@@ -3251,18 +3251,6 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     return sourceScanPartitionsCount;
 }
 
-void TKqpTasksGraph::UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks) {
-    for (auto& [shardId, tasks] : remoteComputeTasks) {
-        auto it = GetMeta().ShardIdToNodeId.find(shardId);
-        YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end());
-        for (ui64 taskId : tasks) {
-            auto& task = GetTask(taskId);
-            task.Meta.NodeId = it->second;
-            // TODO: YQL_ENSURE(task.Meta.Type == TTaskMeta::TTaskType::Scan);
-        }
-    }
-}
-
 TKqpTasksGraph::TKqpTasksGraph(
     const TString& database,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,

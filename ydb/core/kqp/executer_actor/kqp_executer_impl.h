@@ -293,10 +293,6 @@ protected:
                         case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                         case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                             stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->PruneEffect(op, stageInfo));
-                            // TODO: do we resolve shards with effects?
-                            // for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
-                            //     shardIds.insert(shardId);
-                            // }
                         }
                         default:
                             break; // skip here - there will be an error when we will build tasks.

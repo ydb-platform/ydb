@@ -118,6 +118,7 @@ public:
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
         , Generation(generation)
@@ -131,8 +132,6 @@ public:
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
-
-        ReadOnlyTx = IsReadOnlyTx();
     }
 
     TString GetUserSID() const {
@@ -2038,7 +2037,6 @@ private:
         }
 
         THashMap<ui64, TVector<NDqProto::TDqTask*>> datashardTasks; // shardId -> [task]
-        THashMap<ui64, TVector<ui64>> remoteComputeTasks; // shardId -> [task]
         TVector<ui64> computeTasks;
 
         for (const auto& task : TasksGraph.GetTasks()) {
@@ -2046,16 +2044,9 @@ private:
             if (task.Meta.ShardId && task.Meta.Writes) {
                 auto* protoTask = SerializeTaskToProto(task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
-
                 ShardIdToTableInfo->Add(task.Meta.ShardId, stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-            } else if (stageInfo.Meta.IsSysView()) {
+            } else if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
                 computeTasks.emplace_back(task.Id);
-            } else {
-                if (task.Meta.ShardId) {
-                    remoteComputeTasks[task.Meta.ShardId].emplace_back(task.Id);
-                } else {
-                    computeTasks.emplace_back(task.Id);
-                }
             }
         }
 
@@ -2073,6 +2064,8 @@ private:
         if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
+
+        // Even if total number of affected shards may be unknown - check the known shards count against limit.
         const size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
 
         if (shardsLimit > 0 && shards > shardsLimit) {
@@ -2137,10 +2130,10 @@ private:
         TopicTxs = std::move(topicTxs);
         DatashardTxs = std::move(datashardTxs);
         EvWriteTxs = std::move(evWriteTxs);
-        RemoteComputeTasks = std::move(remoteComputeTasks);
 
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
+        // TODO: use coroutines here.
         if (Request.SaveQueryPhysicalGraph) {
             SavePhysicalGraph();
         } else {
@@ -2167,24 +2160,9 @@ private:
     }
 
     void HandleResolve(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
+        // TODO: replace with coroutine to flawlessly break executer workflow without additional states.
         YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script physical graph with issues: " << ev->Get()->Issues.ToOneLineString());
-        ResolveShards();
-    }
-
-    void ResolveShards() {
-        if (RemoteComputeTasks) {
-            TSet<ui64> shardIds;
-            for (const auto& [shardId, _] : RemoteComputeTasks) {
-                shardIds.insert(shardId);
-            }
-
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, TasksGraph.GetMeta().UseFollowers, std::move(shardIds));
-            RegisterWithSameMailbox(kqpShardsResolver);
-            Become(&TKqpDataExecuter::WaitResolveState);
-        } else {
-            OnShardsResolve();
-        }
+        OnShardsResolve();
     }
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
@@ -2685,9 +2663,6 @@ private:
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
 
-        // TODO: task-related stuff should be outside executer
-        TasksGraph.UpdateRemoteTasksNodeId(RemoteComputeTasks);
-
         TasksGraph.GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !TasksGraph.GetMeta().UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         TasksGraph.GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
 
@@ -3160,7 +3135,7 @@ private:
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
     TVector<NKikimrDataEvents::TLock> Locks;
-    bool ReadOnlyTx = true;
+    const bool ReadOnlyTx;
     bool VolatileTx = false;
     bool ImmediateTx = false;
     bool TxPlanned = false;
@@ -3172,7 +3147,6 @@ private:
     bool HasPersistentChannels = false;
 
     THashSet<ui64> SubscribedNodes;
-    THashMap<ui64, TVector<ui64>> RemoteComputeTasks;
 
     TVector<ui64> ComputeTasks;
     TDatashardTxs DatashardTxs;

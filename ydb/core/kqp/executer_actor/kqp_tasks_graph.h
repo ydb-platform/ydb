@@ -433,8 +433,6 @@ public:
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
 
-    void UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks);
-
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 

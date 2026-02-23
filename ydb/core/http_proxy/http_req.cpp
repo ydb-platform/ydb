@@ -1089,6 +1089,9 @@ namespace NKikimr::NHttpProxy {
                 , ProtoCall(protoCall)
                 , Method(method)
             {
+                if (Signature && Signature->Empty()) {
+                    Signature.Reset();
+                }
             }
 
             TStringBuilder LogPrefix() const {

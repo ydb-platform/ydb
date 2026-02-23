@@ -14,7 +14,7 @@
 -- Mute rule checks (counts, met_mute_criteria, raw vs monitor, JSON) are done in
 -- pr_failed_tests_validation_through_mute_rules.sql (all PR-check failures there, not only "blocked").
 
-$lookback_days = 70;
+$lookback_days = 1;
 
 SELECT 
     t.full_name AS full_name,

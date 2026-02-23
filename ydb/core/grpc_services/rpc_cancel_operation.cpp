@@ -42,7 +42,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[CancelBackupCollectionRestore]";
-        case TOperationId::COMPACT:
+        case TOperationId::COMPACTION:
             return "[CancelForcedCompaction]";
         default:
             return "[Untagged]";
@@ -57,7 +57,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
-        case TOperationId::COMPACT:
+        case TOperationId::COMPACTION:
             return new TEvForcedCompaction::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
@@ -68,7 +68,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         const TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
-            || kind == TOperationId::BUILD_INDEX;
+            || kind == TOperationId::BUILD_INDEX
+            || kind == TOperationId::COMPACTION;
     }
 
     void Handle(TEvExport::TEvCancelExportResponse::TPtr& ev) {
@@ -120,6 +121,7 @@ public:
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
+            case TOperationId::COMPACTION:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }

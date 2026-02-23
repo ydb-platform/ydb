@@ -63,7 +63,7 @@ class TGetOperationRPC
             return "[GetIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[GetBackupCollectionRestore]";
-        case TOperationId::COMPACT:
+        case TOperationId::COMPACTION:
             return "[GetForcedCompaction]";
         default:
             return "[Untagged]";
@@ -82,7 +82,7 @@ class TGetOperationRPC
             return new NSchemeShard::TEvBackup::TEvGetIncrementalBackupRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::RESTORE:
             return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
-        case TOperationId::COMPACT:
+        case TOperationId::COMPACTION:
             return new NSchemeShard::TEvForcedCompaction::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
@@ -116,7 +116,7 @@ public:
             case TOperationId::BUILD_INDEX:
             case TOperationId::INCREMENTAL_BACKUP:
             case TOperationId::RESTORE:
-            case TOperationId::COMPACT:
+            case TOperationId::COMPACTION:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }

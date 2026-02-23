@@ -326,8 +326,8 @@ TOperationId::EKind ParseKind(const std::string_view value) {
         return TOperationId::RESTORE;
     }
 
-    if (value.starts_with("compact")) {
-        return TOperationId::COMPACT;
+    if (value.starts_with("compaction")) {
+        return TOperationId::COMPACTION;
     }
 
     return TOperationId::UNUSED;

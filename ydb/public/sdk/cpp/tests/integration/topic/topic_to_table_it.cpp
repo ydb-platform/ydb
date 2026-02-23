@@ -69,6 +69,7 @@ protected:
     };
 
     void SetUp() override;
+    void TearDown() override;
 
     std::unique_ptr<ISession> CreateSession();
 
@@ -332,6 +333,30 @@ void TxUsage::SetUp()
 
     TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableSettings);
     QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, querySettings);
+}
+
+void TxUsage::TearDown()
+{
+    // Close all topic sessions gracefully before stopping the driver.
+    // This prevents a race condition in gRPC cleanup when sessions are
+    // force-closed with zero timeout during fixture destruction.
+    for (auto& [key, ctx] : TopicWriteSessions) {
+        ctx.Session->Close(TDuration::Seconds(5));
+    }
+    TopicWriteSessions.clear();
+
+    for (auto& [key, session] : TopicReadSessions) {
+        session->Close(TDuration::Seconds(5));
+    }
+    TopicReadSessions.clear();
+
+    // Stop clients and driver explicitly to ensure all gRPC operations finish.
+    QueryClient.reset();
+    TableClient.reset();
+    if (Driver) {
+        Driver->Stop(true);
+        Driver.reset();
+    }
 }
 
 TxUsage::TTableSession::TTableSession(NTable::TTableClient& client)

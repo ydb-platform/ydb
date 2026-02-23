@@ -47,11 +47,11 @@ private:
 
 // new: flat context + common runner (IamToken and AccessServiceType are fixed inside runner)
 struct TFederatedTestContext {
-    NMvp::TJwtInfo_EAuthMethod JwtAuthMethod = NMvp::TJwtInfo::StaticCreds;
     TString ExpectedSaId;
     TString ExpectedJwtToken;
     TString SaId;
     TString FederatedJwtTokenPath;
+    bool OmitExplicitCredsTypeAndTokenType = false;
     bool ExpectAuthHeader = true;
 };
 
@@ -63,13 +63,20 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
 
     NMvp::TTokensConfig tokensConfig;
     tokensConfig.set_accessservicetype(NMvp::nebius_v1);
-    auto jwtList = tokensConfig.MutableJwtInfo();
-    auto jwt = jwtList->Add();
-    jwt->SetAuthMethod(ctx.JwtAuthMethod);
-    jwt->SetName("nebiusJwt");
-    jwt->SetAccountId(ctx.SaId);
-    jwt->SetFederatedJwtTokenPath(ctx.FederatedJwtTokenPath);
-    jwt->SetEndpoint(endpoint);
+    auto tokenExchangeList = tokensConfig.MutableOAuthExchange();
+    auto tokenExchange = tokenExchangeList->Add();
+    tokenExchange->SetName("nebiusJwt");
+    tokenExchange->SetTokenEndpoint(endpoint);
+    auto* subjectCreds = tokenExchange->MutableSubjectCredentials();
+    subjectCreds->SetToken(ctx.SaId);
+    auto* actorCreds = tokenExchange->MutableActorCredentials();
+    actorCreds->SetTokenFile(ctx.FederatedJwtTokenPath);
+    if (!ctx.OmitExplicitCredsTypeAndTokenType) {
+        subjectCreds->SetType(NMvp::TOAuthExchange::TCredentials::FIXED);
+        subjectCreds->SetTokenType("urn:nebius:params:oauth:token-type:subject_identifier");
+        actorCreds->SetType(NMvp::TOAuthExchange::TCredentials::FIXED);
+        actorCreds->SetTokenType("urn:ietf:params:oauth:token-type:jwt");
+    }
 
     const TString fixedIamToken = "iam_from_tokenator";
 
@@ -124,7 +131,6 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "serviceaccount-expected";
         ctx.FederatedJwtTokenPath = tmpToken.Name();
 
@@ -137,7 +143,6 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "wrong-serviceaccount";
         ctx.FederatedJwtTokenPath = tmpToken.Name();
         ctx.ExpectAuthHeader = false;
@@ -149,10 +154,21 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "serviceaccount-expected";
         ctx.FederatedJwtTokenPath = tmpToken.Name();
         ctx.ExpectAuthHeader = false;
+        RunTokenatorIntegrationTest(ctx);
+    }
+
+    Y_UNIT_TEST(FederatedCredsShorthandWithoutTypeAndTokenType) {
+        TTempFileHandle tmpToken = MakeTestFile("short_jwt_token", "mvp_federated_jwt", ".token");
+        TFederatedTestContext ctx;
+        ctx.ExpectedSaId = "serviceaccount-expected";
+        ctx.ExpectedJwtToken = "short_jwt_token";
+        ctx.SaId = "serviceaccount-expected";
+        ctx.FederatedJwtTokenPath = tmpToken.Name();
+        ctx.OmitExplicitCredsTypeAndTokenType = true;
+        ctx.ExpectAuthHeader = true;
         RunTokenatorIntegrationTest(ctx);
     }
 

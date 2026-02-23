@@ -7,7 +7,7 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
-#include <yaml-cpp/yaml.h>
+#include <optional>
 
 namespace NLastGetopt { class TOptsParseResult; }
 
@@ -17,7 +17,6 @@ struct TMvpStartupOptions {
 private:
     static constexpr ui16 DEFAULT_HTTP_PORT = 8788;
     static constexpr ui16 DEFAULT_HTTPS_PORT = 8789;
-    static const inline TString FEDERATED_CREDS_JWT_TOKEN_NAME = "__federatedCredsJwtToken";
 
     NLastGetopt::TOpts Opts;
     TString YamlConfigPath;
@@ -26,11 +25,8 @@ private:
     TString SslCertificateFile;
 
 public:
-    YAML::Node Config;
-
-    TString FederatedJwtTokenPath;
-    TString FederatedJwtSaId;
-    TString FederatedJwtTokenEndpoint;
+    std::optional<NMvp::TTokensConfig> TokensOverrideConfig;
+    TString Oauth2TokenExchangeTokenName;
 
     bool LogToStderr = false;
     bool Mlock = false;
@@ -45,16 +41,15 @@ public:
 
     static TMvpStartupOptions Build(int argc, const char* argv[]);
     TString GetLocalEndpoint() const;
-    bool FederatedCreds() const;
-    TString GetFederatedCredsJwtTokenName() const;
+    const TString& GetYamlConfigPath() const;
 
 private:
     NLastGetopt::TOptsParseResult ParseArgs(int argc, const char* argv[]);
     void LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
-    void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
+    void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic);
     void SetPorts();
     TString AddSchemeToUserToken(const TString& token, const TString& scheme);
-    void AddFederatedCredsJwt();
+    void OverrideTokensConfig();
     void LoadTokens();
     void LoadCertificates();
 };

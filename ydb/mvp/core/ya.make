@@ -28,6 +28,8 @@ SRCS(
     utils.h
     mvp_tokens.cpp
     mvp_tokens.h
+    mvp_token_exchange.cpp
+    mvp_token_exchange.h
     parser.cpp
     parser.h
     reducer.cpp
@@ -62,6 +64,8 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/security
     ydb/library/protobuf_printer
+    ydb/library/yaml_json
+    library/cpp/protobuf/json
     library/cpp/lwtrace/protos
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json

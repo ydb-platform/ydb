@@ -9,7 +9,8 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
+
+#include <ydb/mvp/meta/protos/config.pb.h>
 
 namespace NMVP {
 
@@ -45,7 +46,7 @@ public:
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
-    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
+    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;

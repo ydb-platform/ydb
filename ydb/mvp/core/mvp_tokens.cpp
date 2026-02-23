@@ -1,5 +1,7 @@
 #include "mvp_tokens.h"
+#include "mvp_token_exchange.h"
 #include "utils.h"
+
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>
@@ -7,6 +9,9 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
+#include <util/string/builder.h>
+
+#include <set>
 
 namespace NMVP {
 
@@ -35,6 +40,9 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
     for (const NMvp::TJwtInfo& jwtInfo : tokensConfig.jwtinfo()) {
         TokenConfigs.JwtTokenConfigs[jwtInfo.name()] = jwtInfo;
     }
+    for (const NMvp::TOAuthExchange& tokenExchangeInfo : tokensConfig.oauthexchange()) {
+        TokenConfigs.OAuthExchangeConfigs[tokenExchangeInfo.name()] = tokenExchangeInfo;
+    }
     for (const NMvp::TOAuthInfo& oauthInfo : tokensConfig.oauthinfo()) {
         TokenConfigs.OauthTokenConfigs[oauthInfo.name()] = oauthInfo;
     }
@@ -48,6 +56,9 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
 }
 
 void TMvpTokenator::Bootstrap() {
+    for (const auto& [name, config] : TokenConfigs.OAuthExchangeConfigs) {
+        Send(SelfId(), new TEvPrivate::TEvRefreshToken(name));
+    }
     for (const auto& [name, config] : TokenConfigs.JwtTokenConfigs) {
         Send(SelfId(), new TEvPrivate::TEvRefreshToken(name));
     }
@@ -76,6 +87,11 @@ void TMvpTokenator::HandlePeriodic() {
 void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     TString name = event->Get()->Name;
     BLOG_D("Refreshing token " << name);
+    const NMvp::TOAuthExchange* tokenExchangeInfo = TokenConfigs.GetOAuthExchangeConfig(name);
+    if (tokenExchangeInfo != nullptr) {
+        UpdateOAuthExchangeToken(tokenExchangeInfo);
+        return;
+    }
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
         UpdateJwtToken(jwtInfo);
@@ -162,6 +178,10 @@ const NMvp::TJwtInfo* TMvpTokenator::TTokenConfigs::GetJwtTokenConfig(const TStr
     return GetTokenConfig(JwtTokenConfigs, name);
 }
 
+const NMvp::TOAuthExchange* TMvpTokenator::TTokenConfigs::GetOAuthExchangeConfig(const TString& name) {
+    return GetTokenConfig(OAuthExchangeConfigs, name);
+}
+
 const NMvp::TOAuthInfo* TMvpTokenator::TTokenConfigs::GetOAuthTokenConfig(const TString& name) {
     return GetTokenConfig(OauthTokenConfigs, name);
 }
@@ -245,6 +265,12 @@ void TMvpTokenator::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev
 }
 
 void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
+    if (TokenConfigs.AccessServiceType != NMvp::yandex_v2) {
+        BLOG_ERROR("JWT token flow is only supported for yandex_v2 access service type, token " << jwtInfo->name());
+        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, jwtInfo->name()});
+        return;
+    }
+
     auto now = std::chrono::system_clock::now();
     auto expiresAt = now + std::chrono::hours(1);
     const auto& serviceAccountId = jwtInfo->accountid();
@@ -252,75 +278,52 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
 
-    switch (TokenConfigs.AccessServiceType) {
-        case NMvp::yandex_v2: {
-            auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
-            auto encodedToken = jwt::create()
-                    .set_key_id(keyId)
-                    .set_issuer(serviceAccountId)
-                    .set_audience(audience)
-                    .set_issued_at(now)
-                    .set_expires_at(expiresAt)
-                    .sign(algorithm);
-            yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
-            request.set_jwt(TString(encodedToken));
-            RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
-                                yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
-                                yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
-                                TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+    auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
+    auto encodedToken = jwt::create()
+        .set_key_id(keyId)
+        .set_issuer(serviceAccountId)
+        .set_audience(audience)
+        .set_issued_at(now)
+        .set_expires_at(expiresAt)
+        .sign(algorithm);
+    yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
+    request.set_jwt(TString(encodedToken));
+    RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
+                        yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
+                        yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
+                        TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+}
 
-            break;
-        }
-        case NMvp::nebius_v1: {
-            nebius::iam::v1::ExchangeTokenRequest request;
-            switch (jwtInfo->authmethod()) {
-                case NMvp::TJwtInfo::StaticCreds: {
-                    auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-                    auto sToken = jwt::create()
-                        .set_key_id(keyId)
-                        .set_issuer(serviceAccountId)
-                        .set_subject(serviceAccountId)
-                        .set_issued_at(now)
-                        .set_expires_at(expiresAt)
-                        .sign(algorithm);
-                    request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-                    request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-                    request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-                    request.set_subject_token(TString(sToken));
-                    break;
-                }
-                case NMvp::TJwtInfo::FederatedCreds: {
-                    TString fToken;
-                    TString error;
-                    const TString& fTokenPath = jwtInfo->federatedjwttokenpath();
-                    if (!NMVP::TryLoadTokenFromFile(fTokenPath, fToken, error, jwtInfo->name())) {
-                        BLOG_ERROR(error);
-                        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, jwtInfo->name()});
-                        return;
-                    }
-                    request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-                    request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-                    request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
-                    request.set_subject_token(serviceAccountId);
-                    request.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
-                    request.set_actor_token(fToken);
-                    break;
-                }
-                default: {
-                    BLOG_ERROR("Unsupported JWT auth method: " << static_cast<int>(jwtInfo->authmethod()) << " for token " << jwtInfo->name());
-                    RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, jwtInfo->name()});
-                    return;
-                }
-            }
-
-            RequestCreateToken<nebius::iam::v1::TokenExchangeService,
-                                nebius::iam::v1::ExchangeTokenRequest,
-                                nebius::iam::v1::CreateTokenResponse,
-                                TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
-
-            break;
-        }
+void TMvpTokenator::UpdateOAuthExchangeToken(const NMvp::TOAuthExchange* tokenExchangeInfo) {
+    if (TokenConfigs.AccessServiceType != NMvp::nebius_v1) {
+        BLOG_ERROR("oauth2_token_exchange tokens are only supported for nebius_v1 access service type, token " << tokenExchangeInfo->name());
+        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, tokenExchangeInfo->name()});
+        return;
     }
+
+    nebius::iam::v1::ExchangeTokenRequest request;
+    TString endpoint = tokenExchangeInfo->tokenendpoint();
+    TString error;
+    if (!BuildTokenExchangeRequestFromConfig(tokenExchangeInfo, request, error)) {
+        BLOG_ERROR(error);
+        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, tokenExchangeInfo->name()});
+        return;
+    }
+    if (endpoint.empty()) {
+        BLOG_ERROR("Token endpoint is empty for token " << tokenExchangeInfo->name());
+        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, tokenExchangeInfo->name()});
+        return;
+    }
+
+    RequestCreateToken<nebius::iam::v1::TokenExchangeService,
+                        nebius::iam::v1::ExchangeTokenRequest,
+                        nebius::iam::v1::CreateTokenResponse,
+                        TEvPrivate::TEvUpdateIamTokenNebius>(
+                            tokenExchangeInfo->name(),
+                            endpoint,
+                            request,
+                            &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange,
+                            tokenExchangeInfo->name());
 }
 
 void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {

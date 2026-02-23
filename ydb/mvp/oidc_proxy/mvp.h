@@ -9,7 +9,8 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
+
+#include <ydb/mvp/oidc_proxy/protos/config.pb.h>
 #include "oidc_settings.h"
 
 namespace NMVP::NOIDC {
@@ -28,7 +29,7 @@ protected:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
-    void TryGetOidcOptionsFromConfig(const YAML::Node& config);
+    void TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig& config);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;

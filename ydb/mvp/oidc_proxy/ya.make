@@ -31,6 +31,7 @@ SRCS(
 PEERDIR(
     ydb/core/util
     ydb/mvp/core
+    ydb/mvp/oidc_proxy/protos
     ydb/public/api/client/nc_private/iam/v1
     ydb/public/api/client/yc_private/oauth
     library/cpp/getopt

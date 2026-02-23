@@ -103,12 +103,14 @@ protected:
     struct TTokenConfigs {
         THashMap<TString, NMvp::TMetadataTokenInfo> MetadataTokenConfigs;
         THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
+        THashMap<TString, NMvp::TOAuthExchange> OAuthExchangeConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;
         NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
         const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
+        const NMvp::TOAuthExchange* GetOAuthExchangeConfig(const TString& name);
         const NMvp::TOAuthInfo* GetOAuthTokenConfig(const TString& name);
         const NMvp::TStaticCredentialsInfo* GetStaticCredentialsTokenConfig(const TString& name);
 
@@ -160,6 +162,7 @@ protected:
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
     void UpdateJwtToken(const NMvp::TJwtInfo* iwtInfo);
+    void UpdateOAuthExchangeToken(const NMvp::TOAuthExchange* tokenExchangeInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);
     void UpdateStaffApiUserToken(const NMvp::TStaffApiUserTokenInfo* staffApiUserTokenInfo);

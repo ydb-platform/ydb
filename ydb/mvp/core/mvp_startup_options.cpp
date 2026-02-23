@@ -1,15 +1,78 @@
 #include "mvp_startup_options.h"
 #include "utils.h"
 
+#include <library/cpp/protobuf/json/json2proto.h>
 #include <util/stream/file.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/system/hostname.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <google/protobuf/text_format.h>
 
 #include <iostream>
+#include <yaml-cpp/yaml.h>
 
 namespace NMVP {
+namespace {
+
+template <typename TMessage, typename TNormalizeNameFn>
+void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
+                         const google::protobuf::RepeatedPtrField<TMessage>& src,
+                         TNormalizeNameFn&& normalizeName)
+{
+    for (const auto& srcItem : src) {
+        TMessage normalizedItem = srcItem;
+        normalizeName(&normalizedItem);
+
+        const TString& name = normalizedItem.GetName();
+        if (name.empty()) {
+            dst->Add()->MergeFrom(normalizedItem);
+            continue;
+        }
+
+        TMessage* target = nullptr;
+        for (auto& dstItem : *dst) {
+            if (dstItem.GetName() == name) {
+                target = &dstItem;
+                break;
+            }
+        }
+
+        if (target == nullptr) {
+            target = dst->Add();
+            target->SetName(name);
+        }
+
+        target->MergeFrom(normalizedItem);
+        target->SetName(name);
+    }
+}
+
+template <typename TMessage>
+void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
+                         const google::protobuf::RepeatedPtrField<TMessage>& src)
+{
+    MergeRepeatedByName(dst, src, [](TMessage*) {});
+}
+
+NProtobufJson::TJson2ProtoConfig MakeJson2ProtoConfig() {
+    return NProtobufJson::TJson2ProtoConfig()
+        .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
+        .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
+        .SetAllowUnknownFields(true);
+}
+
+void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& proto) {
+    if (!node || !node.IsDefined() || node.IsNull()) {
+        return;
+    }
+
+    const NJson::TJsonValue json = NKikimr::NYaml::Yaml2Json(node, true);
+    NProtobufJson::MergeJson2Proto(json, proto, MakeJson2ProtoConfig());
+}
+
+} // namespace
 
 TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     TMvpStartupOptions startupOptions;
@@ -18,7 +81,7 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     startupOptions.LoadConfig(parsedArgs);
     startupOptions.SetPorts();
     startupOptions.LoadTokens();
-    startupOptions.AddFederatedCredsJwt();
+    startupOptions.OverrideTokensConfig();
     startupOptions.LoadCertificates();
 
     return startupOptions;
@@ -34,12 +97,8 @@ TString TMvpStartupOptions::GetLocalEndpoint() const {
         : TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
 }
 
-bool TMvpStartupOptions::FederatedCreds() const {
-    return !FederatedJwtTokenPath.empty();
-}
-
-TString TMvpStartupOptions::GetFederatedCredsJwtTokenName() const {
-    return FEDERATED_CREDS_JWT_TOKEN_NAME;
+const TString& TMvpStartupOptions::GetYamlConfigPath() const {
+    return YamlConfigPath;
 }
 
 NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char* argv[]) {
@@ -58,8 +117,18 @@ NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char
 void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs) {
     if (!YamlConfigPath.empty()) {
         try {
-            Config = YAML::LoadFile(YamlConfigPath);
-            TryGetStartupOptionsFromConfig(parsedArgs);
+            YAML::Node config = YAML::LoadFile(YamlConfigPath);
+            NMvp::TMvpAppConfig appConfig;
+            MergeYamlNodeToProto(config, appConfig);
+            if (!appConfig.HasGeneric()) {
+                return;
+            }
+
+            const NMvp::TGenericConfig& generic = appConfig.GetGeneric();
+            if (!generic.IsInitialized()) {
+                ythrow yexception() << "Error parsing YAML configuration file: invalid generic config";
+            }
+            TryGetStartupOptionsFromConfig(parsedArgs, generic);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
@@ -67,73 +136,51 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
     }
 }
 
-void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs) {
-    if (!Config["generic"]) {
-        return;
+void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic) {
+    if (generic.HasAccessServiceType()) {
+        AccessServiceType = generic.GetAccessServiceType();
     }
-    auto generic = Config["generic"];
 
-    if (generic["access_service_type"]) {
-        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
-        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &AccessServiceType)) {
-            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+    if (generic.HasLogging()
+        && generic.GetLogging().HasStderr()
+        && parsedArgs.FindLongOptParseResult("stderr") == nullptr)
+    {
+        LogToStderr = generic.GetLogging().GetStderr();
+    }
+
+    if (parsedArgs.FindLongOptParseResult("mlock") == nullptr && generic.HasMlock()) {
+        Mlock = generic.GetMlock();
+    }
+
+    if (generic.HasAuth()) {
+        const auto& auth = generic.GetAuth();
+        if (auth.HasTokenFile()) {
+            YdbTokenFile = auth.GetTokenFile();
         }
-    }
 
-    if (generic["logging"] && generic["logging"]["stderr"]) {
-        if (parsedArgs.FindLongOptParseResult("stderr") == nullptr) {
-            LogToStderr = generic["logging"]["stderr"].as<bool>(false);
-        }
-    }
-
-    if (generic["mlock"]) {
-        if (parsedArgs.FindLongOptParseResult("mlock") == nullptr) {
-            Mlock = generic["mlock"].as<bool>(false);
-        }
-    }
-
-    if (generic["auth"]) {
-        auto auth = generic["auth"];
-        YdbTokenFile = auth["token_file"].as<std::string>("");
-
-        if (auto federatedCreds = auth["federated_creds"]; federatedCreds.IsDefined()) {
+        if (auth.HasTokens()) {
             if (AccessServiceType != NMvp::nebius_v1) {
-                ythrow yexception() << "Federated credentials are only supported for Nebius access service type";
+                ythrow yexception() << "auth.tokens overrides are only supported for Nebius access service type";
             }
-
-            auto tokenPath = TString(federatedCreds["k8s_token_path"].as<std::string>(""));
-            FederatedJwtTokenEndpoint = federatedCreds["token_service_endpoint"].as<std::string>("");
-            FederatedJwtSaId = federatedCreds["service_account_id"].as<std::string>("");
-
-            if (tokenPath.empty()) {
-                ythrow yexception() << "Configuration error: 'k8s_token_path' must be specified in 'federated_creds'.";
-            }
-            if (FederatedJwtSaId.empty()) {
-                ythrow yexception() << "Configuration error: 'service_account_id' must be specified in 'federated_creds'.";
-            }
-            if (FederatedJwtTokenEndpoint.empty()) {
-                ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
-            }
-            FederatedJwtTokenPath = tokenPath;
-            TString federatedJwtToken;
-            TString error;
-            if (!NMVP::TryLoadTokenFromFile(tokenPath, federatedJwtToken, error)) {
-                ythrow yexception() << error;
-            }
+            TokensOverrideConfig = auth.GetTokens();
         }
     }
 
-    if (generic["server"]) {
-        auto server = generic["server"];
-        CaCertificateFile = server["ca_cert_file"].as<std::string>("");
-        SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
-
-        if (parsedArgs.FindLongOptParseResult("http-port") == nullptr) {
-            HttpPort = server["http_port"].as<ui16>(0);
+    if (generic.HasServer()) {
+        const auto& server = generic.GetServer();
+        if (server.HasCaCertFile()) {
+            CaCertificateFile = server.GetCaCertFile();
+        }
+        if (server.HasSslCertFile()) {
+            SslCertificateFile = server.GetSslCertFile();
         }
 
-        if (parsedArgs.FindLongOptParseResult("https-port") == nullptr) {
-            HttpsPort = server["https_port"].as<ui16>(0);
+        if (parsedArgs.FindLongOptParseResult("http-port") == nullptr && server.HasHttpPort()) {
+            HttpPort = static_cast<ui16>(server.GetHttpPort());
+        }
+
+        if (parsedArgs.FindLongOptParseResult("https-port") == nullptr && server.HasHttpsPort()) {
+            HttpsPort = static_cast<ui16>(server.GetHttpsPort());
         }
     }
 }
@@ -180,14 +227,59 @@ void TMvpStartupOptions::LoadTokens() {
     }
 }
 
-void TMvpStartupOptions::AddFederatedCredsJwt() {
-    if (!FederatedJwtTokenPath.empty()) {
-        auto* jwtInfo = Tokens.AddJwtInfo();
-        jwtInfo->SetAuthMethod(NMvp::TJwtInfo::FederatedCreds);
-        jwtInfo->SetAccountId(FederatedJwtSaId);
-        jwtInfo->SetFederatedJwtTokenPath(FederatedJwtTokenPath);
-        jwtInfo->SetEndpoint(FederatedJwtTokenEndpoint);
-        jwtInfo->SetName(FEDERATED_CREDS_JWT_TOKEN_NAME);
+void TMvpStartupOptions::OverrideTokensConfig() {
+    if (!TokensOverrideConfig.has_value()) {
+        return;
+    }
+
+    const auto& override = *TokensOverrideConfig;
+
+    if (override.HasStaffApiUserToken()) {
+        Tokens.SetStaffApiUserToken(override.GetStaffApiUserToken());
+    }
+    if (override.HasStaffApiUserTokenInfo()) {
+        Tokens.MutableStaffApiUserTokenInfo()->MergeFrom(override.GetStaffApiUserTokenInfo());
+    }
+    if (override.HasAccessServiceType()) {
+        Tokens.SetAccessServiceType(override.GetAccessServiceType());
+    }
+
+    MergeRepeatedByName(Tokens.MutableJwtInfo(), override.GetJwtInfo());
+    MergeRepeatedByName(Tokens.MutableOAuthInfo(), override.GetOAuthInfo());
+    MergeRepeatedByName(Tokens.MutableSecretInfo(), override.GetSecretInfo());
+    MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
+    MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
+    MergeRepeatedByName(Tokens.MutableOAuthExchange(), override.GetOAuthExchange());
+
+    THashSet<TString> overriddenTokenExchangeNames;
+    Oauth2TokenExchangeTokenName.clear();
+    for (size_t i = 0; i < static_cast<size_t>(override.OAuthExchangeSize()); ++i) {
+        const auto& tokenExchangeInfo = override.GetOAuthExchange(static_cast<int>(i));
+        if (tokenExchangeInfo.GetName().empty()) {
+            ythrow yexception() << "Configuration error: 'name' must be specified in 'auth.tokens.oauth_exchange'.";
+        }
+        if (i == 0) {
+            Oauth2TokenExchangeTokenName = tokenExchangeInfo.GetName();
+        }
+        overriddenTokenExchangeNames.insert(tokenExchangeInfo.GetName());
+    }
+
+    for (const auto& tokenExchangeInfo : Tokens.GetOAuthExchange()) {
+        if (overriddenTokenExchangeNames.find(tokenExchangeInfo.GetName()) == overriddenTokenExchangeNames.end()) {
+            continue;
+        }
+        if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
+            ythrow yexception() << "Configuration error: 'token-endpoint' must be specified in 'auth.tokens.oauth_exchange'.";
+        }
+    }
+
+    for (const auto& tokenExchangeInfo : Tokens.GetOAuthExchange()) {
+        if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
+            continue;
+        }
+        if (to_lower(tokenExchangeInfo.GetTokenEndpoint()).StartsWith("http://")) {
+            ythrow yexception() << "Configuration error: 'token-endpoint' must not use 'http' scheme in 'auth.tokens.oauth_exchange'.";
+        }
     }
 }
 

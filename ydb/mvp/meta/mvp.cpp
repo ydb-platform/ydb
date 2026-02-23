@@ -4,6 +4,7 @@
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -14,6 +15,8 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/http/http_cache.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
+#include <yaml-cpp/yaml.h>
 #include "mvp.h"
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydbc.h>
@@ -21,6 +24,25 @@
 using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
+namespace {
+
+NProtobufJson::TJson2ProtoConfig MakeJson2ProtoConfig() {
+    return NProtobufJson::TJson2ProtoConfig()
+        .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
+        .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
+        .SetAllowUnknownFields(true);
+}
+
+void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& proto) {
+    if (!node || !node.IsDefined() || node.IsNull()) {
+        return;
+    }
+
+    const NJson::TJsonValue json = NKikimr::NYaml::Yaml2Json(node, true);
+    NProtobufJson::MergeJson2Proto(json, proto, MakeJson2ProtoConfig());
+}
+
+} // namespace
 
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -162,17 +184,12 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    if (!config["meta"]) {
-        return;
-    }
-    auto meta = config["meta"];
-
-    MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
-    MetaDatabase = meta["meta_database"].as<std::string>("");
-    MetaCache = meta["meta_cache"].as<bool>(false);
-    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
-    DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
+void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
+    MetaApiEndpoint = config.has_metaapiendpoint() ? config.metaapiendpoint() : "";
+    MetaDatabase = config.has_metadatabase() ? config.metadatabase() : "";
+    MetaCache = config.has_metacache() ? config.metacache() : false;
+    MetaDatabaseTokenName = config.has_metadatabasetokenname() ? config.metadatabasetokenname() : "";
+    DbUserTokenSource = config.has_dbusertokenaccess() ? config.dbusertokenaccess() : false;
 }
 
 
@@ -180,10 +197,15 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    if (StartupOptions.Config) {
+    if (!StartupOptions.GetYamlConfigPath().empty()) {
         try {
-            TryGetMetaOptionsFromConfig(StartupOptions.Config);
-        } catch (const YAML::Exception& e) {
+            YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+            NMvp::NMeta::TMetaAppConfig appConfig;
+            MergeYamlNodeToProto(config, appConfig);
+            if (appConfig.HasMeta()) {
+                TryGetMetaOptionsFromConfig(appConfig.GetMeta());
+            }
+        } catch (const yexception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
@@ -197,8 +219,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
         MetaDatabase = defaultMetaDatabase;
     }
 
-    if (StartupOptions.FederatedCreds() && MetaDatabaseTokenName.empty()) {
-        MetaDatabaseTokenName = StartupOptions.GetFederatedCredsJwtTokenName();
+    if (!StartupOptions.Oauth2TokenExchangeTokenName.empty() && MetaDatabaseTokenName.empty()) {
+        MetaDatabaseTokenName = StartupOptions.Oauth2TokenExchangeTokenName;
     }
 
     if (StartupOptions.Mlock) {

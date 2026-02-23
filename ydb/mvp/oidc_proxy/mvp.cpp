@@ -2,6 +2,7 @@
 #include "oidc_client.h"
 #include "openid_connect.h"
 
+#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -28,10 +29,31 @@
 #include <util/string/strip.h>
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
+#include <yaml-cpp/yaml.h>
 
 NActors::IActor* CreateMemProfiler();
 
 namespace NMVP::NOIDC {
+namespace {
+
+NProtobufJson::TJson2ProtoConfig MakeJson2ProtoConfig() {
+    return NProtobufJson::TJson2ProtoConfig()
+        .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
+        .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
+        .SetAllowUnknownFields(true);
+}
+
+void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& proto) {
+    if (!node || !node.IsDefined() || node.IsNull()) {
+        return;
+    }
+
+    const NJson::TJsonValue json = NKikimr::NYaml::Yaml2Json(node, true);
+    NProtobufJson::MergeJson2Proto(json, proto, MakeJson2ProtoConfig());
+}
+
+} // namespace
 
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -195,42 +217,45 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
-    auto oidc = config["oidc"];
-    if (!oidc) {
-        ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
-    }
-    OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
-    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
-    OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
-    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
-    OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
-    OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
-    OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
-    OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
-    OpenIdConnectSettings.ImpersonateUrlPath = oidc["impersonate_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH);
-    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = oidc["whoami_extended_info_endpoint"].as<std::string>("");
+void TMVP::TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig& config) {
+    OpenIdConnectSettings.SecretName = config.has_secretname() ? config.secretname() : "";
+    OpenIdConnectSettings.ClientId = config.has_clientid() ? config.clientid() : OpenIdConnectSettings.DEFAULT_CLIENT_ID;
+    OpenIdConnectSettings.SessionServiceEndpoint = config.has_sessionserviceendpoint() ? config.sessionserviceendpoint() : "";
+    OpenIdConnectSettings.SessionServiceTokenName = config.has_sessionservicetokenname() ? config.sessionservicetokenname() : "";
+    OpenIdConnectSettings.AuthorizationServerAddress = config.has_authorizationserveraddress() ? config.authorizationserveraddress() : "";
+    OpenIdConnectSettings.AuthUrlPath = config.has_authurlpath() ? config.authurlpath() : OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH;
+    OpenIdConnectSettings.TokenUrlPath = config.has_tokenurlpath() ? config.tokenurlpath() : OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH;
+    OpenIdConnectSettings.ExchangeUrlPath = config.has_exchangeurlpath() ? config.exchangeurlpath() : OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH;
+    OpenIdConnectSettings.ImpersonateUrlPath = config.has_impersonateurlpath() ? config.impersonateurlpath() : OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH;
+    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = config.has_whoamiextendedinfoendpoint() ? config.whoamiextendedinfoendpoint() : "";
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
-    for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
+    OpenIdConnectSettings.AllowedProxyHosts.clear();
+    for (const auto& host : config.allowedproxyhosts()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
-        OpenIdConnectSettings.AllowedProxyHosts.push_back(TString(host));
+        OpenIdConnectSettings.AllowedProxyHosts.push_back(host);
     }
     Cout << "Finished processing allowed_proxy_hosts." << Endl;
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
-    if (StartupOptions.Config) {
+    if (!StartupOptions.GetYamlConfigPath().empty()) {
         try {
-            TryGetOidcOptionsFromConfig(StartupOptions.Config);
-        } catch (const YAML::Exception& e) {
+            YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+            NMvp::NOidcProxy::TOidcProxyAppConfig appConfig;
+            MergeYamlNodeToProto(config, appConfig);
+            if (!appConfig.HasOidc()) {
+                ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
+            }
+            TryGetOidcOptionsFromConfig(appConfig.GetOidc());
+        } catch (const yexception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
     }
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
-    if (StartupOptions.FederatedCreds()) {
-        OpenIdConnectSettings.SessionServiceTokenName = StartupOptions.GetFederatedCredsJwtTokenName();
+    if (!StartupOptions.Oauth2TokenExchangeTokenName.empty()) {
+        OpenIdConnectSettings.SessionServiceTokenName = StartupOptions.Oauth2TokenExchangeTokenName;
     }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 

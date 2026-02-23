@@ -23,21 +23,31 @@ def fetch_from_test_results(ydb_wrapper, branch, build_type, days_window=7, mute
         full_name,
         suite_folder,
         test_name,
-        CAST(run_timestamp AS Date) AS date_window,
+        date_window,
         build_type,
         branch,
         SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END) AS pass_count,
         SUM(CASE WHEN status IN ('failure', 'error') THEN 1 ELSE 0 END) AS fail_count,
         SUM(CASE WHEN status = 'mute' THEN 1 ELSE 0 END) AS mute_count,
         SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skip_count
-    FROM `{table_path}`
-    WHERE run_timestamp >= CurrentUtcDate() - {days_window} * Interval("P1D")
-        AND branch = '{branch}'
-        AND build_type = '{build_type}'
-        AND job_name IN ({_regression_jobs_sql()})
-        {EXCLUDE_MANUAL_RUNS_SQL}
-        AND test_name IS NOT NULL
-        AND test_name != ''
+    FROM (
+        SELECT
+            full_name,
+            suite_folder,
+            test_name,
+            CAST(run_timestamp AS Date) AS date_window,
+            build_type,
+            branch,
+            status
+        FROM `{table_path}`
+        WHERE run_timestamp >= CurrentUtcDate() - {days_window} * Interval("P1D")
+            AND branch = '{branch}'
+            AND build_type = '{build_type}'
+            AND job_name IN ({_regression_jobs_sql()})
+            {EXCLUDE_MANUAL_RUNS_SQL}
+            AND test_name IS NOT NULL
+            AND test_name != ''
+    )
     GROUP BY full_name, suite_folder, test_name, date_window, build_type, branch
     """
     logging.info(f"Fetching from test_results for branch={branch}, build_type={build_type}, days={days_window}")

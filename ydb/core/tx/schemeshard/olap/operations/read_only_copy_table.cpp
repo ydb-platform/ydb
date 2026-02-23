@@ -25,8 +25,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    template<typename TEvent>
-    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override  {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -46,14 +45,6 @@ public:
         Y_ABORT_UNLESS(txState->MinStep); // we have to have right minstep
 
         return true;
-    }
-
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
-    }
-
-    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -92,6 +83,8 @@ public:
 
                 shardInfo.CurrentTxId = OperationId.GetTxId();
                 context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+                shardInfo.CountReferences++;
+                context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
             }
             context.SS->PersistTxState(db, OperationId);
         }
@@ -137,29 +130,20 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    template<typename TEvent>
-    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                     DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr>::GetName()
                      << " at tablet: " << ssId);
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                    DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr>::GetName()
                      << " triggered early"
                      << ", message: " << evRecord.ShortDebugString());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
-    }
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
-    }
-
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -183,16 +167,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        // copy shards
-        for (const auto& shard : txState->Shards) {
-            auto shardIdx = shard.Idx;
-            TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-            shardInfo.CountReferences = shardInfo.CountReferences == 0 ? 2 : shardInfo.CountReferences + 1;
-            context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy shard");
-            context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
-
-            dstPath.Base()->IncShardsInside();
-        }
+        dstPath.Base()->IncShardsInside(txState->Shards.size());
 
         Y_ABORT_UNLESS(!context.SS->ColumnTables.contains(dstPath.Base()->PathId));
         auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
@@ -267,21 +242,16 @@ public:
         });
     }
 
-    template<typename TEvent>
-    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                   DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr>::GetName()
                                << ", save it"
                                << ", at schemeshard: " << ssId);
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
-    }
-
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
@@ -295,7 +265,7 @@ public:
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
 
@@ -319,7 +289,7 @@ public:
                                     << ", no renaming has been detected for this operation");
 
             NIceDb::TNiceDb db(context.GetDB());
-            context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
             return true;
         }
 

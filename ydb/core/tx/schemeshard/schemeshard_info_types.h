@@ -1305,7 +1305,7 @@ struct TShardInfo {
     TPathId PathId = InvalidPathId;
     TTabletTypes::EType TabletType = ETabletType::TypeInvalid;
     TChannelsBindings BindedChannels;
-    uint64_t CountReferences = 0;
+    ui64 CountReferences = 1;
 
     TShardInfo(TTxId txId, TPathId pathId, TTabletTypes::EType type)
        : CurrentTxId(txId)
@@ -3887,6 +3887,8 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     float CalcProgress() const;
 };
 // } // NForcedCompaction
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 
 }
 

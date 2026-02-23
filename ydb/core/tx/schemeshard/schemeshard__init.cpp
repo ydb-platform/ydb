@@ -783,7 +783,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             pathId,
             rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
             rowSet.template GetValue<typename SchemaTable::TabletType>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::CountReferences>(1)
+            rowSet.template GetValue<typename SchemaTable::CountReferences>()
         );
     }
 

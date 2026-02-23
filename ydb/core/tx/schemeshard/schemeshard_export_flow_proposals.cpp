@@ -14,13 +14,6 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-namespace {
-
-bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
-}
-
-}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -471,7 +464,7 @@ void PrepareDropping(
         item.WaitTxId = InvalidTxId;
         item.State = TExportInfo::EState::Dropped;
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-        if ((item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) && itemPath.IsResolved() && !itemPath.IsDeleted()) {
+        if (IsPathTypeTable(item) && itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
             if (exportInfo.State == TExportInfo::EState::AutoDropping) {
                 func(itemIdx);

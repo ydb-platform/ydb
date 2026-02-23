@@ -29,10 +29,6 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     return itemIdx;
 }
 
-bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
-}
-
 bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
     return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex

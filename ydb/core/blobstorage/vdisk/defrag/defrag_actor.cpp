@@ -51,15 +51,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct TEvStartCompactionFromDefrag :
         public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::TEvStartCompactionFromDefrag>
-    {
-        ui64 SpaceCouldBeFreedViaCompaction;
-        ui64 GarbageThresholdToRunCompaction;
-
-        TEvStartCompactionFromDefrag(ui64 spaceCouldBeFreedViaCompaction, ui64 garbageThresholdToRunCompaction)
-            : SpaceCouldBeFreedViaCompaction(spaceCouldBeFreedViaCompaction)
-            , GarbageThresholdToRunCompaction(garbageThresholdToRunCompaction)
-        {}
-    };
+    {};
 
     double DefragThreshold(const TOutOfSpaceState& oos, double defaultPercent, double hugeDefragFreeSpaceBorder) {
         double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
@@ -209,7 +201,7 @@ namespace NKikimr {
                         STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
                             (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
                             (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction));
-                        Send(CompactionManagerId, new TEvStartCompactionFromDefrag(spaceCouldBeFreedViaCompaction, garbageThresholdToRunCompaction));
+                        Send(CompactionManagerId, new TEvStartCompactionFromDefrag());
                     }
 
                     // check if we need to run defragmentation

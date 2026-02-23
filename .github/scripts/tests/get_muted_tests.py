@@ -117,7 +117,6 @@ def create_tables(ydb_wrapper, table_path):
     create_sql = f"""
         CREATE table IF NOT EXISTS `{table_path}` (
             `date` Date NOT NULL,
-            `build_type` Utf8 NOT NULL,
             `test_name` Utf8 NOT NULL,
             `suite_folder` Utf8 NOT NULL,
             `full_name` Utf8 NOT NULL,
@@ -125,9 +124,9 @@ def create_tables(ydb_wrapper, table_path):
             `owners` Utf8,
             `branch` Utf8 NOT NULL,
             `is_muted` Uint32,
-            PRIMARY KEY (`date`, `branch`, `build_type`, `test_name`, `suite_folder`, `full_name`)
+            PRIMARY KEY (`date`, branch, `test_name`, `suite_folder`, `full_name`)
         )
-            PARTITION BY HASH(date, branch, build_type)
+            PARTITION BY HASH(date, branch)
             WITH (STORE = COLUMN)
         """
     
@@ -158,11 +157,10 @@ def upload_muted_tests(tests):
         print(f'📤 Starting bulk upsert to: {table_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        # Prepare column_types (build_type in PK — table may need migration if it existed before)
+        # Prepare column_types
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
-            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -172,14 +170,9 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        try:
-            ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
-            print(f'✅ Bulk upsert completed successfully')
-            print(f'📊 Successfully uploaded {len(tests)} test records')
-        except Exception as e:
-            print(f'⚠️ Bulk upsert failed (table may need migration for build_type): {e}')
-            print('   Run ALTER or create new table. See .github/scripts/mute/docs/MUTE_V4_TESTING_AND_SWITCH.md')
-            # Non-critical data mart: continue without failing CI; migration can be done separately
+        ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
+        print(f'✅ Bulk upsert completed successfully')
+        print(f'📊 Successfully uploaded {len(tests)} test records')
 
 
 def to_str(data):
@@ -222,7 +215,6 @@ def mute_applier(args):
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = args.branch
-            test['build_type'] = args.build_type
             is_muted = int(mute_check(testsuite, testcase))
             test['is_muted'] = is_muted
             

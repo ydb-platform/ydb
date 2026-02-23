@@ -4,7 +4,7 @@
 
 - **scripts_branch**: При изменении интерфейсов скриптов (новые аргументы, пути) нужно бэкпортить на все активные ветки, где запускается update_muted_ya. Либо сохранять обратную совместимость (опциональные аргументы, те же пути).
 - **Cache**: Ключ `mute-state-{branch}-{build_type}` общий для параллельных запусков. При одновременных run последний перезапишет cache. Редкий случай — задокументировано.
-- **all_tests_with_owner_and_mute**: Если таблица создана до v4 (без build_type в PK), upload_muted_tests упадёт. **Миграция**: создать новую таблицу с build_type или пересоздать. tests_monitor имеет fallback на legacy-схему при чтении.
+- **all_tests_with_owner_and_mute**: main — источник правды для ownership. Схема как в main: PK (date, branch, test_name, suite_folder, full_name), без build_type.
 - **mute_decisions**: Если таблица без match_details, behavior_start_* — write автоматически откатывается на базовую схему (без потери данных).
 
 ## 1. Параллельное тестирование

@@ -51,7 +51,7 @@
 - [x] **5.1** Update `update_muted_ya.yml` full flow: cache restore → detection → quarantine load → create_new_muted_ya (with quarantine exclusion) → graduation → cache save
 - [x] **5.2** Update `collect_analytics.yml` if it uses muted_ya (per build_type) — N/A: data marts read from tests_monitor, not muted_ya
 - [ ] **5.3** Update `create_issues_for_muted_tests.yml` for multi-file if needed
-- [x] **5.4** Update `get_muted_tests.py upload_muted_tests` for per build_type files
+- [x] **5.4** `all_tests_with_owner_and_mute`: reverted to main schema (no build_type). Main = source of truth for ownership
 - [x] **5.5** Update `mute_rules.md` documentation
 
 ---

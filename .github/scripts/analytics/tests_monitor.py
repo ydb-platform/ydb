@@ -483,64 +483,21 @@ def main():
                         owners,
                         run_timestamp_last,
                         is_muted,
-                        date,
-                        build_type
+                        date
                     FROM 
                         `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
-                        AND build_type = '{build_type}'
                         AND date = Date('{date}')
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date
-                    AND hist.build_type = owners_t.build_type;
-            """
-            try:
-                results = ydb_wrapper.execute_scan_query(
-                    query_get_history, query_name=f"get_monitor_history_for_date_{branch}"
-                )
-            except Exception as e:
-                print(
-                    f"Warning: query with build_type in owners_t failed for date {date}, "
-                    f"build_type='{build_type}', branch='{branch}': {e}. Falling back to legacy schema."
-                )
-                legacy_query = f"""
-                    SELECT 
-                        hist.branch AS branch,
-                        hist.build_type AS build_type,
-                        hist.date_window AS date_window,
-                        hist.days_ago_window AS days_ago_window,
-                        hist.fail_count AS fail_count,
-                        hist.full_name AS full_name,
-                        hist.history AS history,
-                        hist.history_class AS history_class,
-                        hist.mute_count AS mute_count,
-                        owners_t.owners AS owners,
-                        hist.pass_count AS pass_count,
-                        owners_t.run_timestamp_last AS run_timestamp_last,
-                        owners_t.is_muted AS is_muted,
-                        hist.skip_count AS skip_count,
-                        hist.suite_folder AS suite_folder,
-                        hist.test_name AS test_name
-                    FROM (
-                        SELECT * FROM `{flaky_tests_table}`
-                        WHERE date_window = Date('{date}') AND build_type = '{build_type}' AND branch = '{branch}'
-                    ) AS hist
-                    INNER JOIN (
-                        SELECT test_name, suite_folder, owners, run_timestamp_last, is_muted, date
-                        FROM `{all_tests_table}`
-                        WHERE branch = '{branch}' AND date = Date('{date}')
-                    ) AS owners_t
-                    ON hist.test_name = owners_t.test_name
-                    AND hist.suite_folder = owners_t.suite_folder
                     AND hist.date_window = owners_t.date;
-                """
-                results = ydb_wrapper.execute_scan_query(
-                    legacy_query, query_name=f"get_monitor_history_for_date_{branch}_legacy"
-                )
+            """
+            results = ydb_wrapper.execute_scan_query(
+                query_get_history, query_name=f"get_monitor_history_for_date_{branch}"
+            )
 
             if results:
                 for row in results:

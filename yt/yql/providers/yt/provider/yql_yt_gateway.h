@@ -739,6 +739,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TString, UniqueId)
         OPTION_FIELD(TTempFiles::TPtr, TmpFiles)
+        OPTION_FIELD(ETableContentDeliveryMode, DeliveryMode);
     };
 
     struct TDownloadTableResult: public NCommon::TOperationResult {

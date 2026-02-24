@@ -6024,7 +6024,7 @@ private:
                 auto tx = entry->Tx;
                 auto tables = options.Tables();
 
-                auto deliveryMode = forceLocalTableContent ? ETableContentDeliveryMode::File : settings->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
+                auto deliveryMode = options.DeliveryMode();
                 TString contentTmpFolder = forceLocalTableContent ? TString() : settings->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);

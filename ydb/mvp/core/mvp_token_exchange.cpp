@@ -66,65 +66,65 @@ size_t Base64OutputLen(TStringBuf input) {
 
 template <class TAlg>
 TString SignJwtWithAsymmetricAlg(const TOauthCredentials& creds, const std::chrono::system_clock::time_point& now) {
-    const TDuration ttl = ParseJwtTtl(creds.ttl());
+    const TDuration ttl = ParseJwtTtl(creds.GetTtl());
     auto expiresAt = now + std::chrono::seconds(ttl.Seconds());
     auto builder = jwt::create()
         .set_issued_at(now)
         .set_expires_at(expiresAt);
-    if (!creds.kid().empty()) {
-        builder.set_key_id(creds.kid());
+    if (!creds.GetKid().empty()) {
+        builder.set_key_id(creds.GetKid());
     }
-    if (!creds.iss().empty()) {
-        builder.set_issuer(creds.iss());
+    if (!creds.GetIss().empty()) {
+        builder.set_issuer(creds.GetIss());
     }
-    if (!creds.sub().empty()) {
-        builder.set_subject(creds.sub());
+    if (!creds.GetSub().empty()) {
+        builder.set_subject(creds.GetSub());
     }
-    if (!creds.jti().empty()) {
-        builder.set_id(creds.jti());
+    if (!creds.GetJti().empty()) {
+        builder.set_id(creds.GetJti());
     }
-    if (creds.aud_size() > 0) {
+    if (creds.AudSize() > 0) {
         std::set<std::string> audience;
-        for (const auto& aud : creds.aud()) {
+        for (const auto& aud : creds.GetAud()) {
             audience.insert(aud);
         }
         builder.set_audience(audience);
     }
-    auto alg = TAlg("", creds.privatekey());
+    auto alg = TAlg("", creds.GetPrivateKey());
     return TString(builder.sign(alg));
 }
 
 template <class TAlg>
 TString SignJwtWithHmacAlg(const TOauthCredentials& creds, const std::chrono::system_clock::time_point& now) {
-    const TDuration ttl = ParseJwtTtl(creds.ttl());
+    const TDuration ttl = ParseJwtTtl(creds.GetTtl());
     auto expiresAt = now + std::chrono::seconds(ttl.Seconds());
     auto builder = jwt::create()
         .set_issued_at(now)
         .set_expires_at(expiresAt);
-    if (!creds.kid().empty()) {
-        builder.set_key_id(creds.kid());
+    if (!creds.GetKid().empty()) {
+        builder.set_key_id(creds.GetKid());
     }
-    if (!creds.iss().empty()) {
-        builder.set_issuer(creds.iss());
+    if (!creds.GetIss().empty()) {
+        builder.set_issuer(creds.GetIss());
     }
-    if (!creds.sub().empty()) {
-        builder.set_subject(creds.sub());
+    if (!creds.GetSub().empty()) {
+        builder.set_subject(creds.GetSub());
     }
-    if (!creds.jti().empty()) {
-        builder.set_id(creds.jti());
+    if (!creds.GetJti().empty()) {
+        builder.set_id(creds.GetJti());
     }
-    if (creds.aud_size() > 0) {
+    if (creds.AudSize() > 0) {
         std::set<std::string> audience;
-        for (const auto& aud : creds.aud()) {
+        for (const auto& aud : creds.GetAud()) {
             audience.insert(aud);
         }
         builder.set_audience(audience);
     }
 
-    const size_t expectedLen = Base64OutputLen(creds.privatekey());
+    const size_t expectedLen = Base64OutputLen(creds.GetPrivateKey());
     TString decodedKey;
-    decodedKey.resize(Base64DecodeBufSize(creds.privatekey().size()));
-    const size_t decodedBytes = Base64DecodeUneven(const_cast<char*>(decodedKey.data()), creds.privatekey());
+    decodedKey.resize(Base64DecodeBufSize(creds.GetPrivateKey().size()));
+    const size_t decodedBytes = Base64DecodeUneven(const_cast<char*>(decodedKey.data()), creds.GetPrivateKey());
     if (decodedBytes != expectedLen) {
         ythrow yexception() << "failed to decode HMAC secret from Base64";
     }
@@ -163,25 +163,25 @@ TString JoinAlgorithmsForError() {
 }
 
 bool ResolveFixedTokenValue(const TOauthCredentials& creds, TString& token, TString& error) {
-    if (!creds.token().empty()) {
-        token = creds.token();
-        if (!creds.tokenfile().empty()) {
+    if (!creds.GetToken().empty()) {
+        token = creds.GetToken();
+        if (!creds.GetTokenFile().empty()) {
             BLOG_D("Both token and token_file are set, token will be used");
         }
         return true;
     }
-    if (!creds.tokenfile().empty()) {
-        return NMVP::TryLoadTokenFromFile(creds.tokenfile(), token, error, "oauth2 credentials");
+    if (!creds.GetTokenFile().empty()) {
+        return NMVP::TryLoadTokenFromFile(creds.GetTokenFile(), token, error, "oauth2 credentials");
     }
     error = "OAuth2 token exchange credentials require either token or token_file";
     return false;
 }
 
 TOauthCredentials::EType InferCredsType(const TOauthCredentials& creds) {
-    if (!creds.alg().empty() || !creds.privatekey().empty()) {
+    if (!creds.GetAlg().empty() || !creds.GetPrivateKey().empty()) {
         return TOauthCredentials::JWT;
     }
-    if (!creds.token().empty() || !creds.tokenfile().empty()) {
+    if (!creds.GetToken().empty() || !creds.GetTokenFile().empty()) {
         return TOauthCredentials::FIXED;
     }
     return TOauthCredentials::TYPE_UNSPECIFIED;
@@ -191,7 +191,7 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
     TString tokenValue;
     TString tokenType;
 
-    TOauthCredentials::EType credsType = creds.type();
+    TOauthCredentials::EType credsType = creds.GetType();
     if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
         credsType = InferCredsType(creds);
         if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
@@ -204,22 +204,22 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
         if (!ResolveFixedTokenValue(creds, tokenValue, error)) {
             ythrow yexception() << error;
         }
-        tokenType = creds.tokentype();
+        tokenType = creds.GetTokenType();
         return {std::move(tokenValue), std::move(tokenType)};
     }
 
     if (credsType == TOauthCredentials::JWT) {
-        if (creds.alg().empty()) {
+        if (creds.GetAlg().empty()) {
             ythrow yexception() << "alg is required for JWT credentials";
         }
-        if (creds.privatekey().empty()) {
+        if (creds.GetPrivateKey().empty()) {
             ythrow yexception() << "private-key is required for JWT credentials";
         }
 
-        auto algIt = JwtAlgorithmsFactory.find(creds.alg());
+        auto algIt = JwtAlgorithmsFactory.find(creds.GetAlg());
         if (algIt == JwtAlgorithmsFactory.end()) {
             ythrow yexception()
-                << "Algorithm \"" << creds.alg() << "\" is not supported"
+                << "Algorithm \"" << creds.GetAlg() << "\" is not supported"
                 << ". Supported algorithms are: " << JoinAlgorithmsForError();
         }
 
@@ -228,7 +228,7 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
         } catch (const std::exception& ex) {
             ythrow yexception() << "Failed to build JWT credentials: " << ex.what();
         }
-        tokenType = creds.tokentype();
+        tokenType = creds.GetTokenType();
         return {std::move(tokenValue), std::move(tokenType)};
     }
 
@@ -240,42 +240,42 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
 bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
                                           nebius::iam::v1::ExchangeTokenRequest& request,
                                           TString& error) {
-    request.set_grant_type(tokenExchangeInfo->granttype());
-    request.set_requested_token_type(tokenExchangeInfo->requestedtokentype());
+    request.set_grant_type(tokenExchangeInfo->GetGrantType());
+    request.set_requested_token_type(tokenExchangeInfo->GetRequestedTokenType());
 
-    if (!tokenExchangeInfo->aud().empty()) {
-        request.set_audience(tokenExchangeInfo->aud(0));
-        if (tokenExchangeInfo->aud_size() > 1) {
-            BLOG_D("Only first aud value is used for token " << tokenExchangeInfo->name());
+    if (!tokenExchangeInfo->GetAud().empty()) {
+        request.set_audience(tokenExchangeInfo->GetAud(0));
+        if (tokenExchangeInfo->AudSize() > 1) {
+            BLOG_D("Only first aud value is used for token " << tokenExchangeInfo->GetName());
         }
     }
-    for (const auto& scope : tokenExchangeInfo->scope()) {
+    for (const auto& scope : tokenExchangeInfo->GetScope()) {
         request.add_scopes(scope);
     }
-    for (const auto& res : tokenExchangeInfo->res()) {
+    for (const auto& res : tokenExchangeInfo->GetRes()) {
         request.add_resource(res);
     }
 
     if (!tokenExchangeInfo->HasSubjectCredentials()) {
-        error = TStringBuilder() << "subject-credentials are required for token " << tokenExchangeInfo->name();
+        error = TStringBuilder() << "subject-credentials are required for token " << tokenExchangeInfo->GetName();
         return false;
     }
     try {
-        auto subjectCreds = GetCreds(tokenExchangeInfo->subjectcredentials());
+        auto subjectCreds = GetCreds(tokenExchangeInfo->GetSubjectCredentials());
         request.set_subject_token(std::move(subjectCreds.first));
         if (!subjectCreds.second.empty()) {
             request.set_subject_token_type(std::move(subjectCreds.second));
         }
 
         if (tokenExchangeInfo->HasActorCredentials()) {
-            auto actorCreds = GetCreds(tokenExchangeInfo->actorcredentials());
+            auto actorCreds = GetCreds(tokenExchangeInfo->GetActorCredentials());
             request.set_actor_token(std::move(actorCreds.first));
             if (!actorCreds.second.empty()) {
                 request.set_actor_token_type(std::move(actorCreds.second));
             }
         }
     } catch (const std::exception& ex) {
-        error = TStringBuilder() << ex.what() << " for token " << tokenExchangeInfo->name();
+        error = TStringBuilder() << ex.what() << " for token " << tokenExchangeInfo->GetName();
         return false;
     }
 

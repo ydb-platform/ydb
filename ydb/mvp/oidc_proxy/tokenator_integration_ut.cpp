@@ -62,7 +62,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     TString endpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
 
     NMvp::TTokensConfig tokensConfig;
-    tokensConfig.set_accessservicetype(NMvp::nebius_v1);
+    tokensConfig.SetAccessServiceType(NMvp::nebius_v1);
     auto tokenExchangeList = tokensConfig.MutableOAuth2Exchange();
     auto tokenExchange = tokenExchangeList->Add();
     tokenExchange->SetName("nebiusJwt");
@@ -103,7 +103,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
         .SessionServiceTokenName = "nebiusJwt",
         .AuthorizationServerAddress = "http://auth.test.net",
         .AllowedProxyHosts = {allowedProxyHost},
-        .AccessServiceType = static_cast<NMvp::EAccessServiceType>(tokensConfig.accessservicetype())
+        .AccessServiceType = static_cast<NMvp::EAccessServiceType>(tokensConfig.GetAccessServiceType())
     };
 
     const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));

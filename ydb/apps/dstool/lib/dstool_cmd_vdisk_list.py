@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_disk_color_pb2 as kikimr_disk_color
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 
@@ -51,10 +52,13 @@ def do(args):
         'VDiskKind',
         'GroupSizeInUnits',
         'PDiskSlotSizeInUnits',
-        'Usage',
         'UsedSize',
         'AvailableSize',
         'TotalSize',
+        'VDiskSlotUsage',
+        'VDiskRawUsage',
+        'NormalizedOccupancy',
+        'CapacityAlert',
         'SatisfactionRank',
         'PoolName',
         'BoxId',
@@ -72,17 +76,18 @@ def do(args):
         'ReadOnly',
     ]
     col_units = {
-        'Usage': '%',
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
-        'TotalSize': 'bytes'
+        'TotalSize': 'bytes',
+        'VDiskSlotUsage': '%',
+        'VDiskRawUsage': '%',
     }
 
     if args.show_pdisk_status:
         visible_columns.extend(['PDiskDriveStatus', 'PDiskDecommitStatus'])
 
     if args.show_vdisk_usage:
-        visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage', 'VDiskRawUsage', 'NormalizedOccupancy', 'CapacityAlert'])
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
@@ -117,7 +122,10 @@ def do(args):
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
-            row['Usage'] = row['UsedSize'] / row['TotalSize'] if row['TotalSize'] > 0 else 0.0
+            row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage
+            row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage
+            row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy
+            row['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(vslot.VDiskMetrics.CapacityAlert)
             row['PDiskPage'] = 'actors/pdisks/pdisk%09u' % (vslot_data.PDiskId)
             row['VDiskPage'] = 'actors/vdisks/vdisk%09u_%09u' % (vslot_data.PDiskId, vslot_data.VSlotId)
             rows.append(row)

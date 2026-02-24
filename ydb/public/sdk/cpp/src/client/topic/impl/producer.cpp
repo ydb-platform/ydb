@@ -13,16 +13,12 @@ namespace NYdb::inline Dev::NTopic {
 
 std::string TProducerSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
     const std::uint64_t lo = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0});
-    const std::uint64_t hi = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0x9E3779B97F4A7C15ull}); // fixed seed
-
-    const std::uint64_t hiBe = InetToHost(hi);
     const std::uint64_t loBe = InetToHost(lo);
 
     std::string out;
-    out.resize(16);
-    memcpy(out.data() + 0, &hiBe, 8);
-    memcpy(out.data() + 8, &loBe, 8);
-    return out; // 16 bytes
+    out.resize(8);
+    memcpy(out.data(), &loBe, 8);
+    return out; // 8 bytes
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

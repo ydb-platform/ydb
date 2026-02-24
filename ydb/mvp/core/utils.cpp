@@ -26,7 +26,7 @@ void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& pro
         NProtobufJson::TJson2ProtoConfig()
             .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
             .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
-            .SetAllowUnknownFields(true));
+            .SetAllowUnknownFields(false));
 }
 
 bool TryLoadTokenFromFile(const TString& tokenPath, TString& token, TString& error, const TString& tokenName) {

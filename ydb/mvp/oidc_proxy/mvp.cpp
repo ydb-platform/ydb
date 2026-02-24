@@ -227,7 +227,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
                 ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
             }
             TryGetOidcOptionsFromConfig(appConfig.GetOidc());
-        } catch (const std::exception& e) {
+        } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
@@ -236,8 +236,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
     if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
         ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
-                               << "SessionServiceTokenName must be specified in oidc config "
-                               "or provided via auth.tokens.oauth2_exchange.";
+                            << "SessionServiceTokenName must be specified in oidc config.";
     }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 

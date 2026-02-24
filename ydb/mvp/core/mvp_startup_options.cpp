@@ -100,12 +100,11 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
     if (!YamlConfigPath.empty()) {
         try {
             YAML::Node config = YAML::LoadFile(YamlConfigPath);
-            NMvp::TMvpAppConfig appConfig;
-            MergeYamlNodeToProto(config, appConfig);
-            if (!appConfig.HasGeneric()) {
-                return;
+            YAML::Node genericNode = config["generic"];
+            NMvp::TGenericConfig generic;
+            if (genericNode) {
+                MergeYamlNodeToProto(genericNode, generic);
             }
-            const NMvp::TGenericConfig& generic = appConfig.GetGeneric();
             TryGetStartupOptionsFromConfig(parsedArgs, generic);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;

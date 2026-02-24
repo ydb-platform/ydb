@@ -46,9 +46,9 @@ Y_UNIT_TEST_SUITE(TCrackedPage) {
         UNIT_ASSERT(httpInsecure.IsHttpSchemeAllowed());
         UNIT_ASSERT(!httpInsecure.IsSecureScheme());
 
-        const TCrackedPage httpSecureRejected("https://token.endpoint:443");
-        UNIT_ASSERT(httpSecureRejected.IsHttpSchemeAllowed());
-        UNIT_ASSERT(httpSecureRejected.IsSecureScheme());
+        const TCrackedPage httpsSecure("https://token.endpoint:443");
+        UNIT_ASSERT(httpsSecure.IsHttpSchemeAllowed());
+        UNIT_ASSERT(httpsSecure.IsSecureScheme());
     }
 
     Y_UNIT_TEST(RequestedHostAllowedByWildcard) {

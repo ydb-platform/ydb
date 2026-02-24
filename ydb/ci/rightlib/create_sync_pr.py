@@ -89,17 +89,28 @@ class PrSyncCreator:
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
     def force_sync_from_head(self):
-        """Overwrite all files from the head branch to ensure consistency after merge."""
-        self.logger.info("Force syncing all files from %s", self.head_branch)
+        """Replace all directories from the head branch with exact copies."""
+        self.logger.info("Force syncing directories from %s", self.head_branch)
 
-        self.git_run("checkout", self.head_branch, "--", ".")
+        result = self.git_run("ls-tree", "--name-only", "-d", self.head_branch)
+        dirs = [d for d in result.stdout.decode().strip().split("\n") if d]
+
+        if not dirs:
+            self.logger.info("No directories found in %s", self.head_branch)
+            return
+
+        self.logger.info("Directories to force sync: %s", dirs)
+
+        for d in dirs:
+            self.git_run("rm", "-rf", "--", d, fail=False)
+            self.git_run("checkout", self.head_branch, "--", d)
 
         has_changes = self.git_run("diff", "--cached", "--quiet", fail=False).returncode != 0
         if has_changes:
-            self.git_run("commit", "-m", f"Force sync all files from {self.head_branch}")
+            self.git_run("commit", "-m", f"Force sync directories from {self.head_branch}")
             self.logger.info("Force sync commit created")
         else:
-            self.logger.info("All files already match %s, no force sync needed", self.head_branch)
+            self.logger.info("All directories already match %s, no force sync needed", self.head_branch)
 
     def create_new_pr(self):
         dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"

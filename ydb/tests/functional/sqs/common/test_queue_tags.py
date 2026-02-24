@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import time
 import pytest
 from hamcrest import assert_that, raises
 
@@ -40,27 +41,34 @@ class TestQueueTags(KikimrSqsTestBase):
 
         assert get_tags() == {}
 
+        def wait_for_tags(expected, retries=10):
+            for _ in range(retries):
+                if get_tags() == expected:
+                    return
+                time.sleep(0.1)
+            assert get_tags() == expected
+
         add_tags({})
         assert get_tags() == {}
 
         add_tags({'key1': 'value0'})
-        assert get_tags() == {'key1': 'value0'}
+        wait_for_tags({'key1': 'value0'})
 
         # Change an existing tag value:
         add_tags({'key1': 'value1'})
-        assert get_tags() == {'key1': 'value1'}
+        wait_for_tags({'key1': 'value1'})
 
         # Adding a new tag without mentioning an existing tag should not delete the latter one:
         add_tags({'key2': 'value2'})
-        assert get_tags() == {'key1': 'value1', 'key2': 'value2'}
+        wait_for_tags({'key1': 'value1', 'key2': 'value2'})
 
         # Add multiple tags:
         add_tags({'key3': 'value3', 'key4': 'value0'})
-        assert get_tags() == {'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value0'}
+        wait_for_tags({'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value0'})
 
         # Add a new tag and change an existing tag:
         add_tags({'key4': 'value4', 'key5': 'value5'})
-        assert get_tags() == {'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value4', 'key5': 'value5'}
+        wait_for_tags({'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value4', 'key5': 'value5'})
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

@@ -333,7 +333,18 @@ class KikimrSqsTestBase(object):
             '-H',
             'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
         ]
-        yatest.common.execute(cmd)
+        retries_count = 20
+        while retries_count:
+            logging.debug("Running {}".format(' '.join(cmd)))
+            try:
+                yatest.common.execute(cmd)
+            except yatest.common.ExecutionError as ex:
+                logging.debug("Create metauser failed: {}. Retrying".format(ex))
+                retries_count -= 1
+                time.sleep(3)
+            else:
+                return
+        raise RuntimeError("Failed to create SQS metauser")
 
     @classmethod
     def _setup_cluster(cls):

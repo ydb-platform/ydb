@@ -234,14 +234,6 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MigrateJwtInfoToOAuth2Exchange();
     ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
     Tokens.SetAccessServiceType(AccessServiceType);
-
-    Oauth2TokenExchangeTokenName.clear();
-    for (size_t i = 0; i < static_cast<size_t>(override.OAuth2ExchangeSize()); ++i) {
-        const auto& tokenExchangeInfo = override.GetOAuth2Exchange(static_cast<int>(i));
-        if (i == 0) {
-            Oauth2TokenExchangeTokenName = tokenExchangeInfo.GetName();
-        }
-    }
 }
 
 void TMvpStartupOptions::LoadCertificates() {

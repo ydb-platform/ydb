@@ -208,10 +208,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
         MetaDatabase = defaultMetaDatabase;
     }
 
-    if (!StartupOptions.Oauth2TokenExchangeTokenName.empty() && MetaDatabaseTokenName.empty()) {
-        MetaDatabaseTokenName = StartupOptions.Oauth2TokenExchangeTokenName;
-    }
-
     if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
     }

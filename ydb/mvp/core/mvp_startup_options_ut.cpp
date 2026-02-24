@@ -119,7 +119,6 @@ generic:
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
         TMvpStartupOptions opts = MakeOpts(argv);
 
-        UNIT_ASSERT(!opts.Oauth2TokenExchangeTokenName.empty());
         UNIT_ASSERT(opts.Tokens.OAuth2ExchangeSize() > 0);
         const auto& tokenExchange = opts.Tokens.GetOAuth2Exchange(0);
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetTokenEndpoint(), "grpcs://token.endpoint:443");

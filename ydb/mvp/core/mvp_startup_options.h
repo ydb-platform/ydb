@@ -26,7 +26,6 @@ private:
 
 public:
     std::optional<NMvp::TTokensConfig> TokensOverrideConfig;
-    TString Oauth2TokenExchangeTokenName;
 
     bool LogToStderr = false;
     bool Mlock = false;

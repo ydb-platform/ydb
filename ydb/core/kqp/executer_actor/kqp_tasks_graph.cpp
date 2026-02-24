@@ -760,6 +760,7 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     vectorResolveTransform.OutputType = vectorResolve.GetOutputType();
     TTaskInputMeta meta;
     meta.VectorResolveSettings = settings;
+    meta.TablePath = stageInfo.Meta.TablePath;
     BuildTransformChannels(vectorResolveTransform, meta, "VectorResolve/Map", stageInfo, inputIndex,
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
@@ -1440,8 +1441,12 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                         : NKikimrDataEvents::OPTIMISTIC);
             }
 
-            if (GetMeta().QuerySpanId && !isTableImmutable) {
-                input.Meta.StreamLookupSettings->SetQuerySpanId(GetMeta().QuerySpanId);
+            if (!isTableImmutable) {
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.StreamLookupSettings->GetTable().GetPath());
+                if (effectiveSpanId) {
+                    input.Meta.StreamLookupSettings->SetQuerySpanId(effectiveSpanId);
+                }
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
@@ -1464,8 +1469,12 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.VectorResolveSettings->SetLockMode(*GetMeta().LockMode);
             }
 
-            if (GetMeta().QuerySpanId) {
-                input.Meta.VectorResolveSettings->SetQuerySpanId(GetMeta().QuerySpanId);
+            {
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.TablePath);
+                if (effectiveSpanId) {
+                    input.Meta.VectorResolveSettings->SetQuerySpanId(effectiveSpanId);
+                }
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
@@ -2688,8 +2697,10 @@ void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSour
         settings.SetLockTxId(*lockTxId);
         settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
     }
-    if (GetMeta().QuerySpanId) {
-        settings.SetQuerySpanId(GetMeta().QuerySpanId);
+    const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+        GetMeta().QuerySpanId, settings.GetTable().GetTablePath());
+    if (effectiveSpanId) {
+        settings.SetQuerySpanId(effectiveSpanId);
     }
 }
 
@@ -3009,10 +3020,14 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
         settings.SetLockMode(*GetMeta().LockMode);
     }
         // Use per-transaction QuerySpanId if available (for deferred effects),
-        // otherwise fall back to global QuerySpanId
-        ui64 querySpanId = GetMeta().GetTxQuerySpanId(task.StageId.TxId);
-        if (querySpanId) {
-            settings.SetQuerySpanId(querySpanId);
+        // otherwise fall back to global QuerySpanId; apply per-table suppression.
+        {
+            const ui64 rawSpanId = GetMeta().GetTxQuerySpanId(task.StageId.TxId);
+            const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                rawSpanId, settings.GetTable().GetPath());
+            if (effectiveSpanId) {
+                settings.SetQuerySpanId(effectiveSpanId);
+            }
         }
 
     auto sinkPosition = std::lower_bound(

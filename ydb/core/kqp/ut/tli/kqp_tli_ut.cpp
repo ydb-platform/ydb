@@ -536,6 +536,15 @@ namespace {
             ConfigureKikimrForTli(Kikimr, logEnabled);
         }
 
+        TTliTestContext(TKikimrSettings settings)
+            : Kikimr(std::move(settings))
+            , Client(Kikimr.GetQueryClient())
+            , Session(Client.GetSession().GetValueSync().GetSession())
+            , VictimSession(Client.GetSession().GetValueSync().GetSession())
+        {
+            ConfigureKikimrForTli(Kikimr);
+        }
+
         void CreateTable(const TString& tableName) {
             CreateTableInSession(Session, tableName);
         }
@@ -769,6 +778,24 @@ namespace {
 
         UNIT_ASSERT_C(ss.Str().find("TLI INFO") == TString::npos,
             "no TLI INFO logs expected when TLI logs are disabled");
+    }
+
+    void VerifyNoTliLogsForIgnoredTable(
+        const TString& issues,
+        TStringStream& ss,
+        const TString& breakerQueryText)
+    {
+        UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
+            "Issue should contain 'Transaction locks invalidated': " << issues);
+
+        UNIT_ASSERT_C(!issues.Contains("BreakerQuerySpanId:"),
+            "Issue should NOT contain 'BreakerQuerySpanId:': " << issues);
+
+        const auto patterns = MakeTliLogPatterns();
+        auto breakerSpan = ExtractBreakerQuerySpanId(ss.Str(), "SessionActor",
+            patterns.BreakerSessionActorMessagePattern, breakerQueryText);
+        UNIT_ASSERT_C(!breakerSpan,
+            "BreakerQuerySpanId for ignored table should be absent in TLI logs, breakerQuery: " << breakerQueryText);
     }
 
     // ==================== DataQuery backward-compatibility helpers ====================
@@ -1469,6 +1496,102 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }
 
+    Y_UNIT_TEST(IgnoredTableRegexes) {
+        TStringStream ss;
+
+        TKikimrSettings settings = MakeKikimrSettings(ss);
+        settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/.*/Table1");
+        TTliTestContext ctx(std::move(settings));
+
+        ctx.CreateAndSeedTables(3);
+
+        // Victim: JOIN of 3 tables — Table1 is ignored, Table2 and Table3 are not
+        const TString victimQueryText = R"(
+            SELECT t1.Value, t2.Value, t3.Value
+            FROM `/Root/Tenant1/Table1` AS t1
+            JOIN `/Root/Tenant1/Table2` AS t2 ON t1.Key = t2.Key
+            JOIN `/Root/Tenant1/Table3` AS t3 ON t1.Key = t3.Key
+            WHERE t1.Key = 1u
+        )";
+        const TString victimCommitText = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+
+        const TString breakerUpdate1 = "UPDATE `/Root/Tenant1/Table1` SET Value = \"Breaker1\" WHERE Key = 1u";
+        const TString breakerUpdate2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"Breaker2\" WHERE Key = 1u";
+        const TString breakerUpdate3 = "UPDATE `/Root/Tenant1/Table3` SET Value = \"Breaker3\" WHERE Key = 1u";
+
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimCommitText);
+
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate2);
+        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdate3);
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        // Table2 and Table3 (NOT ignored): full TLI verification
+        // 3 breaker records: Table2 immediate + Table3 immediate + Table3 deferred
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdate2, victimQueryText, victimCommitText,
+            /* expectedBreakerCount */ 3, /* expectedVictimCount */ 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdate3, victimQueryText, victimCommitText,
+            /* expectedBreakerCount */ 3, /* expectedVictimCount */ 1);
+
+        // Table1 (IGNORED): no breaker TLI records
+        VerifyNoTliLogsForIgnoredTable(issues, ss, breakerUpdate1);
+    }
+
+    Y_UNIT_TEST(IgnoredTableRegexesSeparateQueries) {
+        TStringStream ss;
+
+        TKikimrSettings settings = MakeKikimrSettings(ss);
+        settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/Tenant1/Table1");
+        TTliTestContext ctx(std::move(settings));
+
+        ctx.CreateAndSeedTables(3);
+        const TString tablePathPrefix = "PRAGMA TablePathPrefix = \"/Root/Tenant1\";\n";
+
+        // Two victims: both touch ignored Table1 first, then lock different non-ignored tables.
+        TSession victim2Session = ctx.Client.GetSession().GetValueSync().GetSession();
+
+        const TString victim1ReadIgnored = tablePathPrefix + "SELECT * FROM Table1 WHERE Key = 1u";
+        const TString victim1QueryText = tablePathPrefix + "SELECT * FROM Table2 WHERE Key = 1u";
+        const TString victim1CommitText = tablePathPrefix + "UPDATE Table2 SET Value = \"Victim2Update\" WHERE Key = 1u";
+
+        const TString victim2ReadIgnored = tablePathPrefix + "SELECT * FROM Table1 WHERE Key = 1u";
+        const TString victim2QueryText = tablePathPrefix + "SELECT * FROM Table3 WHERE Key = 1u";
+        const TString victim2CommitText = tablePathPrefix + "UPDATE Table3 SET Value = \"Victim3Update\" WHERE Key = 1u";
+
+        const TString breakerUpdate1 = tablePathPrefix + "UPDATE Table1 SET Value = \"Breaker1\" WHERE Key = 1u";
+        const TString breakerUpdate2 = tablePathPrefix + "UPDATE Table2 SET Value = \"Breaker2\" WHERE Key = 1u";
+        const TString breakerUpdate3 = tablePathPrefix + "UPDATE Table3 SET Value = \"Breaker3\" WHERE Key = 1u";
+
+        auto victim1Tx = BeginReadTx(ctx.VictimSession, victim1ReadIgnored);
+        ExecuteInTx(ctx.VictimSession, victim1Tx, victim1QueryText);
+
+        auto victim2Tx = BeginReadTx(victim2Session, victim2ReadIgnored);
+        ExecuteInTx(victim2Session, victim2Tx, victim2QueryText);
+
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate2);
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate3);
+        NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
+
+        auto [status1, issues1] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victim1Tx, victim1CommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
+
+        auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victim2CommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
+
+        // Verify each non-ignored table independently like other multi-victim tests.
+        VerifyTliIssueAndLogs(issues1, ss, breakerUpdate2, victim1QueryText, victim1CommitText,
+            /* expectedBreakerCount */ 4, /* expectedVictimCount */ 2);
+        VerifyTliIssueAndLogs(issues2, ss, breakerUpdate3, victim2QueryText, victim2CommitText,
+            /* expectedBreakerCount */ 4, /* expectedVictimCount */ 2);
+
+        // Table1 (IGNORED): no breaker TLI records.
+        VerifyNoTliLogsForIgnoredTable(issues1, ss, breakerUpdate1);
+    }
+
     // ==================== DataQuery backward-compatibility tests ====================
     // These tests verify that TLI logging works correctly with the legacy DataQuery API
     // (NYdb::NTable::TTableClient / ExecuteDataQuery).
@@ -1523,6 +1646,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
+
 }
 
 } // namespace NKqp

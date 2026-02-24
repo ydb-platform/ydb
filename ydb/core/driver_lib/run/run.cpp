@@ -1635,6 +1635,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
     }
 
+    if (runConfig.AppConfig.HasTliConfig()) {
+        AppData->TliConfig = runConfig.AppConfig.GetTliConfig();
+    }
+
     TAppDataInitializersList appDataInitializers;
     // setup domain info
     appDataInitializers.AddAppDataInitializer(new TDomainsInitializer(runConfig));

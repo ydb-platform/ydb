@@ -853,6 +853,9 @@ protected:
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
         TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
+        for (const auto& regex : AppData()->TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:

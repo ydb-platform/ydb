@@ -2984,6 +2984,10 @@ message TNbsConfig {
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
 }
 
+message TTliConfig {
+    repeated string IgnoredTableRegexes = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3100,6 +3104,8 @@ message TAppConfig {
     optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
 
     optional TNbsConfig NbsConfig = 119;
+
+    optional TTliConfig TliConfig = 120;
 }
 
 message TYdbVersion {

@@ -104,13 +104,6 @@ static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(
     return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, tx);
 }
 
-static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(const NKikimr::NSchemeShard::TPath& srcPath, NKikimr::NSchemeShard::TOperationId id, NKikimr::NSchemeShard::TTxState::ETxState txState, NKikimr::NSchemeShard::TTxState* state) {
-    if (srcPath->IsTable()) {
-        return NKikimr::NSchemeShard::CreateCopyTable(id, txState, state);
-    }
-    return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, txState);
-}
-
 namespace NKikimr::NSchemeShard {
 
 bool CreateConsistentCopyTables(

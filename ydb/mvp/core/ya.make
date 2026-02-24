@@ -6,6 +6,9 @@ LIBRARY()
 
 SRCS(
     appdata.cpp
+    cache_policy.cpp
+    core_ydb.cpp
+    core_ydbc.cpp
     cracked_page.cpp
     filter.cpp
     mapper.cpp
@@ -14,14 +17,11 @@ SRCS(
     mvp_security_printer.cpp
     mvp_startup_options.cpp
     mvp_test_runtime.cpp
-    utils.cpp
-    mvp_tokens.cpp
     mvp_token_exchange.cpp
+    mvp_tokens.cpp
     parser.cpp
     reducer.cpp
-    core_ydb.cpp
-    core_ydbc.cpp
-    cache_policy.cpp
+    utils.cpp
 )
 
 PEERDIR(

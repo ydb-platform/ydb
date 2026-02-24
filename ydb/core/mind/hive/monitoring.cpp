@@ -3053,7 +3053,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        TenantName = GetParams(ev->Get()).Get("tenantName");
+        TenantName = GetParams(Event.Get()).Get("tenantName");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }

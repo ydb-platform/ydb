@@ -1507,6 +1507,17 @@ message TEvConditionalEraseRowsResponse {
     optional TStats Stats = 4;
 }
 
+message TEvCheckConstraintRequest {
+    optional uint64 TabletId = 1;
+    optional uint64 OwnerId = 2;
+    optional uint64 PathId = 3;
+    repeated string CheckingColumns = 4;
+    optional uint64 SnapshotTxId = 5;
+    optional uint64 SnapshotStep = 6;
+    optional uint64 SeqNoGeneration = 7;
+    optional uint64 SeqNoRound = 8;
+}
+
 message TEvBuildIndexCreateRequest {
     optional uint64 Id = 1;          // unique id of build index process
 

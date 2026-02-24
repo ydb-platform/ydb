@@ -28,8 +28,8 @@ protected:
 public:
     TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
-    TString MetaApiEndpoint;
-    TString MetaDatabase;
+    TString MetaApiEndpoint = "";
+    TString MetaDatabase = "";
     bool MetaCache = false;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;

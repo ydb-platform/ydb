@@ -100,6 +100,7 @@ ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test
 ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk
+ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]

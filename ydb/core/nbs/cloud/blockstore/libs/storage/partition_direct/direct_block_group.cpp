@@ -406,6 +406,27 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
         NWilson::EFlags::NONE,
         ActorSystem);
 
+    const auto requestRange = TBlockRange64::WithLength(
+        requestHandler->GetStartIndex(),
+        requestHandler->GetSize());
+
+    if (requestRange.Start >= BlocksMeta.size()) {
+        const auto partRange = TBlockRange64::WithLength(0, BlocksMeta.size());
+
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TDirectBlockGroup::DoWriteBlocksLocal request %s out of range %s",
+            requestRange.Print().c_str(),
+            partRange.Print().c_str());
+
+        requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
+
+        requestHandler->Span.EndOk();
+        execSpan.EndOk();
+        return;
+    }
+
     TVector<TEvWritePersistentBufferResultFuture> futures;
     TVector<ui64> storageRequestIds;
     futures.reserve(3);
@@ -679,10 +700,29 @@ void TDirectBlockGroup::DoReadBlocksLocal(
         NWilson::EFlags::NONE,
         ActorSystem);
 
-    auto startIndex = requestHandler->GetStartIndex();
+    const auto requestRange = TBlockRange64::WithLength(
+        requestHandler->GetStartIndex(),
+        requestHandler->GetSize());
+
+    if (requestRange.Start >= BlocksMeta.size()) {
+        const auto partRange = TBlockRange64::WithLength(0, BlocksMeta.size());
+
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TDirectBlockGroup::DoReadBlocksLocal request %s out of range %s",
+            requestRange.Print().c_str(),
+            partRange.Print().c_str());
+
+        requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
+
+        requestHandler->Span.EndOk();
+        execSpan.EndOk();
+        return;
+    }
 
     // Block is not written
-    if (!DirtyMap->IsBlockWritten(startIndex)) {
+    if (!DirtyMap->IsBlockWritten(requestRange.Start)) {
         auto data = requestHandler->GetData();
         if (auto guard = data.Acquire()) {
             const auto& sglist = guard.Get();
@@ -701,7 +741,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
 
     const ui64 storageRequestId = ++StorageRequestId;
 
-    if (!DirtyMap->IsBlockFlushedToDDisk(startIndex)) {
+    if (!DirtyMap->IsBlockFlushedToDDisk(requestRange.Start)) {
         const auto& ddiskConnection = PersistentBufferConnections[0];
 
         auto& childSpan = requestHandler->GetChildSpan(storageRequestId, true);
@@ -712,7 +752,8 @@ void TDirectBlockGroup::DoReadBlocksLocal(
                 0,   // vChunkIndex
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
-            DirtyMap->GetLsnByPersistentBufferIndex(startIndex, 0),
+            DirtyMap->GetLsnByPersistentBufferIndex(requestRange.Start, 0),
+
             NKikimr::NDDisk::TReadInstruction(true),
             requestHandler->GetData(),
             childSpan);

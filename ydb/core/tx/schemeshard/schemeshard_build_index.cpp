@@ -388,6 +388,32 @@ void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TInd
     }
 }
 
+bool TSchemeShard::PersistBuildIndexSampleForgetAll(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    // There may be more KMeansTreeSamples than 2*K when an index is build with overlap
+    // We want forget to work correctly even with index builds failed because of some reason
+    // So we don't want to remove all samples instead of relying on FilterBorderRows.size()
+    Y_ENSURE(info.IsBuildVectorIndex());
+    ui32 maxCount = 0;
+    {
+        auto rowset = db.Table<Schema::KMeansTreeSample>().Reverse().Range(info.Id).Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            TIndexBuildId id = rowset.template GetValue<Schema::KMeansTreeSample::Id>();
+            if (id != info.Id) {
+                break;
+            }
+            maxCount = rowset.template GetValue<Schema::KMeansTreeSample::Row>();
+            break;
+        }
+    }
+    for (ui32 row = 0; row <= maxCount; ++row) {
+        db.Table<Schema::KMeansTreeSample>().Key(info.Id, row).Delete();
+    }
+    return true;
+}
+
 void TSchemeShard::PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& info) {
     TVector<TString> clusters;
     for (const auto& [_, row] : info.Sample.Rows) {
@@ -455,7 +481,7 @@ void TSchemeShard::PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TI
     }
 }
 
-void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+bool TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     db.Table<Schema::IndexBuild>().Key(info.Id).Delete();
 
     ui32 columnNo = 0;
@@ -478,9 +504,12 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
     if (info.IsBuildVectorIndex()) {
         db.Table<Schema::KMeansTreeProgress>().Key(info.Id).Delete();
-        PersistBuildIndexSampleForget(db, info);
+        if (!PersistBuildIndexSampleForgetAll(db, info)) {
+            return false;
+        }
         PersistBuildIndexClustersForget(db, info);
     }
+    return true;
 }
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {

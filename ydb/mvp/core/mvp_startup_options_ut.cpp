@@ -5,18 +5,6 @@
 
 using namespace NMVP;
 
-namespace {
-    template <size_t N>
-    TMvpStartupOptions MakeOpts(const char* (&argv)[N]) {
-        return TMvpStartupOptions::Build(N, argv);
-    }
-
-    template <size_t N>
-    TMvpStartupOptions MakeOpts(const char* (&&argv)[N]) {
-        return TMvpStartupOptions::Build(N, argv);
-    }
-}
-
 Y_UNIT_TEST_SUITE(TMvpStartupOptions) {
     Y_UNIT_TEST(DefaultHttpPortWhenNoPorts) {
         TMvpStartupOptions opts = MakeOpts({"mvp_test"});

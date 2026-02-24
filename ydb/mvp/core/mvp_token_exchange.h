@@ -1,12 +1,25 @@
 #pragma once
 
 #include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
+
+#include <util/generic/vector.h>
 
 namespace NMVP {
 
-bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
-                                          nebius::iam::v1::ExchangeTokenRequest& request,
-                                          TString& error);
+struct TOAuth2ExchangeData {
+    TString GrantType;
+    TString RequestedTokenType;
+    TString Audience;
+    TVector<TString> Scopes;
+    TVector<TString> Resources;
+    TString SubjectToken;
+    TString SubjectTokenType;
+    TString ActorToken;
+    TString ActorTokenType;
+};
+
+bool TryBuildOAuth2ExchangeData(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
+                                TOAuth2ExchangeData& prepared,
+                                TString& error);
 
 } // namespace NMVP

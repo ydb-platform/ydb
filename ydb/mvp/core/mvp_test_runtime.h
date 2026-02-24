@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <util/generic/string.h>
 #include <util/system/tempfile.h>
@@ -22,6 +23,16 @@ inline TTempFileHandle MakeTestFile(const TStringBuf content, const TString& nam
     ofs.Write(content);
     ofs.Finish();
     return tmpFile;
+}
+
+template <size_t N>
+inline NMVP::TMvpStartupOptions MakeOpts(const char* (&argv)[N]) {
+    return NMVP::TMvpStartupOptions::Build(N, argv);
+}
+
+template <size_t N>
+inline NMVP::TMvpStartupOptions MakeOpts(const char* (&&argv)[N]) {
+    return NMVP::TMvpStartupOptions::Build(N, argv);
 }
 
 class TMvpTestRuntime : public NActors::TTestActorRuntimeBase {

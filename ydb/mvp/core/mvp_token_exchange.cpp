@@ -237,23 +237,30 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
 
 } // anonymous namespace
 
-bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
-                                          nebius::iam::v1::ExchangeTokenRequest& request,
-                                          TString& error) {
-    request.set_grant_type(tokenExchangeInfo->GetGrantType());
-    request.set_requested_token_type(tokenExchangeInfo->GetRequestedTokenType());
+bool TryBuildOAuth2ExchangeData(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
+                                TOAuth2ExchangeData& prepared,
+                                TString& error) {
+    prepared.GrantType = tokenExchangeInfo->GetGrantType();
+    prepared.RequestedTokenType = tokenExchangeInfo->GetRequestedTokenType();
+    prepared.Audience.clear();
+    prepared.Scopes.clear();
+    prepared.Resources.clear();
+    prepared.SubjectToken.clear();
+    prepared.SubjectTokenType.clear();
+    prepared.ActorToken.clear();
+    prepared.ActorTokenType.clear();
 
     if (!tokenExchangeInfo->GetAud().empty()) {
-        request.set_audience(tokenExchangeInfo->GetAud(0));
+        prepared.Audience = tokenExchangeInfo->GetAud(0);
         if (tokenExchangeInfo->AudSize() > 1) {
             BLOG_D("Only first aud value is used for token " << tokenExchangeInfo->GetName());
         }
     }
     for (const auto& scope : tokenExchangeInfo->GetScope()) {
-        request.add_scopes(scope);
+        prepared.Scopes.push_back(scope);
     }
     for (const auto& res : tokenExchangeInfo->GetRes()) {
-        request.add_resource(res);
+        prepared.Resources.push_back(res);
     }
 
     if (!tokenExchangeInfo->HasSubjectCredentials()) {
@@ -262,16 +269,16 @@ bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExch
     }
     try {
         auto subjectCreds = GetCreds(tokenExchangeInfo->GetSubjectCredentials());
-        request.set_subject_token(std::move(subjectCreds.first));
+        prepared.SubjectToken = std::move(subjectCreds.first);
         if (!subjectCreds.second.empty()) {
-            request.set_subject_token_type(std::move(subjectCreds.second));
+            prepared.SubjectTokenType = std::move(subjectCreds.second);
         }
 
         if (tokenExchangeInfo->HasActorCredentials()) {
             auto actorCreds = GetCreds(tokenExchangeInfo->GetActorCredentials());
-            request.set_actor_token(std::move(actorCreds.first));
+            prepared.ActorToken = std::move(actorCreds.first);
             if (!actorCreds.second.empty()) {
-                request.set_actor_token_type(std::move(actorCreds.second));
+                prepared.ActorTokenType = std::move(actorCreds.second);
             }
         }
     } catch (const std::exception& ex) {

@@ -1,5 +1,6 @@
 #include "mvp_startup_options.h"
 #include "cracked_page.h"
+#include "mvp_startup_options_migration.h"
 #include "utils.h"
 
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -214,6 +215,7 @@ void TMvpStartupOptions::LoadTokens() {
     }
 
     if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
+        MigrateJwtInfoToOAuth2ExchangeIfNeeded(&Tokens, AccessServiceType);
         if (Tokens.HasStaffApiUserTokenInfo()) {
             UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
         } else if (Tokens.HasStaffApiUserToken()) {
@@ -248,6 +250,7 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
+    MigrateJwtInfoToOAuth2ExchangeIfNeeded(&Tokens, AccessServiceType);
 
     THashSet<TString> overriddenTokenExchangeNames;
     Oauth2TokenExchangeTokenName.clear();
@@ -280,6 +283,7 @@ void TMvpStartupOptions::OverrideTokensConfig() {
             ythrow yexception() << "Configuration error: 'token_endpoint' must use grpc.";
         }
     }
+
 }
 
 void TMvpStartupOptions::LoadCertificates() {

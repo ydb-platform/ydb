@@ -16,6 +16,7 @@ SRCS(
     mvp_mem_profiler.cpp
     mvp_security_printer.cpp
     mvp_startup_options.cpp
+    mvp_startup_options_migration.cpp
     mvp_test_runtime.cpp
     mvp_token_exchange.cpp
     mvp_tokens.cpp

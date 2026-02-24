@@ -103,7 +103,6 @@ protected:
 
     struct TTokenConfigs {
         THashMap<TString, NMvp::TMetadataTokenInfo> MetadataTokenConfigs;
-        THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
         THashMap<TString, NMvp::TOAuth2Exchange> OAuth2ExchangeConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;

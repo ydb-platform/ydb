@@ -51,6 +51,7 @@ SRCS(
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp
     blobstorage_pdisk_drivemodel_db.cpp
+    blobstorage_pdisk_encryption_threads.cpp
     blobstorage_pdisk_impl.cpp
     blobstorage_pdisk_impl_http.cpp
     blobstorage_pdisk_impl_log.cpp

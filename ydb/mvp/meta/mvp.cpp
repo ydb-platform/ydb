@@ -176,24 +176,29 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     DbUserTokenSource = config.HasDbUserTokenAccess() ? config.GetDbUserTokenAccess() : false;
 }
 
+void TMVP::TryGetMetaOptionsFromConfig() {
+    if (StartupOptions.GetYamlConfigPath().empty()) {
+        return;
+    }
+    try {
+        YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+        NMvp::NMeta::TMetaAppConfig appConfig;
+        MergeYamlNodeToProto(config, appConfig);
+        if (appConfig.HasMeta()) {
+            TryGetMetaOptionsFromConfig(appConfig.GetMeta());
+        }
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    if (!StartupOptions.GetYamlConfigPath().empty()) {
-        try {
-            YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
-            NMvp::NMeta::TMetaAppConfig appConfig;
-            MergeYamlNodeToProto(config, appConfig);
-            if (appConfig.HasMeta()) {
-                TryGetMetaOptionsFromConfig(appConfig.GetMeta());
-            }
-        } catch (const YAML::Exception& e) {
-            std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-            std::exit(EXIT_FAILURE);
-        }
-    }
+    TryGetMetaOptionsFromConfig();
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

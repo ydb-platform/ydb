@@ -218,21 +218,26 @@ void TMVP::TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig&
     Cout << "Finished processing allowed_proxy_hosts." << Endl;
 }
 
-THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
-    if (!StartupOptions.GetYamlConfigPath().empty()) {
-        try {
-            YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
-            NMvp::NOidcProxy::TOidcProxyAppConfig appConfig;
-            MergeYamlNodeToProto(config, appConfig);
-            if (!appConfig.HasOidc()) {
-                ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
-            }
-            TryGetOidcOptionsFromConfig(appConfig.GetOidc());
-        } catch (const YAML::Exception& e) {
-            std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-            std::exit(EXIT_FAILURE);
-        }
+void TMVP::TryGetOidcOptionsFromConfig() {
+    if (StartupOptions.GetYamlConfigPath().empty()) {
+        return;
     }
+    try {
+        YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+        NMvp::NOidcProxy::TOidcProxyAppConfig appConfig;
+        MergeYamlNodeToProto(config, appConfig);
+        if (!appConfig.HasOidc()) {
+            ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
+        }
+        TryGetOidcOptionsFromConfig(appConfig.GetOidc());
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
+    TryGetOidcOptionsFromConfig();
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
     if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {

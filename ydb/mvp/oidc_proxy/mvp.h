@@ -29,6 +29,7 @@ protected:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
+    void TryGetOidcOptionsFromConfig();
     void TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig& config);
 
     TMVPAppData AppData;

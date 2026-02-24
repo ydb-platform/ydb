@@ -46,6 +46,7 @@ public:
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
+    void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
 
     TMVPAppData AppData;

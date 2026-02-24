@@ -131,8 +131,6 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/olap order_by_with_limit.py.TestOrderBy.test_corner
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
-ydb/tests/postgres_integrations/go-libpq py3test.[docker_wrapper_test.py] chunk
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board

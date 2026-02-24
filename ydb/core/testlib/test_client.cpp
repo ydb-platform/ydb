@@ -2163,6 +2163,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain);
         op->SetWorkingDir(parent);
@@ -2183,6 +2184,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain);
         op->SetWorkingDir(parent);
@@ -2197,6 +2199,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetWorkingDir(parent);
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
@@ -2227,6 +2230,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
         op->SetWorkingDir(parent);
@@ -2241,6 +2245,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain);
         op->SetWorkingDir(parent);
@@ -2255,6 +2260,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::DeleteSubdomain(const TString &parent, const TString &name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain);
         op->SetWorkingDir(parent);
@@ -2269,6 +2275,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::ForceDeleteSubdomain(const TString &parent, const TString &name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain);
         op->SetWorkingDir(parent);
@@ -2283,6 +2290,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::ForceDeleteUnsafe(const TString &parent, const TString &name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe);
         op->SetWorkingDir(parent);
@@ -2416,6 +2424,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
@@ -2432,6 +2441,7 @@ namespace Tests {
         NKikimrSchemeOp::EIndexType type, const TVector<TString> dataColumns, TDuration timeout)
     {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
         op->SetWorkingDir(parent);
@@ -2492,6 +2502,7 @@ namespace Tests {
         }
 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
         *op->MutableCreateConsistentCopyTables() = std::move(coping);
@@ -2609,6 +2620,7 @@ namespace Tests {
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
         op->SetWorkingDir(parent);
@@ -2624,6 +2636,7 @@ namespace Tests {
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::MoveIndex(const TString& table, const TString& src, const TString& dst, bool allowOverwrite, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         auto descr = op->MutableMoveIndex();
@@ -2662,6 +2675,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackup);
         op->SetWorkingDir(parent);
@@ -2675,6 +2689,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         op->SetWorkingDir(parent);
@@ -2688,6 +2703,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
         op->SetWorkingDir(parent);
@@ -2808,6 +2824,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -2826,6 +2843,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        request->Record.SetSecurityToken("root@builtin");
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);

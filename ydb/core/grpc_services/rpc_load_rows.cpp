@@ -176,7 +176,7 @@ public:
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
             NACLib::TUserContextBuilder()
                 .WithUserSID(GetUserSID(request))
-                .WithUserTraceId(request->GetUserTraceId().GetOrEmplace(""))
+                .WithUserTraceId(request->GetTraceId().GetOrEmplace(""))
                 .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
@@ -338,7 +338,7 @@ public:
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(), 
             NACLib::TUserContextBuilder()
                 .WithUserSID(GetUserSID(request))
-                .WithUserTraceId(request->GetUserTraceId().GetOrEmplace(""))
+                .WithUserTraceId(request->GetTraceId().GetOrEmplace(""))
                 .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)

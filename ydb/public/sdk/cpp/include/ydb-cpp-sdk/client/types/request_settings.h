@@ -23,7 +23,6 @@ struct TRequestSettings {
     FLUENT_SETTING_DEFAULT(TDeadline, Deadline, TDeadline::Max());
 
     FLUENT_SETTING(std::string, TraceId);
-    FLUENT_SETTING(std::string, UserTraceId);
     FLUENT_SETTING(std::string, RequestType);
     FLUENT_SETTING(THeader, Header);
     FLUENT_SETTING(std::string, TraceParent);
@@ -35,7 +34,6 @@ struct TRequestSettings {
         : ClientTimeout_(other.ClientTimeout_)
         , Deadline_(other.Deadline_)
         , TraceId_(other.TraceId_)
-        , UserTraceId_(other.UserTraceId_)
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
         , TraceParent_(other.TraceParent_)

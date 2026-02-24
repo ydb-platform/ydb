@@ -48,8 +48,6 @@ public:
     virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
     // Return deadile of request execution, calculated from client timeout by grpc
     virtual TInstant GetDeadline() const = 0;
-    // Return user-trace-id value
-    virtual TMaybe<TString> GetUserTraceId() const = 0;
 };
 
 

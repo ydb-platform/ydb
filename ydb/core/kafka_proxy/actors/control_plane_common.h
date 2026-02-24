@@ -342,10 +342,6 @@ public:
         return {};
     }
 
-    TMaybe<TString> GetUserTraceId() const override {
-        return {};
-    }
-
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
         ProcessYdbStatusCode(status, result);
     };

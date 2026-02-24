@@ -23,6 +23,8 @@ public:
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
+            Self->RemoveNodeFromSegments(nodeId);
+
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());
             node.ActualizeNodeStatistics(now);
@@ -73,6 +75,8 @@ public:
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
             }
+
+            Self->UpdateNodeSegments(&node);
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());

@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/tx/replication/service/worker.h>
 
 namespace NKikimrProto::NMetricsConfig {
     class TMetricsConfig;
@@ -48,6 +47,6 @@ public:
 
 private:
     TActorId StreamConsumerRemover;
-    NKikimrProto::NMetricsConfig::TMetricsConfig MetricsConfig;
+    THolder<NKikimrProto::NMetricsConfig::TMetricsConfig> MetricsConfig;
 };
 }

@@ -71,7 +71,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         LOG_D("Handle " << ev->Get()->ToString());
 
         Y_ABORT_UNLESS(!ReadQueue.empty());
-        TResponseDataTrancker req{GetElapsedTicksAsSeconds(), Now() - ReadQueue.front().ReadStartTime, ev};
+        TResponseDataTracker req{GetElapsedTicksAsSeconds(), Now() - ReadQueue.front().ReadStartTime, ev};
         if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             DecompressQueue.emplace_back(std::move(req));
             Send(SelfId(), new TEvents::TEvWakeup(DecompressWakeupTag));
@@ -137,7 +137,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         ResponseQueue.pop_front();
-        Send(Worker, event);
+        Send(Worker, event.Release());
     }
 
     void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
@@ -290,7 +290,7 @@ private:
 
 
     const TActorId YdbProxy;
-    TEvYdbProxy::TTopicReaderSettings Settings;
+    const TEvYdbProxy::TTopicReaderSettings Settings;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
@@ -301,8 +301,8 @@ private:
     bool CreatingReadSessionInProgress = false;
     bool StoppingInProgress = false;
     TDeque<TReadRequestDataTracker> ReadQueue;
-    TDeque<TResponseDataTrancker> DecompressQueue;
-    TDeque<TResponseDataTrancker> ResponseQueue;
+    TDeque<TResponseDataTracker> DecompressQueue;
+    TDeque<TResponseDataTracker> ResponseQueue;
 
     constexpr const static ui64 DecompressWakeupTag = 1;
     constexpr const static ui64 DecompressionDoneWakeupTag = 2;

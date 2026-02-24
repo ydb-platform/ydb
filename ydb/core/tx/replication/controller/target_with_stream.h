@@ -2,9 +2,11 @@
 
 #include "target_base.h"
 
-#include <ydb/core/protos/replication.pb.h>
-
 #include <library/cpp/sliding_window/sliding_window.h>
+
+namespace NKikimrReplication {
+    class TReplicationLocationConfig;
+} // namespace NKikimrReplication::NMetricsConfig
 
 namespace NKikimr::NReplication::NController {
 
@@ -69,9 +71,9 @@ public:
     template <typename... Args>
     explicit TTargetWithStream(Args&&... args)
         : TTargetBase(std::forward<Args>(args)...)
-        , Location(GetLocation())
     {
         SetStreamState(EStreamState::Creating);
+        SetLocation();
     }
 
     void Progress(const TActorContext& ctx) override;
@@ -84,8 +86,10 @@ public:
 
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
 
+    void SetLocation();
+
 protected:
-    NKikimrReplication::TReplicationLocationConfig Location;
+    THolder<NKikimrReplication::TReplicationLocationConfig> Location;
     std::unique_ptr<TTargetWithStreamStats> Stats;
     std::unique_ptr<TTragetWithStreamCounters> Counters;
 

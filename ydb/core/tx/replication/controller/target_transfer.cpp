@@ -1,8 +1,8 @@
 #include "stream_consumer_remover.h"
-#include <ydb/core/protos/metrics_config.pb.h> // should be before target_transfer.h
 #include "target_transfer.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/library/actors/core/events.h>
@@ -161,12 +161,12 @@ struct TTransferCounters: public TTragetWithStreamCounters {
         : TTragetWithStreamCounters()
     {
         CountersGroup = counters
-                            ->GetSubgroup("counters", "transfer")
-                            ->GetSubgroup("host", "")
-                            ->GetSubgroup("transfer_id", location.GetPath())
-                            ->GetSubgroup("database_id", location.GetYcResourceId())
-                            ->GetSubgroup("folder_id", location.GetYcFolderId())
-                            ->GetSubgroup("cloud_id", location.GetYcCloudId());
+            ->GetSubgroup("counters", "transfer")
+            ->GetSubgroup("host", "")
+            ->GetSubgroup("transfer_id", location.GetPath())
+            ->GetSubgroup("database_id", location.GetYcResourceId())
+            ->GetSubgroup("folder_id", location.GetYcFolderId())
+            ->GetSubgroup("cloud_id", location.GetYcCloudId());
 
         ReadTime = CountersGroup->GetExpiringNamedCounter("name", "transfer.read.duration_milliseconds", true);
         ProcessingTime = CountersGroup->GetExpiringNamedCounter("name", "transfer.process.duration_milliseconds", true);
@@ -210,12 +210,13 @@ struct TTransferCounters: public TTragetWithStreamCounters {
 
 TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
+    , MetricsConfig(MakeHolder<TMetricsConfig>())
 {
     Stats.reset(new TTransferStats(Now()));
     if (replication->GetConfig().HasMetricsConfig()) {
-        MetricsConfig.CopyFrom(replication->GetConfig().GetMetricsConfig());
+        MetricsConfig->CopyFrom(replication->GetConfig().GetMetricsConfig());
     } else {
-        MetricsConfig.SetLevel(TMetricsConfig::LEVEL_DEFAULT);
+        MetricsConfig->SetLevel(TMetricsConfig::LEVEL_DEFAULT);
     }
 }
 
@@ -228,12 +229,13 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         cfg.GetTransferSpecific().GetRunAsUser(),
         t.GetDirectoryPath());
 
+    Y_ABORT_UNLESS(MetricsConfig);
     if (cfg.HasMetricsConfig()) {
-        MetricsConfig.CopyFrom(cfg.GetMetricsConfig());
+        MetricsConfig->CopyFrom(cfg.GetMetricsConfig());
     } else {
-        MetricsConfig.SetLevel(TMetricsConfig::LEVEL_DEFAULT);
+        MetricsConfig->SetLevel(TMetricsConfig::LEVEL_DEFAULT);
     }
-    Location.CopyFrom(cfg.GetLocation());
+    Location->CopyFrom(cfg.GetLocation());
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {
@@ -301,12 +303,12 @@ void TTargetTransfer::RemoveWorker(ui64 id) {
 }
 
 void TTargetTransfer::EnsureCounters() {
-    switch (MetricsConfig.GetLevel()) {
+    switch (MetricsConfig->GetLevel()) {
         case TMetricsConfig::LEVEL_DEFAULT:
         case TMetricsConfig::LEVEL_OBJECT:
         case TMetricsConfig::LEVEL_DETAILED:
             if (!Counters) {
-                Counters.reset(new TTransferCounters(AppData()->Counters, Location));
+                Counters.reset(new TTransferCounters(AppData()->Counters, *Location));
             }
             break;
         default:

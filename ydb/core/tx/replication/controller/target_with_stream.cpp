@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 namespace NKikimr::NReplication::NController {
@@ -130,6 +131,7 @@ private:
 
 } // namespace
 
+
 TTargetWithStreamStats::TTargetWithStreamStats(TInstant startTime)
     : CollectionStartTime(startTime)
 {
@@ -171,9 +173,8 @@ bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, 
     return true;
 }
 
-void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const {
+void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool) const {
     auto& dstStats = *destination.MutableStats();
-    Y_UNUSED(detailed);
     ReadBytes.ToProto(*dstStats.MutableReadBytes(), 1);
     ReadMessages.ToProto(*dstStats.MutableReadMessages(), 1);
     WriteBytes.ToProto(*dstStats.MutableWriteBytes(), 1);
@@ -183,12 +184,10 @@ void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicatio
 }
 
 
-bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) {
+bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
     if (!CountersGroup) {
         return false;
     }
-
-    Y_UNUSED(workerId);
 
     const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
     switch (eKey) {
@@ -302,4 +301,10 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
         replication->GetLocation());
 }
 
+void TTargetWithStream::SetLocation() {
+    if (!Location) {
+        Location = MakeHolder<NKikimrReplication::TReplicationLocationConfig>();
+        Location->CopyFrom(GetReplication()->GetLocation());
+    }
+}
 }

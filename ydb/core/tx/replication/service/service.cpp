@@ -38,7 +38,7 @@ class TSessionInfo {
         TRowVersion Heartbeat = TRowVersion::Min();
 
         explicit TWorkerInfo(const TActorId& actorId, const NKikimrReplication::TReplicationLocationConfig& location, TMetricsConfig::EMetricsLevel metricsLevel,
-                             ui64 workerId, NMonitoring::TDynamicCounterPtr& countersRoot)
+            ui64 workerId, NMonitoring::TDynamicCounterPtr& countersRoot)
             : ActorId(actorId)
             , MetricsLevel(metricsLevel)
             , Location(location)
@@ -62,10 +62,10 @@ class TSessionInfo {
             }
 
             auto subgroup = countersRoot->GetSubgroup("transfer_id", Location.GetPath())
-                                ->GetSubgroup("database_id", Location.GetYcResourceId())
-                                ->GetSubgroup("folder_id", Location.GetYcFolderId())
-                                ->GetSubgroup("cloud_id", Location.GetYcCloudId())
-                                ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());
+                ->GetSubgroup("database_id", Location.GetYcResourceId())
+                ->GetSubgroup("folder_id", Location.GetYcFolderId())
+                ->GetSubgroup("cloud_id", Location.GetYcCloudId())
+                ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());
 
             if (!WorkerCounters) {
                 WorkerCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"), WorkerId);
@@ -208,8 +208,8 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId, const NKikimrReplication::TReplicationLocationConfig& replicationLocation,
-                            TMetricsConfig::EMetricsLevel metricsLevel)
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
     {
         auto res = Workers.emplace(id, TWorkerInfo{ops->Register(actor, TMailboxType::HTSwap, poolId),
                                                    replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters});
@@ -222,7 +222,6 @@ public:
         }
 
         Y_ABORT_UNLESS(res.second);
-        res.first->second.MetricsLevel = metricsLevel;
 
         const auto actorId = res.first->second.ActorId;
         ActorIdToWorkerId.emplace(actorId, id);
@@ -581,7 +580,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
-                                          bool autoCommit, bool reportStats) {
+        bool autoCommit, bool reportStats
+    ) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {

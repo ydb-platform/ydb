@@ -2,11 +2,11 @@
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
-#include <ydb/core/protos/metrics_config.pb.h> // should be before target_transfer.h
 #include "target_transfer.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/backoff.h>

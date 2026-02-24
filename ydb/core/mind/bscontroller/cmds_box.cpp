@@ -349,9 +349,6 @@ namespace NKikimr::NBsController {
         if (!hasExplicitVDisks) {
             throw TExError() << "Specify non-empty VDiskId list";
         }
-        if (cmd.GetExpectedVDiskCount() != 0) {
-            throw TExError() << "ExpectedVDiskCount is not supported, use explicit VDiskId list only";
-        }
 
         TVector<const TVSlotInfo*> selected;
         THashSet<TVSlotId> selectedIds;

@@ -988,25 +988,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(response.GetStatus(0).GetSuccess());
 
-            // Scenario B: ExpectedVDiskCount is not supported.
+            // Scenario B: request without explicit list should fail.
             request.Clear();
             populate = request.AddCommand()->MutablePopulatePDisk();
             fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
-            addVDiskId(populate, firstVSlot);
-            addVDiskId(populate, secondVSlot);
-            populate->SetExpectedVDiskCount(1);
-            response = env.Invoke(request);
-            UNIT_ASSERT(!response.GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-            UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("ExpectedVDiskCount is not supported"),
-                response.GetStatus(0).GetErrorDescription());
-
-            // Scenario C: request without explicit list should fail.
-            request.Clear();
-            populate = request.AddCommand()->MutablePopulatePDisk();
-            fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
-            populate->SetExpectedVDiskCount(1);
             response = env.Invoke(request);
             UNIT_ASSERT(!response.GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);

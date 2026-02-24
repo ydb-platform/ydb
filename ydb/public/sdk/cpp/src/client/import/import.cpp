@@ -353,6 +353,8 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
         settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
 
+    settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
+
     for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
         settingsProto.add_exclude_regexps(excludeRegexp);
     }

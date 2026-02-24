@@ -353,7 +353,7 @@ public:
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;
-    ui64 MaxTime = 1000;
+    ui64 MaxTime = 1;
     ui64 BaseTime = 0;
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
@@ -384,7 +384,7 @@ public:
     ui32 NextGroupId() { return ++GroupId; }
 
     std::vector<std::shared_ptr<TPlan>> Plans;
-    ui64 MaxTime = 1000;
+    ui64 MaxTime = 1;
     ui64 BaseTime = 0;
     ui64 UpdateTime = 0;
     TPlanViewConfig Config;

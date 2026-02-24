@@ -225,8 +225,8 @@ namespace NKikimr::NBsController {
                 const auto& disksPerRealm = NumDisksPerRealm[vdisk.FailRealm][pos.Realm];
                 const auto& disksPerDomain = NumDisksPerDomain[domainIdx][pos.Domain];
 
-                const ui32 otherDecommittedInRealm = NumDecommittedDisksInDomain[vdisk.FailRealm] - decommitted;
-                const ui32 otherDecommittedInDomain = NumDecommittedDisksInDomain[vdisk.FailDomain] - decommitted;
+                const ui32 otherDecommittedInRealm = NumDecommittedDisksInRealm[vdisk.FailRealm] - decommitted;
+                const ui32 otherDecommittedInDomain = NumDecommittedDisksInDomain[domainIdx] - decommitted;
 
                 const ui32 disksOnDevice = NumDisksPerDevice[pos.Device];
 

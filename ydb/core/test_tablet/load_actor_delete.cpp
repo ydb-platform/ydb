@@ -49,6 +49,7 @@ namespace NKikimr::NTestShard {
         if (const auto difIt = DeletesInFlight.find(cookie); difIt != DeletesInFlight.end()) {
             TDeleteInfo& info = difIt->second;
             Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            DeleteCounters.RecordOk(info.KeysInQuery.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 // validate that delete was successful
                 const auto& res = results[i];

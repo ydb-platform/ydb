@@ -243,4 +243,5 @@ message TFeatureFlags {
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
 }

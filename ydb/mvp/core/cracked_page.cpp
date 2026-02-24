@@ -10,18 +10,8 @@
 #include <algorithm>
 
 namespace NMVP {
-namespace {
 
-enum class ESchemeKind {
-    Empty,
-    Http,
-    Https,
-    Grpc,
-    Grpcs,
-    Unknown,
-};
-
-ESchemeKind DetectSchemeKind(TStringBuf scheme) {
+TCrackedPage::ESchemeKind TCrackedPage::ParseScheme(TStringBuf scheme) {
     const TString normalized = to_lower(TString(scheme));
     if (normalized.empty()) {
         return ESchemeKind::Empty;
@@ -40,20 +30,6 @@ ESchemeKind DetectSchemeKind(TStringBuf scheme) {
     }
     return ESchemeKind::Unknown;
 }
-
-bool IsSecureSchemeKind(ESchemeKind kind) {
-    return kind == ESchemeKind::Https || kind == ESchemeKind::Grpcs;
-}
-
-bool IsGrpcFamilyScheme(ESchemeKind kind) {
-    return kind == ESchemeKind::Empty || kind == ESchemeKind::Grpc || kind == ESchemeKind::Grpcs;
-}
-
-bool IsHttpFamilyScheme(ESchemeKind kind) {
-    return kind == ESchemeKind::Empty || kind == ESchemeKind::Http || kind == ESchemeKind::Https;
-}
-
-} // namespace
 
 TCrackedPage::TParsedValues TCrackedPage::Parse(TStringBuf url) {
     TParsedValues parsedValues;
@@ -78,6 +54,7 @@ TCrackedPage::TCrackedPage(TParsedValues&& parsedValues)
     , Host(std::move(parsedValues.Host))
     , Uri(std::move(parsedValues.Uri))
     , Parsed(parsedValues.Parsed)
+    , SchemeKind(Parsed ? ParseScheme(Scheme) : ESchemeKind::Unknown)
 {}
 
 TCrackedPage::TCrackedPage(TStringBuf url)
@@ -93,28 +70,15 @@ bool TCrackedPage::IsParsed() const {
 }
 
 bool TCrackedPage::IsSecureScheme() const {
-    if (!Parsed) {
-        return false;
-    }
-    return IsSecureSchemeKind(DetectSchemeKind(Scheme));
-}
-
-bool TCrackedPage::IsSchemeAllowed() const {
-    return IsGrpcSchemeAllowed() || IsHttpSchemeAllowed();
+    return SchemeKind == ESchemeKind::Https || SchemeKind == ESchemeKind::Grpcs;
 }
 
 bool TCrackedPage::IsGrpcSchemeAllowed() const {
-    if (!Parsed) {
-        return false;
-    }
-    return IsGrpcFamilyScheme(DetectSchemeKind(Scheme));
+    return SchemeKind == ESchemeKind::Empty || SchemeKind == ESchemeKind::Grpc || SchemeKind == ESchemeKind::Grpcs;
 }
 
 bool TCrackedPage::IsHttpSchemeAllowed() const {
-    if (!Parsed) {
-        return false;
-    }
-    return IsHttpFamilyScheme(DetectSchemeKind(Scheme));
+    return SchemeKind == ESchemeKind::Empty || SchemeKind == ESchemeKind::Http || SchemeKind == ESchemeKind::Https;
 }
 
 bool TCrackedPage::IsRequestedHostAllowed(const std::vector<TString>& allowedProxyHosts) const {

@@ -19,14 +19,23 @@ struct TCrackedPage {
 
     bool IsParsed() const;
     bool IsSecureScheme() const;
-    bool IsSchemeAllowed() const;
     bool IsGrpcSchemeAllowed() const;
     bool IsHttpSchemeAllowed() const;
     bool IsRequestedHostAllowed(const std::vector<TString>& allowedProxyHosts) const;
     bool TryGetHostAndPort(TStringBuf& scheme, TStringBuf& host, ui16& port) const;
 
 private:
+    enum class ESchemeKind {
+        Empty,
+        Http,
+        Https,
+        Grpc,
+        Grpcs,
+        Unknown,
+    };
+
     const bool Parsed;
+    const ESchemeKind SchemeKind;
 
     struct TParsedValues {
         TString Url;
@@ -37,6 +46,7 @@ private:
     };
 
     static TParsedValues Parse(TStringBuf url);
+    static ESchemeKind ParseScheme(TStringBuf scheme);
     explicit TCrackedPage(TParsedValues&& parsedValues);
 };
 

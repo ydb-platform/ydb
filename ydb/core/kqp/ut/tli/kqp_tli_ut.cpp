@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
-        settings.AppConfig.MutableTliConfig()->AddIgnoredTablePaths("/Root/Tenant1/Table1");
+        settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/.*/Table1");
         TTliTestContext ctx(std::move(settings));
 
         ctx.CreateAndSeedTables(3);
@@ -1544,7 +1544,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
-        settings.AppConfig.MutableTliConfig()->AddIgnoredTablePaths("/Root/Tenant1/Table1");
+        settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/Tenant1/Table1");
         TTliTestContext ctx(std::move(settings));
 
         ctx.CreateAndSeedTables(3);

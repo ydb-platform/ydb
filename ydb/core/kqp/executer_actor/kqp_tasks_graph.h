@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shard_key_ranges.h"
+#include <regex>
 
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -262,15 +263,18 @@ struct TGraphMeta {
         if (spanId == 0 || tablePath.empty()) {
             return spanId;
         }
-        if (IgnoredTablePaths.contains(tablePath)) {
-            return 0;
+        for (const auto& pattern : IgnoredTableRegexes) {
+            std::regex regexPattern(pattern.c_str());
+            if (std::regex_match(tablePath.c_str(), regexPattern)) {
+                return 0;
+            }
         }
         return spanId;
     }
 
     ui64 QuerySpanId = 0;
     THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
-    THashSet<TString> IgnoredTablePaths;
+    THashSet<TString> IgnoredTableRegexes;
 };
 
 struct TTaskInputMeta {

@@ -2985,7 +2985,7 @@ message TNbsConfig {
 }
 
 message TTliConfig {
-    repeated string IgnoredTablePaths = 1;
+    repeated string IgnoredTableRegexes = 1;
 }
 
 message TAppConfig {

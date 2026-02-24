@@ -2275,7 +2275,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     case ETabletType::ColumnShard:
                         olapColumnShards[shard.PathId].push_back(idx);
-                        Self->SharedShards[idx].insert(shard.PathId);
                         break;
                     case ETabletType::ReplicationController:
                         replicationControllers.emplace(shard.PathId, idx);

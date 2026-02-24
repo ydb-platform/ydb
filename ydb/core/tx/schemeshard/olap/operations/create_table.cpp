@@ -783,7 +783,6 @@ public:
 
             for (ui64 i = 0; i < shardsCount; ++i) {
                 TShardIdx idx = context.SS->RegisterShardInfo(columnShardInfo);
-                context.SS->SharedShards[idx].insert(pathId);
                 context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
                 txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
 

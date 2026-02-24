@@ -289,19 +289,31 @@ private:
             for (auto& shard : txState->Shards) {
                 auto shardIdx = shard.Idx;
                 auto& shardInfo = context.SS->ShardInfos[shardIdx];
-                auto& sharedPaths = context.SS->SharedShards[shardIdx];
-                sharedPaths.erase(txState->TargetPathId);
-                context.SS->PersistRemoveSharedShard(db, shardIdx, txState->TargetPathId);
-                if (sharedPaths.empty()) {
+                bool isOwner = txState->TargetPathId == shardInfo.PathId;
+                auto sharedPathsIt = context.SS->SharedShards.find(shardIdx);
+
+                // Removing shared shard
+                if (sharedPathsIt != context.SS->SharedShards.end() && !isOwner) {
+                    sharedPathsIt->second.erase(txState->TargetPathId);
+                    context.SS->PersistRemoveSharedShard(db, shardIdx, txState->TargetPathId);
+                }
+
+                if (sharedPathsIt == context.SS->SharedShards.end() && isOwner) { // Remove shard. No more dependency
                     context.OnComplete.DeleteShard(shardIdx);
-                    context.SS->SharedShards.erase(shardIdx);
-                } else if (txState->TargetPathId == shardInfo.PathId) {
-                    shardInfo.PathId = *sharedPaths.begin();
+                } else if (isOwner) { // Transfer of ownership
+                    AFL_VERIFY(sharedPathsIt != context.SS->SharedShards.end());
+                    AFL_VERIFY(!sharedPathsIt->second.empty());
+                    shardInfo.PathId = *sharedPathsIt->second.begin();
                     context.SS->PersistShardPathId(db, shardIdx, shardInfo.PathId);
                     context.SS->PathsById.at(shardInfo.PathId)->IncShardsInside();
                     context.SS->PathsById.at(txState->TargetPathId)->DecShardsInside();
                     context.SS->IncrementPathDbRefCount(shardInfo.PathId);
                     context.SS->DecrementPathDbRefCount(txState->TargetPathId);
+                }
+
+                // Clearing SharedShards info if it is possible
+                if (sharedPathsIt != context.SS->SharedShards.end() && sharedPathsIt->second.empty()) {
+                    context.SS->SharedShards.erase(sharedPathsIt);
                 }
             }
         }

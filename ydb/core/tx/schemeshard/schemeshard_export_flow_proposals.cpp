@@ -14,6 +14,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -55,7 +56,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+        if (!IsPathTypeTable(item)) {
             continue;
         }
 
@@ -463,7 +464,7 @@ void PrepareDropping(
         item.WaitTxId = InvalidTxId;
         item.State = TExportInfo::EState::Dropped;
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && itemPath.IsResolved() && !itemPath.IsDeleted()) {
+        if (IsPathTypeTable(item) && itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
             if (exportInfo.State == TExportInfo::EState::AutoDropping) {
                 func(itemIdx);

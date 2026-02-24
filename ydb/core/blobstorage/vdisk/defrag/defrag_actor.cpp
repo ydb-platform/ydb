@@ -49,7 +49,7 @@ namespace NKikimr {
     // TEvStartCompactionFromDefrag
     ////////////////////////////////////////////////////////////////////////////
     struct TEvStartCompactionFromDefrag :
-        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::TEvStartCompactionFromDefrag>
+        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::EvStartCompactionFromDefrag>
     {};
 
     double DefragThreshold(
@@ -248,13 +248,8 @@ namespace NKikimr {
         };
 
         void RunDefragPlanner(const TActorContext &ctx) {
-<<<<<<< HEAD
             Y_ABORT_UNLESS(!PlannerId);
-            PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx));
-=======
-            Y_VERIFY_S(!PlannerId, DCtx->VCtx->VDiskLogPrefix);
             PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx, CompactionManagerId));
->>>>>>> 1081e408b77 (batch comp request after independent defrag)
         }
 
         TDuration GeneratePause() const {

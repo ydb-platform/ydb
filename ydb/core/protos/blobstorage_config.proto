@@ -515,7 +515,6 @@ message TPopulatePDisk {
         }
     }
 
-    // keep field number to avoid accidental reuse
     TPDisk DestinationPDisk = 1;
 
     // Explicit VDisks to process first.

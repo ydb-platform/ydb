@@ -198,19 +198,20 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
 }
 
 void TMVP::TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig& config) {
-    OpenIdConnectSettings.SecretName = config.has_secretname() ? config.secretname() : "";
-    OpenIdConnectSettings.ClientId = config.has_clientid() ? config.clientid() : OpenIdConnectSettings.DEFAULT_CLIENT_ID;
-    OpenIdConnectSettings.SessionServiceEndpoint = config.has_sessionserviceendpoint() ? config.sessionserviceendpoint() : "";
-    OpenIdConnectSettings.SessionServiceTokenName = config.has_sessionservicetokenname() ? config.sessionservicetokenname() : "";
-    OpenIdConnectSettings.AuthorizationServerAddress = config.has_authorizationserveraddress() ? config.authorizationserveraddress() : "";
-    OpenIdConnectSettings.AuthUrlPath = config.has_authurlpath() ? config.authurlpath() : OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH;
-    OpenIdConnectSettings.TokenUrlPath = config.has_tokenurlpath() ? config.tokenurlpath() : OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH;
-    OpenIdConnectSettings.ExchangeUrlPath = config.has_exchangeurlpath() ? config.exchangeurlpath() : OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH;
-    OpenIdConnectSettings.ImpersonateUrlPath = config.has_impersonateurlpath() ? config.impersonateurlpath() : OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH;
-    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = config.has_whoamiextendedinfoendpoint() ? config.whoamiextendedinfoendpoint() : "";
+    OpenIdConnectSettings.SecretName = config.GetSecretName();
+    OpenIdConnectSettings.ClientId = config.HasClientId() ? config.GetClientId() : OpenIdConnectSettings.DEFAULT_CLIENT_ID;
+    OpenIdConnectSettings.SessionServiceEndpoint = config.GetSessionServiceEndpoint();
+    OpenIdConnectSettings.SessionServiceTokenName = config.GetSessionServiceTokenName();
+    OpenIdConnectSettings.AuthorizationServerAddress = config.GetAuthorizationServerAddress();
+    OpenIdConnectSettings.AuthUrlPath = config.HasAuthUrlPath() ? config.GetAuthUrlPath() : OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH;
+    OpenIdConnectSettings.TokenUrlPath = config.HasTokenUrlPath() ? config.GetTokenUrlPath() : OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH;
+    OpenIdConnectSettings.ExchangeUrlPath = config.HasExchangeUrlPath() ? config.GetExchangeUrlPath() : OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH;
+    OpenIdConnectSettings.ImpersonateUrlPath = config.HasImpersonateUrlPath() ? config.GetImpersonateUrlPath() : OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH;
+    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = config.GetWhoamiExtendedInfoEndpoint();
+
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     OpenIdConnectSettings.AllowedProxyHosts.clear();
-    for (const auto& host : config.allowedproxyhosts()) {
+    for (const auto& host : config.GetAllowedProxyHosts()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
         OpenIdConnectSettings.AllowedProxyHosts.push_back(host);
     }

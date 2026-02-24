@@ -169,11 +169,11 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
-    MetaApiEndpoint = config.has_metaapiendpoint() ? config.metaapiendpoint() : "";
-    MetaDatabase = config.has_metadatabase() ? config.metadatabase() : "";
-    MetaCache = config.has_metacache() ? config.metacache() : false;
-    MetaDatabaseTokenName = config.has_metadatabasetokenname() ? config.metadatabasetokenname() : "";
-    DbUserTokenSource = config.has_dbusertokenaccess() ? config.dbusertokenaccess() : false;
+    MetaApiEndpoint = config.HasMetaApiEndpoint() ? config.GetMetaApiEndpoint() : "";
+    MetaDatabase = config.HasMetaDatabase() ? config.GetMetaDatabase() : "";
+    MetaCache = config.HasMetaCache() ? config.GetMetaCache() : false;
+    MetaDatabaseTokenName = config.HasMetaDatabaseTokenName() ? config.GetMetaDatabaseTokenName() : "";
+    DbUserTokenSource = config.HasDbUserTokenAccess() ? config.GetDbUserTokenAccess() : false;
 }
 
 

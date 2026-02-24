@@ -3433,6 +3433,12 @@ public:
         });
     }
 
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetIndexPopulationMode() const {
+        return Visit([](const auto& settings) {
+            return settings.index_population_mode();
+        });
+    }
+
     bool CompileExcludeRegexps(TString& errorDescription);
 
     bool IsExcludedFromImport(const TString& path) const;

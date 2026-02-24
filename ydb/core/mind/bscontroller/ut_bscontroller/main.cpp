@@ -978,6 +978,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 item->SetVDisk(vslot.GetVDiskIdx());
             };
 
+            auto sameVDisk = [](const NKikimrBlobStorage::TVDiskID& vdiskId, const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                return vdiskId.GetGroupID() == vslot.GetGroupId()
+                    && vdiskId.GetRing() == vslot.GetFailRealmIdx()
+                    && vdiskId.GetDomain() == vslot.GetFailDomainIdx()
+                    && vdiskId.GetVDisk() == vslot.GetVDiskIdx();
+            };
+
             // Scenario A: explicit list should succeed.
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
@@ -998,6 +1005,54 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
             UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Specify non-empty VDiskId list"),
                 response.GetStatus(0).GetErrorDescription());
+
+            // Scenario C: evict first VDisk and then populate it back to original PDisk.
+            request.Clear();
+            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(firstVSlot.GetGroupId());
+            reassign->SetGroupGeneration(firstVSlot.GetGroupGeneration());
+            reassign->SetFailRealmIdx(firstVSlot.GetFailRealmIdx());
+            reassign->SetFailDomainIdx(firstVSlot.GetFailDomainIdx());
+            reassign->SetVDiskIdx(firstVSlot.GetVDiskIdx());
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
+
+            bool evicted = false;
+            for (const auto& reassignedItem : response.GetStatus(0).GetReassignedItem()) {
+                if (!sameVDisk(reassignedItem.GetVDiskId(), firstVSlot)) {
+                    continue;
+                }
+                evicted = true;
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetNodeId(), firstVSlot.GetVSlotId().GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetPDiskId(), firstVSlot.GetVSlotId().GetPDiskId());
+                UNIT_ASSERT_C(
+                    std::make_pair(reassignedItem.GetTo().GetNodeId(), reassignedItem.GetTo().GetPDiskId())
+                        != std::make_pair(firstVSlot.GetVSlotId().GetNodeId(), firstVSlot.GetVSlotId().GetPDiskId()),
+                    "Expected eviction to move VDisk to another PDisk");
+            }
+            UNIT_ASSERT_C(evicted, "Expected eviction record for first VDisk");
+
+            request.Clear();
+            populate = request.AddCommand()->MutablePopulatePDisk();
+            fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
+            addVDiskId(populate, firstVSlot);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
+
+            bool populatedBack = false;
+            for (const auto& reassignedItem : response.GetStatus(0).GetReassignedItem()) {
+                if (!sameVDisk(reassignedItem.GetVDiskId(), firstVSlot)) {
+                    continue;
+                }
+                populatedBack = true;
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetNodeId(), firstVSlot.GetVSlotId().GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetPDiskId(), firstVSlot.GetVSlotId().GetPDiskId());
+            }
+            UNIT_ASSERT_C(populatedBack, "Expected populate to move first VDisk back to original PDisk");
         });
     }
 

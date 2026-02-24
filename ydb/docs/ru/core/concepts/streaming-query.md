@@ -74,7 +74,7 @@
 
 ## Язык запросов {#syntax}
 
-Потоковые запросы пишутся на [YQL](../yql/reference/index.md) и поддерживают привычные SQL-конструкции: [SELECT](../yql/reference/syntax/select/index.md), [WHERE](../yql/reference/syntax/select/where.md), [GROUP BY](../yql/reference/syntax/select/group-by.md), [JOIN](../yql/reference/syntax/select/join.md). Для работы с временными окнами используется [GROUP BY HOP](../yql/reference/syntax/select/group-by.md#group-by-hop), для поиска паттернов — [MATCH_RECOGNIZE](../yql/reference/syntax/select/match_recognize.md).
+Потоковые запросы пишутся на [YQL](../yql/reference/index.md) и поддерживают привычные SQL-конструкции: [SELECT](../yql/reference/syntax/select/index.md), [WHERE](../yql/reference/syntax/select/where.md), [GROUP BY](../yql/reference/syntax/select/group-by.md), [JOIN](../yql/reference/syntax/select/join.md). Для работы с временными окнами используется [GROUP BY HOP](../yql/reference/syntax/select/group-by.md#group-by-hop){% if feature_match_recogznize==true %}, для поиска паттернов — [MATCH_RECOGNIZE](../yql/reference/syntax/select/match_recognize.md){% endif %}.
 
 ## См. также
 

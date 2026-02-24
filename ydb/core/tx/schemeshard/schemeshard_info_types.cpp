@@ -2906,5 +2906,9 @@ float TForcedCompactionInfo::CalcProgress() const {
     return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
 }
 
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

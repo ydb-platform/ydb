@@ -477,6 +477,45 @@ namespace NSchemeShardUT_Private {
         TestCopyTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
     }
 
+    TEvSchemeShard::TEvModifySchemeTransaction* CopyColumnTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        transaction->SetWorkingDir(dstPath);
+
+        auto op = transaction->MutableCreateColumnTable();
+        op->SetName(dstName);
+        op->SetCopyFromTable(srcFullName);
+        op->SetIsBackup(true);
+
+        SetApplyIf(*transaction, applyIf);
+        return evTx;
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShardId, sender, CopyColumnTableRequest(txId, dstPath, dstName, srcFullName));
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        AsyncCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        AsyncCopyColumnTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
+        TestModificationResult(runtime, txId, expectedResult);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        TestCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
+    }
+
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path) {
         return TestLs(runtime, path, true);
     }

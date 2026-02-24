@@ -2322,6 +2322,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerShardIdx, LocalShardIdx, ForcedCompactionId>;
     };
 
+    struct SharedShards : Table<132> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct OwnerPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
+        using TKey = TableKey<ShardIdx, OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2451,7 +2460,8 @@ struct Schema : NIceDb::Schema {
         SecretsAlterData,
         StreamingQueryState,
         ForcedCompactions,
-        WaitingForcedCompactionShards
+        WaitingForcedCompactionShards,
+        SharedShards
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

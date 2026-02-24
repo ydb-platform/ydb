@@ -275,6 +275,8 @@ enum ESimpleCounters {
 
     COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214 [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
     COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215 [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
+    
+    COUNTER_IN_FLIGHT_OPS_TxReadOnlyCopyColumnTable = 216 [(CounterOpts) = {Name: "InFlightOps/ReadOnlyCopyColumnTable"}];
 }
 
 enum ECumulativeCounters {
@@ -447,6 +449,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 
     COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
+    
+    COUNTER_FINISHED_OPS_TxReadOnlyCopyColumnTable = 134 [(CounterOpts) = {Name: "FinishedOps/ReadOnlyCopyColumnTable"}];
 }
 
 enum EPercentileCounters {

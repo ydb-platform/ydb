@@ -55,6 +55,7 @@ bool IsCreate(ETxType t) {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
@@ -224,6 +225,7 @@ bool IsDrop(ETxType t) {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
@@ -363,6 +365,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:

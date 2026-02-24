@@ -452,6 +452,10 @@ void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
 }
 
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
+}
+
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }

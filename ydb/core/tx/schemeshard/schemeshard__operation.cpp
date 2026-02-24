@@ -1043,6 +1043,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateNewTable(NextPartId(), txState);
     case TTxState::ETxType::TxCopyTable:
         return CreateCopyTable(NextPartId(), txState, state);
+    case TTxState::ETxType::TxReadOnlyCopyColumnTable:
+        return CreateReadOnlyCopyColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterTable:
         return CreateAlterTable(NextPartId(), txState);
     case TTxState::ETxType::TxSplitTablePartition:
@@ -1377,6 +1379,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return {CreateDropOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
+        if (tx.GetCreateColumnTable().HasCopyFromTable()) {
+            return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
+        }
         return {CreateNewColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
         return {CreateAlterColumnTable(op.NextPartId(), tx)};

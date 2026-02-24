@@ -29,10 +29,6 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     return itemIdx;
 }
 
-bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
-}
-
 bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
     return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex
@@ -974,8 +970,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
-                    // Column Tables must be skiped here
-                    if (!IsPathTypeTransferrable(item) || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable || item.State != EState::Dropping) {
+                    if (!IsPathTypeTransferrable(item) || item.State != EState::Dropping) {
                         continue;
                     }
 
@@ -1323,8 +1318,7 @@ private:
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                // TODO (hcpp): support auto dropping after full support for read-only copying for columnar tables. https://github.com/ydb-platform/ydb/issues/26498
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     EndExport(exportInfo, EState::Done, db);
                 } else {
                     PrepareAutoDropping(Self, *exportInfo, db);
@@ -1389,26 +1383,16 @@ private:
             exportInfo->State = EState::CopyTables;
             AllocateTxId(*exportInfo);
         } else {
-            // None of the items is a column table.
-            TDeque<ui32> columnTables;
+            // None of the items is a table.
             for (ui32 i : xrange(exportInfo->Items.size())) {
-                auto& item = exportInfo->Items[i];
-                item.State = EState::Transferring;
+                exportInfo->Items[i].State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, i);
 
-                // TODO (hcpp): remove after implementing copying of column tables
-                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                    columnTables.emplace_back(i);
-                } else {
-                    UploadScheme(*exportInfo, i, ctx);
-                }
+                UploadScheme(*exportInfo, i, ctx);
             }
 
             exportInfo->State = EState::Transferring;
-            exportInfo->PendingItems = std::move(columnTables);
-            for (ui32 itemIdx : exportInfo->PendingItems) {
-                AllocateTxId(*exportInfo, itemIdx);
-            }
+            exportInfo->PendingItems.clear();
         }
 
         Self->PersistExportState(db, *exportInfo);
@@ -1481,26 +1465,16 @@ private:
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(*exportInfo);
             } else {
-                // None of the items is a column table.
-                TDeque<ui32> columnTables;
+                // None of the items is a table.
                 for (ui32 i : xrange(exportInfo->Items.size())) {
-                    auto& item = exportInfo->Items[i];
-                    item.State = EState::Transferring;
+                    exportInfo->Items[i].State = EState::Transferring;
                     Self->PersistExportItemState(db, *exportInfo, i);
 
-                    // TODO (hcpp): remove after implementing copying of column tables
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                        columnTables.emplace_back(i);
-                    } else {
-                        UploadScheme(*exportInfo, i, ctx);
-                    }
+                    UploadScheme(*exportInfo, i, ctx);
                 }
 
                 exportInfo->State = EState::Transferring;
-                exportInfo->PendingItems = std::move(columnTables);
-                for (ui32 itemIdx : exportInfo->PendingItems) {
-                    AllocateTxId(*exportInfo, itemIdx);
-                }
+                exportInfo->PendingItems.clear();
             }
             break;
         }
@@ -1552,7 +1526,7 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
                     Self->EraseEncryptionKey(db, *exportInfo);

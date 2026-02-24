@@ -64,12 +64,13 @@ private:
     ui64 ExportId;
 };
 
-IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+template <typename TSettings>
+IActor* CreateSchemeUploaderFallback(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, enableChecksums, iv);
-    return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
+    return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
 }
 
 template <typename TSettings>

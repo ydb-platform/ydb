@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
@@ -195,6 +196,28 @@ public:
         return TableClientSession;
     }
 
+    std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> GetLocalFlatMsgBusPQClient() {
+        if (!LocalFlatMsgBusPQClient) {
+            const auto& server = GetKikimrRunner()->GetTestServer();
+            LocalFlatMsgBusPQClient = std::make_shared<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
+                server.GetSettings(),
+                server.GetGRpcServer().GetPort(),
+                "/Root"
+            );
+        }
+
+        return LocalFlatMsgBusPQClient;
+    }
+
+    void KillTopicPqrbTablet(const TString& topicPath) {
+        const auto tabletClient = GetLocalFlatMsgBusPQClient();
+        const auto& describeResult = tabletClient->Ls(JoinPath({"/Root", topicPath}));
+        UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
+
+        const auto& persQueueGroup = describeResult->Record.GetPathDescription().GetPersQueueGroup();
+        tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), persQueueGroup.GetBalancerTabletID());
+    }
+
     // External YDB recipe
 
     std::shared_ptr<TDriver> GetExternalDriver() {
@@ -242,7 +265,8 @@ public:
     void CreateTopic(const TString& topicName, std::optional<NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false) {
         if (!settings) {
             settings.emplace()
-                .PartitioningSettings(1, 1);
+                .PartitioningSettings(1, 1)
+                .BeginAddConsumer("test_consumer");
         }
 
         const auto result = GetTopicClient(local)->CreateTopic(topicName, *settings).ExtractValueSync();
@@ -842,6 +866,7 @@ private:
     std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NTable::TSession> TableClientSession;
     std::shared_ptr<NTopic::TTopicClient> LocalTopicClient;
+    std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> LocalFlatMsgBusPQClient;
 
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<TDriver> ExternalDriver;
@@ -2029,10 +2054,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(outputTopic, std::nullopt, /* local */ true);
 
         auto asyncResult = GetQueryClient()->ExecuteQuery(fmt::format(R"(
+                PRAGMA pq.Consumer = "test_consumer";
                 INSERT INTO `{output_topic}`
                 SELECT * FROM `{input_topic}` WITH (
                     STREAMING = "TRUE"
-                ) LIMIT 1
+                ) LIMIT 2
             )",
             "input_topic"_a = inputTopic,
             "output_topic"_a = outputTopic
@@ -2041,6 +2067,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopic, "data", 0, /* local */ true);
         ReadTopicMessage(outputTopic, "data", TInstant::Now() - TDuration::Seconds(100), /* local */ true);
+
+        // Force session reconnect
+        KillTopicPqrbTablet(inputTopic);
+
+        const auto disposition = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data2", 0, /* local */ true);
+        ReadTopicMessage(outputTopic, "data2", disposition, /* local */ true);
 
         const auto result = asyncResult.ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());

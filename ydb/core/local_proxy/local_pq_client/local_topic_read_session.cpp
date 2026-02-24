@@ -468,7 +468,12 @@ private:
             .TopicPath = info.path(),
             .ReadSessionId = SessionId,
         });
-        Y_VALIDATE(PartitionSessions.emplace(partitionSessionId, partitionSession).second, "Partition session #" << partitionSessionId << " already exists");
+        if (const auto [it, inserted] = PartitionSessions.emplace(partitionSessionId, partitionSession); !inserted) {
+            // After internal server retry session may be reconnected
+            LOG_N("Partition session #" << partitionSessionId << " reconnected");
+            AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost);
+            it->second = partitionSession;
+        }
 
         AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
             std::move(partitionSession),

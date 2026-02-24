@@ -65,6 +65,7 @@ system_tablet_backup_config:
     - При использовании конфигурации V1, необходимо изменить [статическую конфигурацию](../configuration-management/configuration-v1/static-config.md) на всех узлах, на которых может работать восстанавливаемая таблетка.
     - При использовании конфигурации V2, воспользуйтесь [инструкцией](../configuration-management/configuration-v2/update-config.md).
     - Пример для таблетки `Hive` с идентификатором `72057594037968897`:
+
     ```yaml
         bootstrap_config:
             tablet:
@@ -74,6 +75,7 @@ system_tablet_backup_config:
                 tablet_id: '72057594037968897'
               boot_mode: RECOVERY
     ```
+
 3. Перезапустите все узлы, на которых может работать восстанавливаемая таблетка. Если какой-либо узел недоступен и не может быть перезапущен, изолируйте его от кластера по сети.
 
     {% note warning %}
@@ -144,6 +146,7 @@ system_tablet_backup_config:
     scp -r /tablet/hive/72057594037968897/backup_20251007T193502_g214_s1222 \
         user@target-host:~/backup_20251007T193502_g214_s1222
     ```
+
 3. Убедитесь, что файлы доступны для чтения процессу {{ ydb-short-name }} на целевом хосте.
 
 ### Шаг 4. Выполните восстановление {#perform-recovery}

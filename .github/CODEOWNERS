@@ -95,7 +95,9 @@
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
+/ydb/library/pdisk_io @ydb-platform/blobstorage
 /ydb/library/workload/tpcc @ydb-platform/blobstorage
+/ydb/tools/stress_tool @ydb-platform/blobstorage
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli

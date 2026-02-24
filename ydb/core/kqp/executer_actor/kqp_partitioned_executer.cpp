@@ -85,6 +85,7 @@ public:
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
         , ChannelService(channelService)
         , QuerySpanId(settings.QuerySpanId)
+        , UserCtx(settings.UserCtx)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -587,7 +588,7 @@ private:
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
-            .UserCtx = NACLib::TUserContextBuilder().WithUserSID(UserToken->GetUserSID()).Build()
+            .UserCtx = UserCtx
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -603,7 +604,7 @@ private:
         }
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
-        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
+        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, UserCtx);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
@@ -932,6 +933,7 @@ private:
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     ui64 QuerySpanId = 0;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace

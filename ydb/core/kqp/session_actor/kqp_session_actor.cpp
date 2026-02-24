@@ -1970,6 +1970,22 @@ public:
         return results;
     }
 
+    NACLib::TUserContext::TPtr CreateUserContext() {
+        NACLib::TUserContextBuilder builder;
+
+        if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
+            builder.WithUserSID(QueryState->UserToken->GetUserSID());
+        } else if (UserCtx != nullptr) {
+            builder.WithUserSID(UserCtx->GetUserSID());
+        }
+
+        if (QueryState !=nullptr) {
+            builder.WithUserTraceId(QueryState->UserTraceId);
+        }
+
+        return builder.Build();
+    }
+
     void SendToExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         bool allowSaveState = false;
         if (QueryState) {
@@ -2035,18 +2051,7 @@ public:
                 .Alloc = std::move(alloc)
             };
 
-            NACLib::TUserContextBuilder builder;
-            if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
-                builder.WithUserSID(QueryState->UserToken->GetUserSID());
-            } else if (UserCtx != nullptr) {
-                builder.WithUserSID(UserCtx->GetUserSID());
-            }
-
-            if (QueryState !=nullptr) {
-                builder.WithUserTraceId(QueryState->UserTraceId);
-            }
-
-            settings.UserCtx = builder.Build();
+            settings.UserCtx = CreateUserContext();
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
@@ -2063,7 +2068,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, CreateUserContext()),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2115,7 +2120,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService);
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, CreateUserContext());
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),
@@ -2144,6 +2149,7 @@ public:
             .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
             .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
+            .UserCtx =  CreateUserContext()
         };
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);

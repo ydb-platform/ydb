@@ -151,10 +151,13 @@ struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
 struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
+    NACLib::TUserContext::TPtr UserCtx;
 
-    TExecuterConfig( TIntrusivePtr<TExecuterMutableConfig> mutableConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig)
+    TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NACLib::TUserContext::TPtr userCtx)
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)
+        , UserCtx(userCtx)
     {}
 };
 

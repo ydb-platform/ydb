@@ -11,6 +11,7 @@
 #include <util/datetime/base.h>
 
 #include <set>
+#include <utility>
 
 namespace NMVP {
 namespace {
@@ -166,18 +167,18 @@ TString JoinAlgorithmsForError() {
     return sb;
 }
 
-bool ResolveFixedTokenValue(const TOauthCredentials& creds, const TString& tokenName, TString& token, TString& error) {
+bool ResolveFixedTokenValue(const TOauthCredentials& creds, TString& token, TString& error) {
     if (!creds.token().empty()) {
         token = creds.token();
         if (!creds.tokenfile().empty()) {
-            BLOG_D("Both token and token_file are set for token " << tokenName << ", token will be used");
+            BLOG_D("Both token and token_file are set, token will be used");
         }
         return true;
     }
     if (!creds.tokenfile().empty()) {
-        return NMVP::TryLoadTokenFromFile(creds.tokenfile(), token, error, tokenName);
+        return NMVP::TryLoadTokenFromFile(creds.tokenfile(), token, error, "oauth2 credentials");
     }
-    error = TStringBuilder() << "OAuth2 token exchange credentials require either token or token_file for token " << tokenName;
+    error = "OAuth2 token exchange credentials require either token or token_file";
     return false;
 }
 
@@ -189,6 +190,62 @@ TOauthCredentials::EType InferCredsType(const TOauthCredentials& creds) {
         return TOauthCredentials::FIXED;
     }
     return TOauthCredentials::TYPE_UNSPECIFIED;
+}
+
+std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
+    TString tokenValue;
+    TString tokenType;
+
+    TOauthCredentials::EType credsType = creds.type();
+    if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
+        credsType = InferCredsType(creds);
+        if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
+            ythrow yexception() << "OAuth2 token exchange credentials type is required";
+        }
+    }
+
+    if (credsType == TOauthCredentials::FIXED) {
+        TString error;
+        if (!ResolveFixedTokenValue(creds, tokenValue, error)) {
+            ythrow yexception() << error;
+        }
+        tokenType = creds.tokentype();
+        return {std::move(tokenValue), std::move(tokenType)};
+    }
+
+    if (credsType == TOauthCredentials::JWT) {
+        if (creds.alg().empty()) {
+            ythrow yexception() << "alg is required for JWT credentials";
+        }
+        if (creds.privatekey().empty()) {
+            ythrow yexception() << "private-key is required for JWT credentials";
+        }
+
+        auto algIt = JwtAlgorithmsFactory.find(creds.alg());
+        if (algIt == JwtAlgorithmsFactory.end()) {
+            ythrow yexception()
+                << "Algorithm \"" << creds.alg() << "\" is not supported"
+                << ". Supported algorithms are: " << JoinAlgorithmsForError();
+        }
+
+        try {
+            tokenValue = algIt->second(creds, std::chrono::system_clock::now());
+        } catch (const std::exception& ex) {
+            ythrow yexception() << "Failed to build JWT credentials: " << ex.what();
+        }
+        tokenType = creds.tokentype().empty() ? TString(JWT_TOKEN_TYPE) : creds.tokentype();
+        return {std::move(tokenValue), std::move(tokenType)};
+    }
+
+    ythrow yexception() << "Unsupported OAuth2 token exchange credentials type. Supported types are JWT and FIXED";
+}
+
+std::pair<TString, TString> GetCredsWithDefaultTokenType(const TOauthCredentials& creds, TStringBuf defaultTokenType) {
+    auto credsPair = GetCreds(creds);
+    if (credsPair.second.empty()) {
+        credsPair.second = TString(defaultTokenType);
+    }
+    return credsPair;
 }
 
 } // anonymous namespace
@@ -212,74 +269,22 @@ bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExch
         request.add_resource(res);
     }
 
-    auto setCreds = [&](const TOauthCredentials& creds, bool subject) -> bool {
-        TString tokenValue;
-        TString tokenType;
-        TOauthCredentials::EType credsType = creds.type();
-        if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
-            credsType = InferCredsType(creds);
-            if (credsType == TOauthCredentials::TYPE_UNSPECIFIED) {
-                error = TStringBuilder() << "OAuth2 token exchange credentials type is required for token " << tokenExchangeInfo->name();
-                return false;
-            }
-        }
-
-        if (credsType == TOauthCredentials::FIXED) {
-            if (!ResolveFixedTokenValue(creds, tokenExchangeInfo->name(), tokenValue, error)) {
-                return false;
-            }
-            tokenType = creds.tokentype();
-            if (tokenType.empty()) {
-                tokenType = subject ? TString(SUBJECT_IDENTIFIER_TOKEN_TYPE) : TString(JWT_TOKEN_TYPE);
-            }
-        } else if (credsType == TOauthCredentials::JWT) {
-            if (creds.alg().empty()) {
-                error = TStringBuilder() << "alg is required for JWT credentials for token " << tokenExchangeInfo->name();
-                return false;
-            }
-            if (creds.privatekey().empty()) {
-                error = TStringBuilder() << "private-key is required for JWT credentials for token " << tokenExchangeInfo->name();
-                return false;
-            }
-
-            auto algIt = JwtAlgorithmsFactory.find(creds.alg());
-            if (algIt == JwtAlgorithmsFactory.end()) {
-                error = TStringBuilder()
-                    << "Algorithm \"" << creds.alg() << "\" is not supported for token " << tokenExchangeInfo->name()
-                    << ". Supported algorithms are: " << JoinAlgorithmsForError();
-                return false;
-            }
-            try {
-                tokenValue = algIt->second(creds, std::chrono::system_clock::now());
-            } catch (const std::exception& ex) {
-                error = TStringBuilder() << "Failed to build JWT credentials for token " << tokenExchangeInfo->name() << ": " << ex.what();
-                return false;
-            }
-            tokenType = creds.tokentype().empty() ? TString(JWT_TOKEN_TYPE) : creds.tokentype();
-        } else {
-            error = TStringBuilder() << "Unsupported OAuth2 token exchange credentials type for token "
-                << tokenExchangeInfo->name() << ". Supported types are JWT and FIXED";
-            return false;
-        }
-
-        if (subject) {
-            request.set_subject_token(tokenValue);
-            request.set_subject_token_type(tokenType);
-        } else {
-            request.set_actor_token(tokenValue);
-            request.set_actor_token_type(tokenType);
-        }
-        return true;
-    };
-
     if (!tokenExchangeInfo->HasSubjectCredentials()) {
         error = TStringBuilder() << "subject-credentials are required for token " << tokenExchangeInfo->name();
         return false;
     }
-    if (!setCreds(tokenExchangeInfo->subjectcredentials(), true)) {
-        return false;
-    }
-    if (tokenExchangeInfo->HasActorCredentials() && !setCreds(tokenExchangeInfo->actorcredentials(), false)) {
+    try {
+        auto subjectCreds = GetCredsWithDefaultTokenType(tokenExchangeInfo->subjectcredentials(), SUBJECT_IDENTIFIER_TOKEN_TYPE);
+        request.set_subject_token(std::move(subjectCreds.first));
+        request.set_subject_token_type(std::move(subjectCreds.second));
+
+        if (tokenExchangeInfo->HasActorCredentials()) {
+            auto actorCreds = GetCredsWithDefaultTokenType(tokenExchangeInfo->actorcredentials(), JWT_TOKEN_TYPE);
+            request.set_actor_token(std::move(actorCreds.first));
+            request.set_actor_token_type(std::move(actorCreds.second));
+        }
+    } catch (const std::exception& ex) {
+        error = TStringBuilder() << ex.what() << " for token " << tokenExchangeInfo->name();
         return false;
     }
 

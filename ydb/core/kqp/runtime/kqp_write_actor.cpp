@@ -5136,8 +5136,7 @@ public:
     TKqpForwardWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         TArgs&& args,
-        TIntrusivePtr<TKqpCounters> counters,
-        const NACLib::TUserContext::TPtr& userCtx)
+        TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -5156,7 +5155,6 @@ public:
                 NWilson::EFlags::AUTO_END)
         , TransformOutput(ExtractTransformOutput(args))
     {
-        Y_UNUSED(userCtx);
         EgressStats.Level = args.StatsLevel;
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
@@ -5467,7 +5465,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
                 auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters, userCtx);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             } else {
-                auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, userCtx);
+                auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             }
         });
@@ -5480,7 +5478,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
                 .WithUserSID(settings.GetUserSID())
                 .WithUserTraceId(settings.GetUserTraceId())
                 .Build();
-            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, userCtx);
+            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });
 }

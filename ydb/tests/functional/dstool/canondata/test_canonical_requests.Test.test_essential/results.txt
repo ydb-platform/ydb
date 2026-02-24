@@ -8,80 +8,95 @@ YDB Distributed Storage Administration Tool
 Subcommands:
 dstool
 ├─ device
-│  └─ list                 List available storage devices
+│  └─ list                              List available storage devices
 ├─ pdisk
-│  ├─ add-by-serial        Add disk to storage box by serial number
-│  ├─ remove-by-serial     Remove disk from storage by serial number
-│  ├─ set                  Set pdisk properties. It may impact respective vdisks
-│  ├─ list                 List pdisks
-│  ├─ stop                 Stop PDisk
-│  ├─ restart              Restart PDisk
-│  ├─ readonly             Change PDisk read-only status
-│  └─ move                 Move PDisk
+│  ├─ add-by-serial                     Add disk to storage box by serial number
+│  ├─ remove-by-serial                  Remove disk from storage by serial 
+│  │                                    number
+│  ├─ set                               Set pdisk properties. It may impact 
+│  │                                    respective vdisks
+│  ├─ list                              List pdisks
+│  ├─ stop                              Stop PDisk
+│  ├─ restart                           Restart PDisk
+│  ├─ readonly                          Change PDisk read-only status
+│  └─ move                              Move PDisk
 ├─ vdisk
-│  ├─ evict                Relocate vdisks to other pdisks
-│  ├─ list                 List vdisks
-│  ├─ set-read-only        Set vdisk read-only mode (experimental mode that 
-│  │                       might help restore data in certain situations)
-│  ├─ remove-donor         Remove vdisks that are in donor mode
-│  ├─ wipe                 Wipe vdisks
-│  └─ compact              Run compaction on vdisks
+│  ├─ evict                             Relocate vdisks to other pdisks
+│  ├─ list                              List vdisks
+│  ├─ set-read-only                     Set vdisk read-only mode (experimental 
+│  │                                    mode that might help restore data in 
+│  │                                    certain situations)
+│  ├─ remove-donor                      Remove vdisks that are in donor mode
+│  ├─ wipe                              Wipe vdisks
+│  └─ compact                           Run compaction on vdisks
 ├─ group
-│  ├─ add                  Add groups to the pool
-│  ├─ check                Check groups
-│  ├─ decommit             Decommit physical group
+│  ├─ add                               Add groups to the pool
+│  ├─ check                             Check groups
+│  ├─ decommit                          Decommit physical group
 │  ├─ show
-│  │  ├─ blob-info         Get blob information from group
-│  │  ├─ storage-efficiency
-│  │  │                    Estimate storage efficiency of VDisks and pools
-│  │  └─ usage-by-tablets  Estimate groups usage by tablets
-│  ├─ state                Change or query group state
-│  ├─ take-snapshot        Take snapshot of groups metadata
-│  ├─ list                 List groups
+│  │  ├─ blob-info                      Get blob information from group
+│  │  ├─ storage-efficiency             Estimate storage efficiency of VDisks 
+│  │  │                                 and pools
+│  │  └─ usage-by-tablets               Estimate groups usage by tablets
+│  ├─ state                             Change or query group state
+│  ├─ take-snapshot                     Take snapshot of groups metadata
+│  ├─ list                              List groups
 │  └─ virtual
-│     ├─ create            Create virtual group backed by BlobDepot
-│     ├─ cancel            Cancel virtual group creation/decommission
-│     └─ reconfigure       Create virtual group backed by BlobDepot
+│     ├─ create                         Create virtual group backed by BlobDepot
+│     ├─ cancel                         Cancel virtual group 
+│     │                                 creation/decommission
+│     └─ reconfigure                    Create virtual group backed by BlobDepot
 ├─ pool
-│  ├─ list                 List pools
+│  ├─ list                              List pools
 │  └─ create
-│     └─ virtual           Create pool suitable for virtual groups
+│     └─ virtual                        Create pool suitable for virtual groups
 ├─ box
-│  └─ list                 List boxes
+│  └─ list                              List boxes
 ├─ node
-│  └─ list                 List nodes
-└─ cluster
-   ├─ balance              Move vdisks out from overpopulated pdisks.
-   ├─ get                  Get cluster wide settings
-   ├─ set                  Set cluster wide settings
-   ├─ workload
-   │  └─ run               Create workload to stress failure model
-   └─ list                 List cluster
+│  └─ list                              List nodes
+├─ cluster
+│  ├─ balance                           Move vdisks out from overpopulated 
+│  │                                    pdisks.
+│  ├─ get                               Get cluster wide settings
+│  ├─ set                               Set cluster wide settings
+│  ├─ workload
+│  │  └─ run                            Create workload to stress failure model
+│  └─ list                              List cluster
+└─ nbs
+   └─ partition
+      ├─ create                         Create NBS 2.0 partition
+      ├─ delete                         Delete NBS 2.0 partition
+      ├─ get-load-actor-adapter-actor-id
+      │                                 Get LoadActorAdapter actor id for NBS 
+      │                                 2.0 partition
+      └─ io                             Send IO to NBS 2.0 partition
 
 Options:
-  {-?|-h|--help}         Print usage
-  --version              Print version
-  {-v|--verbose}         Be verbose during operation
-  {-d|--debug}           Be very verbose during operation
-  {-q|--quiet}           Don't show non-vital messages
-  {-n|--dry-run}         Run command without side effects
+  {-?|-h|--help}                      Print usage
+  --version                           Print version
+  {-v|--verbose}                      Be verbose during operation
+  {-d|--debug}                        Be very verbose during operation
+  {-q|--quiet}                        Don't show non-vital messages
+  {-n|--dry-run}                      Run command without side effects
 Server access options:
   {-e|--endpoint} [PROTOCOL://]HOST[:PORT]
-                         Endpoint is specified as PROTOCOL://HOST[:PORT]. Can be
-                          specified multiple times with different protocols.
-  --grpc-port PORT       GRPC port to use for procedure invocation
-  --mon-port PORT        HTTP monitoring port for viewer JSON access
-  --token-file PATH      Path to token file
-  --iam-token-file PATH  Path to IAM token file
-  --ca-file PATH         File containing PEM encoded root certificates for 
-                         SSL/TLS connections. If this parameter is empty, the 
-                         default roots will be used.
-  --http-timeout HTTP_TIMEOUT
-                         Timeout for blocking socket I/O operations during 
-                         HTTP(s) queries
-  --insecure             Allow insecure HTTPS fetching
-  --use-ip               Use IP addresses instead of hostnames when connecting 
-                         to endpoints
+                                      Endpoint is specified as 
+                                      PROTOCOL://HOST[:PORT]. Can be specified 
+                                      multiple times with different protocols.
+  --grpc-port PORT                    GRPC port to use for procedure invocation
+  --mon-port PORT                     HTTP monitoring port for viewer JSON 
+                                      access
+  --token-file PATH                   Path to token file
+  --iam-token-file PATH               Path to IAM token file
+  --ca-file PATH                      File containing PEM encoded root 
+                                      certificates for SSL/TLS connections. If 
+                                      this parameter is empty, the default roots
+                                       will be used.
+  --http-timeout HTTP_TIMEOUT         Timeout for blocking socket I/O operations
+                                       during HTTP(s) queries
+  --insecure                          Allow insecure HTTPS fetching
+  --use-ip                            Use IP addresses instead of hostnames when
+                                       connecting to endpoints
 
 Free args: min: 1 max: unlimited
-  <subcommand>  device, pdisk, vdisk, group, pool, box, node, cluster
+  <subcommand>  device, pdisk, vdisk, group, pool, box, node, cluster, nbs

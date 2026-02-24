@@ -64,10 +64,6 @@ public:
         TBorrowed& operator=(TBorrowed&&) = delete;
 
         ~TBorrowed() {
-            if (!SharedLockCounter) {
-                return;
-            }
-
             bool releaseLock = false;
 
             with_lock(*SharedLockCounterMutex) {

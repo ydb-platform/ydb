@@ -104,6 +104,7 @@ TImportFromFsResponse::TImportFromFsResponse(TStatus&& status, Ydb::Operations::
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
     if (metadata.settings().no_acl()) {
         Metadata_.Settings.NoACL(metadata.settings().no_acl());

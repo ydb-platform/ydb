@@ -211,7 +211,7 @@ public:
 
 private:
     union TRaw {
-        ui64 Halfs[2] = {0, 0};
+        ui64 Halfs[2] = {0, 0}; // NOLINT(modernize-avoid-c-arrays)
 
         TRawEmbeddedValue Embedded;
 
@@ -234,7 +234,7 @@ private:
                 ui64 FullMeta;
                 struct {
                     TTimezoneId TimezoneId;
-                    ui8 Reserved[5];
+                    ui8 Reserved[5]; // NOLINT(modernize-avoid-c-arrays)
                     ui8 Meta;
                 };
             };

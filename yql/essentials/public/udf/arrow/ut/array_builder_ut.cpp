@@ -338,16 +338,16 @@ Y_UNIT_TEST(TestBuilderAllocatedSize) {
     const TString bString(bigStringSize, 'a');
     TBlockItem strItem1(bString);
     TBlockItem intItem1(1);
-    TBlockItem sItems1[] = {strItem1, intItem1};
-    TBlockItem sItem1(sItems1);
+    std::array<TBlockItem, 2> sItems1 = {strItem1, intItem1};
+    TBlockItem sItem1(sItems1.data());
 
     const TBlockItem bigItem = sItem1.MakeOptional();
 
     const TString hString(hugeStringSize, 'b');
     TBlockItem strItem2(hString);
     TBlockItem intItem2(2);
-    TBlockItem sItems2[] = {strItem2, intItem2};
-    TBlockItem sItem2(sItems2);
+    std::array<TBlockItem, 2> sItems2 = {strItem2, intItem2};
+    TBlockItem sItem2(sItems2.data());
 
     const TBlockItem hugeItem = sItem2.MakeOptional();
 

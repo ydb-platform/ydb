@@ -13,8 +13,7 @@
 #include <utility>
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 struct TSetup {
@@ -118,5 +117,4 @@ Y_UNIT_TEST(TestIterate) {
     UNIT_ASSERT_VALUES_EQUAL(items, vals);
 }
 } // Y_UNIT_TEST_SUITE(TestCompactMultiDict)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -61,6 +61,24 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
 } // namespace
 
+template <typename TRule>
+    requires std::same_as<TRule, TRule_union_op> ||
+             std::same_as<TRule, TRule_intersect_op>
+bool IsAllQualifiedOp(const TRule& node) {
+    if (!node.HasBlock2()) {
+        return false;
+    }
+
+    const TString token = ToLowerUTF8(node.GetBlock2().GetToken1().GetValue());
+    if (token == "all") {
+        return true;
+    } else if (token == "distinct") {
+        return false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+    }
+}
+
 TSourcePtr TSqlSelect::CheckSubSelectOnDiscard(TSourcePtr source) {
     if (!source) {
         return nullptr;
@@ -1371,24 +1389,6 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
             }
         }
         return SelectKind(partial, selectPos, {});
-    }
-}
-
-template <typename TRule>
-    requires std::same_as<TRule, TRule_union_op> ||
-             std::same_as<TRule, TRule_intersect_op>
-bool TSqlSelect::IsAllQualifiedOp(const TRule& node) {
-    if (!node.HasBlock2()) {
-        return false;
-    }
-
-    const TString token = ToLowerUTF8(Token(node.GetBlock2().GetToken1()));
-    if (token == "all") {
-        return true;
-    } else if (token == "distinct") {
-        return false;
-    } else {
-        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
     }
 }
 

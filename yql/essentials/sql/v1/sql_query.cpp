@@ -2657,6 +2657,26 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction21: {
+            // ALTER COLUMN id SET DEFAULT expr
+            const auto& alterRule = node.GetAlt_alter_table_action21().GetRule_alter_table_alter_column_set_default1();
+
+            if (!AlterTableAlterColumnSetDefault(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction22: {
+            // ALTER COLUMN id DROP DEFAULT
+            const auto& alterRule = node.GetAlt_alter_table_action22().GetRule_alter_table_alter_column_drop_default1();
+
+            if (!AlterTableAlterColumnDropDefault(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3027,6 +3047,37 @@ bool TSqlQuery::AlterTableAlterColumnSetCompression(const TRule_alter_table_alte
         .Name = std::move(name),
         .Compression = std::move(compression),
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetCompression,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+
+    const auto& defaultValueRule = node.GetRule_default_value5();
+    TSqlExpression expr(Ctx_, Mode_);
+    auto defaultExpr = Unwrap(expr.Build(defaultValueRule.GetRule_expr2()));
+    if (!defaultExpr) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .DefaultExpr = std::move(defaultExpr),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropDefault,
     });
     return true;
 }
@@ -3757,6 +3808,26 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         return TNodePtr();
     }),
 
+    TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(),
+                "FailOnNonPersistableFlattenAndAggrExprs",
+                MakeLangVersion(2025, 03)))
+        {
+            return Nothing();
+        }
+
+        if (!values.empty()) {
+            query.Error() << "Expected no pragma arguments";
+            return Nothing();
+        }
+
+        ctx.FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Force;
+        return TNodePtr();
+    }),
+
     // TMaybe<bool> fields.
     PAIRED_TABLE_ELEM("AnsiInForEmptyOrNullableItemsCollections", AnsiInForEmptyOrNullableItemsCollections),
     PAIRED_TABLE_ELEM("AnsiRankForNullableKeys", AnsiRankForNullableKeys),
@@ -4290,11 +4361,31 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
         size_t statementNumber = 0;
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
-        if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+        auto checkExplainToken = [&](const auto& stmt) -> bool {
+            if (stmt.HasBlock1()) {
+                auto const& provider = Ctx_.Scoped->CurrService;
+                if (provider == YdbProviderName || provider == KikimrProviderName) {
+                    Ctx_.Error() << "EXPLAIN is not supported by " << Ctx_.Scoped->CurrService << " provider.";
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const auto& firstStmt = statements.GetRule_sql_stmt2();
+        if (!checkExplainToken(firstStmt)) {
+            return nullptr;
+        }
+
+        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
         for (auto block : statements.GetBlock3()) {
-            if (!Statement(blocks, block.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+            const auto& stmt = block.GetRule_sql_stmt2();
+            if (!checkExplainToken(stmt)) {
+                return nullptr;
+            }
+            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
                 return nullptr;
             }
         }

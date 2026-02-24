@@ -18,8 +18,7 @@
 
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
@@ -371,5 +370,4 @@ NKikimr::NMiniKQL::TType* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TC
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

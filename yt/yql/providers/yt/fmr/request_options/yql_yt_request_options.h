@@ -9,6 +9,7 @@
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/distributed_session.h>
+#include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
 namespace NYql::NFmr {
@@ -89,6 +90,33 @@ struct TFmrUserJobSettings {
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
+    bool operator==(const TFmrUserJobSettings&) const = default;
+};
+
+struct TFmrTvmJobSettings {
+    TString WorkerTvmAlias;
+    TTvmId TableDataServiceTvmId = 0;
+    TMaybe<ui32> TvmPort;
+    TMaybe<TString> TvmSecret;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TFmrTvmGatewaySettings {
+    TTvmId CoordinatorTvmId;
+    TTvmId GatewayTvmId;
+    TString GatewayTvmSecret;
+    TString TvmDiskCacheDir;
+};
+
+struct TFmrTvmSpec {
+    TString WorkerTvmAlias;
+    TString CoordinatorTvmAlias;
+    TString TableDataServiceTvmAlias;
+    TTvmId WorkerTvmId;
+    TTvmId CoordinatorTvmId;
+    TTvmId TableDataServiceTvmId;
 };
 
 struct TYtTableRef {

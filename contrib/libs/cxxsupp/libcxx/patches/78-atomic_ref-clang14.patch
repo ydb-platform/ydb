@@ -1,5 +1,5 @@
 diff --git a/include/__atomic/atomic_ref.h b/include/__atomic/atomic_ref.h
-index 177ea64..a0ed1e8 100644
+index b549366..3866b5f 100644
 --- a/include/__atomic/atomic_ref.h
 +++ b/include/__atomic/atomic_ref.h
 @@ -261,7 +261,7 @@ template <class _Tp>

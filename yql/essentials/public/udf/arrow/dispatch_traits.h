@@ -6,8 +6,7 @@
 
 #include <arrow/type.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <typename TTraits, typename... TArgs>
 std::unique_ptr<typename TTraits::TResult> MakeTupleArrowTraitsImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, const TType* type, TArgs&&... args) {
@@ -254,5 +253,4 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
     Y_ENSURE(false, "Unsupported type");
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

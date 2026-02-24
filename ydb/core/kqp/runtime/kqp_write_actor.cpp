@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -65,7 +66,9 @@ namespace {
         }
     }
 
-    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
+        ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
@@ -237,6 +240,7 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    TVector<ui64> BreakerQuerySpanIds;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -260,9 +264,14 @@ struct TKqpTableWriterStatistics {
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
         LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+        if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.BreakerQuerySpanIdsSize() > 0) {
+            for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+                BreakerQuerySpanIds.push_back(id);
+            }
+        }
     }
 
-    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, const TVector<ui64>& breakerQuerySpanIds = {}) {
         NKqpProto::TKqpTaskExtraStats extraStats;
         if (stats->HasExtra()) {
             stats->GetExtra().UnpackTo(&extraStats);
@@ -271,13 +280,17 @@ struct TKqpTableWriterStatistics {
             extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
         extraStats.MutableLockStats()->SetBrokenAsVictim(
             extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        for (ui64 id : breakerQuerySpanIds) {
+            extraStats.MutableLockStats()->AddBreakerQuerySpanIds(id);
+        }
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
-        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds);
         LocksBrokenAsBreaker = 0;
         LocksBrokenAsVictim = 0;
+        BreakerQuerySpanIds.clear();
 
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
@@ -367,7 +380,8 @@ public:
         const NKikimrDataEvents::ELockMode lockMode,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        const TString& userSID)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -383,6 +397,7 @@ public:
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
+        , UserSID(userSID)
     {
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
@@ -397,6 +412,12 @@ public:
 
     ~TKqpTableWriteActor() {
         ClearMkqlData();
+    }
+
+    // Set the current query's SpanId before processing each batch.
+    // This ensures UpdateShards/AddAction passes the correct per-query SpanId to TxManager.
+    void SetCurrentQuerySpanId(ui64 querySpanId) {
+        CurrentQuerySpanId = querySpanId;
     }
 
     void Bootstrap() {
@@ -482,6 +503,11 @@ public:
 
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+
+        // Associate this token with the current query's SpanId for TLI lock-break attribution.
+        // This ensures each batch created from this token carries the correct QuerySpanId,
+        // even when batches from multiple queries are later combined into a single EvWrite.
+        ShardedWriteController->SetTokenQuerySpanId(token, CurrentQuerySpanId);
 
         CA_LOG_D("Open: token=" << token);
     }
@@ -960,12 +986,9 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << TablePath << "`.",
-                getIssues());
+
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
+            RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -1027,16 +1050,14 @@ public:
                 return builder;
             }());
 
+        // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock, CurrentQuerySpanId)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
+                    Stats.LocksBrokenAsVictim += 1;
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    NYql::TIssues issues;
-                    issues.AddIssue(*TxManager->GetLockIssue());
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::ABORTED,
-                        std::move(issues));
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
                 }
             }
@@ -1101,7 +1122,11 @@ public:
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
-            TxManager->AddAction(shardInfo.ShardId, flags);
+            // Use per-batch QuerySpanId when available; fall back to CurrentQuerySpanId.
+            // This ensures TxManager tracks the correct per-query SpanId even when
+            // FlushBuffers() flushes batches from multiple queries at once.
+            const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
 
@@ -1140,6 +1165,8 @@ public:
             return false;
         }
 
+        // BreakerQuerySpanId is set in AddAction during write phase, not here
+
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
@@ -1150,6 +1177,8 @@ public:
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE)
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        evWrite->Record.SetUserSID(UserSID);
 
         if (isImmediateCommit) {
             const auto locks = TxManager->GetLocks(shardId);
@@ -1504,11 +1533,14 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    const TString UserSID;
 
     TKqpTableWriterStatistics Stats;
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
+    // Current query's SpanId, set before each batch via SetCurrentQuerySpanId.
+    ui64 CurrentQuerySpanId = 0;
 };
 
 
@@ -1751,9 +1783,9 @@ private:
         }
 
         // TODO: remove !PathLookupInfo.empty() after full error support
-        if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !PathLookupInfo.empty()) {
+        if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
-            for (const auto& batch : ProcessBatches) {
+            for (const auto& batch : BufferedBatches) {
                 for (const auto& row : GetRows(batch)) {
                     const auto& key = row.first(KeyColumnTypes.size());
                     if (!primaryKeysSet.insert(key).second) {
@@ -2326,7 +2358,8 @@ public:
     TKqpDirectWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        const TString& userSID)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -2340,6 +2373,7 @@ public:
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
         , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "TKqpDirectWriteActor")
+        , UserSID(userSID)
     {
         EgressStats.Level = args.StatsLevel;
 
@@ -2385,7 +2419,11 @@ public:
                 Settings.GetLockMode(),
                 nullptr,
                 TActorId{},
-                Counters);
+                Counters,
+                UserSID);
+            // Set initial QuerySpanId for direct write actor
+            WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
+
             WriteTableActor->SetParentTraceId(DirectWriteActorSpan.GetTraceId());
             WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -2684,6 +2722,7 @@ private:
     bool WaitingForTableActor = false;
 
     NWilson::TSpan DirectWriteActorSpan;
+    const TString UserSID;
 };
 
 
@@ -2733,6 +2772,7 @@ struct TWriteSettings {
     std::vector<TIndex> Indexes;
 
     bool EnableStreamWrite;
+    ui64 QuerySpanId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -2790,6 +2830,8 @@ public:
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
+        , UserSID(settings.UserSID)
+        , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
@@ -2987,7 +3029,8 @@ public:
                     settings.TransactionSettings.LockMode,
                     TxManager,
                     SessionActorId,
-                    Counters);
+                    Counters,
+                    UserSID);
                 ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(ptr);
                 CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
@@ -3021,6 +3064,7 @@ public:
                     .LockTxId = LockTxId,
                     .LockNodeId = LockNodeId,
                     .LockMode = settings.TransactionSettings.LockMode,
+                    .QuerySpanId = QuerySpanId,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
                     .TxManager = TxManager,
@@ -3055,6 +3099,11 @@ public:
                         settings.TablePath)) {
                     return;
                 }
+            }
+            // Set the current query's SpanId on all write actors for this table.
+            // TxManager::AddAction (called from UpdateShards) will collect per-shard SpanIds.
+            for (auto& [pathId, actorInfo] : writeInfo.Actors) {
+                actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
             }
 
             if (!settings.LookupColumns.empty()) {
@@ -3094,11 +3143,13 @@ public:
                         .WriteActor = ptr,
                         .Id = id,
                     });
-                } else if (!checkSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return;
+                } else {
+                    if (!checkSchemaVersion(
+                            writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                            indexSettings.TableId,
+                            indexSettings.TablePath)) {
+                        return;
+                    }
                 }
 
                 if (indexSettings.IsUniq) {
@@ -3591,6 +3642,8 @@ public:
             || CurrentStateFunc() == &TThis::StateFlush);
         Become(&TThis::StatePrepare);
 
+        PendingPrepareShards = TxManager->GetShardsCount();
+
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -3696,11 +3749,13 @@ public:
             : (TxManager->IsVolatile()
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
+        evWrite ->SetUserSID(UserSID);
 
         if (isRollback) {
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
         } else {
             YQL_ENSURE(TxId);
+            // BreakerQuerySpanId comes from TxManager (set by per-table write actors), not this actor
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         }
@@ -4267,6 +4322,7 @@ public:
             }
         }
         default:
+            if (HandleDeferredLocksBrokenOnPrepare(&ev->Get()->Record)) return;
             HandleError(ev);
         }
     }
@@ -4292,6 +4348,7 @@ public:
             return;
         }
         default:
+            if (HandleDeferredLocksBrokenOnCommit(ev->Get()->Record)) return;
             HandleError(ev);
         }
     }
@@ -4492,20 +4549,15 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            if (ev->Get()->Record.HasTxStats()) {
-                LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
-                LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
-            }
+            CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
+            if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
+                return;
+            }
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder()
-                    << "Transaction locks invalidated. "
-                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
-                getIssues());
+            ReplyError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -4603,10 +4655,7 @@ public:
                 return builder;
             }());
 
-        if (ev->Get()->Record.HasTxStats()) {
-            LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
-            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
-        }
+        CollectTliStats(ev->Get()->Record);
 
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
@@ -4616,6 +4665,7 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             CA_LOG_E("Handle TEvWriteResult: unable to select coordinator. Tx canceled, actorId: " << SelfId()
                 << ", previously selected coordinator: " << TxManager->GetCoordinator()
@@ -4639,6 +4689,7 @@ public:
 
     void OnCommitted(ui64 shardId, ui64) override {
         if (TxManager->ConsumeCommitResult(shardId)) {
+            if (FlushDeferredLocksBrokenIfPending()) return;
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
@@ -4706,11 +4757,95 @@ public:
         Process();
     }
 
+    // --- TLI (Transaction Lineage Information) helpers ---
+    // Collect lock-breaking stats from a shard response for TLI attribution.
+    void CollectTliStats(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (record.HasTxStats()) {
+            const auto& txStats = record.GetTxStats();
+            LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+            for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+                BreakerQuerySpanIds.push_back(id);
+            }
+        }
+    }
+
+    // Defer a LOCKS_BROKEN error during distributed prepare/commit so remaining
+    // shards can respond with their TxStats (breaker TLI info) before the error
+    // is sent to the session actor.  Returns true if the error was deferred.
+    bool TryDeferLocksBrokenError(ui64 shardId, NYql::TIssues&& issues) {
+        if (IsImmediateCommit || PendingLocksBrokenError) {
+            return false;
+        }
+        PendingLocksBrokenError.emplace(NYql::NDqProto::StatusIds::ABORTED, std::move(issues));
+        if (CurrentStateFunc() == &TThis::StateCommit) {
+            if (TxManager->ConsumeCommitResult(shardId)) {
+                FlushPendingLocksBrokenError();
+            }
+            return true;
+        }
+        if (CurrentStateFunc() == &TThis::StatePrepare) {
+            // PendingPrepareShards was already decremented by
+            // HandleDeferredLocksBrokenOnPrepare (called before HandleError).
+            if (PendingPrepareShards == 0) {
+                FlushPendingLocksBrokenError();
+            }
+            return true;
+        }
+        PendingLocksBrokenError.reset();
+        return false;
+    }
+
+    // Account for a prepare-phase shard response and, when a deferred
+    // LOCKS_BROKEN error exists, check whether all shards have responded.
+    // The decrement is unconditional so that PREPARED responses arriving
+    // before the first LOCKS_BROKEN are counted correctly (otherwise the
+    // counter would never reach 0 and the actor would hang).
+    bool HandleDeferredLocksBrokenOnPrepare(const NKikimrDataEvents::TEvWriteResult* record = nullptr) {
+        if (PendingPrepareShards > 0) {
+            --PendingPrepareShards;
+        }
+        if (!PendingLocksBrokenError) return false;
+        if (record) CollectTliStats(*record);
+        if (PendingPrepareShards == 0) {
+            FlushPendingLocksBrokenError();
+        }
+        return true;
+    }
+
+    // Handle a deferred LOCKS_BROKEN error during commit phase.
+    bool HandleDeferredLocksBrokenOnCommit(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (!PendingLocksBrokenError) return false;
+        CollectTliStats(record);
+        if (TxManager->ConsumeCommitResult(record.GetOrigin())) {
+            FlushPendingLocksBrokenError();
+        }
+        return true;
+    }
+
+    // Flush a deferred LOCKS_BROKEN error if one is pending.
+    bool FlushDeferredLocksBrokenIfPending() {
+        if (!PendingLocksBrokenError) return false;
+        FlushPendingLocksBrokenError();
+        return true;
+    }
+
+    void FlushPendingLocksBrokenError() {
+        Y_ABORT_UNLESS(PendingLocksBrokenError);
+        auto error = std::move(*PendingLocksBrokenError);
+        PendingLocksBrokenError.reset();
+        PendingPrepareShards = 0;
+        ReplyErrorImpl(error.first, std::move(error.second));
+    }
+    // --- End TLI helpers ---
+
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {
+        if (FlushDeferredLocksBrokenIfPending()) return;
         ReplyError(statusCode, id, message, subIssues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) override {
+        if (FlushDeferredLocksBrokenIfPending()) return;
         ReplyError(statusCode, std::move(issues));
     }
 
@@ -4795,7 +4930,7 @@ public:
         ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
             actor->FillStats(&result);
         });
-        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds);
         return result;
     }
 
@@ -4872,6 +5007,17 @@ private:
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    TVector<ui64> BreakerQuerySpanIds;
+
+    // Deferred error for STATUS_LOCKS_BROKEN during distributed prepare/commit.
+    // Allows remaining shards to respond (with breaker TLI stats) before
+    // sending the error to the session actor.
+    std::optional<std::pair<NYql::NDqProto::StatusIds::StatusCode, NYql::TIssues>> PendingLocksBrokenError;
+
+    // Number of shard responses still pending during prepare phase.
+    // Used together with PendingLocksBrokenError to know when all shards
+    // have responded and the deferred error can be flushed.
+    ui64 PendingPrepareShards = 0;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;
@@ -4972,6 +5118,8 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
+    const TString UserSID;
+    ui64 QuerySpanId = 0;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
@@ -4982,7 +5130,8 @@ public:
     TKqpForwardWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         TArgs&& args,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        const TString& userSID)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -4999,6 +5148,7 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
                 NWilson::EFlags::AUTO_END)
+        , UserSID(userSID)
         , TransformOutput(ExtractTransformOutput(args))
     {
         EgressStats.Level = args.StatsLevel;
@@ -5166,6 +5316,7 @@ private:
                 .DefaultColumns = std::move(defaultColumns),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
+                .QuerySpanId = Settings.GetQuerySpanId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {
@@ -5281,6 +5432,7 @@ private:
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
+    const TString UserSID;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
 
 private:
@@ -5302,11 +5454,12 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
     factory.RegisterSink<NKikimrKqp::TKqpTableSinkSettings>(
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args) {
+            auto userSID = settings.GetUserSID();
             if (!ActorIdFromProto(settings.GetBufferActorId())) {
-                auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters);
+                auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters, userSID);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             } else {
-                auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
+                auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, userSID);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             }
         });
@@ -5315,7 +5468,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TOutputTransformArguments&& args) {
             AFL_ENSURE(ActorIdFromProto(settings.GetBufferActorId()));
-            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
+            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, settings.GetUserSID());
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });
 }

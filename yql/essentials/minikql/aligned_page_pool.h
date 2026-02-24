@@ -51,7 +51,7 @@ public:
 class TSystemMmap {
 public:
     static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size);
+    static int Munmap(void* addr, size_t size) noexcept;
 };
 
 class TFakeMmap {
@@ -60,7 +60,7 @@ public:
     static std::function<void(void* addr, size_t size)> OnMunmap;
 
     static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size);
+    static int Munmap(void* addr, size_t size) noexcept;
 };
 
 template <typename TMmap = TSystemMmap>
@@ -110,7 +110,7 @@ public:
 
     void* GetPage();
 
-    void ReturnPage(void* addr) noexcept;
+    void ReturnPage(void* addr);
 
     void Swap(TAlignedPagePoolImpl& other) {
         DoSwap(FreePages_, other.FreePages_);
@@ -142,7 +142,7 @@ public:
 
     void* GetBlock(size_t size);
 
-    void ReturnBlock(void* ptr, size_t size) noexcept;
+    void ReturnBlock(void* ptr, size_t size);
 
     size_t GetPeakAllocated() const noexcept {
         return PeakAllocated_;
@@ -244,7 +244,7 @@ public:
 
 protected:
     void* Alloc(size_t size);
-    void Free(void* ptr, size_t size) noexcept;
+    void Free(void* ptr, size_t size);
 
     void UpdatePeaks() {
         PeakAllocated_ = Max(PeakAllocated_, GetAllocated());

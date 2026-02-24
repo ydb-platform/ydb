@@ -24,8 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf::TUnboxedValuePod& value) {
     return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed()));
@@ -106,7 +105,7 @@ class THolderFactory;
 struct TComputationContextLLVM {
     const THolderFactory& HolderFactory;
     IStatsRegistry* const Stats;
-    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues;
+    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; // NOLINT(modernize-avoid-c-arrays)
     const NUdf::IValueBuilder* const Builder;
     float UsageAdjustor = 1.f;
     ui32 RssCounter = 0U;
@@ -527,5 +526,4 @@ auto CallComputationBuilderWithArgs(F* f, TCallable& callable, const TComputatio
     return f(ctx, callable.GetInput(Is)...);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

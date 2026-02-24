@@ -9,8 +9,8 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalQueryBuilder: public NNonCopyable::TNonCopyable {
 public:
-    TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<int, TExprNode::TPtr>&& stages, THashMap<int, TVector<TExprNode::TPtr>>&& stageArgs,
-                          THashMap<int, TPositionHandle>&& stagePos, TRBOContext& rboCtx)
+    TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<ui32, TExprNode::TPtr>&& stages, THashMap<ui32, TVector<TExprNode::TPtr>>&& stageArgs,
+                          THashMap<ui32, TPositionHandle>&& stagePos, TRBOContext& rboCtx)
         : Root(root)
         , Graph(std::move(graph))
         , Stages(std::move(stages))
@@ -44,8 +44,8 @@ private:
 
     TOpRoot& Root;
     TStageGraph Graph;
-    THashMap<int, TExprNode::TPtr> Stages;
-    THashMap<int, TVector<TExprNode::TPtr>> StageArgs;
-    THashMap<int, TPositionHandle> StagePos;
+    THashMap<ui32, TExprNode::TPtr> Stages;
+    THashMap<ui32, TVector<TExprNode::TPtr>> StageArgs;
+    THashMap<ui32, TPositionHandle> StagePos;
     TRBOContext& RBOCtx;
 };

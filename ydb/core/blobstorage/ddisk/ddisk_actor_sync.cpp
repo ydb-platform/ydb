@@ -286,8 +286,19 @@ namespace NKikimr::NDDisk {
                     }
                 }
             };
+
+            // TODO: use io_uring
+            // TODO: common span before the loop?
+
             TBlockSelector segmentSelector(sync.VChunkIndex, begin, end - begin);
-            SendInternalWrite(chunkRef, sync.Creds, segmentSelector, NWilson::TTraceId{ev->TraceId}, std::move(segmentData), std::move(callback));
+            auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, ev->TraceId.Clone(), "DDisk.InternalSyncWrite",
+                    NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+                .Attribute("tablet_id", static_cast<long>(sync.Creds.TabletId))
+                .Attribute("vchunk_index", static_cast<long>(segmentSelector.VChunkIndex))
+                .Attribute("offset_in_bytes", segmentSelector.OffsetInBytes)
+                .Attribute("size", segmentSelector.Size));
+
+            SendInternalWrite(chunkRef, segmentSelector, std::move(span), std::move(segmentData), std::move(callback));
         }
     }
 

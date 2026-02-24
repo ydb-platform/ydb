@@ -40,4 +40,4 @@ __all__ = ('wcwidth', 'wcswidth', 'width', 'iter_sequences', 'iter_graphemes',
 
 # Using 'hatchling', it does not seem to provide the pyproject.toml nicety, "dynamic = ['version']"
 # like flit_core, maybe there is some better way but for now we have to duplicate it in both places
-__version__ = '0.5.3'
+__version__ = '0.6.0'

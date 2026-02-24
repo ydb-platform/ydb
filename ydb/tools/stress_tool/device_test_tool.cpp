@@ -7,8 +7,10 @@
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
+#include "device_test_tool_pb_test.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
+#include "device_test_tool_uring_router_test.h"
 
 namespace NKikimr {
 namespace NPDisk {
@@ -39,6 +41,7 @@ R"__(
 int main(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
+    bool disablePDiskDataEncryption = false;
     opts.AddLongOption("path", "path to device").RequiredArgument("FILE");
     opts.AddLongOption("cfg", "path to config file").RequiredArgument().DefaultValue("cfg.txt");
     opts.AddLongOption("name", "device name").DefaultValue("Name");
@@ -46,10 +49,11 @@ int main(int argc, char **argv) {
     opts.AddLongOption("output-format", "wiki|human|json").DefaultValue("wiki");
     opts.AddLongOption("mon-port", "port for monitoring http page").DefaultValue("0");
     opts.AddLongOption("run-count", "number of times to run each test").DefaultValue("1");
-    opts.AddLongOption("inflight-from", "override InFlight starting value (PDisk/DDisk tests only)").DefaultValue("0");
-    opts.AddLongOption("inflight-to", "override InFlight ending value (PDisk/DDisk tests only)").DefaultValue("0");
+    opts.AddLongOption("inflight-from", "override InFlight starting value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
+    opts.AddLongOption("inflight-to", "override InFlight ending value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
     opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
     opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
+    opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&disablePDiskDataEncryption);
     TOptsParseResult res(&opts, argc, argv);
 
     if (!res.Has("no-logo") && res.Get("output-format") != TString("json")) {
@@ -58,7 +62,7 @@ int main(int argc, char **argv) {
 
     NKikimr::TPerfTestConfig config(res.Get("path"), res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
-            res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"));
+            res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 
@@ -66,6 +70,7 @@ int main(int argc, char **argv) {
     if (config.RunCount > 1) {
         ui32 totalTests = 0;
         totalTests += protoTests.AioTestListSize();
+        totalTests += protoTests.UringRouterTestListSize();
         totalTests += protoTests.TrimTestListSize();
         // For PDiskTest, count the inner PDiskTestList items
         for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
@@ -123,6 +128,28 @@ int main(int argc, char **argv) {
         }
     }
     printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.UringRouterTestListSize(); ++i) {
+        NDevicePerfTest::TUringRouterTest testProto = protoTests.GetUringRouterTestList(i);
+        if (config.HasInFlightOverride()) {
+            for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+                testProto.SetQueueDepth(inFlight);
+                for (ui32 run = 0; run < config.RunCount; ++run) {
+                    THolder<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
+                    test->SetPrinter(printer);
+                    test->RunTest();
+                }
+            }
+        } else {
+            for (ui32 run = 0; run < config.RunCount; ++run) {
+                THolder<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
+                test->SetPrinter(printer);
+                test->RunTest();
+            }
+        }
+    }
+    printer->EndTest();
+
     for (ui32 i = 0; i < protoTests.TrimTestListSize(); ++i) {
         NDevicePerfTest::TTrimTest testProto = protoTests.GetTrimTestList(i);
         for (ui32 run = 0; run < config.RunCount; ++run) {
@@ -199,6 +226,14 @@ int main(int argc, char **argv) {
                 test->RunTest();
             }
         }
+    }
+    printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.PersistentBufferTestListSize(); ++i) {
+        NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
+        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+        test->SetPrinter(printer);
+        test->RunTest();
     }
     printer->EndTest();
 

@@ -13,6 +13,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/forced_compaction.proto";
 import "ydb/core/protos/sys_view_types.proto";
 
 enum EIsolationLevel {
@@ -397,7 +398,7 @@ message TKqpPhyConnection {
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
-        TKqpPhyValue QueryValue = 2;
+        repeated TKqpPhyValue QueryValue = 2;
     }
 
     message TIndexTable {
@@ -424,6 +425,7 @@ message TKqpFullTextSource {
     TKqpPhyValue BFactor = 11;
     TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
+    TKqpPhyValue Mode = 14;
 }
 
 message TKqpReadRangesSource {
@@ -626,6 +628,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
+        NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
     }
 }
 

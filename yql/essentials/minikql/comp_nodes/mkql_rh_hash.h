@@ -17,8 +17,7 @@
 
 #define MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <class TKey>
 struct TRobinHoodDefaultSettings {
@@ -653,5 +652,4 @@ public:
     }
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

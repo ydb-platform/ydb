@@ -1,9 +1,10 @@
 #include "partition_direct_actor.h"
 
+#include "fast_path_service.h"
+#include "load_actor_adapter.h"
+
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -30,37 +31,41 @@ void TPartitionActor::Bootstrap(const NActors::TActorContext& ctx)
     Y_UNUSED(ctx);
     Become(&TThis::StateWork);
 
-    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-        "Started NBS partition: actor id %s", SelfId().ToString().data());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Started NBS partition: actor id %s",
+        SelfId().ToString().data());
 
     AllocateDDiskBlockGroup(ctx);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
-void TPartitionActor::CreateBSControllerPipeClient(const NActors::TActorContext& ctx)
+void TPartitionActor::CreateBSControllerPipeClient(
+    const NActors::TActorContext& ctx)
 {
-    BSControllerPipeClient = ctx.Register(NTabletPipe::CreateClient(
-        ctx.SelfID,
-        MakeBSControllerID()));
+    BSControllerPipeClient = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
 }
 
 void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
     CreateBSControllerPipeClient(ctx);
 
-    auto request = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
     request->Record.SetDDiskPoolName(StorageConfig.GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(StorageConfig.GetPersistentBufferDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig.GetPersistentBufferDDiskPoolName());
 
     // TODO: fill with tablet id
     request->Record.SetTabletId(1);
 
     // TODO: add more direct block groups
-    auto *query = request->Record.AddQueries();
+    auto* query = request->Record.AddQueries();
     query->SetDirectBlockGroupId(0);
 
-    // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1 vchunk since disk size will be 128MB.
+    // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1 vchunk
+    // since disk size will be 128MB.
     query->SetTargetNumVChunks(1);
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
@@ -72,7 +77,9 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
         "HandleControllerAllocateDDiskBlockGroupResult record is: %s",
         msg->Record.DebugString().data());
 
@@ -84,23 +91,23 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 
         TVector<NBsController::TDDiskId> ddiskIds;
         TVector<NBsController::TDDiskId> persistentBufferDDiskIds;
-        for (const auto& node : response.GetNodes()) {
+        for (const auto& node: response.GetNodes()) {
             ddiskIds.emplace_back(node.GetDDiskId());
-            persistentBufferDDiskIds.emplace_back(node.GetPersistentBufferDDiskId());
+            persistentBufferDDiskIds.emplace_back(
+                node.GetPersistentBufferDDiskId());
         }
 
-        auto fastPathService =
-            std::make_shared<NYdb::NBS::NBlockStore::TFastPathService>(
-                TActivationContext::ActorSystem(),
-                SelfId().Hash(),   // tabletId
-                1,                 // generation
-                std::move(ddiskIds),
-                std::move(persistentBufferDDiskIds),
-                VolumeConfig.GetBlockSize(),
-                VolumeConfig.GetPartitions(0).GetBlockCount(),
-                VolumeConfig.GetStorageMediaKind(),  // storageMedia
-                StorageConfig,
-                AppData()->Counters);
+        auto fastPathService = std::make_shared<TFastPathService>(
+            TActivationContext::ActorSystem(),
+            SelfId().Hash(),   // tabletId
+            1,                 // generation
+            std::move(ddiskIds),
+            std::move(persistentBufferDDiskIds),
+            VolumeConfig.GetBlockSize(),
+            VolumeConfig.GetPartitions(0).GetBlockCount(),
+            VolumeConfig.GetStorageMediaKind(),   // storageMedia
+            StorageConfig,
+            AppData()->Counters);
 
         LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 
@@ -117,7 +124,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             // Fix me
             diskId = "nbs-1";
             blockSize = 4096;
-            blockCount = 1000;
+            blockCount = 32768;
 
             TString socketPath = "/tmp/" + diskId + ".sock";
             NVhost::TStorageOptions options{
@@ -133,13 +140,16 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         }
 
         LOG_INFO(
-            NActors::TActivationContext::AsActorContext(),
+            ctx,
             NKikimrServices::NBS_PARTITION,
             "Started NBS partition LoadActorAdapter: actor id %s",
             LoadActorAdapter.ToString().data());
     } else {
-        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "HandleControllerAllocateDDiskBlockGroupResult finished with error: %d, reason: %s",
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "HandleControllerAllocateDDiskBlockGroupResult finished with "
+            "error: %d, reason: %s",
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
@@ -148,10 +158,11 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
-    const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+    const TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    auto response = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse>();
+    auto response =
+        std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
     response->ActorId = LoadActorAdapter.ToString();
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
@@ -160,22 +171,32 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 
 STFUNC(TPartitionActor::StateWork)
 {
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+    LOG_DEBUG(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
         "Processing event: %s from sender: %lu",
         ev->GetTypeName().data(),
         ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
-        HFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, HandleControllerAllocateDDiskBlockGroupResult);
-        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest, HandleGetLoadActorAdapterActorId);
+        HFunc(
+            TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
+            HandleControllerAllocateDDiskBlockGroupResult);
+        HFunc(
+            TEvService::TEvGetLoadActorAdapterActorIdRequest,
+            HandleGetLoadActorAdapterActorId);
 
         default:
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+            LOG_DEBUG_S(
+                TActivationContext::AsActorContext(),
+                NKikimrServices::NBS_PARTITION,
                 "Unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+                                         << " event: " << ev->ToString());
             break;
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

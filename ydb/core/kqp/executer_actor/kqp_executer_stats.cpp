@@ -31,6 +31,15 @@ void TMinStats::SetNonZero(ui32 index, ui64 value) {
     }
 }
 
+void TMinStats::Set(ui32 index, ui64 value) {
+    AFL_ENSURE(index < Values.size());
+    auto maybeMin = Values[index] == MinValue;
+    Values[index] = value;
+    if (maybeMin) {
+        MinValue = ExportMinStats(Values);
+    }
+}
+
 void TMaxStats::Resize(ui32 count) {
     Values.resize(count);
 }
@@ -508,8 +517,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs, index, durationUs);
     WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
-    CurrentWaitInputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitInputTimeUs());
-    CurrentWaitOutputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitOutputTimeUs());
+    CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
+    CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
 
     auto updateTimeMs = taskStats.GetUpdateTimeMs();
     UpdateTimeMs = std::max(UpdateTimeMs, updateTimeMs);
@@ -658,21 +667,19 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     return baseTimeMs;
 }
 
-bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
+bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty()) {
         return false;
     }
 
     for (auto stat : InputStages) {
         if (stat->IsFinished()) {
-            if (stat->MaxFinishTimeMs == 0) {
-                stat->MaxFinishTimeMs = ExportMaxStats(stat->FinishTimeMs);
-            }
-            if (stat->UpdateTimeMs < stat->MaxFinishTimeMs || stat->UpdateTimeMs - stat->MaxFinishTimeMs < deadline) {
+            auto nowMs = TInstant::Now().MilliSeconds();
+            if (nowMs < stat->UpdateTimeMs || (nowMs - stat->UpdateTimeMs) * 1000 < deadline) {
                 return false;
             }
         } else {
-            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline) {
+            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsDeadlocked(deadline)) {
                 return false;
             }
         }
@@ -859,9 +866,18 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
     return Result->ByteSizeLong();
 }
 
-void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
+void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    if (txStats.GetLocksBrokenAsBreaker() > 0) {
+        for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+            BreakerQuerySpanIds.push_back(id);
+        }
+    }
+}
+
+void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
+    CollectLockStats(txStats);
 
     ui64 cpuUs = txStats.GetComputeCpuTimeUsec();
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -875,15 +891,13 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
 void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats,
     NKikimrQueryStats::TTxStats&& txStats, TDuration collectLongTaskStatsTimeout)
 {
-    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
-    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    CollectLockStats(txStats);
 
     UpdateTaskStats(0, stats, &txStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
-    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
-    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    CollectLockStats(txStats);
 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -901,6 +915,11 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+        for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
+            if (id != 0) {
+                BreakerQuerySpanIds.push_back(id);
+            }
+        }
     }
     UpdateStorageTables(taskStats, nullptr);
 }
@@ -1005,6 +1024,11 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
             if (taskStats.GetExtra().UnpackTo(&extraStats)) {
                 LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
                 LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+                for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
+                    if (id != 0) {
+                        BreakerQuerySpanIds.push_back(id);
+                    }
+                }
             }
         }
 

@@ -561,8 +561,12 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors()
     return DumpSensors(TTagSet{});
 }
 
-TTagIdSet TSolomonRegistry::EncodeTagSet(const TTagSet& tagSet)
+TTagIdSet TSolomonRegistry::EncodeTagSet(const TTagSet& tags)
 {
+    auto tagSet = tags;
+    for (const auto& [dynamicTag, _] : tagSet.DynamicTags()) {
+        tagSet.ApplyDynamicTag(dynamicTag);
+    }
     return TTagIdSet(tagSet, TagRegistry_.Encode(tagSet));
 }
 

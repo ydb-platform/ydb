@@ -50,6 +50,8 @@ struct TExtensionData
     TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
+
+    bool operator==(const TExtensionData& other) const = default;
 };
 
 TOriginAttributes::TErasedExtensionData Encode(TExtensionData data)
@@ -188,12 +190,19 @@ TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
         static const std::string TraceIdKey("trace_id");
         ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
 
+        ext.HostName = result.Host;
+
         static const std::string SpanIdKey("span_id");
         ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
     }
 
     result.ExtensionData = Encode(ext);
     return result;
+}
+
+bool CompareExtensionDataOverride(const TOriginAttributes::TErasedExtensionData& lhs, const TOriginAttributes::TErasedExtensionData& rhs)
+{
+    return Decode(lhs) == Decode(rhs);
 }
 
 } // namespace
@@ -220,9 +229,16 @@ void EnableErrorOriginOverrides()
             return NGlobal::TErasedStorage{&ExtractFromDictionaryOverride};
         }};
 
+    static NGlobal::TVariable<std::byte> compareExtensionDataOverride{
+        NYT::NDetail::CompareExtensionDataTag,
+        +[] () noexcept {
+            return NGlobal::TErasedStorage{&CompareExtensionDataOverride};
+        }};
+
     getExtensionDataOverride.Get();
     formatOriginOverride.Get();
     extractFromDictionaryOverride.Get();
+    compareExtensionDataOverride.Get();
 }
 
 } // namespace NDetail

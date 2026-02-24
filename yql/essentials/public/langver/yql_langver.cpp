@@ -11,6 +11,7 @@ namespace {
 
 constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 4);
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const std::pair<ui32, ui32> Versions[] = {
 #include "yql_langver_list.inc"
 };

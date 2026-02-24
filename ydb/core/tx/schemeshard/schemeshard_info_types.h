@@ -1381,6 +1381,14 @@ struct TShardInfo {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
     }
 
+    static TShardInfo BlockStoreVolumeDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolumeDirect);
+    }
+
+    static TShardInfo BlockStorePartitionDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStorePartitionDirect);
+    }
+
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::FileStore);
     }
@@ -2874,6 +2882,7 @@ struct TCdcStreamSettings {
     OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
+    OPTION(bool, UserSIDs);
 
     #undef OPTION
 };
@@ -2920,7 +2929,9 @@ struct TCdcStreamInfo
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
             .WithSchemaChanges(desc.GetSchemaChanges())
-            .WithAwsRegion(desc.GetAwsRegion()));
+            .WithAwsRegion(desc.GetAwsRegion())
+            .WithUserSIDs(desc.GetUserSIDs())
+        );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2944,6 +2955,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsTotal(ScanShards.size());
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
+        desc.SetUserSIDs(UserSIDs);
     }
 
     void FinishAlter() {
@@ -3837,6 +3849,43 @@ inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames =
 
     return true;
 }
+
+// namespace NForcedCompaction {
+struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
+    using TPtr = TIntrusivePtr<TForcedCompactionInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        InProgress = 1,
+        Done = 2,
+        Cancelled = 3,
+        Cancelling = 4,
+    };
+
+    ui64 Id;  // TxId from the original TEvCreateRequest
+    EState State = EState::Invalid; 
+    TPathId TablePathId;
+    TPathId SubdomainPathId;
+    bool Cascade;
+    ui32 MaxShardsInFlight;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    TMaybe<TString> UserSID;
+
+    ui32 TotalShardCount = 0;
+    ui32 DoneShardCount = 0; // updates only when persisting
+
+    THashSet<TShardIdx> ShardsInFlight;
+
+    TSet<TActorId> Subscribers;
+
+    bool IsFinished() const;
+    void AddNotifySubscriber(const TActorId& actorId);
+    float CalcProgress() const;
+};
+// } // NForcedCompaction
 
 }
 

@@ -36,7 +36,7 @@ private:
     std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
 
-    ui64 InFlightLimit = 1;
+    ui64 InFlightLimit = 16;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
     bool Cleared = false;

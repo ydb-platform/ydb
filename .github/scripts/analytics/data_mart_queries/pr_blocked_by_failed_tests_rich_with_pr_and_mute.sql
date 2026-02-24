@@ -1,18 +1,18 @@
--- PR blocked by failed tests (rich) + данные по PR и флаги мьюта.
+-- PR blocked by failed tests (rich) + PR data and mute flags.
 --
--- Логика:
---   1. Берём данные из test_results/analytics/pr_blocked_by_failed_tests_rich
---      (тесты, упавшие в PR-check при стабильности в regression/nightly).
---   2. Джойним актуальное состояние PR из github_data/pull_requests
---      (последняя запись по pr_number: base_ref_name, state, merged, title, url и т.д.).
---   3. Джойним tests_monitor на «сегодня» (date_window = CurrentUtcDate())
---      — флаг is_muted_today и owner_today.
---   4. Джойним tests_monitor на день запуска (date_window = день last_run_timestamp)
---      — флаг is_muted_in_run_day.
---   5. Ограничиваем выборку последними $lookback_days днями по last_run_timestamp.
+-- Logic:
+--   1. Take data from test_results/analytics/pr_blocked_by_failed_tests_rich
+--      (tests that failed in PR-check while stable in regression/nightly).
+--   2. Join current PR state from github_data/pull_requests
+--      (latest row per pr_number: base_ref_name, state, merged, title, url, etc.).
+--   3. Join tests_monitor for "today" (date_window = CurrentUtcDate())
+--      — is_muted_today and owner_today.
+--   4. Join tests_monitor for the run day (date_window = day of last_run_timestamp)
+--      — is_muted_in_run_day.
+--   5. Restrict the result set to the last $lookback_days by last_run_timestamp.
 --
--- Параметры:
---   $lookback_days — окно выборки по дате прогона и по date_window в tests_monitor (дни). По умолчанию 30.
+-- Mute rule checks (counts, met_mute_criteria, raw vs monitor, JSON) are done in
+-- pr_failed_tests_validation_through_mute_rules.sql (all PR-check failures there, not only "blocked").
 
 $lookback_days = 1;
 
@@ -27,6 +27,7 @@ SELECT
     t.branch AS branch,
     t.build_type AS build_type,
     t.status_description AS status_description,
+    t.stderr AS stderr,
     t.attempt_number AS attempt_number,
     t.is_last_run_in_pr AS is_last_run_in_pr,
     COALESCE(pr.base_ref_name, '') AS pr_target_branch,
@@ -82,42 +83,44 @@ ON
 LEFT JOIN
     (
         SELECT
-            full_name,
-            branch,
-            build_type,
+            full_name AS m_full_name,
+            branch AS m_branch,
+            build_type AS m_build_type,
             owner,
             is_muted
         FROM
             `test_results/analytics/tests_monitor`
         WHERE
-            date_window = CurrentUtcDate()
+            build_type = 'relwithdebinfo'
+            AND date_window = CurrentUtcDate()
     ) AS m
 ON
-    t.full_name = m.full_name
-    AND t.branch = m.branch
-    AND t.build_type = m.build_type
+    t.full_name = m.m_full_name
+    AND t.branch = m.m_branch
+    AND t.build_type = m.m_build_type
 LEFT JOIN
     (
         SELECT
-            full_name,
-            branch,
-            build_type,
+            full_name AS m_run_full_name,
+            branch AS m_run_branch,
+            build_type AS m_run_build_type,
             date_window,
             is_muted
         FROM
             `test_results/analytics/tests_monitor`
         WHERE
-            date_window >= CurrentUtcDate() - $lookback_days * Interval("P1D")
+            build_type = 'relwithdebinfo'
+            AND date_window >= CurrentUtcDate() - $lookback_days * Interval("P1D")
             AND date_window <= CurrentUtcDate()
     ) AS m_run
 ON
-    t.full_name = m_run.full_name
-    AND t.branch = m_run.branch
-    AND t.build_type = m_run.build_type
+    t.full_name = m_run.m_run_full_name
+    AND t.branch = m_run.m_run_branch
+    AND t.build_type = m_run.m_run_build_type
     AND m_run.date_window = CAST(t.last_run_timestamp AS Date)
 WHERE
     t.last_run_timestamp > CurrentUtcDate() - $lookback_days * Interval("P1D")
 ORDER BY 
-    last_run_timestamp DESC,
-    pr_number,
-    full_name
+    t.last_run_timestamp DESC,
+    t.pr_number,
+    t.full_name

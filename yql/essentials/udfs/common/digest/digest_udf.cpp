@@ -38,8 +38,9 @@ enum EDigestType {
     MURMUR2A32,
     CITY
 };
-const char* DigestNames[] = {
-    "Crc32c", "Crc64", "Fnv32", "Fnv64", "MurMurHash", "MurMurHash32", "MurMurHash2A", "MurMurHash2A32", "CityHash"};
+const auto DigestNames = std::to_array<const char*>({
+    "Crc32c", "Crc64", "Fnv32", "Fnv64", "MurMurHash", "MurMurHash32", "MurMurHash2A", "MurMurHash2A32", "CityHash",
+});
 
 template <typename TResult>
 using TDigestGenerator = TResult(const TStringRef&, TMaybe<TResult> init);
@@ -242,10 +243,10 @@ SIMPLE_STRICT_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
 
     const TStringRef inputRef = args[0].AsStringRef();
     const TStringRef saltRef = args[1].AsStringRef();
-    ui8 out[OutSize];
+    std::array<ui8, OutSize> out;
     Argon2->Hash(reinterpret_cast<const ui8*>(inputRef.Data()), inputRef.Size(),
                  reinterpret_cast<const ui8*>(saltRef.Data()), saltRef.Size(),
-                 out, OutSize);
+                 out.data(), OutSize);
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
 }
 
@@ -266,9 +267,9 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<
         blake2b = BFactory.Create(OutSize);
     }
 
-    ui8 out[OutSize];
+    std::array<ui8, OutSize> out;
     blake2b->Update(inputRef.Data(), inputRef.Size());
-    blake2b->Final(out, OutSize);
+    blake2b->Final(out.data(), OutSize);
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
 }
 
@@ -276,6 +277,7 @@ SIMPLE_STRICT_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {
     using namespace highwayhash;
     Y_UNUSED(valueBuilder);
     const TStringRef inputRef = args[2].AsStringRef();
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     const HH_U64 state[2] = {args[0].Get<ui64>(), args[1].Get<ui64>()};
     ui64 hash = SipHash(state, inputRef.Data(), inputRef.Size());
     return TUnboxedValuePod(hash);
@@ -285,12 +287,13 @@ SIMPLE_STRICT_UDF(THighwayHash, ui64(ui64, ui64, ui64, ui64, TAutoMap<char*>)) {
     using namespace highwayhash;
     Y_UNUSED(valueBuilder);
     const TStringRef inputRef = args[4].AsStringRef();
-    const uint64_t key[4] = {
+    const std::array<uint64_t, 4> key = {
         args[0].Get<ui64>(),
         args[1].Get<ui64>(),
         args[2].Get<ui64>(),
-        args[3].Get<ui64>()};
-    ui64 hash = HighwayHash64(key, inputRef.Data(), inputRef.Size());
+        args[3].Get<ui64>(),
+    };
+    ui64 hash = HighwayHash64(key.data(), inputRef.Data(), inputRef.Size());
     return TUnboxedValuePod(hash);
 }
 
@@ -376,9 +379,9 @@ SIMPLE_STRICT_UDF(TSha1, char*(TAutoMap<char*>)) {
     SHA_CTX sha;
     SHA1_Init(&sha);
     SHA1_Update(&sha, inputRef.Data(), inputRef.Size());
-    unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1_Final(hash, &sha);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    std::array<unsigned char, SHA_DIGEST_LENGTH> hash;
+    SHA1_Final(hash.data(), &sha);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
 SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
@@ -386,9 +389,9 @@ SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
     SHA256_Update(&sha, inputRef.Data(), inputRef.Size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
+    SHA256_Final(hash.data(), &sha);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
 SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3));) {
@@ -396,9 +399,9 @@ SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer
     SHA512_CTX sha;
     SHA512_Init(&sha);
     SHA512_Update(&sha, inputRef.Data(), inputRef.Size());
-    unsigned char hash[SHA512_DIGEST_LENGTH];
-    SHA512_Final(hash, &sha);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    std::array<unsigned char, SHA512_DIGEST_LENGTH> hash;
+    SHA512_Final(hash.data(), &sha);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
 SIMPLE_STRICT_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {

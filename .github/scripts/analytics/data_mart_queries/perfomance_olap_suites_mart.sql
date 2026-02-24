@@ -152,9 +152,9 @@ SELECT
         WHEN s.Db LIKE '%/row%' THEN 'row'
         ELSE 'other'
     END AS DbAlias,
-    COALESCE(SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
-    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, FIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
-    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, FIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
+    COALESCE(SubString(CAST(s.Version AS String), 0U, RFIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
+    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, RFIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
+    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, RFIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

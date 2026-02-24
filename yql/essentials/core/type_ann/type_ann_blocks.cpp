@@ -11,8 +11,8 @@
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 namespace {
 
@@ -1271,5 +1271,5 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl
+

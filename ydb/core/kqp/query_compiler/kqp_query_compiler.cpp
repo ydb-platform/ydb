@@ -1431,11 +1431,13 @@ private:
             }
 
             {
-                TExprBase expr(settings.Query().Raw());
-                if (expr.Maybe<TCoParameter>()) {
-                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
-                } else {
-                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue());
+                for (const auto& expr: settings.Query().Maybe<TExprList>().Cast()) {
+                    auto* value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                    if (expr.Maybe<TCoParameter>()) {
+                        value->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                    } else {
+                        FillLiteralProto(expr.Cast<TCoDataCtor>(), *value->MutableLiteralValue());
+                    }
                 }
             }
 
@@ -1685,7 +1687,7 @@ private:
             THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
             if (Config->GetEnableIndexStreamWrite()) {
                 for (const auto& columnNameAtom : settings.DefaultColumns()) {
-                    const auto& columnName = columnNameAtom.StringValue();
+                    const auto columnName = TStringBuf(columnNameAtom);
                     const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                     YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 

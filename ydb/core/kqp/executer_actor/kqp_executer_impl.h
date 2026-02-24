@@ -725,6 +725,40 @@ protected:
                 }
                 str << Endl;
 
+                str << Endl << "Stages:";
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "Tasks";}
+                            TABLEH() {str << "Finished";}
+                            TABLEH() {str << "Deadlocked (1 min)";}
+                            TABLEH() {str << "UpdateTimeMs (ago)";}
+                            TABLEH() {str << "WaitInputTimeUs";}
+                            TABLEH() {str << "WaitOutputTimeUs";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& [stageId, stageStat] : Stats->StageStats) {
+                            TABLER() {
+                                TABLED() {str << stageId.TxId;}
+                                TABLED() {str << stageId.StageId;}
+                                TABLED() {str << stageStat.Task2Index.size();}
+                                TABLED() {str << stageStat.FinishedCount;}
+                                TABLED() {str << stageStat.IsDeadlocked(60'000'000);}
+                                TABLED() {
+                                    auto nowMs = TInstant::Now().MilliSeconds();
+                                    str << (nowMs > stageStat.UpdateTimeMs ? nowMs - stageStat.UpdateTimeMs : 0);
+                                }
+                                TABLED() {str << stageStat.CurrentWaitInputTimeUs.MinValue;}
+                                TABLED() {str << stageStat.CurrentWaitOutputTimeUs.MinValue;}
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Tasks:";
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
@@ -818,6 +852,7 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
+        TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
@@ -1476,6 +1511,15 @@ protected:
 
         ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
         ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
+        // Deduplicate BreakerQuerySpanIds: the same ID may appear from both prepare and commit phases
+        {
+            THashSet<ui64> seen;
+            for (ui64 id : Stats->BreakerQuerySpanIds) {
+                if (seen.insert(id).second) {
+                    ResponseEv->BreakerQuerySpanIds.push_back(id);
+                }
+            }
+        }
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());

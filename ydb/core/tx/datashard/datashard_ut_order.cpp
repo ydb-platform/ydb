@@ -60,7 +60,8 @@ public:
         THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB);
         THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat(
             NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1,
-                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, host.Get()));
+                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, 
+                                          "", host.Get()));
 
         TEngineBay ebay(host.Release(), engine.Release());
         std::shared_ptr<TValidatedDataTx> dataTx(new TValidatedDataTx(std::move(ebay), txId, 0, txBody));

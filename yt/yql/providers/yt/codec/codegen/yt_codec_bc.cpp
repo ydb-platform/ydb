@@ -48,30 +48,30 @@ extern "C" void Write64(void* vbuf, ui64 value) {
     buf.WriteMany((const char*)&value, sizeof(value));
 }
 extern "C" void Write120(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
-    char b[sizeof(*value)];
-    const ui32 size = NDecimal::Serialize(*value, b);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
+    char b[sizeof(value)];
+    const ui32 size = NDecimal::Serialize(value, b);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
     buf.WriteMany(reinterpret_cast<const char*>(&size), sizeof(size));
     buf.WriteMany(b, size);
 }
 
 extern "C" void WriteDecimal32(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    i32 data = NDecimal::ToYtDecimal<i32>(*value);
+    i32 data = NDecimal::ToYtDecimal<i32>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteDecimal64(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    i64 data = NDecimal::ToYtDecimal<i64>(*value);
+    i64 data = NDecimal::ToYtDecimal<i64>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteDecimal128(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    NDecimal::TInt128 data = NDecimal::ToYtDecimal<NDecimal::TInt128>(*value);
+    NDecimal::TInt128 data = NDecimal::ToYtDecimal<NDecimal::TInt128>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteFloat(void* vbuf, ui32 value) {

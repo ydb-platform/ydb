@@ -400,7 +400,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             bool isChangeNotNullConstraint = col.HasNotNull();
 
-            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault() && !col.HasDefaultFromLiteral()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -417,8 +417,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                         break;
                     }
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                        break;
+                    }
                     default: {
-                        errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
+                        errStr = Sprintf("Cannot set default for column '%s'", colName.c_str());
                         return nullptr;
                     }
                 }
@@ -517,6 +520,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                     column.DefaultKind = ETableColumnDefaultKind::None;
                     column.DefaultValue = "";
+                    break;
+                }
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
+                    column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
                     break;
                 }
                 default: break;
@@ -2112,8 +2120,9 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check that total load doesn't exceed the limits
     if (canMergeByLoad) {
-        if (shardLoad + totalLoad > cpuUsageThreshold)
+        if (shardLoad + totalLoad > cpuUsageThreshold) {
             return false;
+        }
 
         reason = TStringBuilder() << "merge by load ("
             << "shardLoad: " << shardLoad << ")";
@@ -2885,6 +2894,19 @@ void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err
         ErrorMessage += '\n';
     }
     ErrorMessage += err;
+}
+
+bool TForcedCompactionInfo::IsFinished() const {
+    return State == EState::Done || State == EState::Cancelled;
+}
+
+void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
+    Y_ENSURE(!IsFinished());
+    Subscribers.insert(actorId);
+}
+
+float TForcedCompactionInfo::CalcProgress() const {
+    return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
 }
 
 } // namespace NSchemeShard

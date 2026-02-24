@@ -382,6 +382,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
     ::NMonitoring::THistogramPtr CompileQueueWaitTime;
 
+    // Warmup
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesFetched;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesCompiled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
+
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileComputationPatternsQueueSize;

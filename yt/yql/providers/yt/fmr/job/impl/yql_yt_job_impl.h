@@ -37,14 +37,17 @@ IFmrJob::TPtr MakeFmrJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    const TFmrJobSettings& settings = {});
+    const TFmrJobSettings& settings = {},
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
+);
 
 TJobResult RunJob(
     TTask::TPtr task,
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
 );
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task);

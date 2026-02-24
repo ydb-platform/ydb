@@ -1059,6 +1059,8 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
+        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
+        SendDeferredReadSetAcks(ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -2409,6 +2411,23 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilso
     ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    AFL_VERIFY_DEBUG(req.HasCmdUpdateReadMetrics());
+
+    if (!req.GetCmdUpdateReadMetrics().HasClientId()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "source_id is required");
+    }
+
+    auto clientId = req.GetCmdUpdateReadMetrics().GetClientId();
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (req.GetCmdUpdateReadMetrics().HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightLimitReachedDurationMs());
+    }
+    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(clientId, inFlightLimitReachedDuration), 0, 0, std::move(traceId));
+}
+
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -2724,7 +2743,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdDeregisterMessageGroup()
         + req.HasCmdSplitMessageGroup()
         + req.HasCmdPublishRead()
-        + req.HasCmdForgetRead();
+        + req.HasCmdForgetRead()
+        + req.HasCmdUpdateReadMetrics();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2768,6 +2788,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+    } else if (req.HasCmdUpdateReadMetrics()) {
+        HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;
@@ -3430,7 +3452,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         if ((tx->State > NKikimrPQ::TTransaction::EXECUTED) ||
             ((tx->State == NKikimrPQ::TTransaction::EXECUTED) && !tx->WriteInProgress)) {
             if (ack) {
-                PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " tx " << event.GetTxId());
+                PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " for TxId " << event.GetTxId());
                 ctx.Send(ev->Sender, ack.release());
                 return;
             }
@@ -3448,12 +3470,34 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
             TryWriteTxs(ctx);
         }
     } else if (ack) {
-        PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " tx " << event.GetTxId());
-        //
-        // для неизвестных транзакций подтверждение отправляется сразу
-        //
-        ctx.Send(ev->Sender, ack.release());
+        PQ_LOG_TX_I("a TEvReadSetAck message to " << event.GetTabletProducer() <<
+                    " for TxId " << event.GetTxId() <<
+                    " will be sent later");
+
+        AddPendingDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
     }
+}
+
+void TPersQueue::MovePendingDeferredReadSetAcks()
+{
+    DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
+    PendingDeferredReadSetAcks.clear();
+}
+
+void TPersQueue::AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack)
+{
+    PendingDeferredReadSetAcks.push_back(std::move(ack));
+}
+
+void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
+{
+    for (auto& e : DeferredReadSetAcks) {
+        PQ_LOG_TX_I("send TEvReadSetAck to " << e.Ack->Record.GetTabletSource() <<
+                    " for TxId " << e.Ack->Record.GetTxId());
+        ctx.Send(e.Sender, e.Ack.release());
+    }
+
+    DeferredReadSetAcks.clear();
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
@@ -3613,6 +3657,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
+
+    MovePendingDeferredReadSetAcks();
 
     WriteTxsInProgress = true;
 

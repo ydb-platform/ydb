@@ -13,6 +13,7 @@ message TReplyStatus {
         INCORRECT_REQUEST = 6;
         MISSING_RECORD = 7;
         OUTDATED = 8;
+        OVERLOADED = 9;
     }
 }
 

@@ -13,6 +13,7 @@ class TpccSuiteBase(LoadSuiteBase):
     threads: int = 4
     time_s: float = 60 * float(getenv('TPCC_TIME_MINUTES', 30))
     tx_mode: TxMode = TxMode.SerializableRW
+    _remote_cli_path: str = ''
 
     @classmethod
     def get_tpcc_path(cls) -> str:
@@ -23,7 +24,7 @@ class TpccSuiteBase(LoadSuiteBase):
         if cls.verify_data and getenv('NO_VERIFY_DATA', '0') != '1' and getenv('NO_VERIFY_DATA_TPCC', '0') != '1':
             # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
             pass
-        YdbCliHelper.deploy_remote_cli()
+        cls._remote_cli_path = YdbCliHelper.deploy_remote_cli()
         wh_count = 0
         try:
             wh_count = ScenarioTestHelper(None).get_table_rows_count(f'{cls.get_tpcc_path()}/warehouse')
@@ -34,7 +35,7 @@ class TpccSuiteBase(LoadSuiteBase):
             logging.info(f'warehouse count {wh_count} less then need {cls.warehouses}. Data will be reimport.')
             YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
             YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
-            YdbCliHelper.import_data_tpcc(cls.get_tpcc_path(), cls.warehouses)
+            YdbCliHelper.import_data_tpcc(cls._remote_cli_path, cls.get_tpcc_path(), cls.warehouses)
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
@@ -71,6 +72,7 @@ class TpccSuiteBase(LoadSuiteBase):
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
         result = YdbCliHelper.run_tpcc(
+            remote_cli_path=self._remote_cli_path,
             users=self.get_users(),
             path=self.get_tpcc_path(),
             bench_time=self.time_s,

@@ -194,7 +194,16 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     if (settings.LogStream) {
-        ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+        if (settings.NodeCount > 1) {
+            auto* logStream = settings.LogStream;
+            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
+                runtime.SetLogBackendFactory([logStream]() {
+                    return new TStreamLogBackend(logStream);
+                });
+            });
+        } else {
+            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+        }
     }
 
     if (settings.InitFederatedQuerySetupFactory) {

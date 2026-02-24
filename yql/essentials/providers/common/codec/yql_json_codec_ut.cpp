@@ -8,9 +8,7 @@
 
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NCommon {
-namespace NJsonCodec {
+namespace NYql::NCommon::NJsonCodec {
 
 using namespace NYql::NCommon;
 using namespace NKikimr;
@@ -115,10 +113,11 @@ Y_UNIT_TEST(ScalarJson) {
 
 Y_UNIT_TEST(ComplexJson) {
     TTestContext ctx;
-    TStructMember members[] = {
+    auto members = std::to_array<TStructMember>({
         TStructMember("X", TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, ctx.TypeEnv)),
-        TStructMember("Y", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))};
-    auto type = TStructType::Create(2, members, ctx.TypeEnv);
+        TStructMember("Y", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)),
+    });
+    auto type = TStructType::Create(2, members.data(), ctx.TypeEnv);
 
     NUdf::TUnboxedValue* items;
     auto value = ctx.Vb.NewArray(2, items);
@@ -166,12 +165,12 @@ Y_UNIT_TEST(EmptyList) {
 Y_UNIT_TEST(FullTuple) {
     TTestContext ctx;
 
-    TType* members[] = {
+    auto members = std::to_array<TType*>({
         TDataType::Create(NUdf::TDataType<ui8>::Id, ctx.TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv),
-    };
-    auto type = TTupleType::Create(3, members, ctx.TypeEnv);
+    });
+    auto type = TTupleType::Create(3, members.data(), ctx.TypeEnv);
 
     NUdf::TUnboxedValue* items;
     NUdf::TUnboxedValue value = ctx.HolderFactory.CreateDirectArrayHolder(type->GetElementsCount(), items);
@@ -187,8 +186,8 @@ Y_UNIT_TEST(FullTuple) {
 
 Y_UNIT_TEST(EmptyTuple) {
     TTestContext ctx;
-    TType* members[] = {};
-    auto type = TTupleType::Create(0, members, ctx.TypeEnv);
+    std::array<TType*, 0> members = {};
+    auto type = TTupleType::Create(0, members.data(), ctx.TypeEnv);
     NUdf::TUnboxedValue* items;
     NUdf::TUnboxedValue value = ctx.HolderFactory.CreateDirectArrayHolder(type->GetElementsCount(), items);
     auto json = WriteValueToFuncJsonStr(value, type);
@@ -237,10 +236,11 @@ Y_UNIT_TEST(Tagged) {
 
 Y_UNIT_TEST(TupleVariant) {
     TTestContext ctx;
-    TType* tupleTypes[] = {
+    auto tupleTypes = std::to_array<TType*>({
         TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv),
-        TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)};
-    auto underlying = TTupleType::Create(2, tupleTypes, ctx.TypeEnv);
+        TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv),
+    });
+    auto underlying = TTupleType::Create(2, tupleTypes.data(), ctx.TypeEnv);
     auto type = TVariantType::Create(underlying, ctx.TypeEnv);
 
     auto value0 = ctx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(false), 0);
@@ -255,10 +255,11 @@ Y_UNIT_TEST(TupleVariant) {
 Y_UNIT_TEST(StructVariant) {
     TTestContext ctx;
 
-    TStructMember members[] = {
+    auto members = std::to_array<TStructMember>({
         TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
-        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))};
-    auto underlying = TStructType::Create(2, members, ctx.TypeEnv);
+        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)),
+    });
+    auto underlying = TStructType::Create(2, members.data(), ctx.TypeEnv);
     auto type = TVariantType::Create(underlying, ctx.TypeEnv);
 
     auto value0 = ctx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
@@ -273,10 +274,11 @@ Y_UNIT_TEST(StructVariant) {
 Y_UNIT_TEST(StructType) {
     TTestContext ctx;
 
-    TStructMember members[] = {
+    auto members = std::to_array<TStructMember>({
         {"A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)},
-        {"B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)}};
-    auto type = TStructType::Create(2, members, ctx.TypeEnv);
+        {"B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)},
+    });
+    auto type = TStructType::Create(2, members.data(), ctx.TypeEnv);
 
     NUdf::TUnboxedValue* items;
     auto value = ctx.Vb.NewArray(2, items);
@@ -305,13 +307,15 @@ Y_UNIT_TEST(VariantTuple) {
     TStringStream json;
     json << "[1, {\"A\":true,\"B\":800}]";
 
-    TStructMember members[] = {
+    auto members = std::to_array<TStructMember>({
         TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
-        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))};
-    TType* tupleTypes[] = {
+        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)),
+    });
+    auto tupleTypes = std::to_array<TType*>({
         TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv),
-        TStructType::Create(2, members, ctx.TypeEnv)};
-    auto underlying = TTupleType::Create(2, tupleTypes, ctx.TypeEnv);
+        TStructType::Create(2, members.data(), ctx.TypeEnv),
+    });
+    auto underlying = TTupleType::Create(2, tupleTypes.data(), ctx.TypeEnv);
     auto type = TVariantType::Create(underlying, ctx.TypeEnv);
     auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
 
@@ -326,10 +330,11 @@ Y_UNIT_TEST(VariantStruct) {
     TStringStream json;
     json << "[\"B\", 800]";
 
-    TStructMember members[] = {
+    auto members = std::to_array<TStructMember>({
         TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
-        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))};
-    auto underlying = TStructType::Create(2, members, ctx.TypeEnv);
+        TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv)),
+    });
+    auto underlying = TStructType::Create(2, members.data(), ctx.TypeEnv);
     auto type = TVariantType::Create(underlying, ctx.TypeEnv);
     auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
 
@@ -808,6 +813,4 @@ Y_UNIT_TEST(WrongFormatEx) {
 }
 } // Y_UNIT_TEST_SUITE(DeserializeDateTypes)
 
-} // namespace NJsonCodec
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon::NJsonCodec

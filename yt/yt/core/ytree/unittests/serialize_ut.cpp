@@ -474,9 +474,8 @@ TEST(TSerializationTest, TError)
 {
     TestSerializationDeserialization(TError());
     TestSerializationDeserialization(TErrorOr<ui64>(5ull));
-    // TODO: TError internal structure is lost during serialization/deserialization process right now.
-    // TestSerializationDeserialization(TError("some error"));
-    // TestSerializationDeserialization(TErrorOr<ui64>(TError("some error")));
+    TestSerializationDeserialization(TError("some error"));
+    TestSerializationDeserialization(TErrorOr<ui64>(TError("some error")));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)

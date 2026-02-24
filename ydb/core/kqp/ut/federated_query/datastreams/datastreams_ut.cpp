@@ -2989,8 +2989,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
-        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            if (WithFeatureFlag) {
+                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            }
+        }
 
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
@@ -3026,29 +3032,31 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .DescribeCount = 2,
                 // Now List Split is done after type annotation, that is the
                 // reason why this value equal to 4 not 5
-                .ListSplitsCount = 4,
+                .ListSplitsCount = WithFeatureFlag ? 4 : 0,
                 .ValidateListSplitsArgs = false
             });
 
-            ui64 readSplitsCount = 0;
-            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .NumberReadSplits = 3,
-                .ValidateReadSplitsArgs = false,
-                .ResultFactory = [&]() {
-                    readSplitsCount += 1;
-                    const auto payloadColumn = readSplitsCount < 3
-                        ? std::vector<std::string>{"P1", "P2", "P3"}
-                        : std::vector<std::string>{"P4", "P5", "P6"};
+            if (WithFeatureFlag) {
+                ui64 readSplitsCount = 0;
+                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+                SetupMockConnectorTableData(connectorClient, {
+                    .TableName = ydbTable,
+                    .Columns = columns,
+                    .NumberReadSplits = 3,
+                    .ValidateReadSplitsArgs = false,
+                    .ResultFactory = [&]() {
+                        readSplitsCount += 1;
+                        const auto payloadColumn = readSplitsCount < 3
+                            ? std::vector<std::string>{"P1", "P2", "P3"}
+                            : std::vector<std::string>{"P4", "P5", "P6"};
 
-                    return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                    );
-                }
-            });
+                        return MakeRecordBatch(
+                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        );
+                    }
+                });
+            }
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -3079,7 +3087,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "ydb_table"_a = ydbTable,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
-        ));
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
+        if (!WithFeatureFlag) {
+            return;
+        }
 
         CheckScriptExecutionsCount(1, 1);
 
@@ -3923,6 +3936,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        }
         const auto connectorClient = SetupMockConnectorClient();
 
         constexpr char inputTopicName[] = "sljInputTopicName";

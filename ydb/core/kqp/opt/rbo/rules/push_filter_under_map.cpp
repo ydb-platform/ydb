@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-std::shared_ptr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -50,7 +50,7 @@ std::shared_ptr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const st
 
     if (remainingFilters.size()) {
         auto pushedFilterExpr = MakeConjunction(remainingFilters, props.PgSyntax);
-        return std::make_shared<TOpFilter>(map, map->Pos, pushedFilterExpr);
+        return MakeIntrusive<TOpFilter>(map, map->Pos, pushedFilterExpr);
     } else {
         return map;
     }

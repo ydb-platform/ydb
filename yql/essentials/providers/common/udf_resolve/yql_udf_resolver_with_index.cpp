@@ -16,8 +16,7 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -266,5 +265,4 @@ IUdfResolver::TPtr CreateUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfReso
     return new TUdfResolverWithIndex(udfIndex, fallback, fileStorage);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

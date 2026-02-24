@@ -64,6 +64,21 @@ class YdbTopicWorkload(WorkloadBase):
         subprocess.run(cmd, check=True, text=True)
         print(f"End at {time.time()}")
 
+    def __one_tablet_but_a_distributed_transaction(self):
+        self.run_topic_write_with_tx(20, 10, 10, "100M")
+
+    def __two_tablets_distributed_transaction(self):
+        self.run_topic_write_with_tx(20, 5, 10, "100M")
+
+    def __a_wide_transaction_with_multiple_partitions_in_one_tablet(self):
+        self.run_topic_write_with_tx(20, 100, 10, "100M")
+
+    def __wide_transaction_one_tablet_contains_one_partition(self):
+        self.run_topic_write_with_tx(20, 100, 1, "100M")
+
+    def __immediate_transaction(self):
+        self.run_topic_write_with_tx(20, 1, 1, "10M")
+
     def __loop(self):
         # init
         self.cmd_run(
@@ -98,6 +113,50 @@ class YdbTopicWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['clean'])
         )
 
+    def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, byte_rate):
+        topic_name = f'workload_topic_pr{number_of_producers}_p{number_of_partitions_in_the_topic}_pq{number_of_partitions_per_tablet}'
+
+        self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet)
+
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'workload', 'topic', 'run', 'write',
+            '-s', self.duration,
+            '--byte-rate', byte_rate,
+            '--use-tx', '--tx-commit-interval', '2000',
+            '-t', str(number_of_producers),
+            '--max-memory-usage-per-producer=2M',
+            '--topic', topic_name
+        ])
+
+        self.delete_topic(topic_name)
+
+    def create_topic(self, topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet):
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'topic', 'create',
+            f'--partitions-count={number_of_partitions_in_the_topic}',
+            f'--partitions-per-tablet={number_of_partitions_per_tablet}',
+            '--auto-partitioning-strategy=up',
+            '--auto-partitioning-stabilization-window-seconds=20',
+            '--auto-partitioning-up-utilization-percent=50',
+            '--retention-period=2s',
+            topic_name,
+        ])
+
+    def delete_topic(self, topic_name):
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'topic', 'drop',
+            topic_name,
+        ])
+
     def get_workload_thread_funcs(self):
-        r = [self.__loop]
-        return r
+        return [
+            self.__loop,
+            self.__one_tablet_but_a_distributed_transaction,
+            self.__two_tablets_distributed_transaction,
+            self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
+            self.__wide_transaction_one_tablet_contains_one_partition,
+            self.__immediate_transaction,
+        ]

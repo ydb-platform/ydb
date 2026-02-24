@@ -1,15 +1,17 @@
-#include <format>
 #include "write_session.h"
 
-#include <util/system/byteorder.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 #include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
 
 #include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/threading/future/subscription/wait_any.h>
+
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
+#include <util/system/byteorder.h>
+
+#include <format>
 
 namespace NYdb::inline Dev::NTopic {
 

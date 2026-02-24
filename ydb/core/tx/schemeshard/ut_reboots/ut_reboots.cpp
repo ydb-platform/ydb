@@ -1,6 +1,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -192,8 +193,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
     Y_UNIT_TEST(Fake) {
     }
 
-    Y_UNIT_TEST(CopyWithData) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS(CopyWithData) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {

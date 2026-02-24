@@ -66,6 +66,10 @@ TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnT
     const NKqpProto::TKqpPhyKeyRange& range, const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
+TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
+    const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo,
+    const NMiniKQL::TTypeEnvironment& typeEnv);
+
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::TTypeEnvironment& typeEnv);

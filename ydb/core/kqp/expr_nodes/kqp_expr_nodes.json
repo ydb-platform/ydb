@@ -100,6 +100,17 @@
             ]
         },
         {
+            "Name": "TKqpReadSysViewSourceSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpSysViewSourceSettings"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 3, "Name": "RangesExpr", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpReadTableFullTextIndexSourceSettings",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpReadTableFullTextIndexSourceSettings"},

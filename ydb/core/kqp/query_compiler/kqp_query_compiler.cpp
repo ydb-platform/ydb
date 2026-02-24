@@ -1495,6 +1495,42 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+        } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
+            NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *sysViewProto.MutableTable());
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillColumns(settings.Columns().Cast(), *tableMeta, sysViewProto, allowSystemColumns);
+
+            auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
+            sysViewProto.SetReverse(readSettings.IsReverse());
+
+            auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();
+            if (ranges.IsValid()) {
+                auto& rangesParam = *sysViewProto.MutableRanges();
+                rangesParam.SetParamName(ranges.Cast().Name().StringValue());
+            } else if (!TCoVoid::Match(settings.RangesExpr().Raw())) {
+                YQL_ENSURE(
+                    TKqlKeyRange::Match(settings.RangesExpr().Raw()),
+                    "SysView read ranges should be parameter or KqlKeyRange, got: " << settings.RangesExpr().Cast().Ptr()->Content()
+                );
+                FillKeyRange(settings.RangesExpr().Cast<TKqlKeyRange>(), *sysViewProto.MutableKeyRange());
+            }
+
+            if (readSettings.ItemsLimit) {
+                TExprBase expr(readSettings.ItemsLimit);
+                if (expr.template Maybe<TCoUint64>()) {
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *sysViewProto.MutableItemsLimit()->MutableLiteralValue());
+                } else if (expr.template Maybe<TCoParameter>()) {
+                    sysViewProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
+                }
+            }
+
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1504,7 +1540,7 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName}, dataSourceCategory)) {
+        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
             FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);

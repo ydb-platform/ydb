@@ -45,6 +45,7 @@ struct TKqpPhyTxSettings {
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
+constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {

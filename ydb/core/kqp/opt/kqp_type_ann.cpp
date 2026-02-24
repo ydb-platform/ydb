@@ -431,6 +431,46 @@ TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx
     return TStatus::Ok;
 }
 
+TStatus AnnotateSysViewSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData)
+{
+    auto table = ResolveTable(node->Child(TKqpReadSysViewSourceSettings::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqpReadSysViewSourceSettings::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    auto ranges = node->Child(TKqpReadSysViewSourceSettings::idx_RangesExpr);
+    if (!TCoVoid::Match(ranges) &&
+        !TCoArgument::Match(ranges) &&
+        !TCoParameter::Match(ranges) &&
+        !TCoRangeFinalize::Match(ranges) &&
+        !TDqPhyPrecompute::Match(ranges) &&
+        !TKqpTxResultBinding::Match(ranges) &&
+        !TKqlKeyRange::Match(ranges))
+    {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(ranges->Pos()),
+            TStringBuilder()
+                << "Expected KeyRange, Void, Parameter, Argument or RangeFinalize in ranges, but got: "
+                << ranges->Content()
+        ));
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2943,6 +2983,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpReadSysViewSourceSettings::Match(input.Get())) {
+                return AnnotateSysViewSourceSettings(input, ctx, cluster, *tablesData);
             }
 
             if (TKqlExternalEffect::Match(input.Get())) {

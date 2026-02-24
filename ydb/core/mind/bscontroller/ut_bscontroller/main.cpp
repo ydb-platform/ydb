@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
-    Y_UNIT_TEST(PopulatePDiskCombinedMode) {
+    Y_UNIT_TEST(PopulatePDiskExplicitOnlyMode) {
         const ui32 numNodes = 10;
         const ui32 numGroups = 10;
         TEnvironmentSetup env(numNodes, 1);
@@ -978,18 +978,17 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 item->SetVDisk(vslot.GetVDiskIdx());
             };
 
-            // Scenario A: explicit + expected with equal counts should succeed.
+            // Scenario A: explicit list should succeed.
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
             addVDiskId(populate, firstVSlot);
-            populate->SetExpectedVDiskCount(1);
             response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(response.GetStatus(0).GetSuccess());
 
-            // Scenario B: explicit count is greater than expected and should fail.
+            // Scenario B: ExpectedVDiskCount is not supported.
             request.Clear();
             populate = request.AddCommand()->MutablePopulatePDisk();
             fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
@@ -1000,20 +999,19 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT(!response.GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("exceeds ExpectedVDiskCount"),
+            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("ExpectedVDiskCount is not supported"),
                 response.GetStatus(0).GetErrorDescription());
 
-            // Scenario C: explicit + expected top-up path fails when not enough additional VDisks exist.
+            // Scenario C: request without explicit list should fail.
             request.Clear();
             populate = request.AddCommand()->MutablePopulatePDisk();
             fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
-            addVDiskId(populate, firstVSlot);
-            populate->SetExpectedVDiskCount(baseConfig.VSlotSize() + 1);
+            populate->SetExpectedVDiskCount(1);
             response = env.Invoke(request);
             UNIT_ASSERT(!response.GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Cluster has only"),
+            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Specify non-empty VDiskId list"),
                 response.GetStatus(0).GetErrorDescription());
         });
     }
@@ -1085,17 +1083,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 }
             }
 
-            std::pair<ui32, ui32> destinationPDisk = {};
-            bool foundDestination = false;
+            TVector<std::pair<ui32, ui32>> candidatePDisks;
             for (const auto& vslot : baseConfig.GetVSlot()) {
                 const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
                 if (usedPDisks.find(pdisk) == usedPDisks.end()) {
-                    destinationPDisk = pdisk;
-                    foundDestination = true;
-                    break;
+                    candidatePDisks.push_back(pdisk);
                 }
             }
-            UNIT_ASSERT_C(foundDestination, "Expected destination PDisk outside source group");
+            UNIT_ASSERT_C(!candidatePDisks.empty(), "Expected destination PDisk outside source group");
 
             request.Clear();
             auto *enableDonorMode = request.AddCommand()->MutableEnableDonorMode();
@@ -1105,15 +1100,37 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            request.Clear();
-            request.SetIgnoreGroupFailModelChecks(true);
-            auto *populate = request.AddCommand()->MutablePopulatePDisk();
-            auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationPDisk.first);
-            target->SetPDiskId(destinationPDisk.second);
-            addVDiskId(populate, source);
+            auto invokePopulate = [&](const std::pair<ui32, ui32>& destinationPDisk, bool rollback) {
+                NKikimrBlobStorage::TConfigRequest populateRequest;
+                populateRequest.SetRollback(rollback);
+                auto *populate = populateRequest.AddCommand()->MutablePopulatePDisk();
+                auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
+                target->SetNodeId(destinationPDisk.first);
+                target->SetPDiskId(destinationPDisk.second);
+                addVDiskId(populate, source);
+                return env.Invoke(populateRequest);
+            };
 
-            response = env.Invoke(request);
+            std::pair<ui32, ui32> destinationPDisk = {};
+            bool foundDestination = false;
+            TStringBuilder probeErrors;
+            for (const auto& candidate : candidatePDisks) {
+                const auto probeResponse = invokePopulate(candidate, true);
+                if (probeResponse.StatusSize() && probeResponse.GetStatus(0).GetSuccess()) {
+                    destinationPDisk = candidate;
+                    foundDestination = true;
+                    break;
+                }
+                probeErrors << " [" << candidate.first << ':' << candidate.second
+                    << " reason# " << static_cast<ui32>(probeResponse.StatusSize() ? probeResponse.GetStatus(0).GetFailReason()
+                        : NKikimrBlobStorage::TConfigResponse::TStatus::kGeneric)
+                    << " description# " << (probeResponse.StatusSize() ? probeResponse.GetStatus(0).GetErrorDescription()
+                        : probeResponse.GetErrorDescription())
+                    << ']';
+            }
+            UNIT_ASSERT_C(foundDestination, TStringBuilder() << "Expected safe destination for explicit move;" << probeErrors);
+
+            response = invokePopulate(destinationPDisk, false);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
@@ -1221,17 +1238,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 }
             }
 
-            std::pair<ui32, ui32> destinationPDisk = {};
-            bool foundDestination = false;
+            TVector<std::pair<ui32, ui32>> candidatePDisks;
             for (const auto& vslot : baseConfig.GetVSlot()) {
                 const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
                 if (usedPDisks.find(pdisk) == usedPDisks.end()) {
-                    destinationPDisk = pdisk;
-                    foundDestination = true;
-                    break;
+                    candidatePDisks.push_back(pdisk);
                 }
             }
-            UNIT_ASSERT_C(foundDestination, "Expected destination PDisk outside source group");
+            UNIT_ASSERT_C(!candidatePDisks.empty(), "Expected destination PDisk outside source group");
 
             request.Clear();
             auto *enableDonorMode = request.AddCommand()->MutableEnableDonorMode();
@@ -1241,16 +1255,38 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            request.Clear();
-            request.SetIgnoreGroupFailModelChecks(true);
-            auto *populate = request.AddCommand()->MutablePopulatePDisk();
-            auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationPDisk.first);
-            target->SetPDiskId(destinationPDisk.second);
-            addVDiskId(populate, source);
-            populate->SetSuppressDonorMode(true);
+            auto invokePopulate = [&](const std::pair<ui32, ui32>& destinationPDisk, bool rollback) {
+                NKikimrBlobStorage::TConfigRequest populateRequest;
+                populateRequest.SetRollback(rollback);
+                auto *populate = populateRequest.AddCommand()->MutablePopulatePDisk();
+                auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
+                target->SetNodeId(destinationPDisk.first);
+                target->SetPDiskId(destinationPDisk.second);
+                addVDiskId(populate, source);
+                populate->SetSuppressDonorMode(true);
+                return env.Invoke(populateRequest);
+            };
 
-            response = env.Invoke(request);
+            std::pair<ui32, ui32> destinationPDisk = {};
+            bool foundDestination = false;
+            TStringBuilder probeErrors;
+            for (const auto& candidate : candidatePDisks) {
+                const auto probeResponse = invokePopulate(candidate, true);
+                if (probeResponse.StatusSize() && probeResponse.GetStatus(0).GetSuccess()) {
+                    destinationPDisk = candidate;
+                    foundDestination = true;
+                    break;
+                }
+                probeErrors << " [" << candidate.first << ':' << candidate.second
+                    << " reason# " << static_cast<ui32>(probeResponse.StatusSize() ? probeResponse.GetStatus(0).GetFailReason()
+                        : NKikimrBlobStorage::TConfigResponse::TStatus::kGeneric)
+                    << " description# " << (probeResponse.StatusSize() ? probeResponse.GetStatus(0).GetErrorDescription()
+                        : probeResponse.GetErrorDescription())
+                    << ']';
+            }
+            UNIT_ASSERT_C(foundDestination, TStringBuilder() << "Expected safe destination for suppress-donor move;" << probeErrors);
+
+            response = invokePopulate(destinationPDisk, false);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
@@ -1471,36 +1507,64 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 return signature;
             };
 
-            THashMap<ui32, TVector<TVDiskRef>> byGroup;
+            const TVDiskRef source = makeRef(baseConfig.GetVSlot(0));
+            TSet<std::pair<ui32, ui32>> usedPDisks;
             for (const auto& vslot : baseConfig.GetVSlot()) {
-                byGroup[vslot.GetGroupId()].push_back(makeRef(vslot));
-            }
-
-            TVDiskRef destinationRef;
-            TVDiskRef slotToMoveRef;
-            bool found = false;
-            for (const auto& [groupId, slots] : byGroup) {
-                Y_UNUSED(groupId);
-                if (slots.size() >= 2) {
-                    destinationRef = slots[0];
-                    slotToMoveRef = slots[1];
-                    found = true;
-                    break;
+                if (vslot.GetGroupId() == source.GroupId) {
+                    usedPDisks.emplace(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
                 }
             }
-            UNIT_ASSERT_C(found, "Expected a group with at least two VSlots");
+
+            TVector<std::pair<ui32, ui32>> candidatePDisks;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                if (usedPDisks.find(pdisk) == usedPDisks.end()) {
+                    candidatePDisks.push_back(pdisk);
+                }
+            }
+            UNIT_ASSERT_C(!candidatePDisks.empty(), "Expected destination PDisk outside source group");
+
+            auto invokePopulate = [&](const std::pair<ui32, ui32>& destinationPDisk, bool rollback) {
+                NKikimrBlobStorage::TConfigRequest populateRequest;
+                populateRequest.SetRollback(rollback);
+                auto *populate = populateRequest.AddCommand()->MutablePopulatePDisk();
+                auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
+                target->SetNodeId(destinationPDisk.first);
+                target->SetPDiskId(destinationPDisk.second);
+                addVDiskId(populate, source);
+                return env.Invoke(populateRequest);
+            };
+
+            std::pair<ui32, ui32> unsafeDestinationPDisk = {};
+            bool foundUnsafe = false;
+            TStringBuilder probeErrors;
+            for (const auto& candidate : candidatePDisks) {
+                const auto probeResponse = invokePopulate(candidate, true);
+                if (probeResponse.StatusSize() && !probeResponse.GetStatus(0).GetSuccess()) {
+                    const auto failReason = probeResponse.GetStatus(0).GetFailReason();
+                    if (failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded
+                            || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
+                        unsafeDestinationPDisk = candidate;
+                        foundUnsafe = true;
+                        break;
+                    }
+                }
+
+                probeErrors << " [" << candidate.first << ':' << candidate.second;
+                if (probeResponse.StatusSize()) {
+                    probeErrors << " status_success# " << probeResponse.GetStatus(0).GetSuccess()
+                        << " reason# " << static_cast<ui32>(probeResponse.GetStatus(0).GetFailReason())
+                        << " description# " << probeResponse.GetStatus(0).GetErrorDescription();
+                } else {
+                    probeErrors << " status# none description# " << probeResponse.GetErrorDescription();
+                }
+                probeErrors << ']';
+            }
+            UNIT_ASSERT_C(foundUnsafe, TStringBuilder() << "Expected unsafe destination rejected by fail model;" << probeErrors);
 
             const auto beforeSignature = makeSignature(baseConfig);
 
-            request.Clear();
-            auto *populate = request.AddCommand()->MutablePopulatePDisk();
-            auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationRef.NodeId);
-            target->SetPDiskId(destinationRef.PDiskId);
-            addVDiskId(populate, destinationRef);
-            addVDiskId(populate, slotToMoveRef);
-
-            response = env.Invoke(request);
+            response = invokePopulate(unsafeDestinationPDisk, false);
             UNIT_ASSERT(!response.GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
@@ -1508,9 +1572,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             const auto failReason = response.GetStatus(0).GetFailReason();
             UNIT_ASSERT_C(
                 failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded
-                    || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData
-                    || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kGeneric
-                    || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable,
+                    || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData,
                 TStringBuilder() << "unexpected fail reason# " << static_cast<ui32>(failReason)
                     << " description# " << response.GetStatus(0).GetErrorDescription());
 

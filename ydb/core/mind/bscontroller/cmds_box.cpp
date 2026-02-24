@@ -346,81 +346,47 @@ namespace NKikimr::NBsController {
         }
 
         const bool hasExplicitVDisks = cmd.VDiskIdSize() != 0;
-        const bool hasExpectedCount = cmd.GetExpectedVDiskCount() != 0;
-        if (!hasExplicitVDisks && !hasExpectedCount) {
-            throw TExError() << "Specify at least one of VDiskId list or ExpectedVDiskCount";
+        if (!hasExplicitVDisks) {
+            throw TExError() << "Specify non-empty VDiskId list";
         }
-
-        if (hasExpectedCount && cmd.VDiskIdSize() > cmd.GetExpectedVDiskCount()) {
-            throw TExError() << "Explicit VDiskId count# " << cmd.VDiskIdSize()
-                             << " exceeds ExpectedVDiskCount# " << cmd.GetExpectedVDiskCount();
+        if (cmd.GetExpectedVDiskCount() != 0) {
+            throw TExError() << "ExpectedVDiskCount is not supported, use explicit VDiskId list only";
         }
 
         TVector<const TVSlotInfo*> selected;
         THashSet<TVSlotId> selectedIds;
 
-        const ui32 expected = Max<ui32>(cmd.GetExpectedVDiskCount(), cmd.VDiskIdSize());
-        selected.reserve(expected);
+        selected.reserve(cmd.VDiskIdSize());
+        for (const auto& protoVDiskId : cmd.GetVDiskId()) {
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(protoVDiskId);
 
-        if (hasExplicitVDisks) {
-            selected.reserve(cmd.VDiskIdSize());
-            for (const auto& protoVDiskId : cmd.GetVDiskId()) {
-                const TVDiskID vdiskId = VDiskIDFromVDiskID(protoVDiskId);
-
-                const TGroupInfo *group = Groups.Find(vdiskId.GroupID);
-                if (!group) {
-                    throw TExGroupNotFound(vdiskId.GroupID.GetRawId());
-                }
-                if (group->VDisksInGroup.empty()) {
-                    throw TExReassignNotViable() << "GroupId# " << group->ID << " has no active VDisks";
-                }
-                if (!group->Topology->IsValidId(vdiskId)) {
-                    throw TExError() << "VDiskId# " << vdiskId << " out of range";
-                }
-                if (vdiskId.GroupGeneration && vdiskId.GroupGeneration != group->Generation) {
-                    throw TExGroupGenerationMismatch(group->ID.GetRawId(), vdiskId.GroupGeneration, group->Generation);
-                }
-
-                const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
-                const TVSlotInfo *slot = group->VDisksInGroup.at(orderNumber);
-                Y_ABORT_UNLESS(slot);
-
-                if (slot->IsBeingDeleted() || slot->Mood == TMood::Donor) {
-                    throw TExReassignNotViable() << "VDiskId# " << vdiskId << " is not movable at the moment";
-                }
-                if (!selectedIds.insert(slot->VSlotId).second) {
-                    throw TExError() << "Duplicate VDiskId# " << vdiskId;
-                }
-
-                if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
-                    selected.push_back(slot);
-                }
+            const TGroupInfo *group = Groups.Find(vdiskId.GroupID);
+            if (!group) {
+                throw TExGroupNotFound(vdiskId.GroupID.GetRawId());
             }
-        }
+            if (group->VDisksInGroup.empty()) {
+                throw TExReassignNotViable() << "GroupId# " << group->ID << " has no active VDisks";
+            }
+            if (!group->Topology->IsValidId(vdiskId)) {
+                throw TExError() << "VDiskId# " << vdiskId << " out of range";
+            }
+            if (vdiskId.GroupGeneration && vdiskId.GroupGeneration != group->Generation) {
+                throw TExGroupGenerationMismatch(group->ID.GetRawId(), vdiskId.GroupGeneration, group->Generation);
+            }
 
-        if (hasExpectedCount) {
-            const ui32 need = expected - cmd.VDiskIdSize();
+            const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
+            const TVSlotInfo *slot = group->VDisksInGroup.at(orderNumber);
+            Y_ABORT_UNLESS(slot);
 
-            ui32 added = 0;
-            VSlots.ForEach([&](TVSlotId, const TVSlotInfo& slot) {
-                if (added == need) {
-                    return;
-                }
-                if (!slot.Group || slot.IsBeingDeleted() || slot.Mood == TMood::Donor) {
-                    return;
-                }
-                if (slot.VSlotId.ComprisingPDiskId() == destinationPDiskId) {
-                    return;
-                }
-                if (selectedIds.insert(slot.VSlotId).second) {
-                    selected.push_back(&slot);
-                    ++added;
-                }
-            });
+            if (slot->IsBeingDeleted() || slot->Mood == TMood::Donor) {
+                throw TExReassignNotViable() << "VDiskId# " << vdiskId << " is not movable at the moment";
+            }
+            if (!selectedIds.insert(slot->VSlotId).second) {
+                throw TExError() << "Duplicate VDiskId# " << vdiskId;
+            }
 
-            if (added != need) {
-                throw TExReassignNotViable() << "Cluster has only " << cmd.VDiskIdSize() + added
-                    << " movable VDisks including explicit list, expected# " << expected;
+            if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
+                selected.push_back(slot);
             }
         }
 

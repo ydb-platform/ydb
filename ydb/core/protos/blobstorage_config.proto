@@ -520,15 +520,8 @@ message TPopulatePDisk {
 
     // Explicit VDisks to process first.
     repeated NKikimrBlobStorage.TVDiskID VDiskId = 2;
-    // Optional target amount of movable VDisks in total.
-    // If both fields are set:
-    //  - explicit VDisks are validated first;
-    //  - explicit VDisks that are already on DestinationPDisk also count towards ExpectedVDiskCount;
-    //  - if VDiskId.size() > ExpectedVDiskCount, request fails;
-    //  - otherwise the controller auto-selects additional movable VDisks to reach ExpectedVDiskCount.
-    uint32 ExpectedVDiskCount = 3;
 
-    bool SuppressDonorMode = 4;
+    bool SuppressDonorMode = 3;
 }
 
 message TSetScrubPeriodicity {

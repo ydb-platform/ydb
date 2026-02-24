@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include "direct_io_op.h"
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
@@ -10,6 +11,36 @@
 
 namespace NKikimr::NDDisk {
 
+#if defined(__linux__)
+
+    struct TPersistentBufferIoOp : TDDiskActor::TDirectIoOpBase {
+        ui64 TabletId;
+        ui64 VChunkIndex;
+        ui64 Lsn;
+        std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight>& PersistentBufferWriteInflight;
+
+        TDDiskIoOp(std::atomic<ui32>& inFlightCount,
+            std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight>& persistentBufferWriteInflight,
+            ui64 tabletId, ui64 vChunkIndex, ui64 lsn)
+            : TDDiskActor::TDirectIoOpBase(inFlightCount)
+            , PersistentBufferWriteInflight(persistentBufferWriteInflight)
+            , TabletId(tabletId)
+            , VChunkIndex(vChunkIndex)
+            , Lsn(lsn)
+        {}
+
+        virtual void Drop() override {
+            auto& inflight = PersistentBufferWriteInflight[{TabletId, VChunkIndex, Lsn}];
+            inflight.Span.End();
+        }
+
+        virtual void Reply() override {
+            auto& inflight = PersistentBufferWriteInflight[{TabletId, VChunkIndex, Lsn}];
+            
+        }
+    };
+#endif
+
     void TDDiskActor::InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format) {
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
@@ -17,8 +48,8 @@ namespace NKikimr::NDDisk {
         ChunkSize = DiskFormat->ChunkSize;
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
-        MaxChunks = format->MaxChunks;
-        PersistentBufferInitChunks = 256;
+        MaxChunks = 512;
+        PersistentBufferInitChunks = 512;
         MaxPersistentBufferInMemoryCache = format->MaxInMemoryCache;
         MaxPersistentBufferChunkRestoreInflight = format->MaxChunkRestoreInflight;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
@@ -169,7 +200,7 @@ namespace NKikimr::NDDisk {
                 loc.HasSignatureCorrection = true;
                 *it.ContiguousDataMut() = 0;
             }
-            loc.Checksum = CalculateChecksum(it, SectorSize);
+            //loc.Checksum = CalculateChecksum(it, SectorSize);
         }
         header->HeaderChecksum = 0;
         std::vector<std::tuple<ui32, ui32, TRope>> parts;

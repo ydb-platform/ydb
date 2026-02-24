@@ -34,9 +34,6 @@
 NActors::IActor* CreateMemProfiler();
 
 namespace NMVP::NOIDC {
-namespace {
-
-} // namespace
 
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");

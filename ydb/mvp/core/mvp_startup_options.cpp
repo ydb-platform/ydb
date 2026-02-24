@@ -192,7 +192,7 @@ void TMvpStartupOptions::LoadTokens() {
     }
 
     if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
-        MigrateJwtInfoToOAuth2ExchangeIfNeeded();
+        MigrateJwtInfoToOAuth2Exchange();
         ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
         ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
         if (Tokens.HasStaffApiUserTokenInfo()) {
@@ -229,7 +229,7 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
-    MigrateJwtInfoToOAuth2ExchangeIfNeeded();
+    MigrateJwtInfoToOAuth2Exchange();
     ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
 
     Oauth2TokenExchangeTokenName.clear();

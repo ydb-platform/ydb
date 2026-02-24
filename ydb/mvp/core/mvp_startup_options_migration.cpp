@@ -5,11 +5,7 @@
 
 namespace NMVP {
 
-void TMvpStartupOptions::MigrateJwtInfoToOAuth2ExchangeIfNeeded() {
-    if (AccessServiceType != NMvp::nebius_v1 && AccessServiceType != NMvp::yandex_v2) {
-        return;
-    }
-
+void TMvpStartupOptions::MigrateJwtInfoToOAuth2Exchange() {
     THashSet<TString> oauth2Names;
     for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
         oauth2Names.insert(tokenExchangeInfo.GetName());

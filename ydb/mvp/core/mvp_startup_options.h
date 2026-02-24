@@ -49,7 +49,7 @@ private:
     void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic);
     void SetPorts();
     TString AddSchemeToUserToken(const TString& token, const TString& scheme);
-    void MigrateJwtInfoToOAuth2ExchangeIfNeeded();
+    void MigrateJwtInfoToOAuth2Exchange();
     void ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride);
     void ValidateOAuth2ExchangeTokenEndpointScheme(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
                                                    const TString& configSource);

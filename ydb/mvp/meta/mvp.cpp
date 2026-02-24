@@ -27,9 +27,6 @@
 using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
-namespace {
-
-} // namespace
 
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");

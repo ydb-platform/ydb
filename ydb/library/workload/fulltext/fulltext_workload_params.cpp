@@ -9,7 +9,7 @@ namespace NYdbWorkload {
 
         switch (commandType) {
             case TWorkloadParams::ECommandType::Root:
-                opts.AddLongOption("table", "Table name.")
+                opts.AddLongOption("path", "Path to workload table.")
                     .DefaultValue(TableName)
                     .StoreResult(&TableName);
                 break;

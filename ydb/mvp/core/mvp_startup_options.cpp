@@ -2,17 +2,18 @@
 #include "cracked_page.h"
 #include "utils.h"
 
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <util/stream/file.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/yexception.h>
-#include <util/system/hostname.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <google/protobuf/text_format.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <yaml-cpp/yaml.h>
+
+#include <util/generic/hash_set.h>
+#include <util/generic/yexception.h>
+#include <util/stream/file.h>
+#include <util/system/hostname.h>
 
 #include <iostream>
-#include <yaml-cpp/yaml.h>
 
 namespace NMVP {
 namespace {
@@ -124,11 +125,7 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
             if (!appConfig.HasGeneric()) {
                 return;
             }
-
             const NMvp::TGenericConfig& generic = appConfig.GetGeneric();
-            if (!generic.IsInitialized()) {
-                ythrow yexception() << "Error parsing YAML configuration file: invalid generic config";
-            }
             TryGetStartupOptionsFromConfig(parsedArgs, generic);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;

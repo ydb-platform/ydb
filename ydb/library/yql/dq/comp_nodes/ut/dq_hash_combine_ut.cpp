@@ -616,7 +616,7 @@ void RunDqAggregateBlockTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useF
 }
 
 template<bool LLVM, bool Spilling, typename StreamCreator>
-void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator)
+void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator, const bool disableDehydration = false)
 {
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
@@ -626,6 +626,16 @@ void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow,
 
     if (Spilling) {
         graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    }
+
+    if (disableDehydration) {
+        for (auto& node : graph->GetNodes()) {
+            auto* testPoints = dynamic_cast<TDqHashCombineTestPoints*>(node.Get());
+            if (!testPoints) {
+                continue;
+            }
+            testPoints->DisableStateDehydration(true);
+        }
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -762,6 +772,17 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 }
             });
         });
+    }
+
+    Y_UNIT_TEST_QUAD(TestWideModeAggregationWithSpillingNonDehydrated, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 100000, 10, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == 100000) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
+            });
+        }, true);
     }
 
     Y_UNIT_TEST_QUAD(TestWideModeAggregationMultiRowNoSpilling, UseLLVM, UseFlow) {

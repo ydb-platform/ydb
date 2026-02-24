@@ -3732,14 +3732,12 @@ void TSchemeShard::PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, T
     }
 }
 
-void TSchemeShard::PersistShardCountReferences(NIceDb::TNiceDb& db, TShardIdx shardIdx, ui64 countReferences) {
-    if (IsLocalId(shardIdx)) {
-        db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Update(
-                NIceDb::TUpdate<Schema::Shards::CountReferences>(countReferences));
-    } else {
-        db.Table<Schema::MigratedShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-            NIceDb::TUpdate<Schema::MigratedShards::CountReferences>(countReferences));
-    }
+void TSchemeShard::PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Update();
+}
+
+void TSchemeShard::PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {

@@ -1305,7 +1305,6 @@ struct TShardInfo {
     TPathId PathId = InvalidPathId;
     TTabletTypes::EType TabletType = ETabletType::TypeInvalid;
     TChannelsBindings BindedChannels;
-    ui64 CountReferences = 1;
 
     TShardInfo(TTxId txId, TPathId pathId, TTabletTypes::EType type)
        : CurrentTxId(txId)

@@ -549,11 +549,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "CountReferences",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "ShardIdx",
                 "ColumnType": "Uint64"
@@ -588,7 +583,6 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
@@ -3767,6 +3761,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "TabletType",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerShardId",
                 "ColumnType": "Uint64"
@@ -3795,30 +3794,19 @@
                 "ColumnId": 6,
                 "ColumnName": "LastTxId",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "TabletType",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 8,
-                "ColumnName": "CountReferences",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6,
-                    7,
-                    8
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9486,6 +9474,58 @@
             {
                 "ColumnId": 3,
                 "ColumnName": "ForcedCompactionId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 132,
+        "TableName": "SharedShards",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "ShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
             }
         ],

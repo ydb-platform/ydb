@@ -83,8 +83,8 @@ public:
 
                 shardInfo.CurrentTxId = OperationId.GetTxId();
                 context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
-                shardInfo.CountReferences++;
-                context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
+                context.SS->SharedShards[shardIdx].insert(txState->TargetPathId);
+                context.SS->PersistAddSharedShard(db, shardIdx, txState->TargetPathId);
             }
             context.SS->PersistTxState(db, OperationId);
         }
@@ -166,8 +166,6 @@ public:
 
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
-
-        dstPath.Base()->IncShardsInside(txState->Shards.size());
 
         Y_ABORT_UNLESS(!context.SS->ColumnTables.contains(dstPath.Base()->PathId));
         auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);

@@ -773,7 +773,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TShardIdx, TTabletId, TPathId, TTxId, TTabletTypes::EType, ui64> TShardsRec;
+    typedef std::tuple<TShardIdx, TTabletId, TPathId, TTxId, TTabletTypes::EType> TShardsRec;
     typedef TDeque<TShardsRec> TShardsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -782,8 +782,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValue<typename SchemaTable::TabletId>(),
             pathId,
             rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
-            rowSet.template GetValue<typename SchemaTable::TabletType>(),
-            rowSet.template GetValue<typename SchemaTable::CountReferences>()
+            rowSet.template GetValue<typename SchemaTable::TabletType>()
         );
     }
 
@@ -825,6 +824,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!rowSet.Next()) {
                     return false;
                 }
+            }
+        }
+
+        return true;
+    }
+    
+    bool LoadSharedShards(NIceDb::TNiceDb& db) const {
+        auto rowSet = db.Table<Schema::SharedShards>().Range().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+        while (!rowSet.EndOfSet()) {
+            const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::SharedShards::ShardIdx>());
+            const auto pathId = TPathId(
+                rowSet.GetValueOrDefault<Schema::SharedShards::OwnerPathId>(Self->TabletID()),
+                rowSet.GetValue<Schema::SharedShards::LocalPathId>()
+            );
+            Self->SharedShards[shardIdx].insert(pathId);
+            if (!rowSet.Next()) {
+                return false;
             }
         }
 
@@ -2235,7 +2254,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 shard.PathId = std::get<2>(rec);
                 shard.CurrentTxId = std::get<3>(rec);
                 shard.TabletType = std::get<4>(rec);
-                shard.CountReferences = std::get<5>(rec);
 
                 Self->IncrementPathDbRefCount(shard.PathId);
 
@@ -2257,6 +2275,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     case ETabletType::ColumnShard:
                         olapColumnShards[shard.PathId].push_back(idx);
+                        Self->SharedShards[idx].insert(shard.PathId);
                         break;
                     case ETabletType::ReplicationController:
                         replicationControllers.emplace(shard.PathId, idx);
@@ -2266,6 +2285,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     default:
                         break;
+                }
+            }
+        }
+        {
+            if (!LoadSharedShards(db)) {
+                return false;
+            }
+            
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit for Shared Shards"
+                        << ", read records: " << Self->SharedShards.size()
+                        << ", at schemeshard: " << Self->TabletID());
+            
+            for (const auto& [shardIdx, paths]: Self->SharedShards) {
+                Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
+                for (const auto& path: paths) {
+                    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInit for Shared Shards"
+                            << ", read: " << shardIdx
+                            << ", PathId: " << path
+                            << ", at schemeshard: " << Self->TabletID()); 
                 }
             }
         }

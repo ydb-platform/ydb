@@ -290,10 +290,9 @@ struct Schema : NIceDb::Schema {
         struct LastTxId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct TabletType :     Column<5, NScheme::NTypeIds::Uint32> { using Type = TTabletTypes::EType; static constexpr Type Default = ETabletType::TypeInvalid; };
         struct OwnerPathId :    Column<6, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; static constexpr Type Default = InvalidOwnerId; };
-        struct CountReferences : Column<7, NScheme::NTypeIds::Uint64> { using Type = ui64; static constexpr Type Default = 1; };
 
         using TKey = TableKey<ShardIdx>;
-        using TColumns = TableColumns<ShardIdx, TabletId, PathId, LastTxId, TabletType, OwnerPathId, CountReferences>;
+        using TColumns = TableColumns<ShardIdx, TabletId, PathId, LastTxId, TabletType, OwnerPathId>;
     };
 
     struct MigratedShards : Table<52> {
@@ -307,10 +306,9 @@ struct Schema : NIceDb::Schema {
         // there can be only 1 schema Tx on a shard at any moment in time
         struct LastTxId :       Column<6, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct TabletType :     Column<7, NScheme::NTypeIds::Uint32> { using Type = TTabletTypes::EType; static constexpr Type Default = ETabletType::TypeInvalid; };
-        struct CountReferences : Column<8, NScheme::NTypeIds::Uint64> { using Type = ui64; };
 
         using TKey = TableKey<OwnerShardId, LocalShardId>;
-        using TColumns = TableColumns<OwnerShardId, LocalShardId, TabletId, OwnerPathId, LocalPathId, LastTxId, TabletType, CountReferences>;
+        using TColumns = TableColumns<OwnerShardId, LocalShardId, TabletId, OwnerPathId, LocalPathId, LastTxId, TabletType>;
     };
 
     struct ChannelsBinding : Table<28> {
@@ -2324,6 +2322,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerShardIdx, LocalShardIdx, ForcedCompactionId>;
     };
 
+    struct SharedShards : Table<132> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct OwnerPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
+        using TKey = TableKey<ShardIdx, OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2453,7 +2460,8 @@ struct Schema : NIceDb::Schema {
         SecretsAlterData,
         StreamingQueryState,
         ForcedCompactions,
-        WaitingForcedCompactionShards
+        WaitingForcedCompactionShards,
+        SharedShards
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

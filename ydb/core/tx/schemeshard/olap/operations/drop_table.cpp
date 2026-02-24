@@ -288,11 +288,20 @@ private:
         if (isStandalone) {
             for (auto& shard : txState->Shards) {
                 auto shardIdx = shard.Idx;
-                TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-                shardInfo.CountReferences--;;
-                context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
-                if (shardInfo.CountReferences == 0) {
-                    context.OnComplete.DeleteShard(shard.Idx);
+                auto& shardInfo = context.SS->ShardInfos[shardIdx];
+                auto& sharedPaths = context.SS->SharedShards[shardIdx];
+                sharedPaths.erase(txState->TargetPathId);
+                context.SS->PersistRemoveSharedShard(db, shardIdx, txState->TargetPathId);
+                if (sharedPaths.empty()) {
+                    context.OnComplete.DeleteShard(shardIdx);
+                    context.SS->SharedShards.erase(shardIdx);
+                } else if (txState->TargetPathId == shardInfo.PathId) {
+                    shardInfo.PathId = *sharedPaths.begin();
+                    context.SS->PersistShardPathId(db, shardIdx, shardInfo.PathId);
+                    context.SS->PathsById.at(shardInfo.PathId)->IncShardsInside();
+                    context.SS->PathsById.at(txState->TargetPathId)->DecShardsInside();
+                    context.SS->IncrementPathDbRefCount(shardInfo.PathId);
+                    context.SS->DecrementPathDbRefCount(txState->TargetPathId);
                 }
             }
         }

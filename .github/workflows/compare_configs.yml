@@ -12,7 +12,7 @@ on:
         default: ""
         description: |
           List of branches for compare separated by space. 
-          If not set, result will be uploaded to global store for the default'.
+          If not set, result will be uploaded to global store for the default list of branches.
         required: false
 defaults:
   run:

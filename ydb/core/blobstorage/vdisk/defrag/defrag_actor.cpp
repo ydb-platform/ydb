@@ -50,7 +50,7 @@ namespace NKikimr {
     // TEvStartCompactionFromDefrag
     ////////////////////////////////////////////////////////////////////////////
     struct TEvStartCompactionFromDefrag :
-        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::TEvStartCompactionFromDefrag>
+        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::EvStartCompactionFromDefrag>
     {};
 
     double DefragThreshold(const TOutOfSpaceState& oos, double defaultPercent, double hugeDefragFreeSpaceBorder) {

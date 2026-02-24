@@ -13,9 +13,6 @@ def add_options(p):
                    help='Destination PDisk for Populate operation [NodeId:PDiskId]')
     p.add_argument('--snapshot-file', type=str, metavar='PATH',
                    help='In snapshot mode write JSON snapshot to PATH; in populate mode read VDisk list from PATH')
-    common.add_vdisk_ids_option(p, required=False)
-    p.add_argument('--current-vdisks-from-pdisk', type=str,
-                   help='Use current VDisk list from this PDisk as source for populate')
     p.add_argument('--suppress-donor-mode', action='store_true',
                    help='Do not leave previous VDisks in donor mode after moving')
     common.add_basic_format_options(p)
@@ -114,36 +111,12 @@ def warn_skipped_donors(args, pdisk_id, skipped_donor_vdisk_ids):
     )
 
 
-def make_vdisk_ids_for_populate(args, base_config):
-    has_vdisk_ids = bool(args.vdisk_ids)
-    has_snapshot_file = args.snapshot_file is not None
-    has_current_pdisk = args.current_vdisks_from_pdisk is not None
-
-    source_count = sum((
-        has_vdisk_ids,
-        has_snapshot_file,
-        has_current_pdisk,
-    ))
-    if source_count > 1:
-        raise Exception('Populate mode requires at most one source: --vdisk-ids, --snapshot-file, or --current-vdisks-from-pdisk')
-
-    if source_count == 0:
-        raise Exception('Populate mode requires source: --vdisk-ids, --snapshot-file, or --current-vdisks-from-pdisk')
-
-    if has_vdisk_ids:
-        vdisk_ids = flatten_vdisk_ids(args.vdisk_ids)
-    elif has_snapshot_file:
-        vdisk_ids = read_snapshot(args.snapshot_file)
-    else:
-        source_pdisk_id = parse_pdisk_id(args.current_vdisks_from_pdisk)
-        vslots_on_pdisk = VSlotsOnPDisk.from_base_config(base_config, source_pdisk_id)
-        vdisk_ids = vslots_on_pdisk.active_vdisk_ids()
-        skipped_donor_vdisk_ids = vslots_on_pdisk.donor_vdisk_ids()
-        warn_skipped_donors(args, source_pdisk_id, skipped_donor_vdisk_ids)
-
+def make_vdisk_ids_for_populate(args):
+    if args.snapshot_file is None:
+        raise Exception('Populate mode requires --snapshot-file')
+    vdisk_ids = read_snapshot(args.snapshot_file)
     if not vdisk_ids:
         raise Exception('VDisk list is empty')
-
     return vdisk_ids
 
 
@@ -171,10 +144,6 @@ def create_populate_request(args, base_config, destination_pdisk_id, vdisk_ids):
 def run_snapshot_mode(args):
     if args.destination_pdisk is not None:
         raise Exception('--destination-pdisk cannot be used with --snapshot-from-pdisk')
-    if args.current_vdisks_from_pdisk is not None:
-        raise Exception('--current-vdisks-from-pdisk cannot be used with --snapshot-from-pdisk')
-    if args.vdisk_ids is not None:
-        raise Exception('--vdisk-ids cannot be used with --snapshot-from-pdisk')
     if args.suppress_donor_mode:
         raise Exception('--suppress-donor-mode cannot be used with --snapshot-from-pdisk')
 
@@ -209,7 +178,7 @@ def run_populate_mode(args):
 
     base_config = common.fetch_base_config()
     destination_pdisk_id = parse_pdisk_id(args.destination_pdisk)
-    vdisk_ids = make_vdisk_ids_for_populate(args, base_config)
+    vdisk_ids = make_vdisk_ids_for_populate(args)
 
     request = create_populate_request(args, base_config, destination_pdisk_id, vdisk_ids)
     response = common.invoke_bsc_request(request)

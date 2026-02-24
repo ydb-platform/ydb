@@ -1464,7 +1464,6 @@ struct TFulltextQuery {
     }
 };
 
-
 struct TFullTextApplyParseResult {
     TExprNode::TPtr BFactor;
     TExprNode::TPtr K1Factor;

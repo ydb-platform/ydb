@@ -256,10 +256,23 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     TokensConfig = StartupOptions.Tokens;
 
-    for (auto secret : TokensConfig.GetSecretInfo()) {
+    bool clientSecretFound = false;
+    for (const auto& secret : TokensConfig.GetSecretInfo()) {
         if (OpenIdConnectSettings.SecretName == secret.GetName()) {
+            clientSecretFound = true;
+            if (secret.GetSecret().empty()) {
+                ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                                    << "oidc.secret_name '" << OpenIdConnectSettings.SecretName
+                                    << "' has empty value in auth token config secret_info.";
+            }
             OpenIdConnectSettings.ClientSecret = secret.GetSecret();
+            break;
         }
+    }
+    if (!OpenIdConnectSettings.SecretName.empty() && !clientSecretFound) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                            << "oidc.secret_name '" << OpenIdConnectSettings.SecretName
+                            << "' was not found in auth token config secret_info.";
     }
 
     NActors::TLoggerActor* loggerActor = new NActors::TLoggerActor(

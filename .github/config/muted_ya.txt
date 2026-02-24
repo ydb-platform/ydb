@@ -40,6 +40,7 @@ ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase[Ta
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
+ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CopyWithData
 ydb/core/tx/schemeshard/ut_reboots TSolomonReboots.CreateAlterSolomonWithReboots
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSimpleTable

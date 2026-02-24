@@ -249,7 +249,6 @@ case "$ACTION" in
         echo "  start [--port PORT] [--mon-port PORT] - Stop any existing ydbd process and start a new one (default)"
         echo "  stop                                    - Stop any existing ydbd process and exit"
         echo "  --port PORT                             - Specify GRPC port number (default: 9001)"
-        echo "  --port PORT                             - Specify GRPC port number (default: 9001)"
         echo "  --mon-port PORT                         - Specify monitoring port number (default: 8765)"
         exit 1
         ;;

@@ -3,16 +3,14 @@
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -39,16 +37,19 @@ private:
 
     NActors::TActorId LoadActorAdapter;
 
-
 public:
-    TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);
+    TPartitionActor(
+        const NActors::TActorId& tablet,
+        NKikimr::TTabletStorageInfo* info);
 
 private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
     void OnDetach(const NActors::TActorContext& ctx) override;
-    void OnTabletDead(NKikimr::TEvTablet::TEvTabletDead::TPtr& ev, const NActors::TActorContext& ctx) override;
+    void OnTabletDead(
+        NKikimr::TEvTablet::TEvTabletDead::TPtr& ev,
+        const NActors::TActorContext& ctx) override;
     void OnActivateExecutor(const NActors::TActorContext& ctx) override;
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
@@ -71,11 +72,13 @@ private:
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
-        const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleGetLoadActorAdapterActorId(
-        const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const NYdb::NBS::NBlockStore::TEvService::
+            TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateVolumeConfig(
@@ -85,4 +88,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}  // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

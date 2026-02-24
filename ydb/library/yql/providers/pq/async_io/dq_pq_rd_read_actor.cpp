@@ -361,6 +361,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
@@ -387,6 +388,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNoSession, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -415,6 +417,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNoSession, IgnoreEvent);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -1577,6 +1580,19 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
     if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
+    const auto sessionIt = Sessions.find(ev->Sender);
+    if (sessionIt == Sessions.end()) {
+        return;
+    }
+    const auto& session = sessionIt->second;
+    if (ev->Cookie != session.Generation) {
+        return;
+    }
+    ReInit("Received TEvNoSession");
+    ScheduleProcessState();
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

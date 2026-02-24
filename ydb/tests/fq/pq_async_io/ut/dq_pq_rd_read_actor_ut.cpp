@@ -358,6 +358,13 @@ public:
         });
     }
 
+    void MockNoSession(NActors::TActorId coordinatorId, ui64 generation) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvNoSession();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0, generation));
+        });
+    }
+
 public:
     NYql::NPq::NProto::TDqPqTopicSource Settings = BuildPqTopicSourceSettings(
         "topic",
@@ -905,6 +912,13 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId2, PartitionId1}}, req->Cookie);
         ExpectStartSession({}, RowDispatcherId2, 2);
         MockAck(RowDispatcherId2, 2, PartitionId1);
+    }
+
+    Y_UNIT_TEST_F(ReInitAfterTEvNoSession, TFixture) {
+        StartSession(Settings);
+
+        MockNoSession(RowDispatcherId1, 1);
+        ExpectCoordinatorRequest(CoordinatorId1);
     }
 }
 

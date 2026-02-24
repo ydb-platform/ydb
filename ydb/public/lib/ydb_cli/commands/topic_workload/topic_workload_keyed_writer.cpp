@@ -77,8 +77,8 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
         TxSupport,
         WaitForCommitTx,
         endTime,
-        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>& producer) {
-            return producer->HasContinuationTokens();
+        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>&) {
+            return true;
         },
         [this]() {
             return GetCreateTimestampForNextMessage();
@@ -127,6 +127,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     settings.Path(Params.TopicName);
     settings.SessionId(SessionId);
     settings.ProducerIdPrefix(producerId);
+    settings.MaxBlock(TDuration::Max());
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
         NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :
@@ -146,7 +147,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer->SetWriteSession(topicClient.CreateKeyedWriteSession(settings));
+    producer->SetProducer(topicClient.CreateProducer(settings));
     return producer;
 }
 

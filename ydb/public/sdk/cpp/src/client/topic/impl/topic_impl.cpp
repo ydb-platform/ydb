@@ -62,24 +62,6 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
     return std::move(session);
 }
 
-std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TProducerSettings& settings) {
-    auto alteredSettings = settings;
-    {
-        std::lock_guard guard(Lock);
-        if (!settings.CompressionExecutor_) {
-            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
-        }
-
-        if (!settings.EventHandlers_.HandlersExecutor_) {
-            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
-        }
-    }
-
-    return std::make_shared<TProducer>(
-        alteredSettings, shared_from_this(), Connections_, DbDriverState_
-    );
-}
-
 std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {

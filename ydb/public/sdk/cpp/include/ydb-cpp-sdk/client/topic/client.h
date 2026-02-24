@@ -50,9 +50,6 @@ public:
     //! Create write session.
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings);
 
-    //! Create keyed write session. Experimental feature. DO NOT USE IN PRODUCTION.
-    std::shared_ptr<IKeyedWriteSession> CreateKeyedWriteSession(const TProducerSettings& settings);
-
     //! Create producer. Experimental feature. DO NOT USE IN PRODUCTION.
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
 

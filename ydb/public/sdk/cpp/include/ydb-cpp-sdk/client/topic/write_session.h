@@ -323,7 +323,7 @@ struct TProducerSettings : public TWriteSessionSettings {
     FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
 
     //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
-    FLUENT_SETTING_DEFAULT(TDuration, MaxBlockMs, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, MaxBlock, TDuration::Zero());
 
     //! Key producer function.
     FLUENT_SETTING_OPTIONAL(std::function<std::string(const TWriteMessage& message)>, KeyProducer);
@@ -411,30 +411,6 @@ public:
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~IWriteSession() = default;
-};
-
-//! Keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
-class IKeyedWriteSession {
-public:
-    //! Write single message.
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) = 0;
-
-    //! Future that is set when next event is available.
-    virtual NThreading::TFuture<void> WaitEvent() = 0;
-
-    //! Wait and return next event. Use WaitEvent() for non-blocking wait.
-    virtual std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) = 0;
-
-    //! Get several events in one call.
-    //! If blocking = false, instantly returns up to maxEventsCount available events.
-    //! If blocking = true, blocks till maxEventsCount events are available.
-    //! If maxEventsCount is unset, write session decides the count to return itself.
-    virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
-
-    virtual TCloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
-    virtual TWriterCounters::TPtr GetCounters() = 0;
-    virtual ~IKeyedWriteSession() = default;
 };
 
 } // namespace NYdb::NTopic

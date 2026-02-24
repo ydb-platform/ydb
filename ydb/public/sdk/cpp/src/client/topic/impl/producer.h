@@ -16,8 +16,7 @@ namespace NYdb::inline Dev::NTopic {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer
 
-class TProducer : public IKeyedWriteSession,
-                  public IProducer,
+class TProducer : public IProducer,
                   public TContinuationTokenIssuer,
                   public std::enable_shared_from_this<TProducer> {
 private:
@@ -253,7 +252,7 @@ private:
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
         bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
         bool TransferEventsToOutputQueue();
-        void AddReadyToAcceptEvent();
+        void AddContinuationToken();
         bool AddSessionClosedIfNeeded();
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
@@ -263,9 +262,9 @@ private:
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
+        std::list<TContinuationToken> TokensQueue;
 
         using EventsIter = std::list<TWriteSessionEvent::TEvent>::iterator;
-        std::list<EventsIter> ContinuationTokensIndex;
 
         std::mutex Lock;
     
@@ -370,7 +369,7 @@ public:
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
     
-    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
     [[nodiscard]] TWriteResult Write(TWriteMessage&& message) override;
 
@@ -378,15 +377,15 @@ public:
 
     TWriteStats GetWriteStats() override;
 
-    NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<void> WaitEvent();
 
-    std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
+    std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false);
 
-    std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) override;
+    std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt);
 
     TCloseResult Close(TDuration closeTimeout = TDuration::Max()) override;
 
-    TWriterCounters::TPtr GetCounters() override;
+    TWriterCounters::TPtr GetCounters();
 
     std::vector<TPartitionInfo> GetPartitions() const;
 

@@ -23,7 +23,7 @@ public:
 
     void Close();
 
-    void SetWriteSession(std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> writeSession);
+    void SetProducer(std::shared_ptr<NYdb::NTopic::IProducer> producer);
 
     void WaitForContinuationToken(const TDuration& timeout);
 
@@ -45,7 +45,7 @@ public:
 private:
     std::string GetKey() const;
 
-    std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> WriteSession_;
+    std::shared_ptr<NYdb::NTopic::IProducer> Producer_;
     ui64 MessageId_ = 0;
     ui64 AckedMessageId_ = 0;
     const TString ProducerId_;

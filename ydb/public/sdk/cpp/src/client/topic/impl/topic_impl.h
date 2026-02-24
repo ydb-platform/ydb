@@ -317,7 +317,6 @@ public:
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
-    std::shared_ptr<IKeyedWriteSession> CreateKeyedWriteSession(const TProducerSettings& settings);
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
     template<typename T>
     std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings);

@@ -466,7 +466,7 @@ std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEve
 std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMessage() {
     std::lock_guard lock(Lock);
     if (Producer->MessagesWorker->IsMemoryUsageOK()) {
-        AddReadyToAcceptEvent();
+        AddContinuationToken();
         return EventsPromise;
     }
 
@@ -474,9 +474,9 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMes
     return std::nullopt;
 }
 
-void TProducer::TEventsWorker::AddReadyToAcceptEvent() {
-    EventsOutputQueue.push_back(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
-    ContinuationTokensIndex.push_back(std::prev(EventsOutputQueue.end()));
+void TProducer::TEventsWorker::AddContinuationToken() {
+    auto continuationToken = IssueContinuationToken();
+    TokensQueue.push_back(std::move(continuationToken));
     Producer->Metrics.IncContinuationTokensSent();
 }
 
@@ -575,7 +575,7 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
     }
 
     if (shouldAddReadyToAcceptEvent) {
-        AddReadyToAcceptEvent();
+        AddContinuationToken();
         Producer->Metrics.IncContinuationTokensSent();
     }
 
@@ -583,17 +583,14 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
 }
 
 std::optional<TContinuationToken> TProducer::TEventsWorker::GetContinuationToken() {
-    if (ContinuationTokensIndex.empty()) {
+    std::lock_guard lock(Lock);
+    if (TokensQueue.empty()) {
         return std::nullopt;
     }
 
-    auto iter = ContinuationTokensIndex.front();
-    auto event = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*iter);
-    Y_ABORT_UNLESS(event, "Expected ReadyToAcceptEvent only in ContinuationTokensIndex");
-    auto continuationToken = std::move(event->ContinuationToken);
-    EventsOutputQueue.erase(iter);
-    ContinuationTokensIndex.pop_front();
-    return continuationToken;
+    auto continuationToken = std::move(TokensQueue.front());
+    TokensQueue.pop_front();
+    return std::move(continuationToken);
 }
 
 std::list<TWriteSessionEvent::TEvent>::iterator TProducer::TEventsWorker::AckQueueBegin(std::uint32_t partition) {
@@ -632,9 +629,6 @@ std::optional<TWriteSessionEvent::TEvent> TProducer::TEventsWorker::GetEventImpl
         }
 
         auto event = std::move(EventsOutputQueue.front());
-        if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
-            ContinuationTokensIndex.pop_front();
-        }
         EventsOutputQueue.pop_front();
         return event;
     }
@@ -1300,14 +1294,10 @@ TProducer::TProducer(
 
     if (Settings.EventHandlers_.CommonHandler_) {
         EventTypesWithHandlers.push_back(TEventsWorker::EEventType::SessionClosed);
-        EventTypesWithHandlers.push_back(TEventsWorker::EEventType::ReadyToAccept);
         EventTypesWithHandlers.push_back(TEventsWorker::EEventType::Ack);
     } else {
         if (Settings.EventHandlers_.SessionClosedHandler_) {
             EventTypesWithHandlers.push_back(TEventsWorker::EEventType::SessionClosed);
-        }
-        if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
-            EventTypesWithHandlers.push_back(TEventsWorker::EEventType::ReadyToAccept);
         }
         if (Settings.EventHandlers_.AcksHandler_) {
             EventTypesWithHandlers.push_back(TEventsWorker::EEventType::Ack);
@@ -1355,7 +1345,7 @@ TProducer::TProducer(
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
 
-    EventsWorker->AddReadyToAcceptEvent();
+    EventsWorker->AddContinuationToken();
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     Settings.EventHandlers_.HandlersExecutor_->Start();
@@ -1776,7 +1766,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
-    auto remainingTimeout = Settings.MaxBlockMs_;
+    auto remainingTimeout = Settings.MaxBlock_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
         if (Closed.load()) {

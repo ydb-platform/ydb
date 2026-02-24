@@ -1,10 +1,13 @@
 /* postgres can not */
+/* yt can not */
+/* ytflow can not */
+/* dq can not */
+/* dqfile can not */
+-- Disable most providers to canonize easily
 USE plato;
-pragma warning("error", "4501");
 
 $subq = (SELECT subkey FROM Input WHERE value = "ddd");
 
---INSERT INTO Output
 SELECT
     key as key,
     "" as subkey,

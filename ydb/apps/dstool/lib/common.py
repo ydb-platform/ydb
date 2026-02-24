@@ -828,21 +828,21 @@ def bytes_to_string(num, round, suffix):
     return f'{res}{right}{suffix}'
 
 
-def gib_string(num):
-    return bytes_to_string(num, 1024 ** 3, '')
+def gb_string(num):
+    return bytes_to_string(num, 1000 ** 3, ' GB')
 
 
 def bytes_string(num):
-    if num > 1024 ** 5:
-        return bytes_to_string(num, 1024 ** 5, ' PiB')
-    if num > 1024 ** 4:
-        return bytes_to_string(num, 1024 ** 4, ' TiB')
-    if num > 1024 ** 3:
-        return bytes_to_string(num, 1024 ** 3, ' GiB')
-    if num > 1024 ** 2:
-        return bytes_to_string(num, 1024 ** 2, ' MiB')
-    if num > 1024:
-        return bytes_to_string(num, 1024, ' kiB')
+    if num > 1000 ** 5:
+        return bytes_to_string(num, 1000 ** 5, ' PB')
+    if num > 1000 ** 4:
+        return bytes_to_string(num, 1000 ** 4, ' TB')
+    if num > 1000 ** 3:
+        return bytes_to_string(num, 1000 ** 3, ' GB')
+    if num > 1000 ** 2:
+        return bytes_to_string(num, 1000 ** 2, ' MB')
+    if num > 1000:
+        return bytes_to_string(num, 1000, ' kB')
     return bytes_to_string(num, 1, '')
 
 

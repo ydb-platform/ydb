@@ -9,11 +9,33 @@ namespace NKikimr::NStat {
 
 class TSelectBuilder;
 
+class TSimpleColumnStatisticEval {
+    NScheme::TTypeInfo Type;
+    TString PgTypeMod;
+
+    std::optional<ui32> CountDistinctSeq;
+    std::optional<ui32> MinSeq;
+    std::optional<ui32> MaxSeq;
+public:
+    using TPtr = std::unique_ptr<TSimpleColumnStatisticEval>;
+
+    explicit TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod)
+        : Type(std::move(type))
+        , PgTypeMod(std::move(pgTypeMod))
+    {}
+
+    EStatType GetType() const;
+    size_t EstimateSize() const;
+    void AddAggregations(const TString& columnName, TSelectBuilder& builder);
+    NKikimrStat::TSimpleColumnStatistics Extract(
+        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) const;
+};
+
 // Base class for classes that manage evaluation of column statistics
 // of a particular type in TAnalyzeActor.
-class IColumnStatisticEval {
+class IStage2ColumnStatisticEval {
 public:
-    using TPtr = std::unique_ptr<IColumnStatisticEval>;
+    using TPtr = std::unique_ptr<IStage2ColumnStatisticEval>;
 
     static TVector<EStatType> SupportedTypes();
     static TPtr MaybeCreate(
@@ -26,7 +48,7 @@ public:
     virtual size_t EstimateSize() const = 0;
     virtual void AddAggregations(const TString& columnName, TSelectBuilder&) = 0;
     virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const = 0;
-    virtual ~IColumnStatisticEval() = default;
+    virtual ~IStage2ColumnStatisticEval() = default;
 };
 
 }

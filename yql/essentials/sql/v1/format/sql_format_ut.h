@@ -601,6 +601,10 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = FALSE)\n;\n"},
         {"alter table user compact with(cascade=TruE,max_shards_in_flight=3)",
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, max_shards_in_flight = 3)\n;\n"},
+        {"alter table t alter column c set default 42",
+         "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
+        {"alter table t alter column c drop default",
+         "ALTER TABLE t\n\tALTER COLUMN c DROP DEFAULT\n;\n"},
     };
 
     TSetup setup;

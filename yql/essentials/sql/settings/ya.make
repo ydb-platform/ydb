@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     partitioning.cpp
     translation_settings.cpp
+    translation_sql_flags.cpp
     translator.cpp
 )
 

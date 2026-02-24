@@ -299,6 +299,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
                 }
 
+                if (AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                    initialState = TImportInfo::EState::DownloadExportMetadata;
+                }
+
                 const auto& settings = request.GetRequest().GetImportFromFsSettings();
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -384,8 +388,9 @@ private:
         return true;
     }
 
-    // S3-specific FillItems
-    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromS3Settings& settings, TString& explain) {
+    // S3-FS-specific FillItems
+    template <typename TSettings>
+    bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
         if (!importInfo.CompileExcludeRegexps(explain)) {
@@ -400,7 +405,7 @@ private:
                 return false;
             }
 
-            if (!dstPath && settings.source_prefix().empty()) {
+            if (!dstPath && importInfo.GetSource().empty()) {
                 // Can not take path from schema mapping
                 explain = "No common source prefix and item destination path set";
                 return false;
@@ -408,7 +413,7 @@ private:
 
             if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
-                item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+                item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
                 item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
             }
         }
@@ -416,37 +421,6 @@ private:
         if (settings.items().size() && importInfo.Items.empty()) {
             explain = TStringBuilder() << "no items to import";
             return false;
-        }
-
-        return true;
-    }
-
-    // FS-specific FillItems
-    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromFsSettings& settings, TString& explain) {
-        THashSet<TString> dstPaths;
-
-        importInfo.Items.reserve(settings.items().size());
-        for (ui32 itemIdx : xrange(settings.items().size())) {
-            const TString& dstPath = settings.items(itemIdx).destination_path();
-
-            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
-                return false;
-            }
-
-            if (!dstPath) {
-                explain = "destination_path is required for FS import items";
-                return false;
-            }
-
-            const TString& srcPath = settings.items(itemIdx).source_path();
-            if (!srcPath) {
-                explain = "source_path is required for FS import items";
-                return false;
-            }
-
-            auto& item = importInfo.Items.emplace_back(dstPath);
-            // For FS imports, source_path is the full relative path from base_path
-            item.SrcPath = NBackup::NormalizeItemPath(srcPath);
         }
 
         return true;
@@ -561,13 +535,8 @@ private:
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        if (importInfo->Kind == TImportInfo::EKind::S3) {
-            item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
-            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
-        } else {
-            item.SchemeGetter = ctx.Register(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx), TMailboxType::Simple, AppData()->IOPoolId);
-            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
-        }
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
+        Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
     }
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
@@ -1429,12 +1398,8 @@ private:
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
-            // TODO(st-shchetinin): Only S3 imports support schema mapping with encryption (add for FS)
-            if (importInfo->Kind == TImportInfo::EKind::S3) {
-                auto settings = importInfo->GetS3Settings();
-                if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
-                }
+            if (importInfo->GetEncryptedBackup() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
             }
         }
 

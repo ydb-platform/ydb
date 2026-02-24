@@ -39,6 +39,8 @@ public:
         ui64 CreateTs;
         ui64 Flags;
         ui64 VictimQuerySpanId = 0;
+        ui64 BreakerQuerySpanId = 0;
+        ui32 BreakerNodeId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -348,6 +350,17 @@ public:
     bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
     const std::optional<TRowVersion>& GetBreakVersion() const { return BreakVersion; }
 
+    void SetBreakerInfo(ui64 querySpanId, ui32 nodeId) {
+        if (BreakerQuerySpanId_ == 0 && querySpanId != 0) {
+            BreakerQuerySpanId_ = querySpanId;
+            BreakerNodeId_ = nodeId;
+        }
+    }
+    ui64 GetBreakerQuerySpanId() const { return BreakerQuerySpanId_; }
+    ui32 GetBreakerNodeId() const { return BreakerNodeId_; }
+    void ConsumeBreakerInfo() { BreakerConsumed_ = true; }
+    bool IsBreakerConsumed() const { return BreakerConsumed_; }
+
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
@@ -474,6 +487,9 @@ private:
     bool InBrokenLocks = false;
 
     std::optional<TRowVersion> BreakVersion;
+    ui64 BreakerQuerySpanId_ = 0;
+    ui32 BreakerNodeId_ = 0;
+    bool BreakerConsumed_ = false;
 
     THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;  // Locks to break on commit
     absl::flat_hash_set<ui64> VolatileDependencies;

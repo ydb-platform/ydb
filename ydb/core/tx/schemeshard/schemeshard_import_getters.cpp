@@ -49,15 +49,14 @@ struct TGetterSettings {
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
-        Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(
-            AppData()->AwsClientConfig,
-            importInfo->GetS3Settings()));
-        settings.Retries = importInfo->GetS3Settings().number_of_retries();
-        if (importInfo->GetS3Settings().has_encryption_settings()) {
-            settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
-        }
-        settings.IV = std::move(iv);
+        std::visit([&settings, &iv](const auto& s) {
+            settings.ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig,s);
+            settings.Retries = s.number_of_retries();
+            if (s.has_encryption_settings()) {
+                settings.Key = NBackup::TEncryptionKey(s.encryption_settings().symmetric_key().key());
+            }
+            settings.IV = std::move(iv);
+        }, importInfo->Settings);
         return settings;
     }
 
@@ -295,34 +294,45 @@ protected:
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
+    static TString GetItemSource(const TImportInfo& importInfo, ui32 itemIdx) {
+        TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
+
+        // Absolute path in the prefix is possible if the backup with SchemaMapping
+        if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
+            return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+        }
+
+        return srcPrefix;
+    }
+
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/metadata.json";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/metadata.json";
     }
 
     static TString SchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, TStringBuf filename) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << '/' << filename;
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << '/' << filename;
     }
 
     static TString PermissionsKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/permissions.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/permissions.pb";
     }
 
     static TString MaterializedIndexSchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& indexImplTablePrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << indexImplTablePrefix << "/scheme.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << indexImplTablePrefix << "/scheme.pb";
     }
 
     static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
     }
 
     static TString TopicDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
     static bool IsView(TStringBuf schemeKey) {
@@ -1003,7 +1013,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexPopulationMode(ImportInfo->GetS3Settings().index_population_mode())
+        , IndexPopulationMode(ImportInfo->Kind == TImportInfo::EKind::S3 ? ImportInfo->GetS3Settings().index_population_mode() : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED)
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
@@ -1100,15 +1110,15 @@ private:
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/metadata.json";
+        return TStringBuilder() << importInfo.GetSource() << "/metadata.json";
     }
 
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/mapping.json";
+        return TStringBuilder() << importInfo.GetSource() << "/SchemaMapping/mapping.json";
     }
 
     static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/metadata.json";
+        return TStringBuilder() << importInfo.GetSource() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1699,127 +1709,8 @@ public:
     }
 };
 
-class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
-
-    bool ProcessMetadata(const TString& content, TString& error) {
-        try {
-            ImportInfo->Items[ItemIdx].Metadata = NBackup::TMetadata::Deserialize(content);
-            return true;
-        } catch (const std::exception& e) {
-            error = TStringBuilder() << "Failed to parse metadata: " << e.what();
-            return false;
-        }
-    }
-
-    bool ProcessScheme(const TString& content, TString& error) {
-        auto& item = ImportInfo->Items[ItemIdx];
-
-        Ydb::Table::CreateTableRequest table;
-        if (google::protobuf::TextFormat::ParseFromString(content, &table)) {
-            item.Table = table;
-            return true;
-        }
-
-        error = "Failed to parse scheme as table";
-        return false;
-    }
-
-    void ProcessPermissions(const TString& content) {
-        auto& item = ImportInfo->Items[ItemIdx];
-        Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
-            item.Permissions = permissions;
-        }
-    }
-
-    void Reply(bool success, const TString& errorMessage = {}) {
-        LOG_I("TSchemeGetterFS: Reply"
-            << ": self# " << SelfId()
-            << ", importId# " << ImportInfo->Id
-            << ", itemIdx# " << ItemIdx
-            << ", success# " << success
-            << ", error# " << errorMessage);
-
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, errorMessage));
-        PassAway();
-    }
-
-public:
-    explicit TSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
-        : ReplyTo(replyTo)
-        , ImportInfo(std::move(importInfo))
-        , ItemIdx(itemIdx)
-    {
-        Y_ABORT_UNLESS(ImportInfo->Kind == TImportInfo::EKind::FS);
-    }
-
-    void Bootstrap() {
-        const auto settings = ImportInfo->GetFsSettings();
-        const TString basePath = settings.base_path();
-
-        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
-        auto& item = ImportInfo->Items[ItemIdx];
-
-        TString sourcePath = item.SrcPath;
-        if (sourcePath.empty()) {
-            Reply(false, "Source path is empty for import item");
-            return;
-        }
-
-        const TFsPath itemPath = TFsPath(basePath) / sourcePath;
-        TString error;
-
-        const TString metadataPath = itemPath / "metadata.json";
-        TString metadataContent;
-
-        if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ProcessMetadata(metadataContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
-        const TString schemePath = itemPath / schemeFileName;
-        TString schemeContent;
-
-        if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ProcessScheme(schemeContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ImportInfo->GetNoAcl()) {
-            const TString permissionsPath = itemPath / "permissions.pb";
-            TString permissionsContent;
-
-            if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
-                ProcessPermissions(permissionsContent);
-            }
-        }
-
-        Reply(true);
-    }
-
-private:
-    const TActorId ReplyTo;
-    TImportInfo::TPtr ImportInfo;
-    const ui32 ItemIdx;
-};
-
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
-}
-
-IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    return new TSchemeGetterFS(replyTo, std::move(importInfo), itemIdx);
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

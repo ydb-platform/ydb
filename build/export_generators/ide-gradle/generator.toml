@@ -122,6 +122,7 @@ custom_runs-jar="str"
 javac-flags="list"
 kotlinc-flags="list"
 jvm_args="list"
+system_properties="list"
 
 target_commands="list"
 target_commands-ITEM="dict"

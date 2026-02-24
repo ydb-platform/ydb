@@ -450,7 +450,7 @@ class sdist(Command):
         # put 'files' there; the 'mkpath()' is just so we don't die
         # if the manifest happens to be empty.
         self.mkpath(base_dir)
-        dir_util.create_tree(base_dir, files, dry_run=self.dry_run)
+        dir_util.create_tree(base_dir, files)
 
         # And walk over the list of files, either making a hard link (if
         # os.link exists) to each one that doesn't already exist in its
@@ -508,7 +508,7 @@ class sdist(Command):
         self.archive_files = archive_files
 
         if not self.keep_temp:
-            dir_util.remove_tree(base_dir, dry_run=self.dry_run)
+            dir_util.remove_tree(base_dir)
 
     def get_archive_files(self):
         """Return the list of archive files created when the command

@@ -478,6 +478,7 @@ message TTableServiceConfig {
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
+
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
     message TCompileCacheWarmupConfig {
@@ -489,4 +490,6 @@ message TTableServiceConfig {
     }
 
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
+
+    optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
 };

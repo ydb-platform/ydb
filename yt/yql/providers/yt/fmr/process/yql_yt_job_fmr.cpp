@@ -2,6 +2,7 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
+#include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
@@ -23,7 +24,8 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         TableDataServiceDiscoveryFilePath_,
         YtJobServiceType_,
         IsOrdered_,
-        Settings_
+        Settings_,
+        TvmSettings_
     );
 }
 
@@ -36,7 +38,8 @@ void TFmrUserJob::Load(IInputStream& s) {
         TableDataServiceDiscoveryFilePath_,
         YtJobServiceType_,
         IsOrdered_,
-        Settings_
+        Settings_,
+        TvmSettings_
     );
 }
 
@@ -135,7 +138,17 @@ void TFmrUserJob::InitializeFmrUserJob() {
     QueueReader_ = MakeIntrusive<TFmrRawTableQueueReader>(UnionInputTablesQueue_);
 
     auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_});
-    TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
+    TTvmId tableDataServiceTvmId = 0;
+    IFmrTvmClient::TPtr tvmClient;
+    if (TvmSettings_.Defined()) {
+        tvmClient = MakeFmrTvmClient({
+            .SourceTvmAlias = TvmSettings_->WorkerTvmAlias,
+            .TvmPort = TvmSettings_->TvmPort,
+            .TvmSecret = TvmSettings_->TvmSecret
+        });
+        tableDataServiceTvmId = TvmSettings_->TableDataServiceTvmId;
+    }
+    TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, tvmClient, tableDataServiceTvmId);
 
     for (auto& fmrTable: OutputTables_) {
         if (!fmrTable.SortingColumns.Columns.empty()) {

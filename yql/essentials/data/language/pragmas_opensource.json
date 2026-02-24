@@ -132,9 +132,6 @@
     "name": "yt.EnableDynamicStoreReadInDQ"
   },
   {
-    "name": "yt.EnableFuseMapToMapReduce"
-  },
-  {
     "name": "yt.EnforceJobUtc"
   },
   {
@@ -181,6 +178,9 @@
   },
   {
     "name": "yt.ForceTmpSecurity"
+  },
+  {
+    "name": "yt.FuseMapToMapReduce"
   },
   {
     "name": "yt.GeobaseDownloadUrl"

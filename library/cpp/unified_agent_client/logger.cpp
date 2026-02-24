@@ -40,7 +40,7 @@ namespace NUnifiedAgent {
                 }
             }
 
-            // Same slot (including the race loosers) - check if we can log
+            // Same slot (including the race losers) - check if we can log
             const ui32 logged = state.Logged.fetch_add(1, std::memory_order_relaxed);
             if (logged < maxLogsPerSlot) {
                 // Under limit - log it

@@ -184,6 +184,25 @@ message TEvLoadTestRequest {
         // These reads are not counted in any results (IOPS, speed, latency, etc.).
         optional uint32 BackgroundReadRatio = 14 [default = 0];
     }
+
+    message TPersistentBufferWriteLoad {
+        message TWriteInfo {
+            optional uint32 Size = 1;
+            optional uint32 Weight = 2;
+        }
+
+        optional uint64 Tag = 1;
+        optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2;
+        optional uint32 DurationSeconds = 3;
+        optional uint32 DelayBeforeMeasurementsSeconds = 4 [default = 15];
+        optional uint32 InFlightWrites = 5;
+
+        repeated TWriteInfo WriteInfos = 6;
+
+        // Percentage of PB fill average (0-100)
+        optional uint32 FillRatio = 7 [default = 50];
+    }
+
     message TVDiskLoad {
         optional uint64 Tag = 1;
 
@@ -359,6 +378,7 @@ message TEvLoadTestRequest {
         TInterconnectLoad InterconnectLoad = 15;
         TNBS2Load NBS2Load = 16;
         TDDiskWriteLoad DDiskWriteLoad = 17;
+        TPersistentBufferWriteLoad PersistentBufferWriteLoad = 18;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;

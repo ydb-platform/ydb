@@ -211,11 +211,13 @@ private:
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
         LOG_I("Session initialized with id: " << message.session_id() << ", used partition: " << message.partition_id());
 
-        InitSeqNo = message.last_seq_no();
-        MessageSeqNo = *InitSeqNo + 1;
-        SessionStartedAt = TInstant::Now();
+        if (!InitSeqNo.has_value()) {
+            InitSeqNo = message.last_seq_no();
+            MessageSeqNo = *InitSeqNo + 1;
+            SendInitSeqNo();
+        }
 
-        SendInitSeqNo();
+        SessionStartedAt = TInstant::Now();
         AddContinuationEvent();
     }
 

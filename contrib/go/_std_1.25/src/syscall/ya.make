@@ -184,5 +184,20 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         zerrors_windows.go
         zsyscall_windows.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        dirent.go
+        env_unix.go
+        fs_wasip1.go
+        net.go
+        net_fake.go
+        net_wasip1.go
+        os_wasip1.go
+        syscall.go
+        syscall_wasip1.go
+        tables_wasip1.go
+        time_nofake.go
+        timestruct.go
+    )
 ENDIF()
 END()

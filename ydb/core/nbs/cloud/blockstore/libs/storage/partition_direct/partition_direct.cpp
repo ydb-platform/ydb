@@ -1,27 +1,18 @@
 #include "partition_direct_actor.h"
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/appdata_fwd.h>
 
+#include <ydb/library/actors/core/actor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+using namespace NKikimr;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreatePartitionTablet(
-    const NActors::TActorId& owner,
-    NYdb::NBS::NProto::TStorageConfig storageConfig,
-    NKikimrBlockStore::TVolumeConfig volumeConfig)
+IActor* CreatePartitionTablet(const TActorId& tablet, TTabletStorageInfo* info)
 {
-    auto actor = std::make_unique<TPartitionActor>(
-        std::move(storageConfig),
-        std::move(volumeConfig));
-
-    return NActors::TActivationContext::Register(
-        actor.release(),
-        owner,
-        NActors::TMailboxType::ReadAsFilled,
-        NKikimr::AppData()->SystemPoolId);
+    return new TPartitionActor(tablet, info);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

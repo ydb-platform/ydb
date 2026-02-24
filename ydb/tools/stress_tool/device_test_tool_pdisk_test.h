@@ -337,6 +337,7 @@ struct TPDiskTest : public TPerfTest {
         LogSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_DEVICE, explanation);
         LogSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_LOAD_TEST, explanation);
         LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_PDISK, explanation);
+        LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_DDISK, explanation);
 
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));

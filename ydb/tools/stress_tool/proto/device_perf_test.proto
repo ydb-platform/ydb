@@ -38,6 +38,10 @@ message TDDiskTest {
     repeated NKikimr.TEvLoadTestRequest DDiskTestList = 1;
 }
 
+message TPersistentBufferTest {
+    repeated NKikimr.TEvLoadTestRequest PersistentBufferTestList = 1;
+}
+
 message TDriveEstimatorTest {
 }
 
@@ -48,4 +52,5 @@ message TPerfTests {
     optional TDriveEstimatorTest DriveEstimatorTest = 4;
     repeated TDDiskTest DDiskTestList = 5;
     repeated TUringRouterTest UringRouterTestList = 6;
+    repeated TPersistentBufferTest PersistentBufferTestList = 7;
 }

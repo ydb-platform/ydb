@@ -26,7 +26,10 @@ struct TPDiskMon;
 namespace NPDisk {
 
 struct TDiskFormat;
+struct TPersistentBufferFormat;
+
 using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
+using TPersistentBufferFormatPtr = std::unique_ptr<TPersistentBufferFormat, void(*)(TPersistentBufferFormat*)>;
 
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
@@ -195,6 +198,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TString ErrorReason;
     TFileHandle DiskFd; // A duplicated fd for direct disk access
     TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
+    TPersistentBufferFormatPtr PersistentBufferFormat{nullptr, nullptr};
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)

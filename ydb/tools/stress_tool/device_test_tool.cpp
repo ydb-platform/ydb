@@ -7,9 +7,12 @@
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
+#include "device_test_tool_pb_test.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
+#ifdef _linux_
 #include "device_test_tool_uring_router_test.h"
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -69,7 +72,9 @@ int main(int argc, char **argv) {
     if (config.RunCount > 1) {
         ui32 totalTests = 0;
         totalTests += protoTests.AioTestListSize();
+#ifdef _linux_
         totalTests += protoTests.UringRouterTestListSize();
+#endif
         totalTests += protoTests.TrimTestListSize();
         // For PDiskTest, count the inner PDiskTestList items
         for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
@@ -128,6 +133,7 @@ int main(int argc, char **argv) {
     }
     printer->EndTest();
 
+#ifdef _linux_
     for (ui32 i = 0; i < protoTests.UringRouterTestListSize(); ++i) {
         NDevicePerfTest::TUringRouterTest testProto = protoTests.GetUringRouterTestList(i);
         if (config.HasInFlightOverride()) {
@@ -148,6 +154,7 @@ int main(int argc, char **argv) {
         }
     }
     printer->EndTest();
+#endif
 
     for (ui32 i = 0; i < protoTests.TrimTestListSize(); ++i) {
         NDevicePerfTest::TTrimTest testProto = protoTests.GetTrimTestList(i);
@@ -225,6 +232,14 @@ int main(int argc, char **argv) {
                 test->RunTest();
             }
         }
+    }
+    printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.PersistentBufferTestListSize(); ++i) {
+        NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
+        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+        test->SetPrinter(printer);
+        test->RunTest();
     }
     printer->EndTest();
 

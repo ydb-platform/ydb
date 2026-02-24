@@ -285,7 +285,7 @@ Value* GenEqualsFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCod
         (info.Features & NUdf::EDataTypeFeatures::StringType ||
          NUdf::EDataSlot::Uuid == slot ||
          NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction<&MyEquteStrings>(Type::getInt1Ty(context), lv, rv, ctx.Codegen, block);
+        return EmitFunctionCall<&MyEquteStrings>(Type::getInt1Ty(context), {lv, rv}, ctx, block);
     }
 
     const auto lhs = GetterFor(slot, lv, context, block);
@@ -373,7 +373,7 @@ Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCo
         (info.Features & NUdf::EDataTypeFeatures::StringType ||
          NUdf::EDataSlot::Uuid == slot ||
          NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction<&MyCompareStrings>(Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
+        return EmitFunctionCall<&MyCompareStrings>(Type::getInt32Ty(context), {lv, rv}, ctx, block);
     }
 
     const bool extra = info.Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::TzDateType);
@@ -554,7 +554,7 @@ Value* GenHashFunction<false>(NUdf::EDataSlot slot, Value* value, TCodegenContex
         (info.Features & NUdf::EDataTypeFeatures::StringType ||
          NUdf::EDataSlot::Uuid == slot ||
          NUdf::EDataSlot::DyNumber == slot)) {
-        return CallUnaryUnboxedValueFunction<&MyHashString>(Type::getInt64Ty(context), value, ctx.Codegen, block);
+        return EmitFunctionCall<&MyHashString>(Type::getInt64Ty(context), {value}, ctx, block);
     }
 
     const auto val = GetterFor(slot, value, context, block);
@@ -2039,11 +2039,8 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
         block = boxed;
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateBoxedVariantHolder>());
 
-        const auto signature = FunctionType::get(item->getType(), {factory->getType(), item->getType(), variant->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {factory, item, variant}, "output", block);
+        const auto output = EmitFunctionCall<&THolderFactory::CreateBoxedVariantHolder>(item->getType(), {factory, item, variant}, ctx, block);
         result->addIncoming(output, block);
 
         BranchInst::Create(done, block);
@@ -2124,11 +2121,8 @@ ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlow
 Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block) {
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateDirectArrayHolder>());
     const auto valueType = Type::getInt128Ty(context);
-    const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
-    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-    return CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
+    return EmitFunctionCall<&THolderFactory::CreateDirectArrayHolder>(valueType, {fact, size, items}, ctx, block);
 }
 
 Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block) {
@@ -2138,10 +2132,7 @@ Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block) 
 
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetMemoryUsed>());
-    const auto funType = FunctionType::get(Type::getInt64Ty(context), {fact->getType()}, false);
-    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "get_used", block);
-    return CallInst::Create(funType, funcPtr, {fact}, "mem_used", block);
+    return EmitFunctionCall<&THolderFactory::GetMemoryUsed>(Type::getInt64Ty(context), {fact}, ctx, block);
 }
 
 template <bool TrackRss>
@@ -2170,10 +2161,7 @@ Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx
         BranchInst::Create(call, skip, now, block);
 
         block = call;
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TComputationContext::UpdateUsageAdjustor>());
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {ctx.Ctx->getType(), Type::getInt64Ty(context)}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "update", block);
-        CallInst::Create(funType, funcPtr, {ctx.Ctx, ConstantInt::get(init->getType(), limit)}, "", block);
+        EmitFunctionCall<&TComputationContext::UpdateUsageAdjustor>(Type::getVoidTy(context), {ctx.Ctx, ConstantInt::get(init->getType(), limit)}, ctx, block);
 
         BranchInst::Create(skip, block);
 
@@ -2334,24 +2322,19 @@ Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Va
     return call;
 }
 
-Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg,
-                                         NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    auto& context = codegen.GetContext();
-    const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
-    const auto funType = FunctionType::get(result, {arg->getType()}, false);
-    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-    const auto call = CallInst::Create(funType, funcPtr, {arg}, "call", block);
-    return call;
-}
-
-Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right,
-                                          NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    auto& context = codegen.GetContext();
-    const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
-    const auto funType = FunctionType::get(result, {left->getType(), right->getType()}, false);
-    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-    const auto call = CallInst::Create(funType, funcPtr, {left, right}, "call", block);
-    return call;
+Value* EmitFunctionCallImpl(uintptr_t methodPtr, Type* result, std::vector<Value*>&& args, const TCodegenContext& ctx, BasicBlock* block) {
+    std::vector<Type*> argTypes(args.size());
+    std::transform(args.begin(), args.end(), argTypes.begin(),
+                   [](Value* v) { return v->getType(); });
+    auto& context = ctx.Codegen.GetContext();
+    const auto func = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
+    const auto funcType = FunctionType::get(result, std::move(argTypes), false);
+    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "ptr", block);
+    if (result->isVoidTy()) {
+        return CallInst::Create(funcType, funcPtr, std::move(args), "", block);
+    } else {
+        return CallInst::Create(funcType, funcPtr, std::move(args), "call", block);
+    }
 }
 
 Y_NO_INLINE Value* TDecoratorCodegeneratorNodeBase::CreateGetValueImpl(
@@ -2653,15 +2636,11 @@ Function* TMutableCodegeneratorPtrNodeBase::GenerateInternalGetValue(
 Y_NO_INLINE Value* TMutableCodegeneratorFallbackNodeBase::DoGenerateGetValueImpl(
     uintptr_t methodPtr, uintptr_t thisPtr, const TCodegenContext& ctx, BasicBlock*& block) const {
     auto& context = ctx.Codegen.GetContext();
-    const auto type = Type::getInt128Ty(context);
+    const auto valueType = Type::getInt128Ty(context);
     const auto ptrType = PointerType::getUnqual(StructType::get(context));
-    const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
     const auto self = CastInst::Create(Instruction::IntToPtr,
                                        ConstantInt::get(Type::getInt64Ty(context), thisPtr), ptrType, "self", block);
-    const auto funType = FunctionType::get(type, {self->getType(), ctx.Ctx->getType()}, false);
-    const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-    const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx}, "value", block);
-    return value;
+    return EmitFunctionCallImpl(methodPtr, valueType, {self, ctx.Ctx}, ctx, block);
 }
 
 Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(

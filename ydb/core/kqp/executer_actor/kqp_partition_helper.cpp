@@ -12,6 +12,10 @@
 
 namespace NKikimr::NKqp {
 
+// Forward declarations for functions used inside the anonymous namespace
+TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
+    const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv);
+
 namespace {
 
 using namespace NYql;
@@ -150,109 +154,6 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
     return keyValues;
 }
 
-TSerializedPointOrRange FillOneRange(NUdf::TUnboxedValue& begin, NUdf::TUnboxedValue& end,
-    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    const ui32 keyColumnsSize = keyColumnTypes.size();
-
-    // Range tuple contains ranges over all key colums + inclusive sign
-    YQL_ENSURE((keyColumnsSize + 1) == begin.GetListLength());
-
-    auto fillKeyValues = [keyColumnsSize, &keyColumnTypes, &typeEnv](NUdf::TUnboxedValue& value) {
-        TVector<TCell> keyValues;
-        keyValues.reserve(keyColumnsSize);
-
-        for (ui32 i = 0; i < keyColumnsSize; i++) {
-            auto element = value.GetElement(i);
-
-            if (!element) {
-                return keyValues;
-            }
-
-            element = element.GetOptionalValue();
-
-            if (!element) {
-                keyValues.emplace_back(TCell());
-                continue;
-            }
-
-            auto cell = NMiniKQL::MakeCell(keyColumnTypes[i], element, typeEnv, /* copy */ true);
-            keyValues.emplace_back(std::move(cell));
-        }
-
-        return keyValues;
-    };
-
-    TVector<TCell> fromKeyValues = fillKeyValues(begin);
-    TVector<TCell> toKeyValues = fillKeyValues(end);
-
-    bool fromInclusive = !!begin.GetElement(keyColumnsSize).Get<int>();
-
-    /*
-     * Range rules:
-     * - no value - +inf
-     * - any other value means itself, please note that NULL is value and it is the minimum value in column
-     *
-     * `From` should be padded with NULL values to the count of key columns if left border is inclusive.
-     *     For example table with Key1, Key2, X, Y, Z with predicate WHERE Key1 >= 10 will lead to
-     *     left border [ (10, NULL), i.e. first element will be located at 10, NULL. If it is not padded, then
-     *     first element will be located at 10, +inf which definitely is first element after this border in case
-     *     we do not support +inf values in keys.
-     *
-     * `From` should not be padded if border is exclusive.
-     *     For example table with Key1, Key2, X, Y, Z with predicate WHERE Key1 > 10 will lead to
-     *     next left border ( (10,). I.e. the item will be located at 10, +inf, which definitely is first
-     *     element after this border in case we do not support +inf values in keys.
-     *
-     * `To` should not be padded with NULLs when right border is not inclusive.
-     *     For example table with Key1, Key2, X, Y, Z with predicate WHERE Key1 < 10 will lead to
-     *     right border (10, NULL) ). I.e. the range ends at element before 10, NULL
-     *
-     * Note: -inf is an array full of NULLs with inclusive flag set, i.e. minimum value in table.
-     * Note: For `To` border +infinity is an empty array
-     */
-    if (fromKeyValues.empty()) {
-        fromInclusive = true;
-    }
-
-    if (fromInclusive) {
-        while (fromKeyValues.size() != keyColumnsSize) {
-            fromKeyValues.emplace_back(TCell());
-        }
-    }
-
-    bool toInclusive = !!end.GetElement(keyColumnsSize).Get<int>();
-
-    if (!toInclusive && !toKeyValues.empty()) {
-        while (toKeyValues.size() != keyColumnsSize) {
-            toKeyValues.emplace_back(TCell());
-        }
-    }
-
-    bool point = false;
-    if (fromInclusive && toInclusive && fromKeyValues.size() == keyColumnsSize) {
-        if (toKeyValues.empty()) {
-            point = true;
-        } else if (toKeyValues.size() == keyColumnsSize) {
-            point = CompareTypedCellVectors(fromKeyValues.data(), toKeyValues.data(), keyColumnTypes.data(), keyColumnTypes.size()) == 0;
-        }
-    }
-
-    if (point) {
-        YQL_CLOG(DEBUG, ProviderKqp) << "Formed point [extract predicate]: "
-            << DebugPrintPoint(keyColumnTypes, fromKeyValues, *AppData()->TypeRegistry);
-
-        return TSerializedCellVec(fromKeyValues);
-    }
-
-    auto range = TSerializedTableRange(fromKeyValues, fromInclusive, toKeyValues, toInclusive);
-
-    YQL_CLOG(DEBUG, ProviderKqp) << "Formed range [extract predicate]: "
-        << DebugPrintRange(keyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry);
-
-    return range;
-}
-
 bool IsFullRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TSerializedTableRange& range) {
     if (!range.To.GetCells().empty() || range.ToInclusive) {
         return false;
@@ -299,6 +200,111 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo
     return {std::move(range)};
 }
 
+template <typename PhyOpReadRanges>
+TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
+    const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    if (readRanges.HasKeyRanges()) {
+        return FillRangesFromParameter(keyColumnTypes, readRanges.GetKeyRanges(), stageInfo, typeEnv);
+    }
+
+    return BuildFullRange(keyColumnTypes);
+}
+
+} // anonymous namespace
+
+TSerializedPointOrRange FillOneRange(NUdf::TUnboxedValue& begin, NUdf::TUnboxedValue& end,
+    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    const ui32 keyColumnsSize = keyColumnTypes.size();
+
+    // Range tuple contains ranges over all key colums + inclusive sign
+    YQL_ENSURE((keyColumnsSize + 1) == begin.GetListLength());
+
+    auto fillKeyValues = [keyColumnsSize, &keyColumnTypes, &typeEnv](NUdf::TUnboxedValue& value) {
+        TVector<TCell> keyValues;
+        keyValues.reserve(keyColumnsSize);
+
+        for (ui32 i = 0; i < keyColumnsSize; i++) {
+            auto element = value.GetElement(i);
+
+            if (!element) {
+                return keyValues;
+            }
+
+            element = element.GetOptionalValue();
+
+            if (!element) {
+                keyValues.emplace_back(TCell());
+                continue;
+            }
+
+            auto cell = NMiniKQL::MakeCell(keyColumnTypes[i], element, typeEnv, /* copy */ true);
+            keyValues.emplace_back(std::move(cell));
+        }
+
+        return keyValues;
+    };
+
+    TVector<TCell> fromKeyValues = fillKeyValues(begin);
+    TVector<TCell> toKeyValues = fillKeyValues(end);
+
+    bool fromInclusive = !!begin.GetElement(keyColumnsSize).Get<int>();
+
+    /*
+     * Range rules:
+     * - no value - +inf
+     * - any other value means itself, please note that NULL is value and it is the minimum value in column
+     *
+     * `From` should be padded with NULL values to the count of key columns if left border is inclusive.
+     * `From` should not be padded if border is exclusive.
+     * `To` should not be padded with NULLs when right border is not inclusive.
+     *
+     * Note: -inf is an array full of NULLs with inclusive flag set, i.e. minimum value in table.
+     * Note: For `To` border +infinity is an empty array
+     */
+    if (fromKeyValues.empty()) {
+        fromInclusive = true;
+    }
+
+    if (fromInclusive) {
+        while (fromKeyValues.size() != keyColumnsSize) {
+            fromKeyValues.emplace_back(TCell());
+        }
+    }
+
+    bool toInclusive = !!end.GetElement(keyColumnsSize).Get<int>();
+
+    if (!toInclusive && !toKeyValues.empty()) {
+        while (toKeyValues.size() != keyColumnsSize) {
+            toKeyValues.emplace_back(TCell());
+        }
+    }
+
+    bool point = false;
+    if (fromInclusive && toInclusive && fromKeyValues.size() == keyColumnsSize) {
+        if (toKeyValues.empty()) {
+            point = true;
+        } else if (toKeyValues.size() == keyColumnsSize) {
+            point = CompareTypedCellVectors(fromKeyValues.data(), toKeyValues.data(), keyColumnTypes.data(), keyColumnTypes.size()) == 0;
+        }
+    }
+
+    if (point) {
+        YQL_CLOG(DEBUG, ProviderKqp) << "Formed point [extract predicate]: "
+            << DebugPrintPoint(keyColumnTypes, fromKeyValues, *AppData()->TypeRegistry);
+
+        return TSerializedCellVec(fromKeyValues);
+    }
+
+    auto range = TSerializedTableRange(fromKeyValues, fromInclusive, toKeyValues, toInclusive);
+
+    YQL_CLOG(DEBUG, ProviderKqp) << "Formed range [extract predicate]: "
+        << DebugPrintRange(keyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry);
+
+    return range;
+}
+
 TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -333,19 +339,6 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::
 
     return out;
 }
-
-template <typename PhyOpReadRanges>
-TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    if (readRanges.HasKeyRanges()) {
-        return FillRangesFromParameter(keyColumnTypes, readRanges.GetKeyRanges(), stageInfo, typeEnv);
-    }
-
-    return BuildFullRange(keyColumnTypes);
-}
-
-} // anonymous namespace
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)

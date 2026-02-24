@@ -2068,7 +2068,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, CreateUserContext()),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext()),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2120,7 +2120,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, CreateUserContext());
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext());
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),
@@ -2306,7 +2306,7 @@ public:
     }
 
     // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
-    void EmitBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2350,7 +2350,7 @@ public:
     }
 
     // Emit TLI breaker logs for deferred lock scenarios (lock broken between snapshot and re-read).
-    void EmitDeferredBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitDeferredBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->DeferredBreakers.empty() || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2499,8 +2499,8 @@ public:
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
-        EmitBreakerTliLogs(ev);
-        EmitDeferredBreakerTliLogs(ev);
+        EmitBreakerLogs(ev);
+        EmitDeferredBreakerLogs(ev);
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
@@ -2527,7 +2527,6 @@ public:
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
-                        YQL_ENSURE(!issues.Empty());
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                         // Use TxManager's broken locks count as fallback when executer stats don't
                         // carry LocksBrokenAsVictim (e.g. lock invalidation detected via AddLock

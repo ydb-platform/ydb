@@ -160,6 +160,36 @@ private:
     NThreading::TPromise<TReadBlocksLocalResponse> Future;
 };
 
+class TOverallAckRequestHandler: public TBaseRequestHandler
+{
+public:
+    TOverallAckRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        NWilson::TTraceId traceId,
+        TString name,
+        ui64 tabletId,
+        ui8 requiredAckCount);
+
+    ~TOverallAckRequestHandler() override = default;
+
+    NWilson::TSpan GetChildSpan(ui64 requestId, TString eventName);
+
+    [[nodiscard]] bool IsCompleted() const;
+    bool IsCompleted(ui64 requestId) override;
+    void RegisterCompetedRequest() {
+        ++AckCount;
+    }
+
+    [[nodiscard]] ui8 GetRequiredAckCount() const {
+        return RequiredAckCount;
+    }
+
+private:
+    const ui8 RequiredAckCount;
+    ui8 AckCount = 0;
+    TString Name;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

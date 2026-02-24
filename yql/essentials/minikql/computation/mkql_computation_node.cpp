@@ -58,6 +58,8 @@ std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKerne
 }
 
 TDatumProvider MakeDatumProvider(const arrow::Datum& datum) {
+    // TODO(YQL-20095): Explore real problem to fix this.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     return [datum]() {
         return datum;
     };

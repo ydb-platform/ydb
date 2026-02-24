@@ -18,9 +18,11 @@ PEERDIR(
     ydb/core/nbs/cloud/storage/core/libs/coroutine
 
     ydb/core/protos
+    ydb/library/aclib
     ydb/library/services
 
     ydb/core/mind/bscontroller
+    contrib/libs/opentelemetry-proto
 )
 
 END()

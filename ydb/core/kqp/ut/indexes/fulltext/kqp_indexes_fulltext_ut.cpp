@@ -72,6 +72,40 @@ void AddIndex(NQuery::TQueryClient& db, const TString& indexName = "fulltext_pla
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void DoValidateWildcardMatchQuery(NQuery::TQueryClient& db, const TString& query, const TString& expectedResult,
+     const TString& likeResult = "", const TString& returnColumns = "`Key`, `Text`")
+{
+    {
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.ClientTimeout(TDuration::Minutes(1));    
+        TString sql = Sprintf(R"sql(
+            SELECT %s FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "%s", "Wildcard" as Mode)
+            ORDER BY `Key`;
+        )sql", returnColumns.c_str(), query.c_str());
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(expectedResult, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    for(bool caseSensitive : {false, true})
+    {
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.ClientTimeout(TDuration::Minutes(1));    
+        TString sql = Sprintf(R"sql(
+            SELECT %s FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE `Text` %s "%s"
+            ORDER BY `Key`;
+        )sql", returnColumns.c_str(), caseSensitive ? "LIKE" : "ILIKE", query.c_str());
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TString expected = (!caseSensitive || likeResult.empty()) ? expectedResult : likeResult;
+        CompareYson(expected, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevanceQuery, std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> cases, NYdb::TParamsBuilder params = {}) {
     for (const auto& [query, expectedResults] : cases) {
         // Get the actual relevance score
@@ -2948,7 +2982,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "404 not found") AND FulltextMatch(Text, "205 not found")
+            WHERE FulltextMatch(`Text`, "404 not found") AND FulltextScore(Text, "205 not found") > 0
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2960,12 +2994,36 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE Text = "404 not found"
+            WHERE FulltextMatch(`Text`, "404 not found") AND FulltextMatch(Text, "205 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(`Text`, "404 not found") > 0 AND FulltextScore(Text, "205 not found") > 0
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore predicate is not specified to access index.");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Multiple fulltext score predicates in a single read are not supported.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE Text = "404 not found"
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
@@ -3678,91 +3736,44 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgram, Edge, Covered) {
 
     AddIndexNGram(db, 3, 3, false, Edge, Covered);
 
-    {
-        TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "% renaissance%", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "% renaissance%", R"([
+        [[1u];["Area Renaissance"]]
+    ])", "[]");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "Werner Heisenberg", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    DoValidateWildcardMatchQuery(db, "Werner Heisenberg", R"([
+        [[2u];["Werner Heisenberg"]]
+    ])");
 
-        CompareYson(R"([
-            [[1u];["Area Renaissance"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[2u];["Werner Heisenberg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-    }
+    DoValidateWildcardMatchQuery(db, "% renaissance%", R"([
+        [[1u]]
+    ])", "[]", "`Key`");
 
-    {
-        TString query = R"sql(
-            SELECT `Key`, FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "% renaissance", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "Werner Heisenberg", R"([
+        [[2u]]
+    ])", "", "`Key`");
 
-            SELECT `Key` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "Werner Heisenberg", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    DoValidateWildcardMatchQuery(db, "% renaissance%", R"([
+        [[1u]]
+    ])", "[]", "`Key`");
 
-        CompareYson(R"([
-            [[1u]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[2u]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-    }
+    // {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
+    DoValidateWildcardMatchQuery(db, "arena %", R"([
+        [[0u];["Arena Allocation"]]
+    ])", "[]");
 
-    {
-        TString query = R"sql(
-            -- {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "arena %", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    // {ber, ern} can be found separately in "Werner Heisenberg" but it's not correct result
+    DoValidateWildcardMatchQuery(db, "bern %", R"([
+        [[3u];["Bern city"]]
+    ])", "[]");
 
-            -- {ber, ern} can be found separately in "Werner Heisenberg" but it's not correct result
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "bern %", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    // N-gram sets are the same: {lus, use, sed, eda, dae, aed}. Wont work without postfilter
+    DoValidateWildcardMatchQuery(db, "lusedaedae", R"([
+        [[4u];["lusedaedae"]]
+    ])");
 
-        CompareYson(R"([
-            [[0u];["Arena Allocation"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[3u];["Bern city"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-    }
-
-    { // N-gram sets are the same: {lus, use, sed, eda, dae, aed}. Wont work without postfilter
-        TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lusedaedae", "Wildcard" as Mode)
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lusedaeda", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            [[4u];["lusedaedae"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[5u];["lusedaeda"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-    }
+    DoValidateWildcardMatchQuery(db, "lusedaeda", R"([
+        [[5u];["lusedaeda"]]
+    ])");
 }
 
 void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool covered) {
@@ -3796,47 +3807,25 @@ void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool c
 
     AddIndexNGram(db, 3, 5, relevance, edge, covered);
 
-    {
-        TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aren%", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "aren%", R"([
+        [[0u];["Arena Allocation"]]
+    ])", "[]");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "wer%ner %berg", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "wer%ner %berg", R"([
+        [[2u];["Werner Heisenberg"]]
+    ])", "[]");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "edaeda%", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "edaeda%", R"([
+        [[5u];["edaedalus"]]
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "маш% обу%ние", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "маш% обу%ние", R"([
+        [[6u];["машинное обучение"]]
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "мор%кот", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            [[0u];["Arena Allocation"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[2u];["Werner Heisenberg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-        CompareYson(R"([
-            [[5u];["edaedalus"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
-        CompareYson(R"([
-            [[6u];["машинное обучение"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
-        CompareYson(R"([
-            [[9u];["морекот"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
-    }
+    DoValidateWildcardMatchQuery(db, "мор%кот", R"([
+        [[9u];["морекот"]]
+    ])");
 
     if (!edge)
     {
@@ -4138,18 +4127,9 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
         UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
-    {
-        const TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "%4️⃣" , "Wildcard" as Mode) -- that's grapheme cluster that consists of three utf8 runes
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([
-            [[1u];["🙈 🎶 4️⃣"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-    }
+    DoValidateWildcardMatchQuery(db, "%4️⃣", R"([
+        [[1u];["🙈 🎶 4️⃣"]]
+    ])");
 
     DropIndex(db);
 
@@ -4367,62 +4347,33 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
 
     AddIndexNGram(db, 1, 5, false, true);
 
-    {
-        const TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aaaaabbcd efg", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "aaaaabbcd efg", R"([
+        [[0u];["aaaaabbcd efg"]]
+    ])");
+    DoValidateWildcardMatchQuery(db, "aaaaab%", R"([
+        [[0u];["aaaaabbcd efg"]]
+    ])");
+    DoValidateWildcardMatchQuery(db, "aa%bc%", R"([
+        [[0u];["aaaaabbcd efg"]]
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aaaaab%", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "ef", R"([
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aa%bc%", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "12%6+7%9=", R"([
+        [[1u];["123456+789="]]
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ef", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "123450+789=", R"([
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "12%6+7%9=", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "123%", R"([
+        [[1u];["123456+789="]]
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "123450+789=", "Wildcard" as Mode)
-            ORDER BY `Key`;
+    DoValidateWildcardMatchQuery(db, "1", R"([
+    ])");
 
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "123%", "Wildcard" as Mode)
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "1", "Wildcard" as Mode)
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            [[0u];["aaaaabbcd efg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
-            [[0u];["aaaaabbcd efg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-        CompareYson(R"([
-            [[0u];["aaaaabbcd efg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
-        CompareYson(R"([
-            [[1u];["123456+789="]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
-        CompareYson(R"([
-            [[1u];["123456+789="]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
-    }
 
     {
         const TString query = R"sql(

@@ -1,5 +1,5 @@
-{%- macro JvmArgs(jvm_args) -%}
-{%-     if jvm_args|length -%}
+{%- macro JvmArgs(jvm_args, system_properties = []) -%}
+{%-     if jvm_args|length or system_properties|length -%}
 {%-         set jnis_args = jvm_args|select('startsWith', 'jnis=') -%}
 {%-         set other_jvm_args = jvm_args|reject('startsWith', 'jnis=') -%}
 {%-         set ep_jvm_args = other_jvm_args|select('eq', '--enable-preview') -%}
@@ -15,7 +15,16 @@
 {%-                 endfor -%}
 {%-             endfor %}
     ).joinToString(":")
-{%          endif %}
+{%          endif -%}
+{%-     endif -%}
+{%-     if system_properties|length %}
+    val systemPropJvmArgs = mutableListOf(
+{%-         for kv in system_properties|slice(2) %}
+        {{ PatchRoots("-D" + kv[0] + "=" + kv[1]) }},
+{%-         endfor %}
+    )
+{%-     endif -%}
+{%-     if jvm_args|length or system_properties|length %}
     jvmArgs = mutableListOf(
 {%-         if jnis_args|length -%}
 {#-             Increase heap, else happened java.lang.OutOfMemoryError #}
@@ -33,7 +42,7 @@
         {{ PatchRoots(jvm_arg|replace("$", "\\$"), true) }},
 {%-             endfor -%}
 {%-         endif %}
-    )
+    ){% if system_properties|length %} + systemPropJvmArgs{% endif %}
 {%      endif -%}
 {%- endmacro -%}
 
@@ -63,11 +72,12 @@ tasks.withType<JavaExec> {
 {%- endif -%}
 {%- set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|sum|unique -%}
 {%- set test_envs = extra_targets|selectattr('test_env')|map(attribute='test_env')|sum|unique -%}
-{%- if test_jvm_args|length or test_cwds|length or test_envs|length %}
+{%- set test_system_properties = extra_targets|selectattr('system_properties')|map(attribute='system_properties')|sum -%}
+{%- if test_jvm_args|length or test_cwds|length or test_envs|length or test_system_properties|length %}
 
 tasks.withType<Test> {
 {#- glue -#}
-{{ JvmArgs(test_jvm_args) }}
+{{ JvmArgs(test_jvm_args, test_system_properties) }}
 {%-     if target.enable_preview -%}
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
 {%      endif -%}

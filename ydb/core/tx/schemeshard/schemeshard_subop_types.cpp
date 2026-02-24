@@ -445,6 +445,7 @@ bool CanDeleteParts(ETxType t) {
         case TxAlterStreamingQuery:
         case TxIncrementalRestoreFinalize:
         case TxTruncateTable:
+            return false; // CanDeleteParts
         case TxInvalid:
         case TxAllocatePQ:
             Y_DEBUG_ABORT("UNREACHABLE");

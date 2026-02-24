@@ -96,7 +96,7 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
 }
 
 static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(
-        const auto& srcPath, NKikimr::NSchemeShard::TOperationId id, const NKikimr::NSchemeShard::TTxTransaction& tx,
+        const NKikimr::NSchemeShard::TPath& srcPath, NKikimr::NSchemeShard::TOperationId id, const NKikimr::NSchemeShard::TTxTransaction& tx,
         const THashSet<TString>& localSequences = { }, TMaybe<NKikimr::NSchemeShard::TPathElement::EPathState> targetState = {}) {
     if (srcPath->IsTable()) {
         return NKikimr::NSchemeShard::CreateCopyTable(id, tx, localSequences, targetState);
@@ -104,7 +104,7 @@ static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(
     return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, tx);
 }
 
-static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(const auto& srcPath, NKikimr::NSchemeShard::TOperationId id, NKikimr::NSchemeShard::TTxState::ETxState txState, NKikimr::NSchemeShard::TTxState* state) {
+static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(const NKikimr::NSchemeShard::TPath& srcPath, NKikimr::NSchemeShard::TOperationId id, NKikimr::NSchemeShard::TTxState::ETxState txState, NKikimr::NSchemeShard::TTxState* state) {
     if (srcPath->IsTable()) {
         return NKikimr::NSchemeShard::CreateCopyTable(id, txState, state);
     }

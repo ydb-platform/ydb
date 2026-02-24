@@ -12,6 +12,10 @@ namespace Ydb::Export {
     class ExportToFsSettings;
 } // namespace Ydb::Export
 
+namespace Ydb::Import {
+    class ImportFromFsSettings;
+} // namespace Ydb::Import
+
 namespace NKikimr::NWrappers::NExternalStorage {
 
 class TFsExternalStorageConfig: public IExternalStorageConfig {
@@ -25,6 +29,7 @@ protected:
 public:
     TFsExternalStorageConfig(const NKikimrSchemeOp::TFSSettings& settings);
     TFsExternalStorageConfig(const Ydb::Export::ExportToFsSettings& settings);
+    TFsExternalStorageConfig(const Ydb::Import::ImportFromFsSettings& settings);
 };
 
 } // NKikimr::NWrappers::NExternalStorage

@@ -26,12 +26,22 @@ IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConf
 }
 
 template <>
+IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings) {
+    return std::make_shared<TS3ExternalStorageConfig>(defaultAwsClientSettings, settings);
+}
+
+template <>
 IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig&, const NKikimrSchemeOp::TFSSettings& settings) {
     return std::make_shared<TFsExternalStorageConfig>(settings);
 }
 
 template <>
 IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig&, const Ydb::Export::ExportToFsSettings& settings) {
+    return std::make_shared<TFsExternalStorageConfig>(settings);
+}
+
+template <>
+IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig&, const Ydb::Import::ImportFromFsSettings& settings) {
     return std::make_shared<TFsExternalStorageConfig>(settings);
 }
 }

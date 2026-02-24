@@ -3398,10 +3398,32 @@ public:
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }
 
+    TString GetSource() const {
+        if (Kind == EKind::S3) {
+            return GetS3Settings().source_prefix();
+        } else if (Kind == EKind::FS) {
+            return GetFsSettings().base_path();
+        }
+        Y_ABORT("Unknown import kind");
+        return {};
+    }
+
     // Getters for common settings fields
     bool GetNoAcl() const {
         return Visit([](const auto& settings) {
             return settings.no_acl();
+        });
+    }
+
+    TString GetDestinationPath() const {
+        return Visit([](const auto& settings) {
+            return settings.destination_path();
+        });
+    }
+
+    bool GetEncryptedBackup() const {
+        return Visit([](const auto& settings) {
+            return settings.has_encryption_settings();
         });
     }
 
@@ -3863,7 +3885,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     };
 
     ui64 Id;  // TxId from the original TEvCreateRequest
-    EState State = EState::Invalid; 
+    EState State = EState::Invalid;
     TPathId TablePathId;
     TPathId SubdomainPathId;
     bool Cascade;

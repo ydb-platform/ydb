@@ -2743,22 +2743,19 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
-    Y_ABORT_UNLESS(Kind == EKind::S3);
-    auto settings = GetS3Settings();
-
     if (TString err; !CompileExcludeRegexps(err)) {
         result.AddError(err);
         return result;
     }
 
     TString dstRoot;
-    if (settings.destination_path().empty()) {
+    if (GetDestinationPath().empty()) {
         dstRoot = CanonizePath(ss->RootPathElements);
     } else {
-        dstRoot = CanonizePath(settings.destination_path());
+        dstRoot = CanonizePath(GetDestinationPath());
     }
 
-    TString sourcePrefix = NBackup::NormalizeExportPrefix(settings.source_prefix());
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(GetSource());
     if (sourcePrefix) {
         sourcePrefix.push_back('/');
     }

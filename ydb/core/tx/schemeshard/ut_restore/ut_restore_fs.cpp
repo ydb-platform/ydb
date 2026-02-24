@@ -598,4 +598,76 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
     Y_UNIT_TEST(ShouldExportThenImportWithDataValidationEncrypted) {
         ExportImportWithDataValidationImpl(true);
     }
+
+    Y_UNIT_TEST(MaterializedIndexFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "by_value"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+
+        TString basePath = tempDir.Path();
+        TString exportSettings = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", exportSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<Ydb::Import::ImportFromS3Settings::IndexPopulationMode> modes = {
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO
+        };
+
+        for (size_t i = 0; i < modes.size(); ++i) {
+            auto mode = modes[i];
+            TString tableName = Sprintf("RestoredTable%zu", i);
+            TString tablePath = "/MyRoot/" + tableName;
+
+            TString importSettings = Sprintf(R"(
+                ImportFromFsSettings {
+                  base_path: "%s"
+                  index_population_mode: %s
+                  items {
+                    source_path: "backup/Table"
+                    destination_path: "%s"
+                  }
+                }
+            )", basePath.c_str(), Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str(), tablePath.c_str());
+
+            TestImport(runtime, ++txId, "/MyRoot", importSettings);
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, tablePath), {
+                NLs::PathExist,
+                NLs::IndexesCount(1),
+            });
+        }
+    }
 }

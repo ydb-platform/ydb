@@ -45,6 +45,11 @@ namespace {
 using TItem = TImportInfo::TItem;
 using EState = TImportInfo::EState;
 
+template <typename T>
+concept HasIndexPopulationMode = requires(const T& t) {
+    { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
+};
+
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
     for (const auto& item : items) {
@@ -254,18 +259,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         TImportInfo::TPtr importInfo = nullptr;
         TImportInfo::EState initialState = TImportInfo::EState::Waiting;
 
-        switch (request.GetRequest().GetSettingsCase()) {
-        case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
-            {
-                auto settings = request.GetRequest().GetImportFromS3Settings();
-                if (!settings.scheme()) {
-                    settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
-                }
-
-                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
-                    initialState = TImportInfo::EState::DownloadExportMetadata;
-                }
-
+        auto validateIndexPopulationMode = [&]<typename TSettings>(const TSettings& settings) -> bool {
+            if constexpr (HasIndexPopulationMode<TSettings>) {
                 if (!AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     switch (settings.index_population_mode()) {
                     case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
@@ -278,6 +273,25 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     default:
                         break;
                     }
+                }
+            }
+            return false;
+        };
+
+        switch (request.GetRequest().GetSettingsCase()) {
+        case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
+            {
+                auto settings = request.GetRequest().GetImportFromS3Settings();
+                if (!settings.scheme()) {
+                    settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
+                }
+
+                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                    initialState = TImportInfo::EState::DownloadExportMetadata;
+                }
+
+                if (validateIndexPopulationMode(settings)) {
+                    return true;
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -304,6 +318,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 const auto& settings = request.GetRequest().GetImportFromFsSettings();
+
+                if (validateIndexPopulationMode(settings)) {
+                    return true;
+                }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
 

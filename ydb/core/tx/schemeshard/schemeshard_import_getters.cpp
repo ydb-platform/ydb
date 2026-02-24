@@ -1013,7 +1013,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexPopulationMode(ImportInfo->Kind == TImportInfo::EKind::S3 ? ImportInfo->GetS3Settings().index_population_mode() : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED)
+        , IndexPopulationMode(ImportInfo->GetIndexPopulationMode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {

@@ -340,12 +340,12 @@ void TxUsage::TearDown()
     // Close all topic sessions gracefully before stopping the driver.
     // This prevents a race condition in gRPC cleanup when sessions are
     // force-closed with zero timeout during fixture destruction.
-    for (auto& [key, ctx] : TopicWriteSessions) {
+    for (auto& [_, ctx] : TopicWriteSessions) {
         ctx.Session->Close(TDuration::Seconds(5));
     }
     TopicWriteSessions.clear();
 
-    for (auto& [key, session] : TopicReadSessions) {
+    for (auto& [_, session] : TopicReadSessions) {
         session->Close(TDuration::Seconds(5));
     }
     TopicReadSessions.clear();

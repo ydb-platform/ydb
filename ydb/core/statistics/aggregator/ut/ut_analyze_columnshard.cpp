@@ -177,6 +177,13 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto tableInfo = PrepareDatabaseAndTable(env);
         auto sender = runtime.AllocateEdgeActor();
 
+        size_t finalResultsCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>([&](auto& ev) {
+            if (ev->Get()->Final) {
+                ++finalResultsCount;
+            }
+        });
+
         TBlockEvents<TEvDataShard::TEvKqpScan> block(runtime);
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
@@ -200,7 +207,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         // Check that AnalyzeActor on the initial tablet instance got cancelled and
         // only 2 AnalyzeActors successfully finished.
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCounter(TEvStatistics::EvFinishTraversal), 2);
+        UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 2);
     }
 
 
@@ -250,6 +257,13 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto tableInfo = PrepareDatabaseAndTable(env);
         auto sender = runtime.AllocateEdgeActor();
 
+        size_t finalResultsCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>([&](auto& ev) {
+            if (ev->Get()->Final) {
+                ++finalResultsCount;
+            }
+        });
+
         TBlockEvents<TEvDataShard::TEvKqpScan> block(runtime);
 
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
@@ -275,7 +289,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
         // Make sure that only 1 AnalyzeActor successfully finished.
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCounter(TEvStatistics::EvFinishTraversal), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 1);
     }
 }
 

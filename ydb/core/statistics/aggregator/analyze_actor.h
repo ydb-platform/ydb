@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <queue>
+
 namespace NKikimr::NStat {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
@@ -16,9 +18,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
 
-    TActorId ScanActorId;
-
-    void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus, NYql::TIssue);
+    void FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus, NYql::TIssue);
 
     // StateNavigate
 
@@ -32,12 +32,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
         TString PgTypeMod;
         TString Name;
 
-        std::optional<ui32> CountDistinctSeq;
-        std::optional<ui32> MinSeq;
-        std::optional<ui32> MaxSeq;
-        TVector<IColumnStatisticEval::TPtr> Statistics;
-
-        explicit TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString pgTypeMod, TString name)
+        TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString pgTypeMod, TString name)
             : Tag(tag)
             , Type(type)
             , PgTypeMod(std::move(pgTypeMod))
@@ -45,15 +40,26 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
         {}
         TColumnDesc(TColumnDesc&&) noexcept = default;
         TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
+    };
 
-        NKikimrStat::TSimpleColumnStatistics ExtractSimpleStats(
-            ui64 count, const TVector<NYdb::TValue>& aggColumns) const;
+    struct TEvalTask {
+        size_t ColumnIdx = -1;
+
+        // One of the following
+        TSimpleColumnStatisticEval::TPtr SimpleStatEval;
+        IStage2ColumnStatisticEval::TPtr Stage2StatEval;
     };
 
     TString TableName;
-    std::optional<ui32> CountSeq;
     TVector<TColumnDesc> Columns;
-    TVector<TStatisticsItem> Results;
+
+    std::queue<TEvalTask> PendingTasks;
+
+    std::optional<ui32> CountSeq;
+    std::vector<TEvalTask> InProgressTasks;
+    TActorId ScanActorId;
+
+    std::optional<ui64> RowCount;
 
     struct TEvPrivate {
         enum EEv {
@@ -88,9 +94,9 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     class TScanActor;
 
-    void HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
-    void HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
+    void DispatchScanActor();
 
+    void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvents::TEvPoison::TPtr& ev);
 
 public:
@@ -116,19 +122,9 @@ public:
         }
     }
 
-    // Calculate simple column statistics (count, count distinct) and
-    // determine the parameters for heavy statistics.
-    STFUNC(StateQueryStage1) {
+    STFUNC(StateQuery) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage1);
-            hFunc(TEvents::TEvPoison, Handle);
-        }
-    }
-
-    // Calculate "heavy" statistics requested from stage 1.
-    STFUNC(StateQueryStage2) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage2);
+            hFunc(TEvPrivate::TEvAnalyzeScanResult, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
     }

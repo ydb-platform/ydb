@@ -54,6 +54,7 @@ namespace NKikimr {
         ui64 ScrubEntrypointLsn;
         NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
         std::unique_ptr<TChunkKeeperData> ChunkKeeperData;
+        bool HasMetadata = false;
 
         TEvLocalRecoveryDone(NKikimrProto::EReplyStatus status,
                              TIntrusivePtr<TLocalRecoveryInfo> recovInfo,
@@ -70,7 +71,8 @@ namespace NKikimr {
                              NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
                              ui64 scrubEntrypointLsn,
                              NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
-                             std::unique_ptr<TChunkKeeperData>&& chunkKeeperData);
+                             std::unique_ptr<TChunkKeeperData>&& chunkKeeperData,
+                             bool hasMetadata);
         ~TEvLocalRecoveryDone();
     };
 

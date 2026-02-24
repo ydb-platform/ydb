@@ -18,7 +18,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
         MaxChunks = format->MaxChunks;
-        PersistentBufferInitChunks = format->InitChunks;
+        PersistentBufferInitChunks = 256;
         MaxPersistentBufferInMemoryCache = format->MaxInMemoryCache;
         MaxPersistentBufferChunkRestoreInflight = format->MaxChunkRestoreInflight;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);

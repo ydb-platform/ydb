@@ -77,7 +77,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
 
     std::map<ui64, ui64> Lsns;
     ui64 WriteSizeBytes = 0;
-    double FreeSpace = 0;
+    double FreeSpace = 1;
 
 
     TReallyFastRng32 Rng;
@@ -317,7 +317,7 @@ public:
                 auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                     NDDisk::TBlockSelector(1, 0, write.Size),
                     requestIdx, NDDisk::TWriteInstruction(0));
-                ev->AddPayload(BuildPayload(write.Size));
+                ev->AddPayload(TRope(write.Data));
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++Write_RequestsSent;
                 ++InFlight;

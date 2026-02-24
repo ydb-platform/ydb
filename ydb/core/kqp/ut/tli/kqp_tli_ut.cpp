@@ -1496,7 +1496,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }
 
-    Y_UNIT_TEST(IgnoredTablePaths) {
+    Y_UNIT_TEST(IgnoredTableRegexes) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
@@ -1540,7 +1540,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyNoTliLogsForIgnoredTable(issues, ss, breakerUpdate1);
     }
 
-    Y_UNIT_TEST(IgnoredTablePathsSeparateQueries) {
+    Y_UNIT_TEST(IgnoredTableRegexesSeparateQueries) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);

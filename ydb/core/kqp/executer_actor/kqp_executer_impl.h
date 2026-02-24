@@ -854,7 +854,7 @@ protected:
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
         TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
         for (const auto& regex : AppData()->TliConfig.GetIgnoredTableRegexes()) {
-            TasksGraph.GetMeta().IgnoredTableRegexes.insert(regex);
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
         }
 
         switch (Request.IsolationLevel) {

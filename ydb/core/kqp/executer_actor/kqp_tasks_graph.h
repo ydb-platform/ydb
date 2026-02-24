@@ -263,18 +263,28 @@ struct TGraphMeta {
         if (spanId == 0 || tablePath.empty()) {
             return spanId;
         }
-        for (const auto& pattern : IgnoredTableRegexes) {
-            std::regex regexPattern(pattern.c_str());
-            if (std::regex_match(tablePath.c_str(), regexPattern)) {
+        for (const auto& regex : IgnoredTliTableRegexes) {
+            if (std::regex_match(tablePath.begin(), tablePath.end(), regex)) {
                 return 0;
             }
         }
         return spanId;
     }
 
+    bool AddIgnoredTliTableRegex(const TString& pattern) {
+        try {
+            IgnoredTliTableRegexes.emplace_back(std::string(pattern));
+            return true;
+        } catch (const std::regex_error&) {
+            // Invalid regex pattern - silently ignore it
+            // The pattern will not be added to the list, so no tables will be filtered by it
+            return false;
+        }
+    }
+
     ui64 QuerySpanId = 0;
     THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
-    THashSet<TString> IgnoredTableRegexes;
+    TVector<std::regex> IgnoredTliTableRegexes;  // Pre-compiled regexes for ignored tables
 };
 
 struct TTaskInputMeta {

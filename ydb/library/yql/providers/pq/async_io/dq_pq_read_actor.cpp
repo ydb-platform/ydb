@@ -5,8 +5,11 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+<<<<<<< HEAD
 #include <ydb/core/base/feature_flags.h>
 
+=======
+>>>>>>> 120b330e336 (YQ-5102 Disable deduplication in pq sink (#34440))
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>

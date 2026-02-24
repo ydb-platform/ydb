@@ -19,6 +19,11 @@ def kikimr(request):
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True,
                 "enable_streaming_queries_counters": True,
+<<<<<<< HEAD
+=======
+                "enable_topics_sql_io_operations": True,
+                "enable_streaming_queries_pq_sink_deduplication": True,
+>>>>>>> 120b330e336 (YQ-5102 Disable deduplication in pq sink (#34440))
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
@@ -43,7 +48,8 @@ def kikimr(request):
 
         return config
 
-    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    checkpointing_period_ms = getattr(request, "param", {}).get("checkpointing_period_ms", "200")
+    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
 
     kikimr = Kikimr(get_ydb_config())

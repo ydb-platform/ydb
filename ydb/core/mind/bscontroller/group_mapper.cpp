@@ -143,7 +143,7 @@ namespace NKikimr::NBsController {
                             }
 
                             AddUsedDisk(pdisk);
-                            GroupLayout.AddDisk(pdisk.Position, orderNumber);
+                            GroupLayout.AddDisk(pdisk.Position, orderNumber, pdisk.Decommitted);
                         }
                     });
                 } catch (const TExError& e) {
@@ -263,7 +263,7 @@ namespace NKikimr::NBsController {
                 undo.Log(index, pdisk);
                 group[index] = pdisk;
                 AddUsedDisk(*pdisk);
-                GroupLayout.AddDisk(pdisk->Position, index);
+                GroupLayout.AddDisk(pdisk->Position, index, pdisk->Decommitted);
                 WorstScore.reset(); // invalidate score
             }
 
@@ -272,16 +272,12 @@ namespace NKikimr::NBsController {
                     const auto& item = undo.Items.back();
                     group[item.Index] = nullptr;
                     RemoveUsedDisk(*item.PDisk);
-                    GroupLayout.RemoveDisk(item.PDisk->Position, item.Index);
+                    GroupLayout.RemoveDisk(item.PDisk->Position, item.Index, item.PDisk->Decommitted);
                     WorstScore.reset(); // invalidate score
                 }
             }
 
             bool DiskIsBetter(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
-                if (king.Decommitted && !pretender.Decommitted) {
-                    return true;
-                }
-
                 if (Self.PreferLessOccupiedRack) {
                     Y_ABORT_UNLESS(Self.PDiskSlotTracker.has_value());
 
@@ -570,7 +566,7 @@ namespace NKikimr::NBsController {
                     for (ui32 i = 0; i < Topology.GetTotalVDisksNum(); ++i) {
                         if (TPDiskInfo *pdisk = group[i]) {
                             // calculate score for this pdisk, removing it from the set first -- to prevent counting itself
-                            const TScore score = GroupLayout.GetExcludedDiskScore(pdisk->Position, i);
+                            const TScore score = GroupLayout.GetExcludedDiskScore(pdisk->Position, i, pdisk->Decommitted);
                             if (worstScore.BetterThan(score)) {
                                 worstScore = score;
                             }
@@ -612,10 +608,7 @@ namespace NKikimr::NBsController {
                     } else if (forbiddenEntities[position.Domain.Index()]) {
                         range.first += Min<ui32>(std::distance(range.first, range.second), pdisk->SkipToNextDomain - 1);
                     } else {
-                        const TScore score = pdisk->Decommitted
-                                ? GroupLayout.GetCandidateScore(position, orderNumber).IgnoreRealmScatter()
-                                : GroupLayout.GetCandidateScore(position, orderNumber);
-                        Cerr << "SCORE " << score.ToString() << Endl;
+                        const TScore score = GroupLayout.GetCandidateScore(position, orderNumber, pdisk->Decommitted);
                         if (score.BetterThan(bestScore)) {
                             candidates.clear();
                             bestScore = score;

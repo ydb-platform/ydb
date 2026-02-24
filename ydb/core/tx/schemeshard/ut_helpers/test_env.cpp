@@ -587,10 +587,12 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
 
+    NKikimrConfig::TTliConfig tliConfig;
     IActor* kqpProxyService = NKqp::CreateKqpProxyService(
         logConfig,
         tableServiceConfig,
         queryServiceConfig,
+        tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
         nullptr, // kqp proxy shared resources

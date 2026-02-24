@@ -167,6 +167,9 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
@@ -853,9 +856,6 @@ protected:
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
         TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
-        for (const auto& regex : AppData()->TliConfig.GetIgnoredTableRegexes()) {
-            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
-        }
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:

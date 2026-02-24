@@ -2056,7 +2056,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2108,7 +2108,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService);
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig);
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),

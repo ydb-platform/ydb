@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         RunTokenatorIntegrationTest(ctx);
     }
 
-    Y_UNIT_TEST(FederatedCredsShorthandWithoutTypeAndTokenType) {
+    Y_UNIT_TEST(FederatedCredsShorthandWithoutTypeAndTokenTypeRejected) {
         TTempFileHandle tmpToken = MakeTestFile("short_jwt_token", "mvp_federated_jwt", ".token");
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         ctx.SaId = "serviceaccount-expected";
         ctx.FederatedJwtTokenPath = tmpToken.Name();
         ctx.OmitExplicitCredsTypeAndTokenType = true;
-        ctx.ExpectAuthHeader = true;
+        ctx.ExpectAuthHeader = false;
         RunTokenatorIntegrationTest(ctx);
     }
 

@@ -16,11 +16,6 @@
 namespace NMVP {
 namespace {
 
-static constexpr TStringBuf DEFAULT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange";
-static constexpr TStringBuf DEFAULT_REQUESTED_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
-static constexpr TStringBuf JWT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
-static constexpr TStringBuf SUBJECT_IDENTIFIER_TOKEN_TYPE = "urn:nebius:params:oauth:token-type:subject_identifier";
-
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
         auto ll = l.length();
@@ -233,19 +228,11 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
         } catch (const std::exception& ex) {
             ythrow yexception() << "Failed to build JWT credentials: " << ex.what();
         }
-        tokenType = creds.tokentype().empty() ? TString(JWT_TOKEN_TYPE) : creds.tokentype();
+        tokenType = creds.tokentype();
         return {std::move(tokenValue), std::move(tokenType)};
     }
 
     ythrow yexception() << "Unsupported OAuth2 token exchange credentials type. Supported types are JWT and FIXED";
-}
-
-std::pair<TString, TString> GetCredsWithDefaultTokenType(const TOauthCredentials& creds, TStringBuf defaultTokenType) {
-    auto credsPair = GetCreds(creds);
-    if (credsPair.second.empty()) {
-        credsPair.second = TString(defaultTokenType);
-    }
-    return credsPair;
 }
 
 } // anonymous namespace
@@ -253,8 +240,8 @@ std::pair<TString, TString> GetCredsWithDefaultTokenType(const TOauthCredentials
 bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
                                           nebius::iam::v1::ExchangeTokenRequest& request,
                                           TString& error) {
-    request.set_grant_type(tokenExchangeInfo->granttype().empty() ? TString(DEFAULT_GRANT_TYPE) : tokenExchangeInfo->granttype());
-    request.set_requested_token_type(tokenExchangeInfo->requestedtokentype().empty() ? TString(DEFAULT_REQUESTED_TOKEN_TYPE) : tokenExchangeInfo->requestedtokentype());
+    request.set_grant_type(tokenExchangeInfo->granttype());
+    request.set_requested_token_type(tokenExchangeInfo->requestedtokentype());
 
     if (!tokenExchangeInfo->aud().empty()) {
         request.set_audience(tokenExchangeInfo->aud(0));
@@ -274,14 +261,18 @@ bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExch
         return false;
     }
     try {
-        auto subjectCreds = GetCredsWithDefaultTokenType(tokenExchangeInfo->subjectcredentials(), SUBJECT_IDENTIFIER_TOKEN_TYPE);
+        auto subjectCreds = GetCreds(tokenExchangeInfo->subjectcredentials());
         request.set_subject_token(std::move(subjectCreds.first));
-        request.set_subject_token_type(std::move(subjectCreds.second));
+        if (!subjectCreds.second.empty()) {
+            request.set_subject_token_type(std::move(subjectCreds.second));
+        }
 
         if (tokenExchangeInfo->HasActorCredentials()) {
-            auto actorCreds = GetCredsWithDefaultTokenType(tokenExchangeInfo->actorcredentials(), JWT_TOKEN_TYPE);
+            auto actorCreds = GetCreds(tokenExchangeInfo->actorcredentials());
             request.set_actor_token(std::move(actorCreds.first));
-            request.set_actor_token_type(std::move(actorCreds.second));
+            if (!actorCreds.second.empty()) {
+                request.set_actor_token_type(std::move(actorCreds.second));
+            }
         }
     } catch (const std::exception& ex) {
         error = TStringBuilder() << ex.what() << " for token " << tokenExchangeInfo->name();

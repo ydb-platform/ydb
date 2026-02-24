@@ -1,5 +1,10 @@
 #include "mvp.h"
 
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydbc.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/utils.h>
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -8,11 +13,6 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydbc.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/mvp/core/utils.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/deprecated/atomic/atomic.h>

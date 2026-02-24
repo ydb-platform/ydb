@@ -1,17 +1,19 @@
 #pragma once
+#include "oidc_settings.h"
+
+#include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/mvp_log.h>
+#include <ydb/mvp/core/mvp_startup_options.h>
+#include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/signals.h>
+#include <ydb/mvp/oidc_proxy/protos/config.pb.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
-#include <library/cpp/getopt/last_getopt.h>
-#include <ydb/mvp/core/mvp_log.h>
-#include <ydb/mvp/core/signals.h>
-#include <ydb/mvp/core/appdata.h>
-#include <ydb/mvp/core/mvp_startup_options.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
 
-#include <ydb/mvp/oidc_proxy/protos/config.pb.h>
-#include "oidc_settings.h"
+#include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NMVP::NOIDC {
 

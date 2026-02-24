@@ -558,6 +558,10 @@ public:
         context.DbChanges.PersistPath(srcPath.Base()->ParentPathId);
         context.DbChanges.PersistApplyUserAttrs(allocatedPathId);
         context.DbChanges.PersistTxState(OperationId);
+        
+        // copy attrs without any checks
+        TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
+        userAttrs->Attrs = srcPath.Base()->UserAttrs->Attrs;
 
         // create new path and inherit properties from src
         dstPath.MaterializeLeaf(srcPath.Base()->Owner, allocatedPathId, /*allowInactivePath*/ true);
@@ -566,7 +570,7 @@ public:
         dstPath.Base()->LastTxId = OperationId.GetTxId();
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath.Base()->PathType = srcPath.Base()->PathType;
-        dstPath.Base()->UserAttrs->AlterData = srcPath.Base()->UserAttrs;
+        dstPath.Base()->UserAttrs->AlterData = userAttrs;
         dstPath.Base()->ACL = srcPath.Base()->ACL;
 
         IncAliveChildrenSafeWithUndo(OperationId, dstParent, context); // for correct discard of ChildrenExist prop

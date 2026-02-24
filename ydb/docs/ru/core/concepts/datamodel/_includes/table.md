@@ -256,12 +256,13 @@ CREATE TABLE article_column_table (
 WITH (STORE = COLUMN);
 ```
 
+Колоночные таблицы поддерживают **локальные Bloom skip индексы** — компактные фильтры по гранулам, которые ускоряют селективные запросы, позволяя пропускать гранулы, заведомо не содержащие искомых значений. Такие индексы задаются с помощью `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter` и могут быть созданы при [создании таблицы](../../../yql/reference/syntax/create_table/secondary_index.md) или добавлены позже через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom-column).
+
 В настоящий момент реализована не вся функциональность колоночных таблиц. Сейчас не поддерживается:
 
 * Чтение с реплик.
 * Вторичные индексы.
 * Векторные индексы.
-* Фильтры Блума.
 * Change Data Capture.
 * Пользовательские атрибуты таблиц.
 

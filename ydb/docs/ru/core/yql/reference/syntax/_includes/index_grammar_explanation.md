@@ -13,6 +13,8 @@
 
     * `secondary` — вторичный индекс. Доступен только `GLOBAL`. Является значением по умолчанию.
     * `vector_kmeans_tree` — векторный индекс. Подробнее описан в [{#T}](../create_table/vector_index.md).
+    * `bloom_filter` — локальный Bloom skip индекс для колоночных таблиц. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
+    * `bloom_ngram_filter` — локальный N-граммный Bloom skip индекс для колоночных таблиц. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
 
 * `UNIQUE` — создаёт индекс с гарантией уникальности для вставляемых значений.
 * `<index_columns>` — список имён колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе. Обязательно должен быть указан.

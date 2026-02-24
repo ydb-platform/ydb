@@ -18,12 +18,13 @@ In most cases, working with column-oriented {{ ydb-short-name }} tables is simil
 * Data is not partitioned by the primary key but by the hash from the [partitioning columns](#olap-tables-partitioning).
 * A [limited set](#olap-data-types) of data types is supported.
 
+Column-oriented tables support **local Bloom skip indexes** (`bloom_filter` and `bloom_ngram_filter`), which help skip data granules that do not contain the required values. See [Local Bloom skip indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom-column) in the ALTER TABLE ADD INDEX syntax.
+
 What's currently not supported:
 
 * Reading data from replicas
 * Secondary indexes
 * Vector indexes
-* Bloom filters
 * Change Data Capture
 * Renaming tables
 * Custom attributes in tables

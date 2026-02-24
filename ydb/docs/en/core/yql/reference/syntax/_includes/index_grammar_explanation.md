@@ -13,6 +13,8 @@
 
     * `secondary` — secondary index. Only `GLOBAL` is available. This is the default value.
     * `vector_kmeans_tree` — vector index. Described in detail in [{#T}](../create_table/vector_index.md).
+    * `bloom_filter` — local Bloom skip index for column-oriented tables. Only `LOCAL` is available. See [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
+    * `bloom_ngram_filter` — local N-gram Bloom skip index for column-oriented tables. Only `LOCAL` is available. See [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
 
 * `UNIQUE` — creates an index with uniqueness guarantee for inserted values.
 * `<index_columns>` — comma-separated list of column names from the created table that can be used for index searches. Must be specified.

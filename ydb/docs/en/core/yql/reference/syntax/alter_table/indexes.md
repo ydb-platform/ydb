@@ -31,6 +31,8 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
+For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **local Bloom skip indexes** is supported; see [Local Bloom skip indexes for column-oriented tables](#local-bloom-column).
+
 ### Examples
 
 A regular secondary index:
@@ -53,6 +55,46 @@ ALTER TABLE `series`
     vector_dimension=512,
     clusters=128,
     levels=2
+  );
+```
+
+### Local Bloom skip indexes for column-oriented tables {#local-bloom-column}
+
+Local Bloom skip indexes are supported **only on column-oriented tables** (`STORE = COLUMN`). They help skip data granules that do not contain the required values, speeding up selective queries.
+
+**Index types:**
+
+* `bloom_filter` — Bloom filter over column values. Parameter:
+  * `false_positive_probability` — target false positive rate (e.g. `0.01`).
+
+* `bloom_ngram_filter` — N-gram Bloom filter for string columns. Parameters:
+  * `ngram_size` — n-gram size (e.g. `3`);
+  * `hashes_count` — number of hash functions;
+  * `filter_size_bytes` — filter size in bytes;
+  * `records_count` — expected number of distinct values per granule;
+  * `case_sensitive` — optional, `true` or `false` (default).
+
+**Example: adding a Bloom filter index**
+
+```yql
+ALTER TABLE `/Root/olapTable`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+**Example: adding an N-gram Bloom filter index**
+
+```yql
+ALTER TABLE `/Root/olapTable`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (resource_id)
+  WITH (
+    ngram_size = 3,
+    hashes_count = 2,
+    filter_size_bytes = 512,
+    records_count = 1024,
+    case_sensitive = true
   );
 ```
 

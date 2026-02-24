@@ -41,83 +41,6 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
         return 0;
 }
 
-class TProducerTestAdapter {
-public:
-    TProducerTestAdapter(NTopic::IKeyedWriteSession* session);
-
-    void WaitForAcks(size_t count, TDuration timeout);
-    std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
-    size_t GetAckedSeqNosCount() const;
-    bool ValidateAcksOrder() const;
-
-private:
-    void RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken = false);
-
-    NTopic::IKeyedWriteSession* Session;
-    std::queue<TContinuationToken> tokens;
-    std::vector<std::uint64_t> ackedSeqNos;
-};
-
-TProducerTestAdapter::TProducerTestAdapter(NTopic::IKeyedWriteSession* session)
-    : Session(session)
-{}
-
-void TProducerTestAdapter::WaitForAcks(size_t count, TDuration timeout) {
-    RunEventLoop(timeout, count, false);
-}
-
-bool TProducerTestAdapter::ValidateAcksOrder() const {
-    size_t expectedSeqNo = 1;
-    for (const auto& seqNo : ackedSeqNos) {
-        if (seqNo != expectedSeqNo) {
-            return false;
-        }
-        expectedSeqNo++;
-    }
-    return true;
-}
-
-size_t TProducerTestAdapter::GetAckedSeqNosCount() const {
-    return ackedSeqNos.size();
-}
-
-std::optional<TContinuationToken> TProducerTestAdapter::GetContinuationToken(TDuration timeout) {
-    RunEventLoop(timeout, 0, true);
-    if (tokens.empty()) {
-        return std::nullopt;
-    }
-    auto token = std::move(tokens.front());
-    tokens.pop();
-    return token;
-}
-
-void TProducerTestAdapter::RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken) {
-    auto deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        Session->WaitEvent().Wait(deadline);
-        auto event = Session->GetEvent(false);
-        if (!event) {
-            continue;
-        }
-        if (auto ev = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            tokens.push(std::move(ev->ContinuationToken));
-            if (stopOnContinuationToken) {
-                return;
-            }
-            continue;
-        }
-        if (auto ev = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
-            for (const auto& ack : ev->Acks) {
-                ackedSeqNos.push_back(ack.SeqNo);
-            }
-
-            if (ackedSeqNos.size() >= stopOnAcksCount) {
-                return;
-            }
-        }
-    }
-}
-
 }
 
 namespace NYdb::inline Dev::NTopic::NTests {
@@ -957,25 +880,20 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};
     });
+    writeSettings.MaxBlock(TDuration::Seconds(30));
 
-    auto session = client.CreateKeyedWriteSession(writeSettings);
-    auto keyedSession = std::dynamic_pointer_cast<TProducer>(session);
+    auto producer = client.CreateProducer(writeSettings);
+    auto keyedSession = std::dynamic_pointer_cast<TProducer>(producer);
 
-    NPersQueue::NTests::TProducerTestAdapter testAdapter(session.get());
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
-        auto token = testAdapter.GetContinuationToken(TDuration::Seconds(30));
-        ASSERT_TRUE(token.has_value()) << "Timed out waiting for ReadyToAcceptEvent";
         TWriteMessage msg("msg");
         msg.SeqNo(i + 1);
         msg.Key(key);
-        session->Write(std::move(*token), std::move(msg));
+        ASSERT_TRUE(producer->Write(std::move(msg)).IsSuccess());
     }
 
-    testAdapter.WaitForAcks(100, TDuration::Seconds(30));
-    ASSERT_TRUE(session->Close(TDuration::Seconds(10)).IsSuccess());
-    ASSERT_EQ(testAdapter.GetAckedSeqNosCount(), 100ull);
-    ASSERT_TRUE(testAdapter.ValidateAcksOrder());
+    ASSERT_TRUE(producer->Close(TDuration::Seconds(10)).IsSuccess());
 
     auto after = client.DescribeTopic(GetTopicPath(TOPIC_NAME), describeTopicSettings).GetValueSync();
     ASSERT_TRUE(after.IsSuccess()) << after.GetIssues().ToOneLineString();

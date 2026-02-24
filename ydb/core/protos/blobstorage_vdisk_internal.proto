@@ -140,7 +140,7 @@ message TIncrHugeChunks {
         optional uint64      ChunkSerNum = 2; // unique id of allocated chunk
         optional EChunkState State = 3;       // chunk state (whether it is complete and has index or write intent only)
     };
-    repeated TChunkInfo Chunks = 1;    // list of all consumed chunks
+    repeated TChunkInfo Chunks = 1; // list of all consumed chunks
     repeated uint32 DeletedChunks = 2; // list of deleted chunks; incremental field only
     optional uint64 CurrentSerNum = 3; // current version of this state
 };

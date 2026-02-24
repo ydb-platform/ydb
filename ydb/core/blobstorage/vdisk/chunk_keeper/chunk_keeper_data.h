@@ -5,12 +5,18 @@
 
 namespace NKikimr {
 
+struct TChunkRecord {
+    ui32 ChunkIdx;
+    ui32 Subsystem;
+    bool ShreddingRequested;
+};
+
 struct TChunkKeeperData {
     TChunkKeeperData(const NKikimrVDiskData::TChunkKeeperEntryPoint& entryPoint);
     void GetOwnedChunks(TSet<ui32>& chunks, const TString& logPrefix);
 
-    std::unordered_map<ui32, ui32> Chunks;                      // ChunkId -> Subsystem
-    std::unordered_map<ui32, std::set<ui32>> ChunksBySubsystem; // Subsystem -> [ Chunk1 .. ChunkN ]
+    std::unordered_map<ui32, TChunkRecord> Chunks;              // ChunkId -> ChunkRecord
+    std::unordered_map<ui32, std::set<ui32>> ChunksBySubsystem; // Subsystem -> [ ChunkIdx1 .. ChunkIdxN ]
 };
 
 } // namespace NKikimr

@@ -470,7 +470,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
         "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
         "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"QueueName\"]"
+        "KeyColumnNames: [\"Account\", \"QueueName\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
@@ -486,7 +488,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"TablesFormat\"          Type: \"Uint32\"}"
         "Columns { Name: \"StartProcessTimestamp\" Type: \"Uint64\"}"
         "Columns { Name: \"NodeProcess\"           Type: \"Uint32\"}"
-        "KeyColumnNames: [\"RemoveTimestamp\", \"QueueIdNumber\"]"
+        "KeyColumnNames: [\"RemoveTimestamp\", \"QueueIdNumber\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.MkDir("/Root/SQS", ".STD");
@@ -499,7 +503,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"RandomId\"                  Type: \"Uint64\"}"
         "Columns { Name: \"SentTimestamp\"             Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"             Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.MkDir("/Root/SQS", ".FIFO");
@@ -515,7 +521,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"ReceiveCount\"          Type: \"Uint32\"}"
         "Columns { Name: \"FirstReceiveTimestamp\" Type: \"Uint64\"}"
         "Columns { Name: \"SentTimestamp\"         Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -526,7 +534,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
         "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
         "Columns { Name: \"MessageId\"             Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -540,7 +550,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"Tail\"                  Type: \"Uint64\"}"
         "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
         "Columns { Name: \"LockTimestamp\"         Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -554,7 +566,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"Attributes\"            Type: \"String\"}"
         "Columns { Name: \"Data\"                  Type: \"String\"}"
         "Columns { Name: \"MessageId\"             Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -563,7 +577,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
         "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
         "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
@@ -571,14 +587,18 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"Account\"               Type: \"Utf8\"}"
         "Columns { Name: \"Name\"                  Type: \"Utf8\"}"
         "Columns { Name: \"Value\"                 Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"Name\"]"
+        "KeyColumnNames: [\"Account\", \"Name\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
         "Name: \".AtomicCounter\""
         "Columns { Name: \"counter_key\"  Type: \"Uint64\"}"
         "Columns { Name: \"value\"        Type: \"Uint64\"}"
-        "KeyColumnNames: [\"counter_key\"]"
+        "KeyColumnNames: [\"counter_key\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
     RunYqlDataQuery("INSERT INTO `/Root/SQS/.AtomicCounter` (counter_key, value) VALUES (0, 0)");
 
@@ -597,8 +617,14 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
         "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
         "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
-    client.CreateTable("/Root/SQS/.STD", attributesTable);
-    client.CreateTable("/Root/SQS/.FIFO", attributesTable);
+    client.CreateTable("/Root/SQS/.STD",
+        attributesTable,
+        TDuration::Seconds(5000),
+        "root@builtin");
+    client.CreateTable("/Root/SQS/.FIFO",
+        attributesTable,
+        TDuration::Seconds(5000),
+        "root@builtin");
 
     client.CreateTable("/Root/SQS",
         "Name: \".Events\""
@@ -609,7 +635,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
         "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
         "Columns { Name: \"Labels\"           Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
+        "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     auto stateTableCommon =
@@ -630,12 +658,16 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         TStringBuilder()
             << stateTableCommon
             << "Columns { Name: \"Shard\"  Type: \"Uint32\"}"
-            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Shard\"]"
+            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Shard\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
     client.CreateTable("/Root/SQS/.FIFO",
         TStringBuilder()
             << stateTableCommon
-            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]"
+            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
 
@@ -653,7 +685,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"SentTimestamp\"              Type: \"Uint64\"}"
         "Columns { Name: \"VisibilityDeadline\"         Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"              Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     auto sentTimestampIdxCommonColumns=
@@ -669,7 +703,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         TStringBuilder()
         << "Name: \"SentTimestampIdx\""
         << sentTimestampIdxCommonColumns
-        << sendTimestampIdsKeys
+        << sendTimestampIdsKeys,
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -681,7 +717,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"GroupId\"                Type: \"String\"}"
         "Columns { Name: \"RandomId\"               Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"          Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.STD",
@@ -695,7 +733,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"Data\"                       Type: \"String\"}"
         "Columns { Name: \"MessageId\"                  Type: \"String\"}"
         "Columns { Name: \"SenderId\"                   Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"RandomId\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"RandomId\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 }
 

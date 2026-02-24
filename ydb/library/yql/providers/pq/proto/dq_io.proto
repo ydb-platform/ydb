@@ -95,6 +95,7 @@ message TDqPqTopicSource {
     bool SkipJsonErrors = 27;
     google.protobuf.Duration MaxPartitionReadSkew = 28;
     uint64 ReadSessionBufferBytes = 29;
+    google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
 }
 
 message TDqPqTopicSink {

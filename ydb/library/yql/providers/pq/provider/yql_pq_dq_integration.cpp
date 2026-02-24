@@ -289,6 +289,8 @@ public:
                         skipErrors = FromString<bool>(Value(setting));
                     } else if (name == StreamingTopicRead) {
                         streamingTopicRead = FromString<bool>(Value(setting));
+                    } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
+                        *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
                     }
                 }
 
@@ -654,6 +656,10 @@ public:
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;
+        }
+
+        if (State_->Configuration->MaxPartitionReadSkew.Get()) {
+            Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
         if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {

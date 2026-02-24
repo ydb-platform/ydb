@@ -358,7 +358,7 @@ public:
                     .InputIndex = InputIndex,
                     .Counters = counters,
                     .BaseSettings = GetReadSessionSettings(clusterState),
-                    .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
+                    .IdleTimeout = NProtoInterop::CastFromProto(SourceParams.GetPartitionsBalancingIdleTimeout()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
                     .AggregatorActor = InfoAggregator,
                 });

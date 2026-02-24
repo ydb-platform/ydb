@@ -2356,8 +2356,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
-        SetupAppConfig().MutableTableServiceConfig()->SetEnableWatermarks(true);
-
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
@@ -2380,7 +2378,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         key String NOT NULL,
                         value String NOT NULL
                     ),
-                    WATERMARK AS (SystemMetadata('write_time') - Interval('PT5S')),
                     WATERMARK_IDLE_TIMEOUT = "PT5S"
                 );
             END DO;)",

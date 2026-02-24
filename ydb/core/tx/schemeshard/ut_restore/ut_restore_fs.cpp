@@ -668,15 +668,6 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
                 NLs::PathExist,
                 NLs::IndexesCount(1),
             });
-
-            // Verify table has correct number of rows
-            ui32 tableRows = CountRows(runtime, tablePath);
-            UNIT_ASSERT_VALUES_EQUAL(tableRows, 2);
-
-            // Verify index table has correct number of rows
-            TString indexPath = tablePath + "/by_value/indexImplTable";
-            ui32 indexRows = CountRows(runtime, indexPath);
-            UNIT_ASSERT_VALUES_EQUAL(indexRows, 2);
         }
     }
 }

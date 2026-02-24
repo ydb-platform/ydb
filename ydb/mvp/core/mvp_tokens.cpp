@@ -118,7 +118,7 @@ void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenNebius::TPtr event) {
         if (responseRefresh > 0) {
             refreshPeriod = TDuration::Seconds(responseRefresh);
         }
-        BLOG_D("Updating token " << event->Get()->Name << " to " << event->Get()->Subject);
+        BLOG_D("Updating token " << event->Get()->Name);
         {
             auto guard = Guard(TokensLock);
             Tokens[event->Get()->Name] = "Bearer " + std::move(event->Get()->Response.access_token());
@@ -307,8 +307,7 @@ void TMvpTokenator::UpdateOAuth2ExchangeToken(const NMvp::TOAuth2Exchange* token
                                 tokenExchangeInfo->GetName(),
                                 endpoint,
                                 exchangeRequest,
-                                &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange,
-                                tokenExchangeInfo->GetName());
+                                &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange);
         return;
     }
 

@@ -55,13 +55,11 @@ protected:
         template <ui32 TEventType, typename TResponse>
         struct TEvUpdateToken : NActors::TEventLocal<TEvUpdateToken<TEventType, TResponse>, TEventType> {
             TString Name;
-            TString Subject;
             NYdbGrpc::TGrpcStatus Status;
             TResponse Response;
 
-            TEvUpdateToken(const TString& name, const TString& subject, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
+            TEvUpdateToken(const TString& name, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
                 : Name(name)
-                , Subject(subject)
                 , Status(status)
                 , Response(response)
             {}
@@ -143,15 +141,15 @@ protected:
     }
 
     template <typename TGrpcService, typename TRequest, typename TResponse, typename TUpdateToken>
-    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest, const TString& subject = "") {
+    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest) {
         NActors::TActorId actorId = SelfId();
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NYdbGrpc::TCallMeta meta;
         meta.Timeout = NYdb::TDeadline::SafeDurationCast(RPC_TIMEOUT);
         auto connection = CreateGRpcServiceConnection<TGrpcService>(endpoint);
         NYdbGrpc::TResponseCallback<TResponse> cb =
-            [actorId, actorSystem, name, subject](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
-                actorSystem->Send(actorId, new TUpdateToken(name, subject, std::move(status), std::move(response)));
+            [actorId, actorSystem, name](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
+                actorSystem->Send(actorId, new TUpdateToken(name, std::move(status), std::move(response)));
         };
         connection->DoRequest(request, std::move(cb), asyncRequest, meta);
     }

@@ -88,6 +88,19 @@ class PrSyncCreator:
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
+    def force_sync_from_head(self):
+        """Overwrite all files from the head branch to ensure consistency after merge."""
+        self.logger.info("Force syncing all files from %s", self.head_branch)
+
+        self.git_run("checkout", self.head_branch, "--", ".")
+
+        has_changes = self.git_run("diff", "--cached", "--quiet", fail=False).returncode != 0
+        if has_changes:
+            self.git_run("commit", "-m", f"Force sync all files from {self.head_branch}")
+            self.logger.info("Force sync commit created")
+        else:
+            self.logger.info("All files already match %s, no force sync needed", self.head_branch)
+
     def create_new_pr(self):
         dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
@@ -127,6 +140,9 @@ class PrSyncCreator:
                 raise Exception(f"Resolved for all known files, but more files were in conflict {conflict_files}")
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
+
+        self.force_sync_from_head()
+
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
         if self.workflow_url:

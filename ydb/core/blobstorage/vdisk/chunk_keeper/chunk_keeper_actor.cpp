@@ -49,31 +49,13 @@ private:
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     )
 
-    STRICT_STFUNC(StateProcessingAllocate,
+    STRICT_STFUNC(StateProcessing,
         hFunc(TEvChunkKeeperAllocate, Handle)
         hFunc(TEvChunkKeeperFree, Handle)
         hFunc(TEvChunkKeeperDiscover, Handle)
         hFunc(NPDisk::TEvChunkReserveResult, Handle)
         hFunc(NPDisk::TEvCutLog, Handle)
-        hFunc(NPDisk::TEvLogResult, HandleLogResultAllocate)
-        cFunc(TEvents::TEvPoison::EventType, PassAway)
-    )
-
-    STRICT_STFUNC(StateProcessingFree,
-        hFunc(TEvChunkKeeperAllocate, Handle)
-        hFunc(TEvChunkKeeperFree, Handle)
-        hFunc(TEvChunkKeeperDiscover, Handle)
-        hFunc(NPDisk::TEvCutLog, Handle)
-        hFunc(NPDisk::TEvLogResult, HandleLogResultFree)
-        cFunc(TEvents::TEvPoison::EventType, PassAway)
-    )
-
-    STRICT_STFUNC(StateProcessingCutLog,
-        hFunc(TEvChunkKeeperAllocate, Handle)
-        hFunc(TEvChunkKeeperFree, Handle)
-        hFunc(TEvChunkKeeperDiscover, Handle)
-        hFunc(NPDisk::TEvCutLog, Handle)
-        hFunc(NPDisk::TEvLogResult, HandleLogResultCutLog)
+        hFunc(NPDisk::TEvLogResult, Handle)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     )
 
@@ -86,6 +68,23 @@ private:
     )
 
 private:
+
+    void Handle(const NPDisk::TEvLogResult::TPtr& ev) {
+        Y_VERIFY_S(ActiveRequest, VDISKP(LogCtx->VCtx, "No ActiveRequest while handling TEvLogResult"));
+        std::visit(TOverloaded{
+            [&](const TRequestAllocate&) -> void {
+                HandleLogResultAllocate(ev);
+            },
+            [&](const TRequestFree&) -> void {
+                HandleLogResultFree(ev);
+            },
+            [&](const TRequestCutLog&) -> void {
+                HandleLogResultCutLog(ev);
+            },
+            [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
+                    "Empty ActiveRequest while processing request")); },
+        }, *ActiveRequest);
+    }
 
     void Handle(const TEvChunkKeeperAllocate::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
@@ -114,9 +113,10 @@ private:
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
                 return;
             }
-            if (it->second != subsystem) {
+            if (it->second.Subsystem != subsystem) {
                 TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx <<
-                        " belongs to another subsystem Requested# " << subsystem << " Actual# " << it->second;
+                        " belongs to another subsystem Requested# " << subsystem << " Actual# " <<
+                        it->second.Subsystem;
                 STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK05, VDISKP(LogCtx->VCtx, "Bad deallocation request"),
                         (ErrorReason, errorReason));
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
@@ -140,8 +140,17 @@ private:
             Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}));
         } else {
             discoveredChunks = it->second.size();
-            Send(ev->Sender, new TEvChunkKeeperDiscoverResult(
-                    std::vector<ui32>(it->second.begin(), it->second.end())));
+            std::vector<TEvChunkKeeperDiscoverResult::TChunkInfo> res;
+            std::transform(it->second.begin(), it->second.end(), std::back_inserter(res), [&](ui32 chunkIdx) {
+                const auto it = Committed->Chunks.find(chunkIdx);
+                Y_VERIFY_S(it != Committed->Chunks.end(), LogCtx->VCtx->VDiskLogPrefix <<
+                        "Chunk not found, ChunkIdx# " << chunkIdx << " Subsystem# " << subsystem);
+                return TEvChunkKeeperDiscoverResult::TChunkInfo{
+                    .ChunkIdx = chunkIdx,
+                    .ShreddingRequested = it->second.ShreddingRequested,
+                };
+            });
+            Send(ev->Sender, new TEvChunkKeeperDiscoverResult(std::move(res)));
         }
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK06, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperDiscover"),
                 (Subsystem, subsystem),
@@ -198,7 +207,7 @@ private:
     void ProcessRequestAllocate(TRequestAllocate request) {
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK09, VDISKP(LogCtx->VCtx, "Process allocation request"),
                 (Subsystem, request.Subsystem));
-        Become(&TThis::StateProcessingAllocate);
+        Become(&TThis::StateProcessing);
         auto msg = std::make_unique<NPDisk::TEvChunkReserve>(LogCtx->PDiskCtx->Dsk->Owner,
                 LogCtx->PDiskCtx->Dsk->OwnerRound, 1);
         Send(LogCtx->PDiskCtx->PDiskId, msg.release());
@@ -253,26 +262,12 @@ private:
                 " allocation request"), (Event, ev->Get()->ToString()));
         CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
-        ui32 chunkIdx;
-        ui32 subsystem;
-        TActorId sender;
-
         Y_VERIFY_S(ActiveRequest, VDISKP(LogCtx->VCtx, "No ActiveRequest while processing allocation request"));
-        std::visit(TOverloaded{
-            [&](const TRequestAllocate& request) -> void {
-                Y_VERIFY_S(request.AllocatedChunk, VDISKP(LogCtx->VCtx,
-                        "AllocatedChunk is expected to be non-nullopt"));
-                chunkIdx = *request.AllocatedChunk;
-                subsystem = request.Subsystem;
-                sender = request.Sender;
-            },
-            [&](const TRequestFree&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Unexpected ActiveRequest while processing allocation request")); },
-            [&](const TRequestCutLog&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Unexpected ActiveRequest while processing allocation request")); },
-            [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Empty ActiveRequest while processing allocation request")); },
-        }, *std::exchange(ActiveRequest, std::nullopt));
+        const TRequestAllocate request = std::get<TRequestAllocate>(*std::exchange(ActiveRequest, std::nullopt));
+        Y_VERIFY_S(request.AllocatedChunk, VDISKP(LogCtx->VCtx, "AllocatedChunk is expected to be non-nullopt"));
+        const ui32 chunkIdx = *request.AllocatedChunk;
+        const ui32 subsystem = request.Subsystem;
+        const TActorId sender = request.Sender;
 
         {
             bool erased = AllocationsInFlight.erase(chunkIdx);
@@ -287,8 +282,12 @@ private:
 
             const auto [_, inserted] = Committed->ChunksBySubsystem[subsystem].insert(chunkIdx);
             Y_VERIFY_S(inserted, LogCtx->VCtx->VDiskLogPrefix << "Bad chunk allocation, chunkIdx# " << chunkIdx <<
-                    " subsystem# " << subsystem << " previous subsystem# " << Committed->Chunks[chunkIdx]);
-            Committed->Chunks[chunkIdx] = subsystem;
+                    " subsystem# " << subsystem << " previous subsystem# " << Committed->Chunks[chunkIdx].Subsystem);
+            Committed->Chunks[chunkIdx] = TChunkRecord{
+                .ChunkIdx = chunkIdx,
+                .Subsystem = subsystem,
+                .ShreddingRequested = false,
+            };
 
             CurEntryPointLsn = ev->Get()->Results[0].Lsn;
             SendCutLog();
@@ -309,7 +308,7 @@ private:
                 (Subsystem, request.Subsystem),
                 (ChunkIdx, request.ChunkIdx));
         auto it = Committed->Chunks.find(request.ChunkIdx);
-        if (it == Committed->Chunks.end() || it->second != request.Subsystem) {
+        if (it == Committed->Chunks.end() || it->second.Subsystem != request.Subsystem) {
             TString errorReason = TStringBuilder() << "Chunk doesn't belong to this subsystem, possible double-free, "
                     "ChunkIdx# " << request.ChunkIdx;
             STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK12, VDISKP(LogCtx->VCtx, "Race occurred"),
@@ -318,7 +317,7 @@ private:
             ActiveRequest.reset();
             ProcessRequestQueue();
         } else {
-            Become(&TThis::StateProcessingFree);
+            Become(&TThis::StateProcessing);
             NPDisk::TCommitRecord commitRecord;
             commitRecord.DeleteChunks.push_back(request.ChunkIdx);
             Y_VERIFY_S(DeletionsInFlight.count(request.ChunkIdx) == 0, LogCtx->VCtx->VDiskLogPrefix <<
@@ -332,24 +331,12 @@ private:
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK14, VDISKP(LogCtx->VCtx, "Handle TEvLogResult while processing"
                 " deallocation request"), (Event, ev->Get()->ToString()));
         CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
-        ui32 chunkIdx;
-        ui32 subsystem;
-        TActorId sender;
 
         Y_VERIFY_S(ActiveRequest, VDISKP(LogCtx->VCtx, "No ActiveRequest while processing deallocation request"));
-        std::visit(TOverloaded{
-            [&](const TRequestAllocate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Unexpected ActiveRequest while processing deallocation request")); },
-            [&](const TRequestFree& request) -> void {
-                chunkIdx = request.ChunkIdx;
-                subsystem = request.Subsystem;
-                sender = request.Sender;
-            },
-            [&](const TRequestCutLog&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Unexpected ActiveRequest while processing deallocation request")); },
-            [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Empty ActiveRequest while processing deallocation request")); },
-        }, *std::exchange(ActiveRequest, std::nullopt));
+        const TRequestFree request = std::get<TRequestFree>(*std::exchange(ActiveRequest, std::nullopt));
+        const ui32 chunkIdx = request.ChunkIdx;
+        const ui32 subsystem = request.Subsystem;
+        const TActorId sender = request.Sender;
 
         {
             bool erased = DeletionsInFlight.erase(chunkIdx);
@@ -392,7 +379,7 @@ private:
 
     void ProcessRequestCutLog(TRequestCutLog) {
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK20, VDISKP(LogCtx->VCtx, "Processing cut log request"));
-        Become(&TThis::StateProcessingCutLog);
+        Become(&TThis::StateProcessing);
         IssueCommit(NPDisk::TCommitRecord{});
     }
 
@@ -438,24 +425,27 @@ private:
 
     TRcBuf SerializeEntryPoint() {
         NKikimrVDiskData::TChunkKeeperEntryPoint proto;
-        auto serializeChunks = [&](const auto& chunks, bool committed) -> void {
-            for (const auto& [chunkIdx, subsystem] : chunks) {
-                if (committed) {
-                    if (DeletionsInFlight.contains(chunkIdx)) {
-                        // chunk is being deleted, generate commit without this chunk
-                        continue;
-                    }
-                } else {
-                    Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), LogCtx->VCtx->VDiskLogPrefix << 
-                            "Chunk is being allocated and deleted simultaneously, ChunkIdx# " << chunkIdx);
+        auto serializeChunk = [&](ui32 chunkIdx, ui32 subsystem, bool committed) {
+            if (committed) {
+                if (DeletionsInFlight.contains(chunkIdx)) {
+                    // chunk is being deleted, generate commit without this chunk
+                    return;
                 }
-                auto* chunk = proto.AddChunks();
-                chunk->SetChunkIdx(chunkIdx);
-                chunk->SetSubsystem(subsystem);
+            } else {
+                Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), LogCtx->VCtx->VDiskLogPrefix << 
+                        "Chunk is being allocated and deleted simultaneously, ChunkIdx# " << chunkIdx);
             }
+            auto* chunk = proto.AddChunks();
+            chunk->SetChunkIdx(chunkIdx);
+            chunk->SetSubsystem(subsystem);
         };
-        serializeChunks(Committed->Chunks, true);
-        serializeChunks(AllocationsInFlight, false);
+
+        for (const auto& [chunkIdx, chunkRecord] : Committed->Chunks) {
+            serializeChunk(chunkIdx, chunkRecord.Subsystem, true);
+        }
+        for (const auto& [chunkIdx, subsystem] : AllocationsInFlight) {
+            serializeChunk(chunkIdx, subsystem, false);
+        }
 
         TRcBuf data(TRcBuf::Uninitialized(proto.ByteSizeLong()));
         const bool success = proto.SerializeToArray(reinterpret_cast<uint8_t*>(

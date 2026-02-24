@@ -36,7 +36,7 @@ struct TTestCtx : public TTestCtxBase {
     Ctest << " --- " << cmd << Endl;        \
     History << cmd << ", "; }
 
-    void Run() {
+    void RunRandom() {
         UpdateChunkKeeperId();
 
         constexpr ui32 steps = 1000;
@@ -138,9 +138,10 @@ struct TTestCtx : public TTestCtxBase {
         auto resHandle = Env->WaitForEdgeActorEvent<TEvChunkKeeperDiscoverResult>(Edge, false);
         UNIT_ASSERT_C(resHandle, History.Str());
         auto* res = resHandle->Get();
-        
-        ADD_TO_HISTORY("TEvChunkKeeperDiscoverResult(" << PrintSorted(res->Chunks) << ") Actual# " << PrintSorted(Chunks[subsystem]));
-        UNIT_ASSERT_C(Compare(res->Chunks, Chunks[subsystem]), History.Str());
+        std::vector<ui32> chunks = GetChunkIdxs(res->Chunks);
+
+        ADD_TO_HISTORY("TEvChunkKeeperDiscoverResult(" << PrintSorted(chunks) << ") Actual# " << PrintSorted(Chunks[subsystem]));
+        UNIT_ASSERT_C(Compare(chunks, Chunks[subsystem]), History.Str());
     }
 
     void UpdateChunkKeeperId() {
@@ -179,6 +180,14 @@ struct TTestCtx : public TTestCtxBase {
         return str.Str();
     }
 
+    std::vector<ui32> GetChunkIdxs(const std::vector<TEvChunkKeeperDiscoverResult::TChunkInfo>& chunks) {
+        std::vector<ui32> res;
+        std::transform(chunks.cbegin(), chunks.cend(), std::back_inserter(res), [&](const auto& chunkInfo) {
+            return chunkInfo.ChunkIdx;
+        });
+        return res;
+    }
+
     template<class T1, class T2>
     bool Compare(const T1& set1, const T2& set2) {
         return PrintSorted(set1) == PrintSorted(set2);
@@ -204,9 +213,16 @@ struct TTestCtx : public TTestCtxBase {
 Y_UNIT_TEST(Random) {
     TTestCtx ctx;
     ctx.Initialize();
-    ctx.Run();
+    ctx.RunRandom();
 }
+
+class TTestSubsystem : public TActorBootstrapped<TTestSubsystem> {
+public:
+
+private:
+
+};
 
 }
 
-}
+} // namespace NKikimr

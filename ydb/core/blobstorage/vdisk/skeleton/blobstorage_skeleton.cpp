@@ -2808,6 +2808,7 @@ namespace NKikimr {
                 .HugeKeeperId = Db->HugeKeeperID,
                 .DefragId = DefragId,
                 .SyncLogId = Db->SyncLogID,
+                .ChunkKeeperId = Db->ChunkKeeperActorID,
             });
 
             const TActorContext& ctx = TActivationContext::AsActorContext();

@@ -150,7 +150,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
         self.logger.info("OPERATION: failover (pile_id=%d)", self._current_pile_id)
-        result = self._bridge_clients[another_pile_id].failover(self._current_pile_id)
+        result = self._bridge_clients[another_pile_id].failover(str(self._current_pile_id))
 
         if not result:
             self.logger.error("Failed to failover pile %d", self._current_pile_id)
@@ -199,7 +199,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
         self.logger.info("OPERATION: rejoin for pile %d", self._current_pile_id)
-        result = self._bridge_clients[another_pile_id].rejoin(self._current_pile_id)
+        result = self._bridge_clients[another_pile_id].rejoin(str(self._current_pile_id))
         if not result:
             self.logger.error("Failed to rejoin pile %d", self._current_pile_id)
             raise Exception("Failed to rejoin pile")

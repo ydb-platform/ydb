@@ -61,8 +61,8 @@ private:
         TUnboxedValue state = TUnboxedValuePod(args[1]);
         auto func = args[2];
         for (TUnboxedValue item; it.Next(item);) {
-            const TUnboxedValue args[2] = {std::move(item), std::move(state)};
-            state = func.Run(valueBuilder, args);
+            const std::array<TUnboxedValue, 2> args = {std::move(item), std::move(state)};
+            state = func.Run(valueBuilder, args.data());
         }
 
         return state;
@@ -104,7 +104,7 @@ public:
         }
 
         const IValueBuilder* ValueBuilder_;
-        TUnboxedValue Streams_[2];
+        std::array<TUnboxedValue, 2> Streams_;
         ui32 LastFetchIndex_ = 0;
     };
 

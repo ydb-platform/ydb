@@ -87,6 +87,7 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TSendMessageActorBase() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
+            TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             if (this->Request().queue_url().empty()) {

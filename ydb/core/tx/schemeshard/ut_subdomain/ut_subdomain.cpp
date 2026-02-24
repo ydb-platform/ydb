@@ -1119,9 +1119,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, 100);
         expectedDomainPaths += 1;
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {NLs::PathExist,
-                            NLs::PathVersionEqual(3)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathExist});
 
         TestCreateTable(runtime, txId++, "/MyRoot/USER_0",
                         "Name: \"table_0\""
@@ -2224,6 +2222,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxShards = 3;
         lowLimits.MaxPQPartitions = 300;
 
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist
+                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)});
+
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
                             "Coordinators: 1 "
@@ -2235,8 +2239,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "}");
         env.TestWaitNotification(runtime, 100);
         expectedDomainPaths += 1;
-
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist
@@ -2274,6 +2276,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxShardsInPath = 4;
         lowLimits.MaxPQPartitions = 20;
 
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist,
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)});
 
         //create subdomain
         {
@@ -2289,8 +2295,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "}");
             env.TestWaitNotification(runtime, txId - 1);
             expectedDomainPaths += 1;
-
-            SetSchemeshardSchemaLimits(runtime, lowLimits);
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
@@ -2731,12 +2735,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
-        ui64 currentDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
-        lowLimits.MaxPaths = currentDomainPaths + 3; // current paths + original limit
+        lowLimits.MaxPaths = 3;
         lowLimits.MaxChildrenInDir = 4;
         lowLimits.MaxAclBytesSize = 25;
         lowLimits.MaxTableColumns = 3;
@@ -2765,7 +2766,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "    data_stream_reserved_storage_quota: 200000"
                                 "}");
 
-            SetSchemeshardSchemaLimits(runtime, lowLimits);
         }
 
         //create column tables, column limits
@@ -2892,6 +2892,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxShardsInPath = 4;
         lowLimits.ExtraPathSymbolsAllowed = "_.-";
 
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist,
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)});
+
         //create subdomain
         {
             TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -2902,8 +2908,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "Name: \"USER_0\"");
             env.TestWaitNotification(runtime, txId - 1);
             expectedDomainPaths += 1;
-
-            SetSchemeshardSchemaLimits(runtime, lowLimits);
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
@@ -3079,12 +3083,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
-        ui64 currentPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
-        lowLimits.MaxPaths = currentPaths + 5; // current paths + original limit
+        lowLimits.MaxPaths = 5;
         lowLimits.MaxChildrenInDir = 3;
         lowLimits.MaxTableIndices = 4;
         lowLimits.MaxShards = 7;

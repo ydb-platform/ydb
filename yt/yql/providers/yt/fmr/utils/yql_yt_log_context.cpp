@@ -28,3 +28,24 @@ TKeepAliveHttpClient::THeaders GetHeadersWithLogContext(const TKeepAliveHttpClie
     }
     return curHeaders;
 }
+
+TKeepAliveHttpClient::THeaders GetFullHttpHeaders(
+    const TKeepAliveHttpClient::THeaders& headers,
+    IFmrTvmClient::TPtr tvmClient,
+    TTvmId tvmId,
+    bool addLogContext
+) {
+    auto curHeaders = GetHeadersWithLogContext(headers, addLogContext);
+    if (tvmClient) {
+        TString serviceTicket = tvmClient->MakeTvmServiceTicket(tvmId);
+        curHeaders["X-Ya-Service-Ticket"] = serviceTicket;
+    }
+    return curHeaders;
+}
+
+void HandleHttpError(TKeepAliveHttpClient::THttpCode statusCode, TString httpResponse) {
+    if (statusCode == HTTP_OK) {
+        return;
+    }
+    ythrow yexception() << httpResponse;
+}

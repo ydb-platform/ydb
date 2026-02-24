@@ -2,6 +2,8 @@
 
 Create a distribution's .egg-info directory and contents"""
 
+from __future__ import annotations
+
 import functools
 import os
 import re
@@ -144,7 +146,7 @@ class InfoCommon:
     def _already_tagged(self, version: str) -> bool:
         # Depending on their format, tags may change with version normalization.
         # So in addition the regular tags, we have to search for the normalized ones.
-        return version.endswith(self.vtags) or version.endswith(self._safe_tags())
+        return version.endswith((self.vtags, self._safe_tags()))
 
     def _safe_tags(self) -> str:
         # To implement this we can rely on `safe_version` pretending to be version 0
@@ -196,11 +198,11 @@ class egg_info(InfoCommon, Command):
     # allow the 'tag_svn_revision' to be detected and
     # set, supporting sdists built on older Setuptools.
     @property
-    def tag_svn_revision(self) -> None:
+    def tag_svn_revision(self) -> int | None:
         pass
 
     @tag_svn_revision.setter
-    def tag_svn_revision(self, value):
+    def tag_svn_revision(self, value) -> None:
         pass
 
     ####################################
@@ -278,16 +280,14 @@ class egg_info(InfoCommon, Command):
         """
         log.info("writing %s to %s", what, filename)
         data = data.encode("utf-8")
-        if not self.dry_run:
-            f = open(filename, 'wb')
-            f.write(data)
-            f.close()
+        f = open(filename, 'wb')
+        f.write(data)
+        f.close()
 
     def delete_file(self, filename) -> None:
         """Delete `filename` (if not a dry run) after announcing it"""
         log.info("deleting %s", filename)
-        if not self.dry_run:
-            os.unlink(filename)
+        os.unlink(filename)
 
     def run(self) -> None:
         # Pre-load to avoid iterating over entry-points while an empty .egg-info
@@ -475,8 +475,7 @@ class FileList(_FileList):
         return self._remove_files(match.match)
 
     def append(self, item) -> None:
-        if item.endswith('\r'):  # Fix older sdists built on Windows
-            item = item[:-1]
+        item = item.removesuffix('\r')  # Fix older sdists built on Windows
         path = convert_path(item)
 
         if self._safe_path(path):
@@ -649,19 +648,18 @@ def write_file(filename, contents) -> None:
 
 def write_pkg_info(cmd, basename, filename) -> None:
     log.info("writing %s", filename)
-    if not cmd.dry_run:
-        metadata = cmd.distribution.metadata
-        metadata.version, oldver = cmd.egg_version, metadata.version
-        metadata.name, oldname = cmd.egg_name, metadata.name
+    metadata = cmd.distribution.metadata
+    metadata.version, oldver = cmd.egg_version, metadata.version
+    metadata.name, oldname = cmd.egg_name, metadata.name
 
-        try:
-            metadata.write_pkg_info(cmd.egg_info)
-        finally:
-            metadata.name, metadata.version = oldname, oldver
+    try:
+        metadata.write_pkg_info(cmd.egg_info)
+    finally:
+        metadata.name, metadata.version = oldname, oldver
 
-        safe = getattr(cmd.distribution, 'zip_safe', None)
+    safe = getattr(cmd.distribution, 'zip_safe', None)
 
-        bdist_egg.write_safety_flag(cmd.egg_info, safe)
+    bdist_egg.write_safety_flag(cmd.egg_info, safe)
 
 
 def warn_depends_obsolete(cmd, basename, filename) -> None:

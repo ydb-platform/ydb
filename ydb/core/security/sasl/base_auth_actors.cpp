@@ -179,8 +179,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
 
     if (!AuthzId.empty()) {
         std::string prepAuthzId;
-        auto saslPrepRC = NLogin::NSasl::SaslPrep(AuthzId, prepAuthzId);
-        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+        auto saslPrepRC = SaslPrep(AuthzId, prepAuthzId);
+        if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authorization identity";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 DerivedActorName << "# " << ctx.SelfID.ToString() <<
@@ -203,8 +203,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
         return CleanupAndDie(ctx);
     } else {
         std::string prepAuthcId;
-        auto saslPrepRC = NLogin::NSasl::SaslPrep(AuthcId, prepAuthcId);
-        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+        auto saslPrepRC = SaslPrep(AuthcId, prepAuthcId);
+        if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authentication identity";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 DerivedActorName << "# " << ctx.SelfID.ToString() <<

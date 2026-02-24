@@ -84,6 +84,7 @@ namespace NKikimrConfig {
     class TSystemTabletBackupConfig;
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
+    class TTliConfig;
 }
 
 namespace NKikimrReplication {
@@ -276,6 +277,7 @@ struct TAppData {
     NKikimrConfig::TSystemTabletBackupConfig& SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
+    NKikimrConfig::TTliConfig& TliConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

@@ -187,7 +187,7 @@ THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
 
 } // namespace
 
-int BuildAST(int argc, char* argv[]) {
+int BuildAST(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString outFileName;
@@ -443,7 +443,7 @@ int BuildAST(int argc, char* argv[]) {
                 hasError = !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
-            if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {
+            if (res.Has("test-lexers") && syntaxVersion == 1 && !res.Has("pg") && !hasError && parseRes.Root) {
                 hasError = !TestLexers(query);
             }
 
@@ -460,7 +460,7 @@ int BuildAST(int argc, char* argv[]) {
     return errors;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return BuildAST(argc, argv);
     } catch (...) {

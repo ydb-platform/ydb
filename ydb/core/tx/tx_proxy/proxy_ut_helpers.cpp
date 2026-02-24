@@ -481,6 +481,13 @@ void SetRowInSimpletable(TBaseTestEnv &env, ui64 key, ui64 value, const TString 
     env.GetClient().FlatQuery(&env.GetRuntime(), query, res);
 }
 
+TLocalPathId GetNextLocalPathId(TBaseTestEnv& env, const TString& root) {
+    env.GetClient().TestMkDir(root, "test42");
+    auto ls = env.GetClient().Ls(root + "/test42");
+    TLocalPathId res = ls->Record.GetPathDescription().GetSelf().GetPathId() + 1;
+    env.GetClient().TestRmDir(root, "test42");
+    return res;
+}
 
 } //NTestLs
 

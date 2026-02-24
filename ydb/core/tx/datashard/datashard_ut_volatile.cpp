@@ -1738,7 +1738,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         WaitForContent(server, sender, "/Root/table-1/Stream", {
             R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
-            R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
+            R"({"user":"<anonymous>","update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
             R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
         });
 

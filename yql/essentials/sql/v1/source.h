@@ -260,7 +260,8 @@ TNodePtr BuildSourceNode(
     TSourcePtr source,
     bool checkExist = false,
     bool withTables = false,
-    bool isInlineScalar = false);
+    bool isInlineScalar = false,
+    bool isPure = false);
 TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
 TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);

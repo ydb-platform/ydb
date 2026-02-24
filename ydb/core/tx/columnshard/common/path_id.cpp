@@ -228,12 +228,16 @@ TSchemeShardLocalPathId TUnifiedOptionalPathId::GetSchemeShardLocalPathIdVerifie
 
 namespace NKikimr::NOlap {
 
-NColumnShard::TUnifiedPathId IPathIdTranslator::GetUnifiedByInternalVerified(const TInternalPathId internalPathId) const {
-    return NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ResolveSchemeShardLocalPathIdVerified(internalPathId));
+std::set<NColumnShard::TUnifiedPathId> IPathIdTranslator::GetUnifiedPathIdsByInternalVerified(const TInternalPathId internalPathId) const {
+    std::set<NColumnShard::TUnifiedPathId> paths;
+    for (const auto& schemeShardLocalPathId: ResolveSchemeShardLocalPathIdsVerified(internalPathId)) {
+        paths.insert(NColumnShard::TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
+    }
+    return paths;
 }
 
-NColumnShard::TSchemeShardLocalPathId IPathIdTranslator::ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const {
-    auto result = ResolveSchemeShardLocalPathId(internalPathId);
+std::set<NColumnShard::TSchemeShardLocalPathId> IPathIdTranslator::ResolveSchemeShardLocalPathIdsVerified(const TInternalPathId internalPathId) const {
+    auto result = ResolveSchemeShardLocalPathIds(internalPathId);
     AFL_VERIFY(result)("path_id", internalPathId.DebugString());
     return *result;
 }

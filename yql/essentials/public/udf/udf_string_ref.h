@@ -8,8 +8,7 @@
 #include <string_view>
 #include <type_traits>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TStringRefBase
@@ -68,7 +67,7 @@ public:
 protected:
     TDataType Data_ = nullptr;
     ui32 Size_ = 0U;
-    ui8 Reserved_[4] = {};
+    ui8 Reserved_[4] = {}; // NOLINT(modernize-avoid-c-arrays)
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -101,7 +100,7 @@ public:
     }
 
     // Allow a string literal construction
-    template <size_t Size> // NOLINTNEXTLINE(google-explicit-constructor)
+    template <size_t Size> // NOLINTNEXTLINE(google-explicit-constructor, modernize-avoid-c-arrays)
     inline constexpr TStringRef(const char (&data)[Size]) noexcept
         : TBase(data, Size - 1)
     {
@@ -122,6 +121,7 @@ public:
     }
 
     template <size_t size>
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     inline static constexpr TStringRef Of(const char (&str)[size]) noexcept {
         return TStringRef(str);
     }
@@ -216,5 +216,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TStringRef, 16);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

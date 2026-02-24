@@ -9,19 +9,21 @@ import os
 import re
 import sys
 import textwrap
+from collections.abc import Iterator
 from sysconfig import get_path, get_platform, get_python_version
 from types import CodeType
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, AnyStr, Literal
 
 from setuptools import Command
 from setuptools.extension import Library
 
-from .._path import StrPathT, ensure_directory
+from .._path import StrPath, StrPathT, ensure_directory
 
 from distutils import log
 from distutils.dir_util import mkpath, remove_tree
 
 if TYPE_CHECKING:
+    from _typeshed import GenericPath
     from typing_extensions import TypeAlias
 
 # Same as zipfile._ZipFileMode from typeshed
@@ -35,12 +37,13 @@ def _get_purelib():
 def strip_module(filename):
     if '.' in filename:
         filename = os.path.splitext(filename)[0]
-    if filename.endswith('module'):
-        filename = filename[:-6]
+    filename = filename.removesuffix('module')
     return filename
 
 
-def sorted_walk(dir):
+def sorted_walk(
+    dir: GenericPath[AnyStr],
+) -> Iterator[tuple[AnyStr, list[AnyStr], list[AnyStr]]]:
     """Do os.walk in a reproducible way,
     independent of indeterministic filesystem readdir order
     """
@@ -156,12 +159,11 @@ class bdist_egg(Command):
         for dirname in INSTALL_DIRECTORY_ATTRS:
             kw.setdefault(dirname, self.bdist_dir)
         kw.setdefault('skip_build', self.skip_build)
-        kw.setdefault('dry_run', self.dry_run)
         cmd = self.reinitialize_command(cmdname, **kw)
         self.run_command(cmdname)
         return cmd
 
-    def run(self):  # noqa: C901  # is too complex (14)  # FIXME
+    def run(self) -> None:  # noqa: C901  # is too complex (14)  # FIXME
         # Generate metadata first
         self.run_command("egg_info")
         # We run install_lib before install_data, because some data hacks
@@ -183,8 +185,7 @@ class bdist_egg(Command):
             pyfile = os.path.join(self.bdist_dir, strip_module(filename) + '.py')
             self.stubs.append(pyfile)
             log.info("creating stub loader for %s", ext_name)
-            if not self.dry_run:
-                write_stub(os.path.basename(ext_name), pyfile)
+            write_stub(os.path.basename(ext_name), pyfile)
             to_compile.append(pyfile)
             ext_outputs[p] = ext_name.replace(os.sep, '/')
 
@@ -206,15 +207,13 @@ class bdist_egg(Command):
         native_libs = os.path.join(egg_info, "native_libs.txt")
         if all_outputs:
             log.info("writing %s", native_libs)
-            if not self.dry_run:
-                ensure_directory(native_libs)
-                with open(native_libs, 'wt', encoding="utf-8") as libs_file:
-                    libs_file.write('\n'.join(all_outputs))
-                    libs_file.write('\n')
+            ensure_directory(native_libs)
+            with open(native_libs, 'wt', encoding="utf-8") as libs_file:
+                libs_file.write('\n'.join(all_outputs))
+                libs_file.write('\n')
         elif os.path.isfile(native_libs):
             log.info("removing %s", native_libs)
-            if not self.dry_run:
-                os.unlink(native_libs)
+            os.unlink(native_libs)
 
         write_safety_flag(os.path.join(archive_root, 'EGG-INFO'), self.zip_safe())
 
@@ -232,11 +231,10 @@ class bdist_egg(Command):
             self.egg_output,
             archive_root,
             verbose=self.verbose,
-            dry_run=self.dry_run,
             mode=self.gen_header(),
         )
         if not self.keep_temp:
-            remove_tree(self.bdist_dir, dry_run=self.dry_run)
+            remove_tree(self.bdist_dir)
 
         # Add to 'Distribution.dist_files' so that the "upload" command works
         getattr(self.distribution, 'dist_files', []).append((
@@ -245,7 +243,7 @@ class bdist_egg(Command):
             self.egg_output,
         ))
 
-    def zap_pyfiles(self):
+    def zap_pyfiles(self) -> None:
         log.info("Removing .py files from temporary directory")
         for base, dirs, files in walk_egg(self.bdist_dir):
             for name in files:
@@ -260,6 +258,8 @@ class bdist_egg(Command):
 
                     pattern = r'(?P<name>.+)\.(?P<magic>[^.]+)\.pyc'
                     m = re.match(pattern, name)
+                    # We shouldn't find any non-pyc files in __pycache__
+                    assert m is not None
                     path_new = os.path.join(base, os.pardir, m.group('name') + '.pyc')
                     log.info(f"Renaming file from [{path_old}] to [{path_new}]")
                     try:
@@ -323,7 +323,7 @@ class bdist_egg(Command):
 NATIVE_EXTENSIONS: dict[str, None] = dict.fromkeys('.dll .so .dylib .pyd'.split())
 
 
-def walk_egg(egg_dir):
+def walk_egg(egg_dir: StrPath) -> Iterator[tuple[str, list[str], list[str]]]:
     """Walk an unpacked egg's contents, skipping the metadata directory"""
     walker = sorted_walk(egg_dir)
     base, dirs, files = next(walker)
@@ -343,9 +343,9 @@ def analyze_egg(egg_dir, stubs):
     safe = True
     for base, dirs, files in walk_egg(egg_dir):
         for name in files:
-            if name.endswith('.py') or name.endswith('.pyw'):
+            if name.endswith(('.py', '.pyw')):
                 continue
-            elif name.endswith('.pyc') or name.endswith('.pyo'):
+            elif name.endswith(('.pyc', '.pyo')):
                 # always scan, even if we already know we're not safe
                 safe = scan_module(egg_dir, base, name, stubs) and safe
     return safe
@@ -409,7 +409,7 @@ def scan_module(egg_dir, base, name, stubs):
     return safe
 
 
-def iter_symbols(code):
+def iter_symbols(code: CodeType) -> Iterator[str]:
     """Yield names and strings used by `code` and its nested code objects"""
     yield from code.co_names
     for const in code.co_consts:
@@ -441,7 +441,6 @@ def make_zipfile(
     zip_filename: StrPathT,
     base_dir,
     verbose: bool = False,
-    dry_run: bool = False,
     compress=True,
     mode: _ZipFileMode = 'w',
 ) -> StrPathT:
@@ -453,7 +452,7 @@ def make_zipfile(
     """
     import zipfile
 
-    mkpath(os.path.dirname(zip_filename), dry_run=dry_run)  # type: ignore[arg-type] # python/mypy#18075
+    mkpath(os.path.dirname(zip_filename))  # type: ignore[arg-type] # python/mypy#18075
     log.info("creating '%s' and adding '%s' to it", zip_filename, base_dir)
 
     def visit(z, dirname, names):
@@ -461,17 +460,12 @@ def make_zipfile(
             path = os.path.normpath(os.path.join(dirname, name))
             if os.path.isfile(path):
                 p = path[len(base_dir) + 1 :]
-                if not dry_run:
-                    z.write(path, p)
+                z.write(path, p)
                 log.debug("adding '%s'", p)
 
     compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
-    if not dry_run:
-        z = zipfile.ZipFile(zip_filename, mode, compression=compression)
-        for dirname, dirs, files in sorted_walk(base_dir):
-            visit(z, dirname, files)
-        z.close()
-    else:
-        for dirname, dirs, files in sorted_walk(base_dir):
-            visit(None, dirname, files)
+    z = zipfile.ZipFile(zip_filename, mode, compression=compression)
+    for dirname, dirs, files in sorted_walk(base_dir):
+        visit(z, dirname, files)
+    z.close()
     return zip_filename

@@ -12,8 +12,8 @@ namespace NYql::NFmr {
 class TSortedMergeReader final: public NYT::TRawTableReader {
 public:
     TSortedMergeReader(
-        TVector<IBlockIterator::TPtr> inputs,
-        TVector<ESortOrder> sortOrders
+        std::vector<IBlockIterator::TPtr> inputs,
+        std::vector<ESortOrder> sortOrders
     );
 
     bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override;
@@ -26,7 +26,7 @@ private:
 private:
     struct TSourceState {
         ui32 SourceId = 0;
-        std::reference_wrapper<const TVector<ESortOrder>> SortOrders;
+        std::reference_wrapper<const std::vector<ESortOrder>> SortOrders;
         IBlockIterator::TPtr It;
         TIndexedBlock Block;
         ui32 RowIndex = 0;
@@ -45,10 +45,10 @@ private:
     int CompareSources(ui32 lhsSourceId, ui32 rhsSourceId) const;
 
 private:
-    const TVector<ESortOrder> SortOrders_;
+    const std::vector<ESortOrder> SortOrders_;
 
-    TVector<TSourceState> Sources_;
-    TVector<ui32> Heap_;
+    std::vector<TSourceState> Sources_;
+    std::vector<ui32> Heap_;
 
     bool HasActive_ = false;
     ui32 ActiveSource_ = 0;

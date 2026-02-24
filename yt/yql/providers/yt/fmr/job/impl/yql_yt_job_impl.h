@@ -7,6 +7,8 @@
 #include <yt/yql/providers/yt/fmr/job_launcher/yql_yt_job_launcher.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_sorted_merge_reader.h>
 
 namespace NYql::NFmr {
 
@@ -35,14 +37,17 @@ IFmrJob::TPtr MakeFmrJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    const TFmrJobSettings& settings = {});
+    const TFmrJobSettings& settings = {},
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
+);
 
 TJobResult RunJob(
     TTask::TPtr task,
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
 );
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task);

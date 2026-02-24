@@ -17,6 +17,7 @@ namespace NKikimr {
 
 static std::atomic<ui64> sId = 1;
 
+using Ydb::Table::VectorIndexSettings;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
@@ -64,7 +65,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvSampleKResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
-    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender, const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k, bool skipForeign = false) {
+    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender, const TString& tableFrom, const TRowVersion& snapshot,
+        ui64 seed, ui64 k, std::function<void(NKikimrTxDataShard::TEvSampleKRequest&)> setupRequest = nullptr) {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
@@ -88,9 +90,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
                 rec.AddColumns("value");
                 rec.AddColumns("key");
-                if (skipForeign) {
-                    rec.AddColumns(NTableIndex::NKMeans::IsForeignColumn);
-                }
 
                 if (snapshot.TxId) {
                     rec.SetSnapshotTxId(snapshot.TxId);
@@ -100,6 +99,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
                 rec.SetK(k);
+
+                if (setupRequest) {
+                    setupRequest(rec);
+                }
             };
             fill(ev1);
             fill(ev2);
@@ -118,9 +121,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 UNIT_ASSERT(TSerializedCellVec::TryParse(row, vec));
                 const auto& cells = vec.GetCells();
                 UNIT_ASSERT_EQUAL(cells.size(), 2);
-                data.Out << "value = ";
-                UNIT_ASSERT(cells[0].ToStream<i32>(data.Out, err));
-                data.Out << ", key = ";
+                data.Out << "value = " << cells[0].AsBuf() << ", key = ";
                 UNIT_ASSERT(cells[1].ToStream<i32>(data.Out, err));
                 data.Out << "\n";
             }
@@ -176,11 +177,19 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             request.AddColumns("some");
         }, "{ <main>: Error: Unknown column: some }");
 
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvSampleKRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
+        }, "{ <main>: Error: either distance or similarity should be set }");
+
         // test multiple issues:
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvSampleKRequest& request) {
             request.SetK(0);
             request.AddColumns("some");
         }, "[ { <main>: Error: Should be requested on at least one row } { <main>: Error: Unknown column: some } ]");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvSampleKRequest& request) {
+            request.AddColumns("some");
+        }, "{ <main>: Error: Unknown column: some }");
     }
 
     Y_UNIT_TEST(RunScan) {
@@ -197,10 +206,18 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "String", false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
 
         // Upsert some initial values
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value)"
+            " VALUES (1, \"a\"), (2, \"b\"), (3, \"c\"), (4, \"d\"), (5, \"e\");");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
 
@@ -212,23 +229,23 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             k = 1;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n");
+                                     "value = c, key = 3\n");
 
             k = 3;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 50, key = 5\n");
+                                     "value = c, key = 3\n"
+                                     "value = b, key = 2\n"
+                                     "value = e, key = 5\n");
 
             k = 9;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 50, key = 5\n"
-                                     "value = 40, key = 4\n"
-                                     "value = 10, key = 1\n");
+                                     "value = c, key = 3\n"
+                                     "value = b, key = 2\n"
+                                     "value = e, key = 5\n"
+                                     "value = d, key = 4\n"
+                                     "value = a, key = 1\n");
         }
         snapshot = {};
         seed = 111;
@@ -236,23 +253,23 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             k = 1;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n");
+                                     "value = a, key = 1\n");
 
             k = 3;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 30, key = 3\n");
+                                     "value = a, key = 1\n"
+                                     "value = b, key = 2\n"
+                                     "value = c, key = 3\n");
 
             k = 9;
             data = DoSampleK(server, sender, kTable, snapshot, seed, k);
             UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 30, key = 3\n"
-                                     "value = 50, key = 5\n"
-                                     "value = 40, key = 4\n");
+                                     "value = a, key = 1\n"
+                                     "value = b, key = 2\n"
+                                     "value = c, key = 3\n"
+                                     "value = e, key = 5\n"
+                                     "value = d, key = 4\n");
         }
     }
 
@@ -275,20 +292,64 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         options.AllowSystemColumnNames(true);
         options.Columns({
             {"key", "Uint32", true, true},
-            {"value", "Uint32", false, false},
+            {"value", "String", false, false},
             {NTableIndex::NKMeans::IsForeignColumn, "Bool", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-1", options);
 
         // Upsert some initial values
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, __ydb_foreign) VALUES "
-            "(1, 10, true), (2, 20, true), (3, 30, true), (4, 40, true), (5, 50, false);");
+            "(1, \"a\", true), (2, \"b\", true), (3, \"c\", true), (4, \"d\", true), (5, \"e\", false);");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
 
         ui64 seed = 0, k = 2;
-        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, true);
-        UNIT_ASSERT_VALUES_EQUAL(data, "value = 50, key = 5\n");
+        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, [&](NKikimrTxDataShard::TEvSampleKRequest& rec) {
+            rec.AddColumns(NTableIndex::NKMeans::IsForeignColumn);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(data, "value = e, key = 5\n");
+    }
+
+    Y_UNIT_TEST(ValidateVectors) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "String", false, false},
+            {NTableIndex::NKMeans::IsForeignColumn, "Bool", false, true},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, __ydb_foreign) VALUES "
+            "(1, \"ab\", false), (2, \"ab\x02\", false), (3, \"\", false), (4, \"cdef\", false), (5, \"de\x02\", false);");
+
+        auto snapshot = CreateVolatileSnapshot(server, {kTable});
+
+        ui64 seed = 0, k = 2;
+        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, [&](NKikimrTxDataShard::TEvSampleKRequest& rec) {
+            rec.AddColumns(NTableIndex::NKMeans::IsForeignColumn);
+            VectorIndexSettings settings;
+            settings.set_vector_dimension(2);
+            settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+            settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+            *rec.MutableSettings() = settings;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(data, "value = de\x02, key = 5\nvalue = ab\x02, key = 2\n");
     }
 }
 

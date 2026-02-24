@@ -164,7 +164,9 @@ void CreateTopicWithAutoPartitioning(TTopicClient& client) {
     client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 }
 
-void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor) {
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
+    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+{
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
@@ -179,9 +181,10 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     TTopicClient topicClient = setup.MakeClient();
 
-
-    auto WaitTasks = [&](auto f, size_t c) {
+    auto WaitTasks = [&, timeout = TInstant::Now() + TDuration::Seconds(60)](auto f, size_t c) {
         while (f() < c) {
+            UNIT_ASSERT(timeout > TInstant::Now());
+            ReadSession->WaitEvent();
             std::this_thread::sleep_for(100ms);
         };
     };
@@ -206,7 +209,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitPlannedTasks(e, n);
         size_t completed = e->GetExecutedCount();
 
-        setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
+        setup.GetServer().KillTopicPqrbTablet(JoinPath({TString(setup.MakeDriverConfig().GetDatabase()), TString(setup.GetTopicPath())}));
         std::this_thread::sleep_for(100ms);
 
         e->StartFuncs(tasks);
@@ -228,9 +231,17 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     ReadSession = topicClient.CreateReadSession(readSettings);
 
+    Cerr << ">>> TEST: start reading" << Endl;
+
     std::uint32_t i = 0;
+    ui32 restartCount = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
-        RunTasks(decompressor, {i++});
+        if (restartCount < maxRestartsCount && i % restartPeriod == 1) {
+            PlanTasksAndRestart(decompressor, {i++});
+            restartCount++;
+        } else {
+            RunTasks(decompressor, {i++});
+        }
     }
 
     ReadSession->Close(TDuration::MilliSeconds(10));
@@ -895,6 +906,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
     }
 
+    Y_UNIT_TEST(ReadWithRestartsAndLargeData) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = std::make_shared<TSyncExecutor>();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup.GetConsumerName())
+            .MaxMemoryUsageBytes(1_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+        std::uint32_t count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
+    }
+
     Y_UNIT_TEST(ConflictingWrites) {
 
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
@@ -1004,7 +1041,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messages; ++i) {
             auto token = getReadyToken();
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            TWriteMessage msg("payload");
+            std::string payload = "payload";
+            TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
             session->Write(std::move(*token), "key-" + ToString(i), std::move(msg));
         }
@@ -1048,7 +1086,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionEventLoop eventLoop(session);
         auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
 
-        TWriteMessage msg("msg0");
+        std::string payload = "msg0";
+        TWriteMessage msg(payload);
         msg.SeqNo(0);
         session->Write(std::move(*token), "key", std::move(msg));
 
@@ -1102,14 +1141,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
 
-            TWriteMessage msg("msg0");
+            std::string payload = "msg0";
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             session->Write(std::move(*token), key0, std::move(msg));
         }
         for (ui64 i = 0; i < count1; ++i) {
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            TWriteMessage msg("msg1");
+            std::string payload = "msg1";
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             session->Write(std::move(*token), key1, std::move(msg));
         }
@@ -1192,7 +1233,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            TWriteMessage msg("msg");
+            std::string payload = "msg";
+            TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
             session->Write(std::move(*token), key, std::move(msg));
         }
@@ -1238,7 +1280,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto key = CreateGuidAsString();
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            auto msg = TWriteMessage("data");
+            std::string payload = "data";
+            TWriteMessage msg(payload);
             msg.SeqNo(i);
             session->Write(std::move(*token), key, std::move(msg));
         }
@@ -1282,7 +1325,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
                     UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
                     const ui64 seqNo = nextSeqNo.fetch_add(1);
-                    auto msg = TWriteMessage("data");
+                    std::string payload = "data";
+                    TWriteMessage msg(payload);
                     msg.SeqNo(seqNo);
                     session->Write(std::move(*token), key, std::move(msg));
                 }
@@ -1317,7 +1361,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto key = CreateGuidAsString();
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            auto msg = TWriteMessage("data");
+            std::string payload = "data";
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             session->Write(std::move(*token), key, std::move(msg));
         }
@@ -1331,7 +1376,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto key = CreateGuidAsString();
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            auto msg = TWriteMessage("data");
+            std::string payload = "data";
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             session->Write(std::move(*token), key, std::move(msg));
         }
@@ -1367,7 +1413,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
                 UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
                 auto key = CreateGuidAsString();
-                auto msg = TWriteMessage("data");
+                std::string payload = "data";   
+                TWriteMessage msg(payload);
                 msg.SeqNo(i);
                 session->Write(std::move(*token), key, std::move(msg));
             }
@@ -1378,6 +1425,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             ui64 txId = 1006;
             NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
         });
+
+        writer.join();
+        splitter.join();
 
         UNIT_ASSERT(eventLoop.WaitForAcks(messages, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
@@ -1406,14 +1456,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Write several messages with different keys
         size_t seqNo = 1;
         for (int i = 0; i < 5; ++i) {
-            TWriteMessage msg("message1-" + ToString(i));
+            std::string payload = "message1-" + ToString(i);
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             bool res = session->Write(key1, std::move(msg));
             UNIT_ASSERT(res);
         }
         
         for (int i = 0; i < 5; ++i) {
-            TWriteMessage msg("message2-" + ToString(i));
+            std::string payload = "message2-" + ToString(i);
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             bool res = session->Write(key2, std::move(msg));
             UNIT_ASSERT(res);
@@ -1440,7 +1492,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         const ui64 messages = 10;
         for (ui64 i = 0; i < messages; ++i) {
-            TWriteMessage msg("payload-" + ToString(i));
+            std::string payload = "payload-" + ToString(i);
+            TWriteMessage msg(payload);
             bool res = session->Write("key-" + ToString(i % 3), std::move(msg));
             UNIT_ASSERT(res);
         }
@@ -1469,7 +1522,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         for (ui64 i = 0; i < 1000; ++i) {
             auto key = CreateGuidAsString();
-            TWriteMessage msg("payload-" + ToString(seqNo));
+            std::string payload = "payload-" + ToString(seqNo);
+            TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
             bool res = session->Write(key, std::move(msg));
             UNIT_ASSERT(res);
@@ -1500,7 +1554,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (int i = 0; i < 1000; ++i) {
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(10));
             UNIT_ASSERT_C(token, "Timed out waiting for ReadyToAcceptEvent");
-            TWriteMessage msg("message-" + ToString(i));
+            std::string payload = "message-" + ToString(i);
+            TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
             session->Write(std::move(*token), "key1", std::move(msg));
         }
@@ -1697,6 +1752,33 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (ackedSeqNos.size() < 14) {
                 Sleep(TDuration::MilliSeconds(200));
             }
+        }
+
+        TKeyedWriteSessionSettings writeSettings3 = writeSettings1;
+        writeSettings3.ProducerIdPrefix("autopartitioning_keyed_3");
+        auto session3 = client.CreateKeyedWriteSession(writeSettings3);
+
+        auto partitionsMap1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsMap();
+        auto partitionsMap3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsMap();
+
+        for (const auto& [partitionId, partitionInfo] : partitionsMap1) {
+            auto partitionInfo3 = partitionsMap3.find(partitionId);
+            UNIT_ASSERT_C(partitionInfo3 != partitionsMap3.end(),
+                "Partition " << partitionId << " is not in session3");
+            UNIT_ASSERT_C(partitionInfo.FromBound_ == partitionInfo3->second.FromBound_,
+                "From bound is not equal for partition " << partitionId);
+            UNIT_ASSERT_C(partitionInfo.ToBound_ == partitionInfo3->second.ToBound_,
+                "To bound is not equal for partition " << partitionId);
+        }
+
+        auto partitionsIndex1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsIndex();
+        auto partitionsIndex3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsIndex();
+        for (const auto& [key, partitionId] : partitionsIndex1) {
+            auto partitionId3 = partitionsIndex3.find(key);
+            UNIT_ASSERT_C(partitionId3 != partitionsIndex3.end(),
+                "Key " << key << " is not in session3");
+            UNIT_ASSERT_EQUAL_C(partitionId, partitionId3->second,
+                "Partition id is not equal for key " << key);
         }
 
         UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), 14,

@@ -41,6 +41,7 @@ SRCS(
     multiget.cpp
     patch.cpp
     recovery.cpp
+    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     self_heal.cpp
@@ -49,6 +50,7 @@ SRCS(
     space_check.cpp
     sync.cpp
     validation.cpp
+    vdisk_internals.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
 )

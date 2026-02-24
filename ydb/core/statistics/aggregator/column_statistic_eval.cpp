@@ -1,6 +1,7 @@
 #include "column_statistic_eval.h"
 #include "select_builder.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
@@ -10,7 +11,49 @@
 
 namespace NKikimr::NStat {
 
-class TCMSEval : public IColumnStatisticEval {
+EStatType TSimpleColumnStatisticEval::GetType() const {
+    return EStatType::SIMPLE_COLUMN;
+}
+
+size_t TSimpleColumnStatisticEval::EstimateSize() const {
+    constexpr size_t DEFAULT_HLL_PRECISION = 14;
+    return 1u << DEFAULT_HLL_PRECISION;
+}
+
+void TSimpleColumnStatisticEval::AddAggregations(
+        const TString& columnName, TSelectBuilder& builder) {
+    CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
+    if (IStage2ColumnStatisticEval::AreMinMaxNeeded(Type)) {
+        MinSeq = builder.AddBuiltinAggregation(columnName, "min");
+        MaxSeq = builder.AddBuiltinAggregation(columnName, "max");
+    }
+}
+
+NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
+        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) const {
+    NKikimrStat::TSimpleColumnStatistics result;
+    result.SetCount(rowCount);
+
+    NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+    ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
+    result.SetCountDistinct(countDistinct);
+
+    result.SetTypeId(Type.GetTypeId());
+    if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
+        NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
+    }
+
+    if (MinSeq) {
+        result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
+    }
+    if (MaxSeq) {
+        result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+    }
+
+    return result;
+}
+
+class TCMSEval : public IStage2ColumnStatisticEval {
     ui64 Width;
     ui64 Depth = DEFAULT_DEPTH;
     std::optional<ui32> Seq;
@@ -72,7 +115,7 @@ struct TBorder {
     explicit TBorder(T val) : Val(val) {}
 };
 
-class TEWHEval : public IColumnStatisticEval {
+class TEWHEval : public IStage2ColumnStatisticEval {
     ui32 NumBuckets;
     TBorder RangeStart;
     TBorder RangeEnd;
@@ -213,14 +256,14 @@ public:
     }
 };
 
-TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
+TVector<EStatType> IStage2ColumnStatisticEval::SupportedTypes() {
     return {
         EStatType::COUNT_MIN_SKETCH,
         EStatType::EQ_WIDTH_HISTOGRAM,
     };
 }
 
-IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
+IStage2ColumnStatisticEval::TPtr IStage2ColumnStatisticEval::MaybeCreate(
         EStatType statType,
         const NKikimrStat::TSimpleColumnStatistics& simpleStats,
         const NScheme::TTypeInfo& columnType) {
@@ -234,7 +277,7 @@ IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
     }
 }
 
-bool IColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
+bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
     return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
 }
 

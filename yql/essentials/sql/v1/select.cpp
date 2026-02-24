@@ -149,7 +149,7 @@ public:
 private:
     TNodePtr Source_;
     TString Alias_;
-    bool IsUsed_;
+    bool IsUsed_ = false;
 
     TNodePtr Node_;
 };
@@ -160,12 +160,19 @@ TNodePtr BuildYqlSubquery(TNodePtr source, TString alias) {
 
 class TSourceNode: public INode {
 public:
-    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables, bool isInlineScalar)
+    TSourceNode(
+        TPosition pos,
+        TSourcePtr&& source,
+        bool checkExist,
+        bool withTables,
+        bool isInlineScalar,
+        bool isPure)
         : INode(pos)
         , Source_(std::move(source))
         , CheckExist_(checkExist)
         , WithTables_(withTables)
         , IsInlineScalar_(isInlineScalar)
+        , IsPure_(isPure)
     {
     }
 
@@ -175,9 +182,11 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (IsInlineScalar_ &&
-            !ctx.IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-            ctx.Error(Source_->GetPos())
-                << "Inline subquery is not available before 2025.04";
+            !ctx.EnsureBackwardCompatibleFeatureAvailable(
+                Source_->GetPos(),
+                "Inline subquery",
+                MakeLangVersion(2025, 04)))
+        {
             return false;
         }
 
@@ -208,10 +217,24 @@ public:
             }
             src->AddDependentSource(Source_);
         }
-        if (Node_ && WithTables_) {
-            TTableList tableList;
-            Source_->GetInputTables(tableList);
 
+        TTableList tableList;
+        Source_->GetInputTables(tableList);
+
+        if (IsPure_ && !tableList.empty()) {
+            TSet<TPosition> positions = {Pos_};
+            for (const auto& table : tableList) {
+                if (table.Keys) {
+                    positions.emplace(table.Keys->GetPos());
+                }
+            }
+            for (const auto& pos : positions) {
+                ctx.Error(pos) << "Reading a table in a pure context";
+            }
+            return false;
+        }
+
+        if (Node_ && WithTables_) {
             TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
             if (!inputTables->Init(ctx, Source_.Get())) {
                 return false;
@@ -239,7 +262,13 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TSourceNode(Pos_, Source_->CloneSource(), CheckExist_, WithTables_, IsInlineScalar_);
+        return new TSourceNode(
+            Pos_,
+            Source_->CloneSource(),
+            CheckExist_,
+            WithTables_,
+            IsInlineScalar_,
+            IsPure_);
     }
 
 protected:
@@ -248,10 +277,23 @@ protected:
     bool CheckExist_;
     bool WithTables_;
     bool IsInlineScalar_;
+    bool IsPure_;
 };
 
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables, bool isInlineScalar) {
-    return new TSourceNode(pos, std::move(source), checkExist, withTables, isInlineScalar);
+TNodePtr BuildSourceNode(
+    TPosition pos,
+    TSourcePtr source,
+    bool checkExist,
+    bool withTables,
+    bool isInlineScalar,
+    bool isPure) {
+    return new TSourceNode(
+        pos,
+        std::move(source),
+        /*checkExist=*/checkExist,
+        /*withTables=*/withTables,
+        /*isInlineScalar=*/isInlineScalar,
+        /*isPure=*/isPure);
 }
 
 class TFakeSource: public ISource {

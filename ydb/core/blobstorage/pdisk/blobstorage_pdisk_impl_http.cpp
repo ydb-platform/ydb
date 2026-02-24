@@ -102,8 +102,8 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
         if (Cfg->SectorMap) {
             PARA() {str << "Note - this is SectorMap device<br>"; }
         }
-        if (!Cfg->EnableSectorEncryption) {
-            PARA() {str << "Note - PDisk sector enctyption is disabled<br>"; }
+        if (!Cfg->FeatureFlags.GetEnablePDiskDataEncryption()) {
+            PARA() {str << "Note - PDisk sector encryption is disabled<br>"; }
         }
         PARA() {str << httpInfo.ErrorStr; }
         TAG(TH4) {str << "Uptime"; }

@@ -35,7 +35,7 @@ from_chars_result_t<UC>
     ++first;
   }
   if (last - first >= 3) {
-    if (fastfloat_strncasecmp(first, str_const_nan<UC>(), 3)) {
+    if (fastfloat_strncasecmp3(first, str_const_nan<UC>())) {
       answer.ptr = (first += 3);
       value = minusSign ? -std::numeric_limits<T>::quiet_NaN()
                         : std::numeric_limits<T>::quiet_NaN();
@@ -54,9 +54,9 @@ from_chars_result_t<UC>
       }
       return answer;
     }
-    if (fastfloat_strncasecmp(first, str_const_inf<UC>(), 3)) {
+    if (fastfloat_strncasecmp3(first, str_const_inf<UC>())) {
       if ((last - first >= 8) &&
-          fastfloat_strncasecmp(first + 3, str_const_inf<UC>() + 3, 5)) {
+          fastfloat_strncasecmp5(first + 3, str_const_inf<UC>() + 3)) {
         answer.ptr = first + 8;
       } else {
         answer.ptr = first + 3;

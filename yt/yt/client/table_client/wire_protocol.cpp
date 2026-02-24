@@ -212,7 +212,7 @@ public:
     }
 
     void WriteSerializedRowset(
-        size_t rowCount,
+        int rowCount,
         const std::vector<TSharedRef>& serializedRowset) override
     {
         WriteRowCount(rowCount);

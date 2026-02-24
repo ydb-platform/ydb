@@ -33,6 +33,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -131,6 +132,9 @@ struct TBackupToS3Settings {
     // External Table
     TControlWrapper EnableExternalTableExport;
     TControlWrapper EnableExternalTableImport;
+    // System Views
+    TControlWrapper EnableSysViewPermissionsExport;
+    TControlWrapper EnableSysViewPermissionsImport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -141,6 +145,8 @@ struct TBackupToS3Settings {
         , EnableExternalDataSourceImport(1, 0, 1)
         , EnableExternalTableExport(1, 0, 1)
         , EnableExternalTableImport(1, 0, 1)
+        , EnableSysViewPermissionsExport(1, 0, 1)
+        , EnableSysViewPermissionsImport(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -155,6 +161,9 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableExternalTableExport, icb->BackupControls.S3Controls.EnableExternalTableExport);
         TControlBoard::RegisterSharedControl(EnableExternalTableImport, icb->BackupControls.S3Controls.EnableExternalTableImport);
+
+        TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
+        TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
     }
 };
 
@@ -1197,18 +1206,13 @@ public:
         InFlightCondErase.erase(shardIdx);
     }
 
-    void ScheduleNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        Y_ENSURE(InFlightCondErase.contains(shardIdx));
-
+    void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
         it->LastCondErase = now;
         it->NextCondErase = now + next;
         it->LastCondEraseLag = TDuration::Zero();
-
-        CondEraseSchedule.push(it);
-        InFlightCondErase.erase(shardIdx);
     }
 
     bool IsUsingSequence(const TString& name) {
@@ -1375,6 +1379,14 @@ struct TShardInfo {
 
     static TShardInfo BlockStorePartition2Info(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
+    }
+
+    static TShardInfo BlockStoreVolumeDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolumeDirect);
+    }
+
+    static TShardInfo BlockStorePartitionDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStorePartitionDirect);
     }
 
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
@@ -1682,6 +1694,12 @@ struct IQuotaCounters {
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
+enum class EPathCategory : ui8 {
+    Regular = 0,
+    Backup,
+    System,
+};
+
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     using TPtr = TIntrusivePtr<TSubDomainInfo>;
     using TConstPtr = TIntrusiveConstPtr<TSubDomainInfo>;
@@ -1896,27 +1914,51 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupPathsCount;
     }
 
-    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    ui64 GetSystemPaths() const {
+        return SystemPathsCount;
+    }
+
+    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(Max<ui64>() - PathsInsideCount >= delta);
         PathsInsideCount += delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(Max<ui64>() - SystemPathsCount >= delta);
+            SystemPathsCount += delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(delta);
+            break;
+        }
         }
     }
 
-    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
             BackupPathsCount -= delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(SystemPathsCount >= delta, "SystemPathsCount: " << SystemPathsCount << " delta: " << delta);
+            SystemPathsCount -= delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(-delta);
+            break;
+        }
         }
     }
 
@@ -2405,6 +2447,7 @@ private:
 
     ui64 PathsInsideCount = 0;
     ui64 BackupPathsCount = 0;
+    ui64 SystemPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
 
     THashSet<TShardIdx> InternalShards;
@@ -2839,6 +2882,7 @@ struct TCdcStreamSettings {
     OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
+    OPTION(bool, UserSIDs);
 
     #undef OPTION
 };
@@ -2885,7 +2929,9 @@ struct TCdcStreamInfo
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
             .WithSchemaChanges(desc.GetSchemaChanges())
-            .WithAwsRegion(desc.GetAwsRegion()));
+            .WithAwsRegion(desc.GetAwsRegion())
+            .WithUserSIDs(desc.GetUserSIDs())
+        );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2909,6 +2955,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsTotal(ScanShards.size());
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
+        desc.SetUserSIDs(UserSIDs);
     }
 
     void FinishAlter() {
@@ -3247,6 +3294,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString SrcPath; // Src path from schema mapping
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
+        TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -3350,10 +3398,32 @@ public:
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }
 
+    TString GetSource() const {
+        if (Kind == EKind::S3) {
+            return GetS3Settings().source_prefix();
+        } else if (Kind == EKind::FS) {
+            return GetFsSettings().base_path();
+        }
+        Y_ABORT("Unknown import kind");
+        return {};
+    }
+
     // Getters for common settings fields
     bool GetNoAcl() const {
         return Visit([](const auto& settings) {
             return settings.no_acl();
+        });
+    }
+
+    TString GetDestinationPath() const {
+        return Visit([](const auto& settings) {
+            return settings.destination_path();
+        });
+    }
+
+    bool GetEncryptedBackup() const {
+        return Visit([](const auto& settings) {
+            return settings.has_encryption_settings();
         });
     }
 
@@ -3801,6 +3871,45 @@ inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames =
 
     return true;
 }
+
+// namespace NForcedCompaction {
+struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
+    using TPtr = TIntrusivePtr<TForcedCompactionInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        InProgress = 1,
+        Done = 2,
+        Cancelled = 3,
+        Cancelling = 4,
+    };
+
+    ui64 Id;  // TxId from the original TEvCreateRequest
+    EState State = EState::Invalid;
+    TPathId TablePathId;
+    TPathId SubdomainPathId;
+    bool Cascade;
+    ui32 MaxShardsInFlight;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    TMaybe<TString> UserSID;
+
+    ui32 TotalShardCount = 0;
+    ui32 DoneShardCount = 0; // updates only when persisting
+
+    THashSet<TShardIdx> ShardsInFlight;
+
+    TSet<TActorId> Subscribers;
+
+    bool IsFinished() const;
+    void AddNotifySubscriber(const TActorId& actorId);
+    float CalcProgress() const;
+};
+// } // NForcedCompaction
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 
 }
 

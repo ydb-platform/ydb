@@ -10,6 +10,7 @@
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
+#include "blobstorage_pdisk_util_flightcontrol.h"
 #include "blobstorage_pdisk_util_sector.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -87,6 +88,24 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             UNIT_ASSERT_EQUAL(res.Seqno, ++s);
             i++;
         }
+    }
+
+    Y_UNIT_TEST(BytesFlightControlMarkCompleteOrder) {
+        TBytesFlightControl flightControl(10, 1024);
+        flightControl.Initialize("ut");
+
+        for (ui64 expectedIdx = 1; expectedIdx <= 6; ++expectedIdx) {
+            UNIT_ASSERT_EQUAL(flightControl.TrySchedule(1), expectedIdx);
+        }
+
+        flightControl.MarkComplete(2, 1);
+        flightControl.MarkComplete(3, 1);
+        flightControl.MarkComplete(4, 1);
+        flightControl.MarkComplete(5, 1);
+        UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 1);
+
+        flightControl.MarkComplete(1, 1);
+        UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 6);
     }
 
     Y_UNIT_TEST(Light) {
@@ -326,8 +345,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
     }
 
     Y_UNIT_TEST(SectorRestorator) {
+        const bool enableSectorEncryption = true;
         TDiskFormat format;
-        format.Clear(true);
+        format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, LogErasureDataParts + 1);
         constexpr ui64 magic = 0x123951924;
         ui64 nonce = 1;
@@ -336,7 +356,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 memset(sectors[i].Begin(), 0, sectors[i].Size());
                 sectors[i].SetCanary();
                 auto *footer = sectors[i].GetDataFooter();
-                footer->Version = PDISK_DATA_VERSION;
+                footer->SetVersionAndEncryption(enableSectorEncryption);
                 footer->Nonce = nonce++;
                 NPDisk::TPDiskHashCalculator hasher(useT1haHash);
                 if (i < LogErasureDataParts) {
@@ -352,8 +372,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
     }
 
     Y_UNIT_TEST(SectorRestoratorOldNewHash) {
+        const bool enableSectorEncryption = true;
         TDiskFormat format;
-        format.Clear(true);
+        format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, 3);
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
@@ -363,7 +384,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 memset(sectors[i].Begin(), 13, sectors[i].Size());
                 sectors[i].SetCanary();
                 auto *footer = sectors[i].GetDataFooter();
-                footer->Version = PDISK_DATA_VERSION;
+                footer->SetVersionAndEncryption(enableSectorEncryption);
                 footer->Nonce = nonce++;
                 NPDisk::TPDiskHashCalculator hasher(useT1haHash);
                 switch (i) {

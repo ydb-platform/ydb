@@ -324,10 +324,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
                     // This description provided by user to override partition policy
-                    userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                    userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                    userLevelDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition);
+                    userPostingDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition);
                     if (prefixVectorIndex) {
-                        userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                        userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                     }
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
@@ -366,10 +366,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
-                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                    docsTableDesc = indexDescription.GetIndexImplTableDescriptions(1);
-                    dictTableDesc = indexDescription.GetIndexImplTableDescriptions(2);
-                    statsTableDesc = indexDescription.GetIndexImplTableDescriptions(3);
+                    dictTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition);
+                    docsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition);
+                    statsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition);
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), /*withRelevance=*/true)));

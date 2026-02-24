@@ -1684,6 +1684,9 @@ TExprBase DqBuildHashJoin(
         }
     }
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
+
     TExprNode::TPtr hashJoin;
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:

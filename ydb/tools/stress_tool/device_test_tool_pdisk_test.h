@@ -249,6 +249,11 @@ struct TPDiskTest : public TPerfTest {
         bool isErasureEncode = false;
         TFormatOptions options;
         options.IsErasureEncodeUserLog = isErasureEncode;
+        if (Cfg.SectorMap) {
+            options.SectorMap = Cfg.SectorMap;
+            options.EnableSmallDiskOptimization = false;
+            diskSize = Cfg.SectorMap->DeviceSize;
+        }
         FormatPDisk(Cfg.Path, diskSize, 4 << 10, ChunkSize, PDiskGuid,
             chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", options);
     }
@@ -285,6 +290,10 @@ struct TPDiskTest : public TPerfTest {
         pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
         pDiskConfig->UseNoopScheduler = true;
         pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);
+        pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!Cfg.DisablePDiskDataEncryption);
+        if (Cfg.SectorMap) {
+            pDiskConfig->SectorMap = Cfg.SectorMap;
+        }
         if (!TestProto.GetEnableTrim()) {
             pDiskConfig->DriveModelTrimSpeedBps = 0;
         }
@@ -299,7 +308,11 @@ struct TPDiskTest : public TPerfTest {
 #if ENABLE_PDISK_ENCRYPTION
         Printer->AddGlobalParam("Encryption", "on");
 #else
-        Printer->AddGlobalParam("Encryption", "off");
+        if (Cfg.DisablePDiskDataEncryption) {
+            Printer->AddGlobalParam("Encryption", "off");
+        } else {
+            Printer->AddGlobalParam("Encryption", "on");
+        }
 #endif
 
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
@@ -324,6 +337,7 @@ struct TPDiskTest : public TPerfTest {
         LogSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_DEVICE, explanation);
         LogSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_LOAD_TEST, explanation);
         LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_PDISK, explanation);
+        LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_DDISK, explanation);
 
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));

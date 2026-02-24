@@ -22,6 +22,7 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
@@ -85,6 +86,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
+    NKikimrConfig::TTliConfig TliConfig;
 };
 
 TAppData::TAppData(
@@ -154,6 +156,7 @@ TAppData::TAppData(
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , RecoveryShardConfig(Impl->RecoveryShardConfig)
     , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
+    , TliConfig(Impl->TliConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

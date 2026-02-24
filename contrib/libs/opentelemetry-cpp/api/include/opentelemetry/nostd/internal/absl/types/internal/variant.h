@@ -45,7 +45,7 @@ OTABSL_NAMESPACE_BEGIN
 template <class... Types>
 class variant;
 
-OTABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, -1);
+OTABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, static_cast<std::size_t>(-1));
 
 template <class T>
 struct variant_size;

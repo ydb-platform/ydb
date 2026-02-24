@@ -4,4 +4,12 @@ option java_package = "ru.yandex.kikimr.proto";
 message TFSSettings {
     optional string BasePath = 1; // Base path on the file system (e.g., /mnt/exports)
     optional string Path = 2; // Relative path for this specific backup/restore operation
+
+    message TLimits {
+        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
+        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
+        reserved 3; // ReadBufferSizeLimit
+    };
+
+    optional TLimits Limits = 100;
 }

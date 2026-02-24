@@ -966,11 +966,13 @@ public:
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
+            NUdf::TUnboxedValue item;
             for (;;) {
-                if (!Iter.Next(Item->RefValue(CompCtx))) {
+                if (!Iter.Next(item)) {
                     return false;
                 }
 
+                Item->SetValue(CompCtx, std::move(item));
                 if (auto newItem = NewItem->GetValue(CompCtx)) {
                     value = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                     return true;
@@ -1251,16 +1253,20 @@ protected:
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
+        const auto itemPtr = new AllocaInst(valueType, 0U, "items_ptr", block);
+        new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
+
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
         const auto status = IsInputStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
 
         const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
+
+        codegenItem->CreateSetValue(ctx, block, itemPtr);
 
         const auto resItem = GetNodeValue(NewItem, ctx, block);
 
@@ -1618,12 +1624,7 @@ public:
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
             } else {
                 const auto factory = ctx.GetFactory();
-
-                const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ExtendList<ResultContainerOpt>>());
-
-                const auto funType = FunctionType::get(list->getType(), {factory->getType(), vector->getType(), index->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                res = CallInst::Create(funType, funcPtr, {factory, vector, index}, "res", block);
+                res = EmitFunctionCall<&THolderFactory::ExtendList<ResultContainerOpt>>(list->getType(), {factory, vector, index}, ctx, block);
             }
             map->addIncoming(res, block);
             BranchInst::Create(free, done, heap, block);
@@ -1645,12 +1646,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFlatMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListFlatMapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

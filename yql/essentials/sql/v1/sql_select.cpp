@@ -61,6 +61,24 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
 } // namespace
 
+template <typename TRule>
+    requires std::same_as<TRule, TRule_union_op> ||
+             std::same_as<TRule, TRule_intersect_op>
+bool IsAllQualifiedOp(const TRule& node) {
+    if (!node.HasBlock2()) {
+        return false;
+    }
+
+    const TString token = ToLowerUTF8(node.GetBlock2().GetToken1().GetValue());
+    if (token == "all") {
+        return true;
+    } else if (token == "distinct") {
+        return false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+    }
+}
+
 TSourcePtr TSqlSelect::CheckSubSelectOnDiscard(TSourcePtr source) {
     if (!source) {
         return nullptr;
@@ -1375,24 +1393,6 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
 }
 
 template <typename TRule>
-    requires std::same_as<TRule, TRule_union_op> ||
-             std::same_as<TRule, TRule_intersect_op>
-bool TSqlSelect::IsAllQualifiedOp(const TRule& node) {
-    if (!node.HasBlock2()) {
-        return false;
-    }
-
-    const TString token = ToLowerUTF8(Token(node.GetBlock2().GetToken1()));
-    if (token == "all") {
-        return true;
-    } else if (token == "distinct") {
-        return false;
-    } else {
-        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
-    }
-}
-
-template <typename TRule>
     requires std::same_as<TRule, TRule_select_stmt> ||
              std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
              std::same_as<TRule, TRule_select_subexpr>
@@ -1514,10 +1514,12 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetToken1();
         TString nextOp = ToLowerUTF8(Token(token));
         if (nextOp != "union" &&
-            !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-            !Ctx_.ExceptIntersectBefore202503) {
-            Ctx_.Error(Ctx_.TokenPosition(token))
-                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            !Ctx_.ExceptIntersectBefore202503 &&
+            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                Ctx_.TokenPosition(token),
+                "EXCEPT/INTERSECT",
+                MakeLangVersion(2025, 3)))
+        {
             return nullptr;
         }
 
@@ -1525,10 +1527,12 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
             const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetBlock2().GetToken1();
             const TString qualifier = ToLowerUTF8(Token(token));
             if (qualifier == "distinct" &&
-                !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-                !Ctx_.ExceptIntersectBefore202503) {
-                Ctx_.Error(Ctx_.TokenPosition(token))
-                    << "UNION DISTINCT is not available before version 2025.03";
+                !Ctx_.ExceptIntersectBefore202503 &&
+                !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                    Ctx_.TokenPosition(token),
+                    "UNION DISTINCT",
+                    MakeLangVersion(2025, 3)))
+            {
                 return nullptr;
             }
         }
@@ -1620,10 +1624,12 @@ TSourcePtr TSqlSelect::BuildIntersection(
         const auto& nextBlock = tail[i];
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
-        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-            !Ctx_.ExceptIntersectBefore202503) {
-            Ctx_.Error(Ctx_.TokenPosition(token))
-                << "EXCEPT/INTERSECT is not available before version 2025.03";
+        if (!Ctx_.ExceptIntersectBefore202503 &&
+            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                Ctx_.TokenPosition(token),
+                "EXCEPT/INTERSECT",
+                MakeLangVersion(2025, 3)))
+        {
             return nullptr;
         }
 

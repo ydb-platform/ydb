@@ -84,7 +84,7 @@ public:
     }
 
     TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx, const TGetParents& getParents, bool allowPureStage) const {
-        const auto* typeAnn = input.Ref().GetTypeAnn();
+        const auto typeAnn = input.Ref().GetTypeAnn();
         const TTypeAnnotationNode* inputItemType = nullptr;
         if (!EnsureNewSeqType<false, true, false>(input.Pos(), *typeAnn, ctx, &inputItemType)) {
             return {};

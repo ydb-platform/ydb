@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TUnboxedValueStream: public IOutputStream {
 public:
@@ -16,5 +15,4 @@ private:
     NUdf::TUnboxedValue Value_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

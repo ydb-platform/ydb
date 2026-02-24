@@ -48,7 +48,7 @@ void DumpSmallNodes(const TExprNode* rootOne, const TExprNode* rootTwo) {
          << rootTwoDump;
 }
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     if (argc != 3) {
         PrintProgramSvnVersion();
@@ -124,7 +124,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 

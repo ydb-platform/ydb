@@ -60,6 +60,8 @@ SRCS(
     datashard__get_state_tx.cpp
     datashard__init.cpp
     datashard__kqp_scan.cpp
+    datashard__lock_rows.cpp
+    datashard__lock_rows.h
     datashard__migrate_schemeshard.cpp
     datashard__mon_reset_schema_version.cpp
     datashard__monitoring.cpp
@@ -281,6 +283,7 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/chunks_limiter
@@ -315,7 +318,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
-    ut_background_compaction
+    ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_column_stats
@@ -332,6 +335,7 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
+    ut_lock_rows
     ut_locks
     ut_minikql
     ut_minstep

@@ -195,15 +195,41 @@ TTableMountInfoPtr TTableMountInfo::Clone() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TTabletRedirectionHint::Register(TRegistrar registrar)
+void TSmoothMovementRedirectionHint::Register(TRegistrar registrar)
 {
-    registrar.Parameter("previous_mount_revision", &TThis::PreviousMountRevision)
+    registrar.Parameter("old_mount_revision", &TThis::OldMountRevision)
         .Default();
-    registrar.Parameter("mount_revision", &TThis::MountRevision)
+    registrar.Parameter("new_mount_revision", &TThis::NewMountRevision)
         .Default();
     registrar.Parameter("cell_id", &TThis::CellId)
         .Default();
     registrar.Parameter("cell_descriptor", &TThis::CellDescriptor)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReshardRedirectionHint::Register(TRegistrar registrar)
+{
+    registrar.Parameter("old_tablet_ids", &TThis::OldTabletIds)
+        .Default();
+    registrar.Parameter("old_tablet_mount_revisions", &TThis::OldTabletMountRevisions)
+        .Default();
+    registrar.Parameter("new_tablet_ids", &TThis::NewTabletIds)
+        .Default();
+    registrar.Parameter("new_tablet_pivot_keys", &TThis::NewTabletPivotKeys)
+        .Default();
+    registrar.Parameter("new_tablets_mount_revision", &TThis::NewTabletsMountRevision)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTabletRedirectionHint::Register(TRegistrar registrar)
+{
+    registrar.Parameter("smooth_movement_redirection_hint", &TThis::SmoothMovementRedirectionHint)
+        .Default();
+    registrar.Parameter("reshard_redirection_hint", &TThis::ReshardRedirectionHint)
         .Default();
 }
 

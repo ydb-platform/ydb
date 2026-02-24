@@ -317,16 +317,11 @@ public:
         const auto factory = ctx.GetFactory();
         const auto builder = ctx.GetBuilder();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::SkipList>());
-
         const auto list = GetNodeValue(List, ctx, block);
         const auto cnt = GetNodeValue(Count, ctx, block);
         const auto count = GetterFor<ui64>(cnt, context, block);
 
-        const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType(), count->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list, count}, "result", block);
-        return result;
+        return EmitFunctionCall<&THolderFactory::SkipList>(list->getType(), {factory, builder, list, count}, ctx, block);
     }
 #endif
 

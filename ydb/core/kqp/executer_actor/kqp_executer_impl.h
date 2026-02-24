@@ -371,7 +371,8 @@ protected:
                     auto& channel = TasksGraph.GetChannel(channelId);
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
-                        auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
+                        auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -724,6 +725,40 @@ protected:
                 }
                 str << Endl;
 
+                str << Endl << "Stages:";
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "Tasks";}
+                            TABLEH() {str << "Finished";}
+                            TABLEH() {str << "Deadlocked (1 min)";}
+                            TABLEH() {str << "UpdateTimeMs (ago)";}
+                            TABLEH() {str << "WaitInputTimeUs";}
+                            TABLEH() {str << "WaitOutputTimeUs";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& [stageId, stageStat] : Stats->StageStats) {
+                            TABLER() {
+                                TABLED() {str << stageId.TxId;}
+                                TABLED() {str << stageId.StageId;}
+                                TABLED() {str << stageStat.Task2Index.size();}
+                                TABLED() {str << stageStat.FinishedCount;}
+                                TABLED() {str << stageStat.IsDeadlocked(60'000'000);}
+                                TABLED() {
+                                    auto nowMs = TInstant::Now().MilliSeconds();
+                                    str << (nowMs > stageStat.UpdateTimeMs ? nowMs - stageStat.UpdateTimeMs : 0);
+                                }
+                                TABLED() {str << stageStat.CurrentWaitInputTimeUs.MinValue;}
+                                TABLED() {str << stageStat.CurrentWaitOutputTimeUs.MinValue;}
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Tasks:";
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
@@ -817,6 +852,10 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
+        TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
+        for (const auto& regex : AppData()->TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
@@ -1057,6 +1096,15 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
+
+        // If Target is not yet initialized (TEvTxRequest from TxProxy hasn't
+        // arrived yet), use the abort sender as the target. Otherwise
+        // TEvTxResponse from PassAway() would be sent to a null TActorId and
+        // the session actor would stay stuck in ExecuteState forever.
+        if (!Target) {
+            Target = ev->Sender;
+        }
+
         HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender == Target);
     }
 
@@ -1163,7 +1211,8 @@ protected:
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
-                auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0));
+                auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1465,6 +1514,24 @@ protected:
 
         ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
         ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
+        // Deduplicate BreakerQuerySpanIds: the same ID may appear from both prepare and commit phases
+        {
+            THashSet<ui64> seen;
+            for (ui64 id : Stats->BreakerQuerySpanIds) {
+                if (seen.insert(id).second) {
+                    ResponseEv->BreakerQuerySpanIds.push_back(id);
+                }
+            }
+        }
+        // Transfer deferred breaker info from stats to response
+        {
+            THashSet<ui64> seen;
+            for (const auto& breaker : Stats->DeferredBreakers) {
+                if (seen.insert(breaker.QuerySpanId).second) {
+                    ResponseEv->DeferredBreakers.push_back({breaker.QuerySpanId, breaker.NodeId});
+                }
+            }
+        }
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
@@ -1499,6 +1566,10 @@ protected:
 
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
+        }
+
+        if (const auto& infoAggregator = TasksGraph.GetMeta().DqInfoAggregator) {
+            this->Send(infoAggregator, new TEvents::TEvPoison());
         }
 
         this->Send(this->SelfId(), new TEvents::TEvPoison);

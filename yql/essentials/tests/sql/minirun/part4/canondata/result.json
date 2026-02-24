@@ -27,6 +27,20 @@
             "uri": "https://{canondata_backend}/1847551/e07ae89624c27b10ab9b925ba8e10e0360458926/resource.tar.gz#test.test_action-eval_ensuretype-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[action-runtime_for_select--Debug]": [
+        {
+            "checksum": "1e75b6136be74a5511c875ea77f434fa",
+            "size": 2254,
+            "uri": "https://{canondata_backend}/212715/5fa56f5af654995aec02170008777631b8766e70/resource.tar.gz#test.test_action-runtime_for_select--Debug_/opt.yql"
+        }
+    ],
+    "test.test[action-runtime_for_select--Results]": [
+        {
+            "checksum": "160f973e87365f85a49d5052aeb877ae",
+            "size": 5549,
+            "uri": "https://{canondata_backend}/212715/5fa56f5af654995aec02170008777631b8766e70/resource.tar.gz#test.test_action-runtime_for_select--Results_/results.txt"
+        }
+    ],
     "test.test[action-runtime_make_code-default.txt-Debug]": [
         {
             "checksum": "20c70e948d177b7a6743de7bb0f1c4bd",
@@ -1244,6 +1258,20 @@
             "uri": "https://{canondata_backend}/1773845/9de2490825819ceeedcd38ca1caed14aade6bbb8/resource.tar.gz#test.test_optimizers-yql-20363-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-YQL_20895_having_depth_3-default.txt-Debug]": [
+        {
+            "checksum": "9ae7f83c6bbbb847804f420d09123cd2",
+            "size": 1811,
+            "uri": "https://{canondata_backend}/1937492/8e71af98ffea2d966531c372a6d377fb2b85b664/resource.tar.gz#test.test_pg-YQL_20895_having_depth_3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-YQL_20895_having_depth_3-default.txt-Results]": [
+        {
+            "checksum": "5973a226b997b414148e8f112dee51c2",
+            "size": 727,
+            "uri": "https://{canondata_backend}/1937492/8e71af98ffea2d966531c372a6d377fb2b85b664/resource.tar.gz#test.test_pg-YQL_20895_having_depth_3-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-aggregate_distinct-default.txt-Debug]": [
         {
             "checksum": "4db05de18eb9e30f1d6f21504aed40ef",
@@ -1973,6 +2001,34 @@
             "checksum": "4183adf9082428c3ed5429ceb096726f",
             "size": 1090,
             "uri": "https://{canondata_backend}/1031349/9a162bf46ddefb28cb1e4f995394146d52c6555c/resource.tar.gz#test.test_select_yql-projection_in_expr-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-select_op_precedence_union_except-default.txt-Debug]": [
+        {
+            "checksum": "7c9d09ba44c0be4afae815fb912fb766",
+            "size": 1276,
+            "uri": "https://{canondata_backend}/1937429/849630dd1b2345c6579750dfa9914c8102fc6159/resource.tar.gz#test.test_select_yql-select_op_precedence_union_except-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-select_op_precedence_union_except-default.txt-Results]": [
+        {
+            "checksum": "c87e600e35d6145b1c812e5b5cdbad4d",
+            "size": 689,
+            "uri": "https://{canondata_backend}/1937429/849630dd1b2345c6579750dfa9914c8102fc6159/resource.tar.gz#test.test_select_yql-select_op_precedence_union_except-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-select_op_precedence_union_intersect-default.txt-Debug]": [
+        {
+            "checksum": "a6376cf81b89fceb905c48c6ae38d6a4",
+            "size": 1450,
+            "uri": "https://{canondata_backend}/1937429/849630dd1b2345c6579750dfa9914c8102fc6159/resource.tar.gz#test.test_select_yql-select_op_precedence_union_intersect-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-select_op_precedence_union_intersect-default.txt-Results]": [
+        {
+            "checksum": "eb1c3e3a0c5e0791150c8dd304bbe4bb",
+            "size": 835,
+            "uri": "https://{canondata_backend}/1937429/849630dd1b2345c6579750dfa9914c8102fc6159/resource.tar.gz#test.test_select_yql-select_op_precedence_union_intersect-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar-default.txt-Debug]": [

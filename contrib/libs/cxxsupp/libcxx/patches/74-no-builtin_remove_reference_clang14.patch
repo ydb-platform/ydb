@@ -1,5 +1,5 @@
 diff --git a/include/__type_traits/remove_reference.h b/include/__type_traits/remove_reference.h
-index ba67891..ef11b16 100644
+index 7cc3ca1..7e3a980 100644
 --- a/include/__type_traits/remove_reference.h
 +++ b/include/__type_traits/remove_reference.h
 @@ -34,7 +34,13 @@ struct remove_reference {

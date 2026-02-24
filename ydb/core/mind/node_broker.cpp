@@ -1226,7 +1226,7 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
                              DbLogPrefix() << " Migrating removed node " << node->IdShortString());
             } else if (nodeV2.State != ENodeState::Removed) {
                 // Assume that old version removes nodes only with version bump. It is not always
-                // true, so it is possible that client never recieve this remove until the restart.
+                // true, so it is possible that client never receive this remove until the restart.
                 // Don't know exactly version, so send it to all nodes that don't have the most
                 // recent version.
                 TNodeInfo removedNode(id, ENodeState::Removed, Epoch.Version);

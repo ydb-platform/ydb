@@ -615,7 +615,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
     const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults,
-    const TExprBase& tableExpr, const TKikimrTableDescription& table,
+    const TExprBase& tableExpr, const TKikimrTableDescription& table, const bool isBatch,
     const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
@@ -660,7 +660,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Input(inputRows.Ptr())
             .Columns(inputColumns)
             .ReturningColumns(returningColumns.Ptr())
-            .IsBatch(ctx.NewAtom(pos, "false"))
+            .IsBatch(isBatch ? ctx.NewAtom(pos, "true") : ctx.NewAtom(pos, "false"))
             .DefaultColumns(columnsWithDefaults)
             .Settings(settings)
             .Done());
@@ -727,7 +727,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
-        .IsBatch(ctx.NewAtom(pos, "false"))
+        .IsBatch(isBatch ? ctx.NewAtom(pos, "true") : ctx.NewAtom(pos, "false"))
         .DefaultColumns(columnsWithDefaults)
         .Settings(settings)
         .Done());
@@ -995,6 +995,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -1066,6 +1069,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
 
             if (fulltextDictDelta.size()) {
@@ -1116,7 +1122,7 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
         upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), upsert.Table(), table,
-        upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
+        upsert.IsBatch() == "true", upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
 
     if (!effects) {
         return node;

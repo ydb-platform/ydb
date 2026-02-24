@@ -344,5 +344,62 @@ IF (CGO_ENABLED)
             cgo_unix_cgo_res.go
     )
 ENDIF()
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        addrselect.go
+        cgo_stub.go
+        conf.go
+        dial.go
+        dnsclient.go
+        dnsclient_unix.go
+        dnsconfig.go
+        dnsconfig_unix.go
+        error_posix.go
+        error_unix.go
+        fd_fake.go
+        fd_wasip1.go
+        file.go
+        file_wasip1.go
+        hook.go
+        hook_unix.go
+        hosts.go
+        interface.go
+        interface_stub.go
+        ip.go
+        iprawsock.go
+        iprawsock_posix.go
+        ipsock.go
+        ipsock_posix.go
+        lookup.go
+        lookup_unix.go
+        mac.go
+        mptcpsock_stub.go
+        net.go
+        net_fake.go
+        netcgo_off.go
+        netgo_off.go
+        nss.go
+        parse.go
+        pipe.go
+        port.go
+        port_unix.go
+        rawconn.go
+        rlimit_unix.go
+        sendfile_stub.go
+        sock_stub.go
+        sockaddr_posix.go
+        sockopt_fake.go
+        sockoptip_stub.go
+        splice_stub.go
+        tcpsock.go
+        tcpsock_posix.go
+        tcpsock_unix.go
+        tcpsockopt_stub.go
+        udpsock.go
+        udpsock_posix.go
+        unixsock.go
+        unixsock_posix.go
+        unixsock_readmsg_other.go
+    )
 ENDIF()
 END()

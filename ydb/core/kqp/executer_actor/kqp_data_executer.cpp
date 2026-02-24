@@ -26,6 +26,7 @@
 #include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/compute/dq_info_aggregation_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
@@ -134,6 +135,10 @@ public:
         ReadOnlyTx = IsReadOnlyTx();
     }
 
+    TString GetUserSID() const {
+        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+    }
+
     bool CheckExecutionComplete() {
         ui32 notFinished = 0;
         for (const auto& x : ShardStates) {
@@ -199,12 +204,13 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+
+        FillLocksFromExtraData();
+
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
-
-        FillLocksFromExtraData();
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -612,10 +618,9 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
                 }
+                FillLocksFromExtraData();
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
@@ -1378,9 +1383,8 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
+                    FillLocksFromExtraData();
                     ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                     return;
                 }
@@ -1453,9 +1457,8 @@ private:
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
+                    FillLocksFromExtraData();
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
@@ -1773,6 +1776,7 @@ private:
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
                     flags));
+                evData->Record.SetUserSID(GetUserSID());
             } else {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
@@ -1780,6 +1784,7 @@ private:
                     TxId,
                     dataTransaction.SerializeAsString(),
                     flags));
+                evData->Record.SetUserSID(GetUserSID());
             }
 
             NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(),
@@ -1811,6 +1816,7 @@ private:
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
+        evWriteTransaction->Record.SetUserSID(GetUserSID());
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
@@ -1929,6 +1935,14 @@ private:
         }
         scriptExternalEffect->Description.SecretNames = SecretNames;
 
+        if (HasExternalSources) {
+            NDq::TTxId txId = TxId;
+            if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
+                txId = GetUserRequestContext()->StreamingQueryPath;
+            }
+            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor(txId));
+        }
+
         if (!WaitRequired()) {
             return Execute();
         }
@@ -2012,8 +2026,6 @@ private:
         if (!graphRestored) {
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         }
-
-        OnEmptyResult();
 
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
@@ -2330,6 +2342,8 @@ private:
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
+        OnEmptyResult();
+
         StartCheckpointCoordinator();
         ExecuteTasks();
 
@@ -2385,9 +2399,9 @@ private:
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {
-                    auto [eIt, success] = evWriteTxs.emplace(
-                        shardId,
-                        TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>());
+                    auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
+                    ev->SetUserSID(GetUserSID());
+                    auto [eIt, success] = evWriteTxs.emplace(shardId, ev);
                     locks = eIt->second->MutableLocks();
                 }
             } else {
@@ -3059,12 +3073,28 @@ private:
         }
     }
 
+    // Extract broken lock info from the first TxLock in a DataShard response.
+    void FillBrokenLockInfo(const NKikimrDataEvents::TLock& brokenLock) {
+        ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+            brokenLock.GetSchemeShard(),
+            brokenLock.GetPathId());
+        if (TxManager) {
+            auto victimSpanId = TxManager->LookupVictimQuerySpanId(brokenLock.GetDataShard(), brokenLock);
+            if (victimSpanId) {
+                TxManager->SetVictimQuerySpanId(*victimSpanId);
+                ResponseEv->BrokenLockQuerySpanId = *victimSpanId;
+            }
+        }
+    }
+
     void FillLocksFromExtraData() {
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
+                    ? info.GetDeferredVictimQuerySpanId() : 0;
                 for (auto& lock : info.GetLocks()) {
                     if (!TxManager) {
                         Locks.push_back(lock);
@@ -3077,7 +3107,7 @@ private:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);
                     }
                 }
 
@@ -3089,6 +3119,17 @@ private:
                     }
 
                     ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
+                }
+                // Collect deferred breaker info for TLI logging at SessionActor level
+                {
+                    const auto& traceIds = info.GetDeferredBreakerQuerySpanIds();
+                    const auto& nodeIds = info.GetDeferredBreakerNodeIds();
+                    for (int i = 0; i < traceIds.size(); ++i) {
+                        ResponseEv->DeferredBreakers.push_back({
+                            traceIds[i],
+                            i < nodeIds.size() ? nodeIds[i] : 0u
+                        });
+                    }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
@@ -3110,8 +3151,8 @@ private:
                         }
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), flags);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        TxManager->AddAction(lock.GetDataShard(), flags, Request.QuerySpanId);
+                        TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId);
                     }
                 }
             }

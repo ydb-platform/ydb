@@ -55,6 +55,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
 
                     Migrate(Self->TabletConfig);
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
+                    Self->UpdateActivePartitions();
 
                     if (SplitMergeEnabled(Self->TabletConfig)) {
                         // TODO DatabasePath is not initialized yet

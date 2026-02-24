@@ -205,8 +205,9 @@ namespace std {
 
 // clang-format on
 
-#if 0
-#else // 0
+#if __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
+#error  include <__cxx03/string_view>
+#else
 #  include <__algorithm/min.h>
 #  include <__assert>
 #  include <__config>
@@ -448,7 +449,7 @@ public:
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 size_type
   copy(_CharT* __s, size_type __n, size_type __pos = 0) const {
     if (__pos > size())
-      __throw_out_of_range("string_view::copy");
+      std::__throw_out_of_range("string_view::copy");
     size_type __rlen = std::min(__n, size() - __pos);
     _Traits::copy(__s, data() + __pos, __rlen);
     return __rlen;
@@ -951,6 +952,6 @@ _LIBCPP_POP_MACROS
 #    include <iterator>
 #    include <type_traits>
 #  endif
-#endif // 0
+#endif // __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
 
 #endif // _LIBCPP_STRING_VIEW

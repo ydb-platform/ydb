@@ -1,7 +1,6 @@
 #include "yql_codec_buf.h"
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", true);
 NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", true);
@@ -260,5 +259,4 @@ void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {
     Current_ += count;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

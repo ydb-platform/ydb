@@ -1,7 +1,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1087,7 +1087,7 @@ get_token( const char ** sp, char ** token_val )
 static void
 parse_whsp(const char **sp)
 {
-	while (LDAP_SPACE(**sp))
+	while ( **sp && LDAP_SPACE(**sp))
 		(*sp)++;
 }
 

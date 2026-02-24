@@ -162,7 +162,7 @@ message TFeatureFlags {
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];
     optional bool EnableAlterShardingInColumnShard = 138 [default = false];
-    optional bool EnablePgSyntax = 139 [default = true];
+    optional bool EnablePgSyntax = 139 [default = false];
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
     optional bool EnableOlapCompression = 142 [default = false];
@@ -213,7 +213,7 @@ message TFeatureFlags {
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
     optional bool EnableAddUniqueIndex = 187 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
-    optional bool RequireDbPrefixInSecretName = 189 [default = false];
+    reserved 189; // RequireDbPrefixInSecretName
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
@@ -235,7 +235,7 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
-    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
@@ -251,4 +251,13 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
+    optional bool EnableSysViewPermissionsExport = 227 [default = false];
+    optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+    optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnablePDiskDataEncryption = 230 [default = true];
+    optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
+    optional bool EnableSetDropDefaultValue = 234 [ default = false];
+    optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
 }

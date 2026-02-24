@@ -9,6 +9,8 @@
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/distributed_session.h>
+#include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
 namespace NYql::NFmr {
 
@@ -31,12 +33,13 @@ enum class ETaskStatus {
 };
 
 enum class ETaskType {
-    Unknown,
-    Download,
-    Upload,
-    SortedUpload,
-    Merge,
-    Map
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6
 };
 
 enum class EFmrComponent {
@@ -75,12 +78,45 @@ public:
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
 
+struct TSortingColumns {
+    std::vector<TString> Columns;
+    std::vector<ESortOrder> SortOrders;
+    bool operator==(const TSortingColumns&) const = default;
+};
+
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
     ui64 QueueSizeLimit = 100;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
+    bool operator==(const TFmrUserJobSettings&) const = default;
+};
+
+struct TFmrTvmJobSettings {
+    TString WorkerTvmAlias;
+    TTvmId TableDataServiceTvmId = 0;
+    TMaybe<ui32> TvmPort;
+    TMaybe<TString> TvmSecret;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TFmrTvmGatewaySettings {
+    TTvmId CoordinatorTvmId;
+    TTvmId GatewayTvmId;
+    TString GatewayTvmSecret;
+    TString TvmDiskCacheDir;
+};
+
+struct TFmrTvmSpec {
+    TString WorkerTvmAlias;
+    TString CoordinatorTvmAlias;
+    TString TableDataServiceTvmAlias;
+    TTvmId WorkerTvmId;
+    TTvmId CoordinatorTvmId;
+    TTvmId TableDataServiceTvmId;
 };
 
 struct TYtTableRef {
@@ -134,6 +170,9 @@ struct TFmrTableRef {
     TFmrTableId FmrTableId;
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
+    std::vector<ESortOrder> SortOrder = {};
+    std::vector<TString> SortColumns = {};
+
     bool operator==(const TFmrTableRef&) const = default;
 };
 
@@ -154,6 +193,10 @@ struct TFmrTableInputRef {
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
 
+    TMaybe<bool> IsFirstRowInclusive;
+    TMaybe<TString> FirstRowKeys; // Binary YSON MAP
+    TMaybe<TString> LastRowKeys;  // Binary YSON MAP
+
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
@@ -164,6 +207,8 @@ struct TFmrTableOutputRef {
     TString TableId;
     TString PartId;
     TString SerializedColumnGroups = TString(); // Serialized TNode of columnGroupSpec, empty if column groups is not set
+
+    TSortingColumns SortingColumns;
 
     TFmrTableOutputRef() = default;
 
@@ -321,6 +366,13 @@ struct TMergeOperationParams {
     TFmrTableRef Output;
 };
 
+struct TSortedMergeOperationParams {
+    void UpdateAfterPreparation(std::vector<TString> cookies, TString PartitionId);
+
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
 struct TTaskTableInputRef {
     std::vector<TTaskTableRef> Inputs;
 
@@ -329,6 +381,11 @@ struct TTaskTableInputRef {
 }; // Corresponds to task input tables, which can consist parts of either fmr or yt input tables.
 
 struct TMergeTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;
+};
+
+struct TSortedMergeTaskParams {
     TTaskTableInputRef Input;
     TFmrTableOutputRef Output;
 };
@@ -347,9 +404,10 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

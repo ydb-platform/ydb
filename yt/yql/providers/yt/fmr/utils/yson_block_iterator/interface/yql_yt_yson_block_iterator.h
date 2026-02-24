@@ -7,7 +7,7 @@ namespace NYql::NFmr {
 
 struct TIndexedBlock {
     TString Data;
-    TVector<TRowIndexMarkup> Rows;
+    std::vector<TRowIndexMarkup> Rows;
 };
 
 class IBlockIterator: public TThrRefBase {

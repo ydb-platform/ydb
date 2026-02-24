@@ -1,0 +1,32 @@
+#pragma once
+
+#include "yql_co.h"
+
+namespace NYql {
+
+TExprNode::TPtr ExpandSqlSelect(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr ExpandSqlSelectSublink(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& originalNode,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx,
+    ui32 subLinkId,
+    const TExprNode::TListType& outerInputs,
+    const TVector<TString>& outerInputAliases);
+
+TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
+    TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnOrder& sourceColumnOrder,
+    const TColumnOrder& targetColumnOrder, TExprContext& ctx);
+
+TExprNode::TPtr ExpandSqlGroupRef(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr ExpandSqlGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr ExpandSqlIterate(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TStringBuf& op, TExprContext& ctx);
+
+} // namespace NYql

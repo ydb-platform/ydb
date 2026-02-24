@@ -828,21 +828,21 @@ def bytes_to_string(num, round, suffix):
     return f'{res}{right}{suffix}'
 
 
-def gib_string(num):
-    return bytes_to_string(num, 1024 ** 3, '')
+def gb_string(num):
+    return bytes_to_string(num, 1000 ** 3, ' GB')
 
 
 def bytes_string(num):
-    if num > 1024 ** 5:
-        return bytes_to_string(num, 1024 ** 5, ' PiB')
-    if num > 1024 ** 4:
-        return bytes_to_string(num, 1024 ** 4, ' TiB')
-    if num > 1024 ** 3:
-        return bytes_to_string(num, 1024 ** 3, ' GiB')
-    if num > 1024 ** 2:
-        return bytes_to_string(num, 1024 ** 2, ' MiB')
-    if num > 1024:
-        return bytes_to_string(num, 1024, ' kiB')
+    if num > 1000 ** 5:
+        return bytes_to_string(num, 1000 ** 5, ' PB')
+    if num > 1000 ** 4:
+        return bytes_to_string(num, 1000 ** 4, ' TB')
+    if num > 1000 ** 3:
+        return bytes_to_string(num, 1000 ** 3, ' GB')
+    if num > 1000 ** 2:
+        return bytes_to_string(num, 1000 ** 2, ' MB')
+    if num > 1000:
+        return bytes_to_string(num, 1000, ' kB')
     return bytes_to_string(num, 1, '')
 
 
@@ -1202,6 +1202,7 @@ def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     for v in base_config.VSlot:
         vdisk_vslot_map['[%08x:_:%u:%u:%u]' % (v.GroupId, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
         vdisk_vslot_map['[%08x:%u:%u:%u:%u]' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
+        vdisk_vslot_map['(%d-%u-%u-%u-%u)' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
 
     res = []
     for string in vdisk_ids:
@@ -1239,11 +1240,18 @@ def add_host_access_options(parser):
 
 
 def add_vdisk_ids_option(g, required=False):
-    g.add_argument('--vdisk-ids', type=str, nargs='+', required=required, help='Space separated list of vdisk ids in format [GroupId:_:FailRealm:FailDomain:VDiskIdx]')
+    help_text = (
+        'Space separated list of vdisk ids in formats: '
+        '[GroupId(hex):_:FailRealm:FailDomain:VDiskIdx], '
+        '[GroupId(hex):GroupGen:FailRealm:FailDomain:VDiskIdx], '
+        'or (GroupId(dec)-GroupGen-FailRealm-FailDomain-VDiskIdx)'
+    )
+    g.add_argument('--vdisk-ids', type=str, nargs='+', required=required, help=help_text)
 
 
 def add_pdisk_ids_option(p, required=False):
-    p.add_argument('--pdisk-ids', type=str, nargs='+', required=required, help='Space separated list of pdisk ids in format [NodeId:PDiskId]')
+    p.add_argument('--pdisk-ids', type=str, nargs='+', required=required,
+                   help='Space separated list of pdisk ids in format [NodeId:PDiskId] (brackets optional)')
 
 
 def add_group_ids_option(p, required=False):

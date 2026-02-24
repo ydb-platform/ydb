@@ -23,12 +23,12 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
     const auto& stageInputIds = Graph.StageInputs;
     auto& ctx = RBOCtx.ExprCtx;
 
-    THashMap<int, TExprNode::TPtr> finalizedStages;
+    THashMap<ui32, TExprNode::TPtr> finalizedStages;
     for (const auto id : stageIds) {
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputConnections;
-        THashSet<int> processedInputsIds;
+        THashSet<ui32> processedInputsIds;
         for (const auto inputStageId : stageInputIds.at(id)) {
             if (processedInputsIds.contains(inputStageId)) {
                 continue;
@@ -144,16 +144,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         .Build()
     .Done().Ptr();
     // clang-format on
-}
-
-bool TPhysicalQueryBuilder::CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const {
-    auto blackList = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable(callableNames)) {
-            return true;
-        }
-        return false;
-    };
-    return !FindNode(input, blackList);
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
@@ -418,8 +408,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     auto lambda = TCoLambda(input);
     auto& ctx = RBOCtx.ExprCtx;
 
-    // Yql has a strange bug in final stage peephole for `WideCombiner` with empty keys.
-    const bool withFinalStageRules = CanApplyPeepHole(lambda.Body().Ptr(), {"WideCombiner"});
+    const bool withFinalStageRules = true;
     // clang-format off
     auto program = Build<TKqpProgram>(ctx, input->Pos())
         .Lambda(ctx.DeepCopyLambda(*input.Get()))
@@ -429,8 +418,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 
     // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
-    auto status = ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer.GetRef(), RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false,
-                                     withFinalStageRules, {});
+    auto status =
+        ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
     if (status != IGraphTransformer::TStatus::Ok) {
         ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
         return nullptr;
@@ -440,12 +429,17 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
-    RBOCtx.TypeAnnTransformer->Rewind();
+    RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
+        status = RBOCtx.TypeAnnTransformer.Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+    }
     Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
     input = output;
 }

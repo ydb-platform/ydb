@@ -48,30 +48,30 @@ extern "C" void Write64(void* vbuf, ui64 value) {
     buf.WriteMany((const char*)&value, sizeof(value));
 }
 extern "C" void Write120(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
-    char b[sizeof(*value)];
-    const ui32 size = NDecimal::Serialize(*value, b);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
+    char b[sizeof(value)];
+    const ui32 size = NDecimal::Serialize(value, b);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
     buf.WriteMany(reinterpret_cast<const char*>(&size), sizeof(size));
     buf.WriteMany(b, size);
 }
 
 extern "C" void WriteDecimal32(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    i32 data = NDecimal::ToYtDecimal<i32>(*value);
+    i32 data = NDecimal::ToYtDecimal<i32>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteDecimal64(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    i64 data = NDecimal::ToYtDecimal<i64>(*value);
+    i64 data = NDecimal::ToYtDecimal<i64>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteDecimal128(void* vbuf, const void* decimal) {
-    auto value = reinterpret_cast<const NDecimal::TInt128*>(decimal);
+    auto value = ReadUnaligned<NDecimal::TInt128>(decimal);
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
-    NDecimal::TInt128 data = NDecimal::ToYtDecimal<NDecimal::TInt128>(*value);
+    NDecimal::TInt128 data = NDecimal::ToYtDecimal<NDecimal::TInt128>(value);
     buf.WriteMany(reinterpret_cast<const char*>(&data), sizeof(data));
 }
 extern "C" void WriteFloat(void* vbuf, ui32 value) {
@@ -235,10 +235,11 @@ namespace {
 template<typename T>
 void ValidateTzData(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) {
     if (!NUdf::IsValidLayoutValue<T>(value)) {
-        ThrowBadTz((int)NUdf::TDataType<T>::Slot);
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_TIME);
     }
-    // TODO: write fast and LLVM_BC-friendly version of NKikimr::NMiniKQL::IsValidTimezoneId(tzId)
-    Y_UNUSED(tzId);
+    if (!NKikimr::NMiniKQL::IsValidTimezoneId(tzId)) {
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_TIMEZONE);
+    }
 }
 
 template<typename T>
@@ -248,7 +249,7 @@ void ReadTzYql(void* vbuf, void* vpod) {
     ui16 tzId;
     auto& buf = *(NCommon::TInputBuf*)vbuf;
     if (!NYql::ReadTzYql<T>(buf, value, tzId)) {
-        ThrowBadTz((int)NUdf::TDataType<T>::Slot);
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_LENGTH);
     }
     ValidateTzData<T>(value, tzId);
     (new (vpod) NUdf::TUnboxedValuePod(value))->SetTimezoneId(tzId);

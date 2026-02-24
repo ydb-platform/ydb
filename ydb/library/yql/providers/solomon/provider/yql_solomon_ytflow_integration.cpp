@@ -78,6 +78,19 @@ public:
         return maybeWriteToShard.Cast().Input().Ptr();
     }
 
+    TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx
+    ) override {
+        auto maybeWriteToShard = TMaybeNode<TSoWriteToShard>(write);
+        YQL_ENSURE(maybeWriteToShard);
+        return Build<TSoWriteToShard>(ctx, write->Pos())
+            .InitFrom(maybeWriteToShard.Cast())
+            .Input(content)
+            .Done().Ptr();
+    }
+
     void FillSourceSettings(
         const TExprNode& /*source*/, ::google::protobuf::Any& /*settings*/, TExprContext& /*ctx*/
     ) override {

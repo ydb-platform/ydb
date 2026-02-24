@@ -13,8 +13,7 @@
 
 #include <arrow/datum.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TBlockTypeHelper: public NUdf::IBlockTypeHelper {
 public:
@@ -344,5 +343,4 @@ protected:
 
 void RebuildTypeIndex();
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -156,6 +156,10 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("globalFulltextPlain");
         case TIndexDescription::EType::GlobalFulltextRelevance:
             return node.Q("globalFulltextRelevance");
+        case TIndexDescription::EType::LocalBloomFilter:
+            return node.Q("localBloomFilter");
+        case TIndexDescription::EType::LocalBloomNgramFilter:
+            return node.Q("localBloomNgramFilter");
     }
 }
 
@@ -365,6 +369,9 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
     }
     if (desc.Settings.InitialScan) {
         settings = node.L(settings, node.Q(node.Y(node.Q("initial_scan"), desc.Settings.InitialScan)));
+    }
+    if (desc.Settings.UserSIDs) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("user_sids"), desc.Settings.UserSIDs)));
     }
     if (desc.Settings.VirtualTimestamps) {
         settings = node.L(settings, node.Q(node.Y(node.Q("virtual_timestamps"), desc.Settings.VirtualTimestamps)));
@@ -830,13 +837,14 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITION_LIST table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
+
             if (Args_.size() != 1) {
                 ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
                 return nullptr;
@@ -868,11 +876,11 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITIONS table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITIONS table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
 
@@ -1689,6 +1697,29 @@ public:
 
                         break;
                     }
+                    case TColumnSchema::ETypeOfChange::SetDefault: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        YQL_ENSURE(col.DefaultExpr);
+                        if (!col.DefaultExpr->Init(ctx, src)) {
+                            return false;
+                        }
+
+                        columnDesc = L(columnDesc, Q(Y(Q("setDefaultValue"), col.DefaultExpr)));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::DropDefault: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        columnDesc = L(columnDesc, Q(Y(Q("dropDefault"))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
                     case TColumnSchema::ETypeOfChange::Nothing: {
                         // do nothing
 
@@ -1795,6 +1826,17 @@ public:
         for (const auto& id : Params_.DropChangefeeds) {
             const auto name = BuildQuotedAtom(id.Pos, id.Name);
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
+        }
+
+        if (Params_.Compact) {
+            auto settings = Y();
+            if (Params_.Compact->Cascade) {
+                settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
+            }
+            if (Params_.Compact->MaxShardsInFlight) {
+                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            }
+            actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
         }
 
         auto opts = Y();

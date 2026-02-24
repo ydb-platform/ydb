@@ -3213,6 +3213,57 @@ state: STATE_ENABLED
       TestTopic(true, 5, 4);
     }
 
+    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
+        Env();
+        ui64 txId = 100;
+
+        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        TestLs(Runtime(), "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+        TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto exportRequest = NDescUT::TExportRequest(S3Port(), {
+            R"(
+                items {
+                    source_path: "/MyRoot/.sys/partition_stats"
+                    destination_prefix: "/partition_stats"
+                }
+            )",
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", exportRequest.GetRequest());
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot");
+
+        UNIT_ASSERT(HasS3File("/partition_stats/system_view.pb"));
+        UNIT_ASSERT(HasS3File("/partition_stats/permissions.pb"));
+        UNIT_ASSERT(HasS3File("/partition_stats/metadata.json"));
+
+        const auto sysviewDesc = GetS3FileContent("/partition_stats/system_view.pb");
+        const auto sysviewDescExpected = "sys_view_id: 1\nsys_view_name: \"partition_stats\"\n";
+        UNIT_ASSERT_EQUAL_C(
+            sysviewDesc, sysviewDescExpected,
+            TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
+
+        const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
+        CheckPermissions(permissions, CreateProtoComparator(R"(
+            actions {
+              change_owner: "user0@builtin"
+            }
+            actions {
+              grant {
+                subject: "user0@builtin"
+                permission_names: "ydb.generic.use"
+              }
+            }
+        )"));
+    }
+
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {
       Env();
       ui64 txId = 100;

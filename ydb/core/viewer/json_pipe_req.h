@@ -48,6 +48,7 @@ protected:
     bool PassedAway = false;
     bool ReplySent = false;
     bool UseCache = false;
+    bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
     TString Error;
     i32 MaxRequestsInFlight = 200;
@@ -334,7 +335,7 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     std::vector<TNodeId> GetDatabaseNodes();
-    bool IsDatabaseRequest();
+    bool IsDatabaseRequest() const;
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
@@ -378,7 +379,7 @@ protected:
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
     TString GetHTTPNOTFOUND(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
-    TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
+    TString GETHTTPACCESSDENIED(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(i32 requests = 1);

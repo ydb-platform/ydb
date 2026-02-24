@@ -299,6 +299,7 @@ struct TCommonAppOptions {
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString MonitoringPrivateKeyFile;
+    TString MonitoringCaFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -398,6 +399,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
         opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
+        opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&MonitoringCaFile);
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
@@ -606,6 +608,10 @@ struct TCommonAppOptions {
         }
         if (MonitoringPrivateKeyFile) {
             appConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(MonitoringPrivateKeyFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (MonitoringCaFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringCaFile(MonitoringCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (SqsHttpPort) {
@@ -1162,7 +1168,7 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString) {
+        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
             if (CommonAppOptions.SeedNodesFile) {
                 InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
                 Y_ABORT_UNLESS(mainYamlConfigString);

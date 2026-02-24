@@ -33,11 +33,19 @@ struct TEvKqpExecuter {
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
+        std::optional<ui64> BrokenLockQuerySpanId;
 
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
         ui64 LocksBrokenAsBreaker = 0;
         ui64 LocksBrokenAsVictim = 0;
+        TVector<ui64> BreakerQuerySpanIds;  // QuerySpanIds of all queries that broke locks (from DataShard, one per shard/table)
+
+        struct TDeferredBreakerInfo {
+            ui64 QuerySpanId = 0;  // Breaker's QuerySpanId
+            ui32 NodeId = 0;        // Node where breaker's query text is cached
+        };
+        TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
 
         THashSet<ui32> ParticipantNodes;
 

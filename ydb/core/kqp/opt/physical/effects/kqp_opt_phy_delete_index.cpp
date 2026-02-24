@@ -51,7 +51,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Table(del.Table())
         .Input(lookupKeys)
         .ReturningColumns(del.ReturningColumns())
-        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+        .IsBatch(del.IsBatch())
         .Done();
 
     TVector<TExprBase> effects;
@@ -137,6 +137,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 }
                 break;
             }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                break;
         }
 
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

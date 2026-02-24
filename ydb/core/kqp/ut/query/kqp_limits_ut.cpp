@@ -251,6 +251,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+        app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
 
         app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 

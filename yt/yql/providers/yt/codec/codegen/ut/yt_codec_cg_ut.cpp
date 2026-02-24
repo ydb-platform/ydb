@@ -8,6 +8,7 @@
 
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
+#include <yql/essentials/utils/swap_bytes.h>
 
 #include <llvm/IR/Module.h> // Y_IGNORE
 
@@ -337,6 +338,81 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(row, buf);
         buf.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\2\0\0\0~\xFB")");
+    }
+
+    Y_UNIT_TEST(TestWriteDataRowDecimal32NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(9, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF")");
+    }
+
+    Y_UNIT_TEST(TestWriteDataRowDecimal64NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(18, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF\xFF\xFF\xFF\xFF")");
+    }
+
+    Y_UNIT_TEST(TestWriteDataRowDecimal128NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(19, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF")");
     }
 
     Y_UNIT_TEST(TestWriteDataRowDecimalNan) {
@@ -1086,7 +1162,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data: unexpected data length");
     }
 
     Y_UNIT_TEST(TestReadTzInvalidTime) {
@@ -1100,7 +1176,40 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data: time point is out of range");
+    }
+
+    Y_UNIT_TEST(TestReadTzInvalidTz) {
+        // full size = 4 + 8 + 2 = 14
+        char buf[4 + 8 + 2];
+        ui32 len = 10;
+        std::memcpy(buf, &len, sizeof(len));
+        // valid timestamp
+        ui64 ts = SwapBytes(NUdf::MAX_TIMESTAMP - 1);
+        std::memcpy(buf + 4, &ts, sizeof(ts));
+        NUdf::TUnboxedValue val;
+        {
+            // invalid tzId
+            ui16 tzId = 586;
+            tzId = SwapBytes(tzId);
+            std::memcpy(buf + 12, &tzId, sizeof(tzId));
+            TReadSetup setup("ReadTzTimestamp", TStringBuf(buf, sizeof(buf)));
+            typedef void(*TFunc)(TInputBuf&, void*);
+            auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp data: unknown timezone");
+        }
+        {
+            const ui16 validTzId = 587;
+            ui16 tzId = validTzId;
+            tzId = SwapBytes(tzId);
+            std::memcpy(buf + 12, &tzId, sizeof(tzId));
+            TReadSetup setup("ReadTzTimestamp", TStringBuf(buf, sizeof(buf)));
+            typedef void(*TFunc)(TInputBuf&, void*);
+            auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+            funcPtr(setup.Buf_, &val);
+            UNIT_ASSERT_VALUES_EQUAL(val.Get<ui64>(), NUdf::MAX_TIMESTAMP - 1);
+            UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), validTzId);
+        }
     }
 
 #endif

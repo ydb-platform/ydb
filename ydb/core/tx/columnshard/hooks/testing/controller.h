@@ -55,17 +55,24 @@ private:
     using TUnifiedPathId = NKikimr::NColumnShard::TUnifiedPathId;
 
     class TPathIdTranslator: public NOlap::IPathIdTranslator {
-        THashMap<TInternalPathId, TSchemeShardLocalPathId> InternalToSchemeShardLocal;
+        THashMap<TInternalPathId, std::set<TSchemeShardLocalPathId>> InternalToSchemeShardLocal;
         THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
 
     public:
         void AddPathId(const TUnifiedPathId& pathId) {
-            AFL_VERIFY(InternalToSchemeShardLocal.emplace(pathId.InternalPathId, pathId.SchemeShardLocalPathId).second);
+            AFL_VERIFY(InternalToSchemeShardLocal[pathId.InternalPathId].emplace(pathId.SchemeShardLocalPathId).second);
             AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
         }
         void DeletePathId(const TUnifiedPathId& pathId) {
-            InternalToSchemeShardLocal.erase(pathId.InternalPathId);
             SchemeShardLocalToInternal.erase(pathId.SchemeShardLocalPathId);
+            auto it = InternalToSchemeShardLocal.find(pathId.InternalPathId);
+            if (it == InternalToSchemeShardLocal.end()) {
+                return;
+            }
+            it->second.erase(pathId.SchemeShardLocalPathId);
+            if (it->second.empty()) {
+                InternalToSchemeShardLocal.erase(it);
+            }
         }
 
     public:
@@ -78,14 +85,16 @@ private:
         }
         THashSet<TSchemeShardLocalPathId> GetSchemeShardLocalPathIds() const {
             THashSet<TSchemeShardLocalPathId> result;
-            for (const auto& [internalPathId, schemeShardLocalPathId] : InternalToSchemeShardLocal) {
-                result.emplace(schemeShardLocalPathId);
+            for (const auto& [internalPathId, schemeShardLocalPathIds] : InternalToSchemeShardLocal) {
+                for (const auto& schemeShardLocalPathId: schemeShardLocalPathIds) {
+                    AFL_VERIFY(result.insert(schemeShardLocalPathId).second);
+                }
             }
             return result;
         }
 
     public:   //NOlap::IPathIdTranslator
-        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
+        virtual std::optional<std::set<TSchemeShardLocalPathId>> ResolveSchemeShardLocalPathIdsOptional(
             const TInternalPathId internalPathId) const override {
             if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
                 return { *p };

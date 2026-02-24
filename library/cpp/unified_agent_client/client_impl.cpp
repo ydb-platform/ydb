@@ -44,7 +44,8 @@ namespace NUnifiedAgent::NPrivate {
         , ForkProtector(forkProtector)
         , Counters(parameters.Counters ? parameters.Counters : MakeIntrusive<TClientCounters>())
         , Log(parameters.Log)
-        , MainLogger(Log, MakeFMaybe(Parameters.LogRateLimitBytes))
+        , MainLogger(Log, MakeFMaybe(Parameters.LogRateLimitBytes),
+                     TLogger::TCounters{.DroppedBytes = &Counters->ClientLogDroppedBytes})
         , Logger(MainLogger.Child(Sprintf("ua_%" PRIu64, Id.fetch_add(1))))
         , Channel(nullptr)
         , Stub(nullptr)
@@ -55,8 +56,6 @@ namespace NUnifiedAgent::NPrivate {
         , Destroyed(false)
         , Lock()
     {
-        MainLogger.SetDroppedBytesCounter(&Counters->ClientLogDroppedBytes);
-
         if (ForkProtector != nullptr) {
             ForkProtector->Register(*this);
         }

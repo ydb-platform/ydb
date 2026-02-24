@@ -16,6 +16,8 @@
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_tablemetadata.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -376,6 +378,17 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                         break;
                     }
 
+                    case NKqpProto::TKqpSource::kSysViewSource: {
+                        YQL_ENSURE(source.GetInputIndex() == 0);
+                        YQL_ENSURE(stage.SourcesSize() == 1);
+                        meta.TableId = MakeTableId(source.GetSysViewSource().GetTable());
+                        meta.TablePath = source.GetSysViewSource().GetTable().GetPath();
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
+                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                        stageSourcesCount++;
+                        break;
+                    }
+
                     default: {
                         YQL_ENSURE(false, "unknown source type");
                     }
@@ -412,30 +425,44 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                 }
             }
 
+            auto fillMetaFromSinkSettings = [&tx, &meta](NKikimrKqp::TKqpTableSinkSettings& settings) {
+                meta.TablePath = settings.GetTable().GetPath();
+                if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
+                } else {
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                }
+
+                if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                    meta.TableId = MakeTableId(settings.GetTable());
+                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                    for (const auto& indexSettings : settings.GetIndexes()) {
+                        meta.IndexMetas.emplace_back();
+                        meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
+                        meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
+                        meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                    }
+                }
+            };
+
             for (auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     YQL_ENSURE(sink.GetOutputIndex() == 0);
-                    YQL_ENSURE(stage.SinksSize() == 1);
-                    meta.TablePath = settings.GetTable().GetPath();
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
-                    } else {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
-                    }
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
+                    fillMetaFromSinkSettings(settings);
+                }
+            }
 
-                    if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                        meta.TableId = MakeTableId(settings.GetTable());
-                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
-
-                        for (const auto& indexSettings : settings.GetIndexes()) {
-                            meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                        }
-                    }
+            for (auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(transform.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
+                    fillMetaFromSinkSettings(settings);
                 }
             }
 
@@ -733,6 +760,7 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     vectorResolveTransform.OutputType = vectorResolve.GetOutputType();
     TTaskInputMeta meta;
     meta.VectorResolveSettings = settings;
+    meta.TablePath = stageInfo.Meta.TablePath;
     BuildTransformChannels(vectorResolveTransform, meta, "VectorResolve/Map", stageInfo, inputIndex,
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
@@ -1075,7 +1103,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         }
 
         taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
-    }  else if (task.Meta.ScanTask || stageInfo.Meta.IsSysView()) {
+    }  else if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
@@ -1296,6 +1324,17 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
         auto& channelDesc = *outputDesc.AddChannels();
         FillChannelDesc(channelDesc, GetChannel(channel), GetMeta().ChannelTransportVersion, enableSpilling);
     }
+
+    if (output.Transform) {
+        auto* transformDesc = outputDesc.MutableTransform();
+        auto& transform = output.Transform;
+
+        transformDesc->SetType(transform->Type);
+        transformDesc->SetInputType(transform->InputType);
+        transformDesc->SetOutputType(transform->OutputType);
+
+        *transformDesc->MutableSettings() = transform->Settings;
+    }
 }
 
 void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings, bool& enableMetering) const {
@@ -1338,6 +1377,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 }
 
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
+            } else if (input.Meta.SysViewSourceSettings) {
+                inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SysViewSourceSettings);
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -1400,6 +1441,14 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                         : NKikimrDataEvents::OPTIMISTIC);
             }
 
+            if (!isTableImmutable) {
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.StreamLookupSettings->GetTable().GetPath());
+                if (effectiveSpanId) {
+                    input.Meta.StreamLookupSettings->SetQuerySpanId(effectiveSpanId);
+                }
+            }
+
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);
@@ -1418,6 +1467,14 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
             if (GetMeta().LockMode) {
                 input.Meta.VectorResolveSettings->SetLockMode(*GetMeta().LockMode);
+            }
+
+            {
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.TablePath);
+                if (effectiveSpanId) {
+                    input.Meta.VectorResolveSettings->SetQuerySpanId(effectiveSpanId);
+                }
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
@@ -1474,6 +1531,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         } else {
             dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
         }
+    }
+
+    if (const auto& infoAggregator = GetMeta().DqInfoAggregator) {
+        NActorsProto::TActorId actorIdProto;
+        ActorIdToProto(infoAggregator, &actorIdProto);
+        (*result->MutableTaskParams())["dq_info_aggregator"] = actorIdProto.SerializeAsString();
     }
 
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
@@ -1682,6 +1745,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                             auto sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse full text source settings");
                             sourceSettings->ClearSnapshot();
+                        } else if (settings.Is<NKikimrKqp::TKqpSysViewSourceSettings>()) {
+                            auto sourceSettings = newInput.Meta.SysViewSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpSysViewSourceSettings>();
+                            YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse sys view source settings");
                         } else {
                             newInput.SourceSettings = sourceInfo.GetSettings();
                         }
@@ -2443,10 +2509,16 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
     {
-        auto value = ExtractPhyValue(
-        stageInfo, fullTextSource.GetQuerySettings().GetQueryValue(),
-        TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        settings->MutableQuerySettings()->SetQuery(TString(value.AsStringRef()));
+
+        TStringBuilder queryBuilder;
+        for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
+            auto value = ExtractPhyValue(
+                stageInfo, query,
+                TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+            queryBuilder << TString(value.AsStringRef());
+        }
+
+        settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
 
@@ -2470,12 +2542,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    if (fullTextSource.HasQueryMode()) {
+    if (fullTextSource.HasDefaultOperator()) {
         auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetQueryMode(),
+            stageInfo, fullTextSource.GetDefaultOperator(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         if (value.HasValue()) {
-            settings->SetQueryMode(TString(value.AsStringRef()));
+            settings->SetDefaultOperator(TString(value.AsStringRef()));
         }
     }
 
@@ -2514,10 +2586,121 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 }
 
+void TKqpTasksGraph::BuildSysViewTasksFromSource(TStageInfo& stageInfo) {
+    YQL_ENSURE(stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kSysViewSource);
+
+    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    const auto& source = stage.GetSources(0);
+    const auto& sysViewSource = source.GetSysViewSource();
+
+    auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SOURCE_READ);
+    task.Meta.Type = TTaskMeta::TTaskType::Compute;
+    task.Meta.NodeId = GetMeta().ExecuterId.NodeId();
+
+    const auto& stageSource = stage.GetSources(0);
+    auto& input = task.Inputs.at(stageSource.GetInputIndex());
+    input.SourceType = NYql::KqpSysViewSourceName;
+    input.ConnectionInfo = NYql::NDq::TSourceInput{};
+
+    input.Meta.SysViewSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpSysViewSourceSettings>();
+    NKikimrKqp::TKqpSysViewSourceSettings* settings = input.Meta.SysViewSourceSettings;
+
+    settings->SetDatabase(GetMeta().Database);
+    settings->MutableTable()->CopyFrom(sysViewSource.GetTable());
+    settings->SetTablePath(sysViewSource.GetTable().GetPath());
+    settings->SetSysViewInfo(sysViewSource.GetTable().GetSysView());
+    settings->SetReverse(sysViewSource.GetReverse());
+
+    // Fill SysViewDescription from table metadata
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+    if (tableInfo && tableInfo->SysViewInfo) {
+        *settings->MutableSysViewDescription() = *tableInfo->SysViewInfo;
+    }
+
+    // Fill columns: convert TKqpPhyColumnId to TKqpColumnMetadataProto using table metadata
+    for (const auto& phyCol : sysViewSource.GetColumns()) {
+        auto* col = settings->AddColumns();
+        col->SetId(phyCol.GetId());
+        col->SetName(phyCol.GetName());
+        if (tableInfo) {
+            auto it = tableInfo->Columns.find(phyCol.GetName());
+            if (it != tableInfo->Columns.end()) {
+                col->SetTypeId(it->second.Type.GetTypeId());
+                if (NScheme::NTypeIds::IsParametrizedType(it->second.Type.GetTypeId())) {
+                    NScheme::ProtoFromTypeInfo(it->second.Type, {}, *col->MutableTypeInfo());
+                }
+            }
+        }
+    }
+
+    // Fill key columns from table info
+    if (tableInfo) {
+        for (size_t i = 0; i < tableInfo->KeyColumns.size(); ++i) {
+            auto* kc = settings->AddKeyColumns();
+            kc->SetName(tableInfo->KeyColumns[i]);
+            if (i < tableInfo->KeyColumnTypes.size()) {
+                kc->SetTypeId(tableInfo->KeyColumnTypes[i].GetTypeId());
+            }
+        }
+    }
+
+    // Fill key ranges from the source proto
+    const auto& holderFactory = TxAlloc->HolderFactory;
+    const auto& typeEnv = TxAlloc->TypeEnv;
+    const auto& keyTypes = tableInfo ? tableInfo->KeyColumnTypes : TVector<NScheme::TTypeInfo>();
+
+    auto guard = TxAlloc->TypeEnv.BindAllocator();
+
+    switch (sysViewSource.GetRangesExprCase()) {
+        case NKqpProto::TKqpSysViewSource::kKeyRange: {
+            auto range = MakeKeyRange(keyTypes, sysViewSource.GetKeyRange(), stageInfo, holderFactory, typeEnv);
+            range.Serialize(*settings->AddKeyRanges());
+            break;
+        }
+        case NKqpProto::TKqpSysViewSource::kRanges: {
+            auto ranges = FillRangesFromParameter(keyTypes, sysViewSource.GetRanges(), stageInfo, typeEnv);
+            for (auto& pointOrRange : ranges) {
+                if (auto* range = std::get_if<TSerializedTableRange>(&pointOrRange)) {
+                    range->Serialize(*settings->AddKeyRanges());
+                } else {
+                    // Convert point to an inclusive range [point, point]
+                    auto& point = std::get<TSerializedCellVec>(pointOrRange);
+                    TSerializedTableRange rangeFromPoint(point.GetCells(), true, point.GetCells(), true);
+                    rangeFromPoint.Point = true;
+                    rangeFromPoint.Serialize(*settings->AddKeyRanges());
+                }
+            }
+            break;
+        }
+        default: {
+            // Full scan — construct a range from [NULL..NULL] (beginning) to [] (end), both inclusive.
+            // Scan actors expect From to have at least one NULL cell for full scans;
+            // a default-constructed TSerializedTableRange has empty From cells which some
+            // scan actors interpret as +inf.
+            TVector<TCell> fromCells(keyTypes.size()); // NULL cells = "from the very beginning"
+            TSerializedTableRange fullRange(fromCells, true, TConstArrayRef<TCell>(), true);
+            fullRange.Serialize(*settings->AddKeyRanges());
+            break;
+        }
+    }
+
+    // Pass user token for access control in scan actors (e.g., Auth* sys views)
+    if (UserToken) {
+        settings->SetUserToken(UserToken->SerializeAsString());
+    }
+
+    LOG_D("Stage " << stageInfo.Id << " create sys view source task: " << task.Id);
+}
+
 void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings) {
     if (const auto& lockTxId = GetMeta().LockTxId) {
         settings.SetLockTxId(*lockTxId);
         settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
+    }
+    const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+        GetMeta().QuerySpanId, settings.GetTable().GetTablePath());
+    if (effectiveSpanId) {
+        settings.SetQuerySpanId(effectiveSpanId);
     }
 }
 
@@ -2820,6 +3003,44 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
     output.SinkSettings = extSink.GetSettings();
 }
 
+void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, const TKqpTasksGraph::TTaskType& task) const {
+    auto& lockTxId = GetMeta().LockTxId;
+    if (lockTxId) {
+        settings.SetLockTxId(*lockTxId);
+        settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
+    }
+    if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+        ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+    }
+    if (!settings.GetInconsistentTx() && GetMeta().Snapshot.IsValid()) {
+        settings.MutableMvccSnapshot()->SetStep(GetMeta().Snapshot.Step);
+        settings.MutableMvccSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
+    }
+    if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
+        settings.SetLockMode(*GetMeta().LockMode);
+    }
+        // Use per-transaction QuerySpanId if available (for deferred effects),
+        // otherwise fall back to global QuerySpanId; apply per-table suppression.
+        {
+            const ui64 rawSpanId = GetMeta().GetTxQuerySpanId(task.StageId.TxId);
+            const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                rawSpanId, settings.GetTable().GetPath());
+            if (effectiveSpanId) {
+                settings.SetQuerySpanId(effectiveSpanId);
+            }
+        }
+
+    auto sinkPosition = std::lower_bound(
+        internalSinksOrder.begin(),
+        internalSinksOrder.end(),
+        std::make_pair(task.StageId.TxId, settings.GetPriority()));
+    AFL_ENSURE(sinkPosition != internalSinksOrder.end()
+            && sinkPosition->first == task.StageId.TxId
+            && sinkPosition->second == settings.GetPriority());
+
+    settings.SetPriority(std::distance(internalSinksOrder.begin(), sinkPosition));
+}
+
 void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
     const auto& intSink = sink.GetInternalSink();
     auto& output = task.Outputs[sink.GetOutputIndex()];
@@ -2834,31 +3055,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
             settings = *stageInfo.Meta.ResolvedSinkSettings;
         }
 
-        auto& lockTxId = GetMeta().LockTxId;
-        if (lockTxId) {
-            settings.SetLockTxId(*lockTxId);
-            settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
-        }
-        if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
-            ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
-        }
-        if (!settings.GetInconsistentTx() && GetMeta().Snapshot.IsValid()) {
-            settings.MutableMvccSnapshot()->SetStep(GetMeta().Snapshot.Step);
-            settings.MutableMvccSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
-        }
-        if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
-            settings.SetLockMode(*GetMeta().LockMode);
-        }
-
-        auto sinkPosition = std::lower_bound(
-            internalSinksOrder.begin(),
-            internalSinksOrder.end(),
-            std::make_pair(task.StageId.TxId, settings.GetPriority()));
-        AFL_ENSURE(sinkPosition != internalSinksOrder.end()
-                && sinkPosition->first == task.StageId.TxId
-                && sinkPosition->second == settings.GetPriority());
-
-        settings.SetPriority(std::distance(internalSinksOrder.begin(), sinkPosition));
+        FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
         output.SinkSettings.ConstructInPlace();
         output.SinkSettings->PackFrom(settings);
@@ -2866,6 +3063,30 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         output.SinkSettings = intSink.GetSettings();
     }
 }
+
+void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
+    const auto& intSink = transform.GetInternalSink();
+    auto& output = task.Outputs[transform.GetOutputIndex()];
+    output.Type = TTaskOutputType::Map;
+
+    AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+
+    NKikimrKqp::TKqpTableSinkSettings settings;
+    if (!stageInfo.Meta.ResolvedSinkSettings) {
+        YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+    } else {
+        settings = *stageInfo.Meta.ResolvedSinkSettings;
+    }
+
+    FillKqpTableSinkSettings(settings, internalSinksOrder, task);
+
+    output.Transform.ConstructInPlace();
+    output.Transform->Type = TString(NYql::KqpTableSinkName);
+    output.Transform->InputType = transform.GetInputType();
+    output.Transform->OutputType = transform.GetOutputType();
+    output.Transform->Settings.PackFrom(settings);
+}
+
 
 void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
     for (const auto& sink : stage.GetSinks()) {
@@ -2875,6 +3096,18 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
             BuildInternalSinks(sink, stageInfo, internalSinksOrder, task);
         } else if (sink.HasExternalSink()) {
             BuildExternalSinks(sink, task);
+        } else {
+            YQL_ENSURE(false, "unknown sink type");
+        }
+    }
+
+    if (stage.OutputTransformsSize() > 0) {
+        YQL_ENSURE(stage.OutputTransformsSize() == 1, "multiple output transforms are not supported");
+        const auto& transform = stage.GetOutputTransforms(0);
+        YQL_ENSURE(transform.GetOutputIndex() < task.Outputs.size());
+
+        if (transform.HasInternalSink()) {
+            BuildInternalOutputTransform(transform, stageInfo, internalSinksOrder, task);
         } else {
             YQL_ENSURE(false, "unknown sink type");
         }
@@ -2919,10 +3152,10 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             // build task conditions
             const bool buildFromSourceTasks = stage.SourcesSize() > 0;
             const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() + stage.OutputTransformsSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
             const bool buildScanTasks = GetMeta().IsScan
                 ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                : maybeOlapRead && (stage.SinksSize() == 0 || stageInfo.Meta.HasReads())
+                : maybeOlapRead && (stage.SinksSize() + stage.OutputTransformsSize() == 0 || stageInfo.Meta.HasReads())
                 ;
 
             // TODO: doesn't work right now - multiple conditions are possible in tests
@@ -2952,6 +3185,10 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     } break;
                     case NKqpProto::TKqpSource::kFullTextSource: {
                         BuildFullTextScanTasksFromSource(stageInfo, stats);
+                        GetMeta().UnknownAffectedShardCount = true;
+                    } break;
+                    case NKqpProto::TKqpSource::kSysViewSource: {
+                        BuildSysViewTasksFromSource(stageInfo);
                         GetMeta().UnknownAffectedShardCount = true;
                     } break;
                     case NKqpProto::TKqpSource::kExternalSource: {
@@ -3052,6 +3289,13 @@ TKqpTasksGraph::TKqpTasksGraph(
         return;
     }
 
+    // Store per-transaction QuerySpanIds for deferred effects
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        if (Transactions[txIdx].QuerySpanId != 0) {
+            GetMeta().SetTxQuerySpanId(txIdx, Transactions[txIdx].QuerySpanId);
+        }
+    }
+
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (const auto& tx : Transactions) {
         if (txsType) {
@@ -3101,17 +3345,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             const auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
 
-            if (stage.SinksSize() == 0) {
-                continue;
-            }
-
-            for (const auto& sink : stage.GetSinks()) {
-                if (!sink.HasInternalSink()) {
-                    continue;
-                }
-
-                const auto& intSink = sink.GetInternalSink();
-
+            auto addSink = [&stageInfo, &order, txIdx](const NKqpProto::TKqpInternalSink& intSink) {
                 AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 if (!stageInfo.Meta.ResolvedSinkSettings) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
@@ -3120,6 +3354,32 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
                 } else {
                     order.emplace_back(txIdx, stageInfo.Meta.ResolvedSinkSettings->GetPriority());
                 }
+            };
+
+            if (stage.SinksSize() > 0) {
+                AFL_ENSURE(stage.OutputTransformsSize() == 0);
+
+                for (const auto& sink : stage.GetSinks()) {
+                    if (!sink.HasInternalSink()) {
+                        continue;
+                    }
+
+                    const auto& intSink = sink.GetInternalSink();
+                    addSink(intSink);
+                }
+            }
+            if (stage.OutputTransformsSize() > 0) {
+                AFL_ENSURE(stage.OutputTransformsSize() == 1);
+                AFL_ENSURE(stage.SinksSize() == 0);
+
+                const auto& transform = stage.GetOutputTransforms(0);
+
+                if (!transform.HasInternalSink()) {
+                    continue;
+                }
+
+                const auto& intSink = transform.GetInternalSink();
+                addSink(intSink);
             }
         }
     }

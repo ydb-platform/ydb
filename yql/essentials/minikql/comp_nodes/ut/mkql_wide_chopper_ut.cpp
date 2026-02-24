@@ -451,10 +451,7 @@ public:
         // Call GetState.
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto getStateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowWrapper::GetState>());
-        const auto getStateType = FunctionType::get(ptrType, {self->getType(), statePtr->getType(), ctx.Ctx->getType()}, false);
-        const auto getStateFuncPtr = CastInst::Create(Instruction::IntToPtr, getStateFunc, PointerType::getUnqual(getStateType), "GetState", block);
-        const auto state = CallInst::Create(getStateType, getStateFuncPtr, {self, statePtr, ctx.Ctx}, "", block);
+        const auto state = EmitFunctionCall<&TTestProxyFlowWrapper::GetState>(ptrType, {self, statePtr, ctx.Ctx}, ctx, block);
 
         // Initialize temporary storage.
         const auto statusType = Type::getInt32Ty(context);
@@ -473,10 +470,7 @@ public:
         }
 
         // Call ProxyFetch.
-        const auto proxyFetchFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowState::ProxyFetch>());
-        const auto proxyFetchType = FunctionType::get(statusType, {state->getType(), ctx.Ctx->getType(), output->getType()}, false);
-        const auto proxyFetchFuncPtr = CastInst::Create(Instruction::IntToPtr, proxyFetchFunc, PointerType::getUnqual(proxyFetchType), "ProxyFetch", block);
-        const auto result = CallInst::Create(proxyFetchType, proxyFetchFuncPtr, {state, ctx.Ctx, output}, "", block);
+        const auto result = EmitFunctionCall<&TTestProxyFlowState::ProxyFetch>(statusType, {state, ctx.Ctx, output}, ctx, block);
 
         // Return the result.
         ICodegeneratorInlineWideNode::TGettersList getters(Width_);

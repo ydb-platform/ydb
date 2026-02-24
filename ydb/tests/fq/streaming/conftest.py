@@ -21,18 +21,11 @@ def kikimr(request):
                 "enable_streaming_queries": True,
                 "enable_streaming_queries_counters": True,
                 "enable_topics_sql_io_operations": True,
+                "enable_streaming_queries_pq_sink_deduplication": True,
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True,
-                "streaming_queries": {
-                    "external_storage": {
-                        "database_connection": {
-                            "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE"),
-                        },
-                    },
-                },
+                "enable_match_recognize": True
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,
@@ -46,7 +39,8 @@ def kikimr(request):
 
         return config
 
-    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    checkpointing_period_ms = getattr(request, "param", {}).get("checkpointing_period_ms", "200")
+    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
 
     kikimr = Kikimr(get_ydb_config())

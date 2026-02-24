@@ -50,7 +50,9 @@
 
 #include <ydb/core/control/immediate_control_board_actor.h>
 
+#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/driver_lib/version/version.h>
+
 #include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
@@ -85,6 +87,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -103,6 +106,15 @@
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
+
+#if defined(OS_LINUX)
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#endif
 
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/monitor.h>
@@ -242,6 +254,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -997,6 +1010,26 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
     }
+
+    { // create retro collector
+        setup->LocalServices.emplace_back(
+                NRetroTracing::MakeRetroCollectorId(),
+                TActorSetupCmd(NRetroTracing::CreateRetroCollector(), TMailboxType::ReadAsFilled,
+                        appData->BatchPoolId));
+    }
+
+#if defined(OS_LINUX)
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().GetEnabled()) {
+        auto ssProxy = NYdb::NBS::NStorage::CreateSSProxy(Config.GetNbsConfig().GetNbsStorageConfig());
+
+        setup->LocalServices.emplace_back(
+            NYdb::NBS::NStorage::MakeSSProxyServiceId(),
+            TActorSetupCmd(
+                ssProxy.release(),
+                TMailboxType::Revolving,
+                appData->UserPoolId));
+    }
+#endif
 }
 
 // TImmediateControlBoardInitializer
@@ -1210,6 +1243,10 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+#if defined(OS_LINUX)
+    addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+#endif
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())
@@ -2254,9 +2291,16 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
+        TDuration warmupDeadline;
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() && !appData->TenantName.empty()) {
+            auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
+            warmupDeadline = TDuration::Seconds(std::max(
+                warmupProto.GetHardDeadlineSeconds(), warmupProto.GetSoftDeadlineSeconds()));
+        }
+
         // Create resource manager
         auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources, NodeId);
+            {}, kqpProxySharedResources, NodeId, warmupDeadline);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2288,6 +2332,22 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() && !appData->TenantName.empty()) {
+            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
+
+            TString database = appData->TenantName;
+            TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+
+            TVector<NActors::TActorId> notifyActorIds = {
+                NKqp::MakeKqpRmServiceID(NodeId),
+                MakeGRpcServersManagerId(NodeId),
+            };
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
+            setup->LocalServices.push_back(std::make_pair(
+                NKqp::MakeKqpWarmupActorId(NodeId),
+                TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 
@@ -3156,5 +3216,21 @@ void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup*
     setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
+
+#if defined(OS_LINUX)
+
+TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig)
+     : IKikimrServicesInitializer(runConfig) {
+}
+
+void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+
+    const auto& config = Config.GetNbsConfig();
+    NYdb::NBS::NBlockStore::CreateNbsService(config);
+}
+
+#endif
 
 } // namespace NKikimr::NKikimrServicesInitializers

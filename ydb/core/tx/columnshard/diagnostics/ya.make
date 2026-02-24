@@ -14,4 +14,8 @@ PEERDIR(
     yql/essentials/core/issue/protos
 )
 
+RESOURCE(
+    viz-global.js viz-global.js
+)
+
 END()

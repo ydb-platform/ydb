@@ -318,14 +318,7 @@ public:
     }
 
     TString GetOutputDebugString() override {
-        if (AllocatedHolder->Output) {
-            switch (AllocatedHolder->Output->GetFillLevel()) {
-                case NoLimit:   return "";
-                case SoftLimit: return TStringBuilder() << "Output.FillLimit == SoftLimit " << AllocatedHolder->Output->DebugString();
-                case HardLimit: return TStringBuilder() << "Output.FillLimit == HardLimit " << AllocatedHolder->Output->DebugString();
-            }
-        }
-        return "";
+        return AllocatedHolder->Output ? AllocatedHolder->Output->DebugString() : "";
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
@@ -639,8 +632,8 @@ public:
                 if (inputDesc.GetSource().GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                     inputUsesWatermarks = true;
                     if (transform && WatermarksTracker) {
-                        transform->WatermarksTracker.emplace(/*logPrefix=*/"");
-                        transform->WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
+                        transform->WatermarksTracker.emplace(*WatermarksTracker, true);
+                        transform->WatermarksTracker->TransferInput(*WatermarksTracker, i, false);
                     }
                 }
             } else {
@@ -674,17 +667,16 @@ public:
                     if (inputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                         inputUsesWatermarks = true;
                         if (transform && WatermarksTracker) {
-                            WatermarksTracker->UnregisterInputChannel(channelId);
                             if (!transform->WatermarksTracker) {
-                                transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                                transform->WatermarksTracker.emplace(*WatermarksTracker, true);
                             }
-                            transform->WatermarksTracker->RegisterInputChannel(channelId/*TODO: , idleTimeout */);
+                            transform->WatermarksTracker->TransferInput(*WatermarksTracker, channelId, true);
                         }
                     }
                 }
-                if (inputUsesWatermarks && transform && WatermarksTracker) {
-                    WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
-                }
+            }
+            if (inputUsesWatermarks && transform && WatermarksTracker) {
+                WatermarksTracker->RegisterAsyncInput(i, transform->WatermarksTracker->GetMaxIdleTimeout());
             }
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
@@ -768,14 +760,25 @@ public:
                 YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
                 transform->TransformOutputType = static_cast<TType*>(outputTypeNode);
 
-                TStringBuf inputTypeNodeRaw(transformDesc.GetInputType());
-                auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, typeEnv);
-                YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
-                TType* inputType = static_cast<TType*>(inputTypeNode);
-                YQL_ENSURE(inputTypeNodeRaw == entry->OutputItemTypesRaw[i]);
-                LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
-                    << transformDesc.GetType() << " with input type: " << *inputType
-                    << " , output type: " << *transform->TransformOutputType);
+                {
+                    TStringBuf inputTypeNodeRaw(transformDesc.GetInputType());
+                    auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, entry->Env);
+                    YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
+                    TType* inputType = static_cast<TType*>(inputTypeNode);
+
+                    auto typeCheckLog = [&] () {
+                        TStringStream out;
+                        out << *inputType << " != " << *entry->OutputItemTypes[i];
+                        LOG(TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
+                            << transformDesc.GetType() << " with output type: " << *transform->TransformOutputType
+                            << " , input type: " << *inputType);
+                        return out.Str();
+                    };
+                    YQL_ENSURE(inputType->IsSameType(*entry->OutputItemTypes[i]),  "" << typeCheckLog());
+                    LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                        << transformDesc.GetType() << " with input type: " << *inputType
+                        << " , output type: " << *transform->TransformOutputType);
+                }
 
                 transform->TransformInput = CreateDqAsyncOutputBuffer(i, transformDesc.GetType(), entry->OutputItemTypes[i], memoryLimits.ChannelBufferSize,
                     StatsModeToCollectStatsLevel(Settings.StatsMode));
@@ -930,8 +933,8 @@ public:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     if (Y_LIKELY(InputConsumed)) {
-                        // did smth => waiting for nothing
-                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                        // reset waiting start time after each consumed value
+                        Stats->CurrentWaitInputStartTime = now;
                     } else {
                         StartWaitingInput();
                         if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {

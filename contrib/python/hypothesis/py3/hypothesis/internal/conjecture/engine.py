@@ -9,13 +9,12 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib
-import inspect
 import math
 import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator, Sequence
-from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
@@ -70,7 +69,6 @@ from hypothesis.internal.escalation import InterestingOrigin
 from hypothesis.internal.healthcheck import fail_health_check
 from hypothesis.internal.observability import Observation, with_observability_callback
 from hypothesis.reporting import base_report, report, verbose_report
-from hypothesis.utils.deprecation import note_deprecation
 
 # In most cases, the following constants are all Final. However, we do allow users
 # to monkeypatch all of these variables, which means we cannot annotate them as
@@ -156,11 +154,23 @@ class HealthCheckState:
         return "\n".join(out)
 
 
+def _invalid_thresholds(*, r: float, c: float) -> tuple[int, int]:
+    base = math.ceil(math.log(1 - c) / math.log(1 - r)) - 1
+    per_p = math.ceil(1 / r)
+    return base, per_p
+
+
+# stop once we're 99% confident the true valid rate is below 1%. See
+# https://github.com/HypothesisWorks/hypothesis/issues/4623#issuecomment-3814681997
+# for how we derived this formula.
+INVALID_THRESHOLD_BASE, INVALID_PER_VALID = _invalid_thresholds(r=0.01, c=0.99)
+
+
 class ExitReason(Enum):
     max_examples = "settings.max_examples={s.max_examples}"
     max_iterations = (
         "settings.max_examples={s.max_examples}, "
-        "but < 10% of examples satisfied assumptions"
+        "but < 1% of examples satisfied assumptions"
     )
     max_shrinks = f"shrunk example {MAX_SHRINKS} times"
     finished = "nothing left to do"
@@ -241,24 +251,8 @@ class DiscardObserver(DataObserver):
 
 
 def realize_choices(data: ConjectureData, *, for_failure: bool) -> None:
-    # backwards-compatibility with backends without for_failure, can remove
-    # in a few months
-    kwargs = {}
-    if for_failure:
-        if "for_failure" in inspect.signature(data.provider.realize).parameters:
-            kwargs["for_failure"] = True
-        else:
-            note_deprecation(
-                f"{type(data.provider).__qualname__}.realize does not have the "
-                "for_failure parameter. This will be an error in future versions "
-                "of Hypothesis. (If you installed this backend from a separate "
-                "package, upgrading that package may help).",
-                has_codemod=False,
-                since="2025-05-07",
-            )
-
     for node in data.nodes:
-        value = data.provider.realize(node.value, **kwargs)
+        value = data.provider.realize(node.value, for_failure=for_failure)
         expected_type = {
             "string": str,
             "float": float,
@@ -275,7 +269,7 @@ def realize_choices(data: ConjectureData, *, for_failure: bool) -> None:
         constraints = cast(
             ChoiceConstraintsT,
             {
-                k: data.provider.realize(v, **kwargs)
+                k: data.provider.realize(v, for_failure=for_failure)
                 for k, v in node.constraints.items()
             },
         )
@@ -522,12 +516,9 @@ class ConjectureRunner:
         self.call_count += 1
         interrupted = False
 
-        try:
-            self.__stoppable_test_function(data)
-        except KeyboardInterrupt:
-            interrupted = True
-            raise
-        except BackendCannotProceed as exc:
+        def _backend_cannot_proceed(
+            exc: BackendCannotProceed, data: ConjectureData
+        ) -> None:
             if exc.scope in ("verified", "exhausted"):
                 self._switch_to_hypothesis_provider = True
                 if exc.scope == "verified":
@@ -553,16 +544,35 @@ class ConjectureRunner:
             # But we check self.valid_examples == 0 to determine whether to raise
             # Unsatisfiable, and that would throw this check off.
             self.invalid_examples += 1
+            data.cannot_proceed_scope = exc.scope
 
+        # this fiddly bit of control flow is to work around `return` being
+        # disallowed in `finally` blocks as of python 3.14. Otherwise, we would
+        # just return in the _backend_cannot_proceed branch.
+        finally_early_return = False
+
+        try:
+            self.__stoppable_test_function(data)
+        except KeyboardInterrupt:
+            interrupted = True
+            raise
+        except BackendCannotProceed as exc:
+            _backend_cannot_proceed(exc, data)
             # skip the post-test-case tracking; we're pretending this never happened
             interrupted = True
-            data.cannot_proceed_scope = exc.scope
             data.freeze()
             return
         except BaseException:
             data.freeze()
             if self.settings.backend != "hypothesis":
-                realize_choices(data, for_failure=True)
+                try:
+                    realize_choices(data, for_failure=True)
+                except BackendCannotProceed as exc:
+                    _backend_cannot_proceed(exc, data)
+                    # skip the post-test-case tracking; we're pretending this
+                    # never happened
+                    interrupted = True
+                    return
             self.save_choices(data.choices)
             raise
         finally:
@@ -573,22 +583,35 @@ class ConjectureRunner:
                 data.freeze()
 
                 if self.settings.backend != "hypothesis":
-                    realize_choices(data, for_failure=data.status is Status.INTERESTING)
+                    try:
+                        realize_choices(
+                            data, for_failure=data.status is Status.INTERESTING
+                        )
+                    except BackendCannotProceed as exc:
+                        _backend_cannot_proceed(exc, data)
+                        finally_early_return = True
 
-                call_stats: CallStats = {
-                    "status": data.status.name.lower(),
-                    "runtime": data.finish_time - data.start_time,
-                    "drawtime": math.fsum(data.draw_times.values()),
-                    "gctime": data.gc_finish_time - data.gc_start_time,
-                    "events": sorted(
-                        k if v == "" else f"{k}: {v}" for k, v in data.events.items()
-                    ),
-                }
-                self.stats_per_test_case.append(call_stats)
+                if not finally_early_return:
+                    call_stats: CallStats = {
+                        "status": data.status.name.lower(),
+                        "runtime": data.finish_time - data.start_time,
+                        "drawtime": math.fsum(data.draw_times.values()),
+                        "gctime": data.gc_finish_time - data.gc_start_time,
+                        "events": sorted(
+                            k if v == "" else f"{k}: {v}"
+                            for k, v in data.events.items()
+                        ),
+                    }
+                    self.stats_per_test_case.append(call_stats)
 
-                self._cache(data)
-                if data.misaligned_at is not None:  # pragma: no branch # coverage bug?
-                    self.misaligned_count += 1
+                    self._cache(data)
+                    if (
+                        data.misaligned_at is not None
+                    ):  # pragma: no branch # coverage bug?
+                        self.misaligned_count += 1
+
+        if finally_early_return:
+            return
 
         self.debug_data(data)
 
@@ -713,11 +736,8 @@ class ConjectureRunner:
             #  while in the other case below we just want to move on to shrinking.)
             if self.valid_examples >= self.settings.max_examples:
                 self.exit_with(ExitReason.max_examples)
-            if self.call_count >= max(
-                self.settings.max_examples * 10,
-                # We have a high-ish default max iterations, so that tests
-                # don't become flaky when max_examples is too low.
-                1000,
+            if (self.invalid_examples + self.overrun_examples) > (
+                INVALID_THRESHOLD_BASE + INVALID_PER_VALID * self.valid_examples
             ):
                 self.exit_with(ExitReason.max_iterations)
 
@@ -1077,8 +1097,12 @@ class ConjectureRunner:
         # but with the important distinction that this clause will move on to
         # the shrinking phase having found one or more bugs, while the other
         # will exit having found zero bugs.
-        if self.valid_examples >= self.settings.max_examples or self.call_count >= max(
-            self.settings.max_examples * 10, 1000
+        invalid_threshold = (
+            INVALID_THRESHOLD_BASE + INVALID_PER_VALID * self.valid_examples
+        )
+        if (
+            self.valid_examples >= self.settings.max_examples
+            or (self.invalid_examples + self.overrun_examples) > invalid_threshold
         ):  # pragma: no cover
             return False
 
@@ -1214,8 +1238,7 @@ class ConjectureRunner:
             # a novel prefix, ask the backend for an input.
             if not self.using_hypothesis_backend:
                 data = self.new_conjecture_data([])
-                with suppress(BackendCannotProceed):
-                    self.test_function(data)
+                self.test_function(data)
                 continue
 
             self._current_phase = "generate"
@@ -1409,7 +1432,7 @@ class ConjectureRunner:
                     # case (1): duplicate the choices in start1:start2.
                     attempt = data.choices[:start2] + data.choices[start1:]
                 else:
-                    (start, end) = self.random.choice([(start1, end1), (start2, end2)])
+                    start, end = self.random.choice([(start1, end1), (start2, end2)])
                     replacement = data.choices[start:end]
                     # We attempt to replace both the examples with
                     # whichever choice we made. Note that this might end

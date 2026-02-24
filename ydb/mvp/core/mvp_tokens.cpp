@@ -40,8 +40,8 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
     for (const NMvp::TJwtInfo& jwtInfo : tokensConfig.jwtinfo()) {
         TokenConfigs.JwtTokenConfigs[jwtInfo.name()] = jwtInfo;
     }
-    for (const NMvp::TOAuthExchange& tokenExchangeInfo : tokensConfig.oauthexchange()) {
-        TokenConfigs.OAuthExchangeConfigs[tokenExchangeInfo.name()] = tokenExchangeInfo;
+    for (const NMvp::TOAuth2Exchange& tokenExchangeInfo : tokensConfig.oauth2exchange()) {
+        TokenConfigs.OAuth2ExchangeConfigs[tokenExchangeInfo.name()] = tokenExchangeInfo;
     }
     for (const NMvp::TOAuthInfo& oauthInfo : tokensConfig.oauthinfo()) {
         TokenConfigs.OauthTokenConfigs[oauthInfo.name()] = oauthInfo;
@@ -56,7 +56,7 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
 }
 
 void TMvpTokenator::Bootstrap() {
-    for (const auto& [name, config] : TokenConfigs.OAuthExchangeConfigs) {
+    for (const auto& [name, config] : TokenConfigs.OAuth2ExchangeConfigs) {
         Send(SelfId(), new TEvPrivate::TEvRefreshToken(name));
     }
     for (const auto& [name, config] : TokenConfigs.JwtTokenConfigs) {
@@ -87,9 +87,9 @@ void TMvpTokenator::HandlePeriodic() {
 void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     TString name = event->Get()->Name;
     BLOG_D("Refreshing token " << name);
-    const NMvp::TOAuthExchange* tokenExchangeInfo = TokenConfigs.GetOAuthExchangeConfig(name);
+    const NMvp::TOAuth2Exchange* tokenExchangeInfo = TokenConfigs.GetOAuth2ExchangeConfig(name);
     if (tokenExchangeInfo != nullptr) {
-        UpdateOAuthExchangeToken(tokenExchangeInfo);
+        UpdateOAuth2ExchangeToken(tokenExchangeInfo);
         return;
     }
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
@@ -178,8 +178,8 @@ const NMvp::TJwtInfo* TMvpTokenator::TTokenConfigs::GetJwtTokenConfig(const TStr
     return GetTokenConfig(JwtTokenConfigs, name);
 }
 
-const NMvp::TOAuthExchange* TMvpTokenator::TTokenConfigs::GetOAuthExchangeConfig(const TString& name) {
-    return GetTokenConfig(OAuthExchangeConfigs, name);
+const NMvp::TOAuth2Exchange* TMvpTokenator::TTokenConfigs::GetOAuth2ExchangeConfig(const TString& name) {
+    return GetTokenConfig(OAuth2ExchangeConfigs, name);
 }
 
 const NMvp::TOAuthInfo* TMvpTokenator::TTokenConfigs::GetOAuthTokenConfig(const TString& name) {
@@ -294,7 +294,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                         TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
 }
 
-void TMvpTokenator::UpdateOAuthExchangeToken(const NMvp::TOAuthExchange* tokenExchangeInfo) {
+void TMvpTokenator::UpdateOAuth2ExchangeToken(const NMvp::TOAuth2Exchange* tokenExchangeInfo) {
     if (TokenConfigs.AccessServiceType != NMvp::nebius_v1) {
         BLOG_ERROR("oauth2_token_exchange tokens are only supported for nebius_v1 access service type, token " << tokenExchangeInfo->name());
         RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, tokenExchangeInfo->name()});
@@ -304,7 +304,7 @@ void TMvpTokenator::UpdateOAuthExchangeToken(const NMvp::TOAuthExchange* tokenEx
     nebius::iam::v1::ExchangeTokenRequest request;
     TString endpoint = tokenExchangeInfo->tokenendpoint();
     TString error;
-    if (!BuildTokenExchangeRequestFromConfig(tokenExchangeInfo, request, error)) {
+    if (!BuildOAuth2ExchangeRequestFromConfig(tokenExchangeInfo, request, error)) {
         BLOG_ERROR(error);
         RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, tokenExchangeInfo->name()});
         return;

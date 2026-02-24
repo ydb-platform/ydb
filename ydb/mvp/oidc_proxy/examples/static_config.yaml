@@ -16,7 +16,7 @@ generic:
     token_file: ydb/mvp/oidc_proxy/examples/token_file.json
 
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "static-creds-token"
           token_endpoint: "grpcs://tokens.net:443"
           grant_type: "urn:ietf:params:oauth:grant-type:token-exchange"

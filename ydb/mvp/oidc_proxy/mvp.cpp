@@ -247,7 +247,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
                 ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
             }
             TryGetOidcOptionsFromConfig(appConfig.GetOidc());
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }

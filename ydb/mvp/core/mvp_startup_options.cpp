@@ -1,4 +1,5 @@
 #include "mvp_startup_options.h"
+#include "cracked_page.h"
 #include "utils.h"
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -249,14 +250,14 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableSecretInfo(), override.GetSecretInfo());
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
-    MergeRepeatedByName(Tokens.MutableOAuthExchange(), override.GetOAuthExchange());
+    MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
 
     THashSet<TString> overriddenTokenExchangeNames;
     Oauth2TokenExchangeTokenName.clear();
-    for (size_t i = 0; i < static_cast<size_t>(override.OAuthExchangeSize()); ++i) {
-        const auto& tokenExchangeInfo = override.GetOAuthExchange(static_cast<int>(i));
+    for (size_t i = 0; i < static_cast<size_t>(override.OAuth2ExchangeSize()); ++i) {
+        const auto& tokenExchangeInfo = override.GetOAuth2Exchange(static_cast<int>(i));
         if (tokenExchangeInfo.GetName().empty()) {
-            ythrow yexception() << "Configuration error: 'name' must be specified in 'auth.tokens.oauth_exchange'.";
+            ythrow yexception() << "Configuration error: 'name' must be specified in 'auth.tokens.oauth2_exchange'.";
         }
         if (i == 0) {
             Oauth2TokenExchangeTokenName = tokenExchangeInfo.GetName();
@@ -264,21 +265,22 @@ void TMvpStartupOptions::OverrideTokensConfig() {
         overriddenTokenExchangeNames.insert(tokenExchangeInfo.GetName());
     }
 
-    for (const auto& tokenExchangeInfo : Tokens.GetOAuthExchange()) {
+    for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
         if (overriddenTokenExchangeNames.find(tokenExchangeInfo.GetName()) == overriddenTokenExchangeNames.end()) {
             continue;
         }
         if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
-            ythrow yexception() << "Configuration error: 'token-endpoint' must be specified in 'auth.tokens.oauth_exchange'.";
+            ythrow yexception() << "Configuration error: 'token_endpoint' must be specified in 'auth.tokens.oauth2_exchange'.";
         }
     }
 
-    for (const auto& tokenExchangeInfo : Tokens.GetOAuthExchange()) {
+    for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
         if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
             continue;
         }
-        if (to_lower(tokenExchangeInfo.GetTokenEndpoint()).StartsWith("http://")) {
-            ythrow yexception() << "Configuration error: 'token-endpoint' must not use 'http' scheme in 'auth.tokens.oauth_exchange'.";
+        const TCrackedPage cracked(tokenExchangeInfo.GetTokenEndpoint());
+        if (!cracked.IsGrpcSchemeAllowed()) {
+            ythrow yexception() << "Configuration error: 'token_endpoint' must use grpc.";
         }
     }
 }

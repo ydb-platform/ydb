@@ -92,9 +92,9 @@ generic:
   access_service_type: "nebius_v1"
   auth:
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "nebiusJwt"
-          token_endpoint: "https://token.endpoint/"
+          token_endpoint: "grpcs://token.endpoint:443"
 )";
         TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_tokens_override", ".yaml");
 
@@ -109,9 +109,9 @@ generic:
   access_service_type: "nebius_v1"
   auth:
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "nebiusJwt"
-          token_endpoint: "https://token.endpoint/"
+          token_endpoint: "grpcs://token.endpoint:443"
           grant_type: "urn:ietf:params:oauth:grant-type:token-exchange"
           requested_token_type: "urn:ietf:params:oauth:token-type:access_token"
           subject_credentials:
@@ -129,9 +129,9 @@ generic:
         TMvpStartupOptions opts = MakeOpts(argv);
 
         UNIT_ASSERT(!opts.Oauth2TokenExchangeTokenName.empty());
-        UNIT_ASSERT(opts.Tokens.OAuthExchangeSize() > 0);
-        const auto& tokenExchange = opts.Tokens.GetOAuthExchange(0);
-        UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetTokenEndpoint(), "https://token.endpoint/");
+        UNIT_ASSERT(opts.Tokens.OAuth2ExchangeSize() > 0);
+        const auto& tokenExchange = opts.Tokens.GetOAuth2Exchange(0);
+        UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetTokenEndpoint(), "grpcs://token.endpoint:443");
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetGrantType(), "urn:ietf:params:oauth:grant-type:token-exchange");
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetRequestedTokenType(), "urn:ietf:params:oauth:token-type:access_token");
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetSubjectCredentials().GetToken(), "service-account-id");
@@ -144,7 +144,7 @@ generic:
   access_service_type: "nebius_v1"
   auth:
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "nebiusJwt"
           subject_credentials:
             type: "FIXED"
@@ -154,7 +154,7 @@ generic:
         TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_oauth2_no_endpoint", ".yaml");
 
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'token-endpoint' must be specified in 'auth.tokens.oauth_exchange'");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'token_endpoint' must be specified in 'auth.tokens.oauth2_exchange'");
     }
 
     Y_UNIT_TEST(Oauth2TokenExchangeHttpEndpointThrows) {
@@ -163,7 +163,7 @@ generic:
   access_service_type: "nebius_v1"
   auth:
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "nebiusJwt"
           token_endpoint: "http://token.endpoint/"
           subject_credentials:
@@ -174,13 +174,53 @@ generic:
         TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_oauth2_http_endpoint", ".yaml");
 
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'token-endpoint' must not use 'http' scheme in 'auth.tokens.oauth_exchange'");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'token_endpoint' must use grpc.");
+    }
+
+    Y_UNIT_TEST(Oauth2TokenExchangeHttpsEndpointThrows) {
+        TString yaml = TStringBuilder() << R"(
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    tokens:
+      oauth2_exchange:
+        - name: "nebiusJwt"
+          token_endpoint: "https://token.endpoint/"
+          subject_credentials:
+            type: "FIXED"
+            token: "service-account-id"
+            token_type: "urn:nebius:params:oauth:token-type:subject_identifier"
+)";
+        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_oauth2_https_endpoint", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'token_endpoint' must use grpc.");
+    }
+
+    Y_UNIT_TEST(Oauth2TokenExchangeHostPortWithoutSchemeAccepted) {
+        TString yaml = TStringBuilder() << R"(
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    tokens:
+      oauth2_exchange:
+        - name: "nebiusJwt"
+          token_endpoint: "token.endpoint:443"
+          subject_credentials:
+            type: "FIXED"
+            token: "service-account-id"
+            token_type: "urn:nebius:params:oauth:token-type:subject_identifier"
+)";
+        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_oauth2_host_port_no_scheme", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(MakeOpts(argv));
     }
 
     Y_UNIT_TEST(Oauth2TokenExchangeOverridesTokenFileByName) {
         TTempFileHandle tmpToken = MakeTestFile(R"pb(
 AccessServiceType: nebius_v1
-OAuthExchange {
+OAuth2Exchange {
   Name: "nebiusJwt"
   TokenEndpoint: "grpcs://token.from.file:443"
   GrantType: "urn:ietf:params:oauth:grant-type:token-exchange"
@@ -204,7 +244,7 @@ generic:
   auth:
     token_file: )" << tmpToken.Name() << R"(
     tokens:
-      oauth_exchange:
+      oauth2_exchange:
         - name: "nebiusJwt"
           requested_token_type: "custom-requested-type"
           subject_credentials:
@@ -215,8 +255,8 @@ generic:
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
         TMvpStartupOptions opts = MakeOpts(argv);
 
-        UNIT_ASSERT(opts.Tokens.OAuthExchangeSize() > 0);
-        const auto& tokenExchange = opts.Tokens.GetOAuthExchange(0);
+        UNIT_ASSERT(opts.Tokens.OAuth2ExchangeSize() > 0);
+        const auto& tokenExchange = opts.Tokens.GetOAuth2Exchange(0);
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetName(), "nebiusJwt");
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetTokenEndpoint(), "grpcs://token.from.file:443");
         UNIT_ASSERT_VALUES_EQUAL(tokenExchange.GetRequestedTokenType(), "custom-requested-type");

@@ -63,7 +63,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
 
     NMvp::TTokensConfig tokensConfig;
     tokensConfig.set_accessservicetype(NMvp::nebius_v1);
-    auto tokenExchangeList = tokensConfig.MutableOAuthExchange();
+    auto tokenExchangeList = tokensConfig.MutableOAuth2Exchange();
     auto tokenExchange = tokenExchangeList->Add();
     tokenExchange->SetName("nebiusJwt");
     tokenExchange->SetTokenEndpoint(endpoint);
@@ -72,9 +72,9 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     auto* actorCreds = tokenExchange->MutableActorCredentials();
     actorCreds->SetTokenFile(ctx.FederatedJwtTokenPath);
     if (!ctx.OmitExplicitCredsTypeAndTokenType) {
-        subjectCreds->SetType(NMvp::TOAuthExchange::TCredentials::FIXED);
+        subjectCreds->SetType(NMvp::TOAuth2Exchange::TCredentials::FIXED);
         subjectCreds->SetTokenType("urn:nebius:params:oauth:token-type:subject_identifier");
-        actorCreds->SetType(NMvp::TOAuthExchange::TCredentials::FIXED);
+        actorCreds->SetType(NMvp::TOAuth2Exchange::TCredentials::FIXED);
         actorCreds->SetTokenType("urn:ietf:params:oauth:token-type:jwt");
     }
 

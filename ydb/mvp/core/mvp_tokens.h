@@ -15,6 +15,7 @@
 #include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 #include "grpc_log.h"
+#include "cracked_page.h"
 
 namespace NMVP {
 
@@ -103,14 +104,14 @@ protected:
     struct TTokenConfigs {
         THashMap<TString, NMvp::TMetadataTokenInfo> MetadataTokenConfigs;
         THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
-        THashMap<TString, NMvp::TOAuthExchange> OAuthExchangeConfigs;
+        THashMap<TString, NMvp::TOAuth2Exchange> OAuth2ExchangeConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;
         NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
         const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
-        const NMvp::TOAuthExchange* GetOAuthExchangeConfig(const TString& name);
+        const NMvp::TOAuth2Exchange* GetOAuth2ExchangeConfig(const TString& name);
         const NMvp::TOAuthInfo* GetOAuthTokenConfig(const TString& name);
         const NMvp::TStaticCredentialsInfo* GetStaticCredentialsTokenConfig(const TString& name);
 
@@ -135,13 +136,10 @@ protected:
 
     template <typename TGRpcService>
     std::unique_ptr<NMVP::TLoggedGrpcServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TString& endpoint) {
-        TStringBuf scheme = "grpc";
-        TStringBuf host;
-        TStringBuf uri;
-        NHttp::CrackURL(endpoint, scheme, host, uri);
+        TCrackedPage cracked(endpoint);
         NYdbGrpc::TGRpcClientConfig config;
-        config.Locator = host;
-        config.EnableSsl = (scheme == "grpcs");
+        config.Locator = cracked.Host;
+        config.EnableSsl = cracked.IsSecureScheme();
         SetGrpcKeepAlive(config);
         return std::unique_ptr<NMVP::TLoggedGrpcServiceConnection<TGRpcService>>(new NMVP::TLoggedGrpcServiceConnection<TGRpcService>(config, GRpcClientLow.CreateGRpcServiceConnection<TGRpcService>(config)));
     }
@@ -162,7 +160,7 @@ protected:
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
     void UpdateJwtToken(const NMvp::TJwtInfo* iwtInfo);
-    void UpdateOAuthExchangeToken(const NMvp::TOAuthExchange* tokenExchangeInfo);
+    void UpdateOAuth2ExchangeToken(const NMvp::TOAuth2Exchange* tokenExchangeInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);
     void UpdateStaffApiUserToken(const NMvp::TStaffApiUserTokenInfo* staffApiUserTokenInfo);

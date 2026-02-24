@@ -31,7 +31,7 @@ struct TLessNoCase {
     }
 };
 
-using TOauthCredentials = NMvp::TOAuthExchange::TCredentials;
+using TOauthCredentials = NMvp::TOAuth2Exchange::TCredentials;
 using TJwtSignerFn = TString(*)(const TOauthCredentials&, const std::chrono::system_clock::time_point&);
 
 TDuration ParseJwtTtl(TStringBuf ttlValue) {
@@ -193,9 +193,9 @@ TOauthCredentials::EType InferCredsType(const TOauthCredentials& creds) {
 
 } // anonymous namespace
 
-bool BuildTokenExchangeRequestFromConfig(const NMvp::TOAuthExchange* tokenExchangeInfo,
-                                         nebius::iam::v1::ExchangeTokenRequest& request,
-                                         TString& error) {
+bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
+                                          nebius::iam::v1::ExchangeTokenRequest& request,
+                                          TString& error) {
     request.set_grant_type(tokenExchangeInfo->granttype().empty() ? TString(DEFAULT_GRANT_TYPE) : tokenExchangeInfo->granttype());
     request.set_requested_token_type(tokenExchangeInfo->requestedtokentype().empty() ? TString(DEFAULT_REQUESTED_TOKEN_TYPE) : tokenExchangeInfo->requestedtokentype());
 

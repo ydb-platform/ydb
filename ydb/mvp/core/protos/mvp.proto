@@ -10,7 +10,7 @@ message TJwtInfo {
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
 }
 
-message TOAuthExchange {
+message TOAuth2Exchange {
     message TCredentials {
         enum EType {
             TYPE_UNSPECIFIED = 0;
@@ -24,14 +24,13 @@ message TOAuthExchange {
         optional string TokenFile = 4;
 
         optional string Alg = 5;
-        reserved 6;
-        optional string PrivateKey = 7;
-        optional string Kid = 8;
-        optional string Iss = 9;
-        optional string Sub = 10;
-        repeated string Aud = 11;
-        optional string Jti = 12;
-        optional string Ttl = 13 [default = "1h"];
+        optional string PrivateKey = 6;
+        optional string Kid = 7;
+        optional string Iss = 8;
+        optional string Sub = 9;
+        repeated string Aud = 10;
+        optional string Jti = 11;
+        optional string Ttl = 12 [default = "1h"];
     }
 
     optional string Name = 1;
@@ -87,7 +86,7 @@ message TTokensConfig {
     repeated TStaticCredentialsInfo StaticCredentialsInfo = 6; // Data for create token from static credentials
     optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
     optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
-    repeated TOAuthExchange OAuthExchange = 9; // OAuth2 token exchange data for TTokensConfig
+    repeated TOAuth2Exchange OAuth2Exchange = 9; // OAuth2 token exchange data for TTokensConfig
 }
 
 message TLoggingConfig {

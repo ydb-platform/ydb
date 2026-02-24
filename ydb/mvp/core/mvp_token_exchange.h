@@ -5,8 +5,8 @@
 
 namespace NMVP {
 
-bool BuildTokenExchangeRequestFromConfig(const NMvp::TOAuthExchange* tokenExchangeInfo,
-                                         nebius::iam::v1::ExchangeTokenRequest& request,
-                                         TString& error);
+bool BuildOAuth2ExchangeRequestFromConfig(const NMvp::TOAuth2Exchange* tokenExchangeInfo,
+                                          nebius::iam::v1::ExchangeTokenRequest& request,
+                                          TString& error);
 
 } // namespace NMVP

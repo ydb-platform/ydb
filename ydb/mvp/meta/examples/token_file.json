@@ -1,6 +1,6 @@
 AccessServiceType: nebius_v1
 
-OAuthExchange {
+OAuth2Exchange {
   Name: "static-creds-token"
   SubjectCredentials {
     PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIJQQIBADANBgkqhkiG9w0BAQ...truncated...\n-----END PRIVATE KEY-----\n"

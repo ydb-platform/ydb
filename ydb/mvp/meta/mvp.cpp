@@ -205,7 +205,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
             if (appConfig.HasMeta()) {
                 TryGetMetaOptionsFromConfig(appConfig.GetMeta());
             }
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }

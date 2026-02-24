@@ -5,7 +5,6 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
-    cracked_page.cpp
     extension.cpp
     extension_final.cpp
     extension_manager.cpp

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/mvp/core)
 SIZE(SMALL)
 
 SRCS(
+    cracked_page_ut.cpp
     mvp_ut.cpp
     mvp_tokens.cpp
     mvp_test_runtime.cpp

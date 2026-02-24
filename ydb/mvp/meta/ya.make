@@ -7,7 +7,6 @@ LIBRARY()
 SRCS(
     meta.cpp
     meta_cache.cpp
-    meta_cache.h
     meta_cloud.h
     meta_cluster.h
     meta_clusters.h
@@ -15,9 +14,7 @@ SRCS(
     meta_cp_databases_verbose.h
     meta_db_clusters.h
     meta_versions.cpp
-    meta_versions.h
     mvp.cpp
-    mvp.h
 )
 
 PEERDIR(

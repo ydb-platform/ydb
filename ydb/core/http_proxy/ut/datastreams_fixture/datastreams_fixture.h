@@ -75,7 +75,14 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
-    void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
+    struct TInitParameters {
+        bool YandexCloudMode : 1 = true;
+        bool EnableMetering : 1 = false;
+        bool EnableSqsTopic : 1 = false;
+        bool EnforceUserTokenRequirement : 1 = false;
+    };
+
+    void InitAll(const TInitParameters initParameters);
 
     TString FormAuthorizationStr(const TString& region) const;
 
@@ -226,7 +233,7 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering);
+    void InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement);
 
     void InitAccessServiceService();
 
@@ -260,20 +267,26 @@ public:
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {
     public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(false);
+        InitAll(TInitParameters{
+            .YandexCloudMode = false,
+        });
     }
 };
 
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
     public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, true);
+        InitAll(TInitParameters{
+            .EnableMetering = true,
+        });
     }
 };
 
 class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
     public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, false, true);
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+        });
     }
 };

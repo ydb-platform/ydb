@@ -20,15 +20,15 @@ void THttpProxyTestMock::TearDown(NUnitTest::TTestContext&) {
 }
 
 void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
-    InitAll();
+    InitAll(TInitParameters{});
 }
 
-void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
+void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(yandexCloudMode, enableMetering);
+    InitKikimr(initParameters.YandexCloudMode, initParameters.EnableMetering, initParameters.EnforceUserTokenRequirement);
     InitAccessServiceService();
-    InitHttpServer(yandexCloudMode, enableSqsTopic);
+    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) const {
@@ -334,6 +334,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
     auto driverConfig = NYdb::TDriverConfig()
         .SetEndpoint(endpoint)
+        .SetAuthToken("root@builtin")
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
     NYdb::TDriver driver(driverConfig);
     auto tableClient = NYdb::NTable::TTableClient(driver);
@@ -358,7 +359,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
+void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -369,6 +370,10 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
+    if (enforceUserTokenRequirement) {
+        auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig->SetEnforceUserTokenRequirement(true);
+    }
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);

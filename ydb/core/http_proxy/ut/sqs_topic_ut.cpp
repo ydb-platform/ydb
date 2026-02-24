@@ -33,6 +33,25 @@ namespace {
         }
     };
 
+    class TWithEnforceUserTokenRequirementFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnforceUserTokenRequirement = true,
+            });
+        }
+    };
+
+
+    class TNoAuthWithEnforceUserTokenRequirementFixture: public TWithEnforceUserTokenRequirementFixture {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            TWithEnforceUserTokenRequirementFixture::SetUp(ctx);
+            DisableAuthorization();
+        }
+    };
+
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
 
@@ -52,7 +71,7 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
-    NYdb::TDriverConfig MakeDriverConfig(TFixture& fixture) {
+    NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
 
         config.SetEndpoint("localhost:" + ToString(fixture.GRpcServerPort));
@@ -63,7 +82,7 @@ namespace {
         return config;
     }
 
-    NYdb::TDriver MakeDriver(TFixture& fixture) {
+    NYdb::TDriver MakeDriver(std::derived_from<THttpProxyTestMock> auto& fixture) {
         return TDriver(MakeDriverConfig(fixture));
     }
 
@@ -1780,5 +1799,95 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         DeleteQueue({{"QueueUrl", queueUrl}});
         json = GetQueueUrl({{"QueueName", "ExampleQueueName"}}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlEmpty, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrl, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExampleQueueName";
+        const TString consumer = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+        auto queueName = topicName;
+        auto json = GetQueueUrl({{"QueueName", queueName}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlOfNotExistingQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenSendMessage, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto json = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        }, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenReceiveMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto jsonSend = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+
+        DisableAuthorization();
+
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DisableAuthorization();
+
+        json = DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenCreateQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteQueue, TWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DisableAuthorization();
+
+        json = DeleteQueue({{"QueueUrl", queueUrl}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
     }
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

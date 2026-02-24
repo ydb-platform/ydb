@@ -1392,7 +1392,7 @@ namespace NKikimr::NHttpProxy {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
-                    if (AppData(ctx)->EnforceUserTokenRequirement) {
+                    if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(
                             ctx,
                             NSQS::NErrors::INCOMPLETE_SIGNATURE.HttpStatusCode,

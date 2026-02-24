@@ -96,6 +96,9 @@ ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_format[v2-test.parquet-parquet-kikimr_settings0]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_format[v2-test_each_row.json-json_each_row-kikimr_settings0]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_format[v2-test_list.json-json_list-kikimr_settings0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_json_errors[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]

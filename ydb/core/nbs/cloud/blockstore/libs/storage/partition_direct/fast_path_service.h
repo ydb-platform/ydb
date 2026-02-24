@@ -40,7 +40,7 @@ public:
         ui32 blockSize,
         ui64 blocksCount,
         ui32 storageMedia,
-        const NYdb::NBS::NProto::TStorageConfig& storageConfig,
+        const NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;

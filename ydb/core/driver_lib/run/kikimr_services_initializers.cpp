@@ -109,6 +109,11 @@
 
 #if defined(OS_LINUX)
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #endif
 
 #include <ydb/core/mon/mon.h>
@@ -1012,6 +1017,19 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 TActorSetupCmd(NRetroTracing::CreateRetroCollector(), TMailboxType::ReadAsFilled,
                         appData->BatchPoolId));
     }
+
+#if defined(OS_LINUX)
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().GetEnabled()) {
+        auto ssProxy = NYdb::NBS::NStorage::CreateSSProxy(Config.GetNbsConfig().GetNbsStorageConfig());
+
+        setup->LocalServices.emplace_back(
+            NYdb::NBS::NStorage::MakeSSProxyServiceId(),
+            TActorSetupCmd(
+                ssProxy.release(),
+                TMailboxType::Revolving,
+                appData->UserPoolId));
+    }
+#endif
 }
 
 // TImmediateControlBoardInitializer
@@ -1225,6 +1243,10 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+#if defined(OS_LINUX)
+    addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+#endif
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())
@@ -3205,7 +3227,8 @@ void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setu
     Y_UNUSED(setup);
     Y_UNUSED(appData);
 
-    NYdb::NBS::NBlockStore::CreateNbsService();
+    const auto& config = Config.GetNbsConfig();
+    NYdb::NBS::NBlockStore::CreateNbsService(config);
 }
 
 #endif

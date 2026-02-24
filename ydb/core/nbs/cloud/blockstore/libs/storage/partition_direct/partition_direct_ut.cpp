@@ -1,10 +1,12 @@
-// #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 
 // #include <ydb/core/blobstorage/ddisk/ddisk.h>
 // #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 // #include <ydb/core/util/actorsys_test/testactorsys.h>
+// #include <ydb/core/protos/config.pb.h>
+// #include <ydb/core/testlib/tablet_helpers.h>
 
 // using namespace NKikimr;
 
@@ -16,6 +18,7 @@
 
 // const TString DDiskPoolName = "ddp1";
 // const TString PersistentBufferDDiskPoolName = "ddp1";
+// const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
 
 // void SetupStorage(TEnvironmentSetup& env)
 // {
@@ -42,52 +45,90 @@
 //         UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
 //     }
 
-//     CreateNbsService();
+//     // Setup NBS service with storage config
+//     NKikimrConfig::TNbsConfig nbsConfig;
+//     auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
+//     storageConfig->SetDDiskPoolName(DDiskPoolName);
+//     storageConfig->SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
+//     CreateNbsService(nbsConfig);
 //     StartNbsService();
-// }
-
-// NYdb::NBS::NProto::TStorageConfig CreateStorageConfig()
-// {
-//     NYdb::NBS::NProto::TStorageConfig storageConfig;
-//     storageConfig.SetDDiskPoolName(DDiskPoolName);
-//     storageConfig.SetPersistentBufferDDiskPoolName(
-//         PersistentBufferDDiskPoolName);
-//     return storageConfig;
 // }
 
 // NKikimrBlockStore::TVolumeConfig CreateVolumeConfig()
 // {
 //     NKikimrBlockStore::TVolumeConfig volumeConfig;
+//     volumeConfig.SetDiskId("test-volume");
 //     volumeConfig.SetBlockSize(4096);
+//     volumeConfig.SetStoragePoolName(DDiskPoolName);
 //     auto* partition = volumeConfig.AddPartitions();
 //     partition->SetBlockCount(32768);
 //     return volumeConfig;
 // }
 
-// TActorId CreatePartitionActor(TEnvironmentSetup& env)
+// ui64 CreatePartitionTablet(TEnvironmentSetup& env)
 // {
-//     auto partition = env.Runtime->Register(
-//         new TPartitionActor(CreateStorageConfig(), CreateVolumeConfig()),
-//         1   // nodeId
-//     );
+//     // Create tablet like in SetupTablet()
+//     env.Runtime->CreateTestBootstrapper(
+//         TTestActorSystem::CreateTestTabletInfo(
+//             PartitionTabletId,
+//             TTabletTypes::Unknown,
+//             env.Settings.Erasure.GetErasure(),
+//             env.GroupId,
+//             3),  // NumChannels
+//         [](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
+//             return new TPartitionActor(tablet, info);
+//         },
+//         env.Settings.ControllerNodeId);
 
-//     // Wait for partition and direct block group to be ready
+//     // Wait for tablet to boot
+//     bool working = true;
+//     env.Runtime->Sim(
+//         [&] { return working; },
+//         [&](IEventHandle& event) {
+//             working = event.GetTypeRewrite() != TEvTablet::EvBoot;
+//         });
+
+//     // Send volume config update
+//     auto volumeConfig = CreateVolumeConfig();
+//     auto updateEvent = std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+//     updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
+//     updateEvent->Record.SetTxId(1);
+
+//     const TActorId& edge = env.Runtime->AllocateEdgeActor(
+//         env.Settings.ControllerNodeId,
+//         __FILE__,
+//         __LINE__);
+
+//     env.Runtime->SendToPipe(
+//         PartitionTabletId,
+//         edge,
+//         updateEvent.release(),
+//         0,
+//         TTestActorSystem::GetPipeConfigWithRetries());
+
+//     // Wait for response
+//     auto response = env.WaitForEdgeActorEvent<NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+//     UNIT_ASSERT(response->Get()->Record.GetStatus() == NKikimrBlockStore::OK);
+
+//     // Wait for partition to allocate DDisk group
 //     env.Sim(TDuration::Seconds(5));
 
-//     return partition;
+//     return PartitionTabletId;
 // }
 
 // TActorId GetLoadActorAdapterActorId(
 //     TEnvironmentSetup& env,
-//     const TActorId& partition,
+//     ui64 partitionTabletId,
 //     const TActorId& edge)
 // {
-//     env.Runtime->Send(
-//         new IEventHandle(
-//             partition,
-//             edge,
-//             new TEvService::TEvGetLoadActorAdapterActorIdRequest()),
-//         edge.NodeId());
+//     auto request = std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdRequest>();
+//     env.Runtime->SendToPipe(
+//         partitionTabletId,
+//         edge,
+//         request.release(),
+//         0,
+//         TTestActorSystem::GetPipeConfigWithRetries());
+
 //     auto res = env.WaitForEdgeActorEvent<
 //         TEvService::TEvGetLoadActorAdapterActorIdResponse>(edge, false);
 //     UNIT_ASSERT(res);
@@ -118,7 +159,7 @@
 
 //         SetupStorage(env);
 
-//         auto partition = CreatePartitionActor(env);
+//         auto partition = CreatePartitionTablet(env);
 
 //         const TActorId& edge = runtime->AllocateEdgeActor(
 //             env.Settings.ControllerNodeId,

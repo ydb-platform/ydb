@@ -49,7 +49,7 @@ TFastPathService::TFastPathService(
     ui32 blockSize,
     ui64 blocksCount,
     ui32 storageMedia,
-    const NProto::TStorageConfig& storageConfig,
+    const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , TraceSamplePeriod(

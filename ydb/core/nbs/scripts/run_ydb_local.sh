@@ -62,7 +62,7 @@ parse_args "$@"
 YDBD_BIN="`pwd`/../../../../ydb/apps/ydbd/ydbd"
 DSTOOL_BIN="`pwd`/../../../../ydb/apps/dstool/ydb-dstool"
 
-for bin in $YDBD_BIN
+for bin in $YDBD_BIN $DSTOOL_BIN
 do
   if ! test -f $bin; then
     echo "$bin not found, build all targets first"
@@ -175,6 +175,18 @@ ConfigsConfig {
                                 Component: \"NBS_PARTITION\"
                                 Level: 7
                             }
+                            Entry {
+                                Component: \"NBS_SS_PROXY\"
+                                Level: 7
+                            }
+                            Entry {
+                                Component: \"FLAT_TX_SCHEMESHARD\"
+                                Level: 7
+                            }
+                            Entry {
+                                Component: \"NBS_VOLUME\"
+                                Level: 7
+                            }
                         }
                     }
                 }
@@ -188,6 +200,18 @@ ConfigsConfig {
     rm -f "$TEMP_FILE"
 
     printf "\n\nYdbd monitoring is running at $MON_PORT, logs in $PERSISTENT_TMP_DIR/logs/ydbd.log\n"
+}
+
+function start_compute_node {
+    echo ""
+    echo "Start compute node"
+    ydbd server \
+        --yaml-config static/config.yaml \
+        --tenant /Root/NBS \
+        --mon-port 31002 \
+        --ic-port 31003 \
+        --grpc-port 31001 \
+        --node-broker-port $GRPC_PORT > $PERSISTENT_TMP_DIR/logs/compute.log 2>&1 &
 }
 
 function create_ddisk_pool {
@@ -216,6 +240,7 @@ case "$ACTION" in
         ;;
     start)
         start_ydbd
+        start_compute_node
         create_ddisk_pool
         create_partition
         ;;
@@ -223,6 +248,7 @@ case "$ACTION" in
         echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
         echo "  start [--port PORT] [--mon-port PORT] - Stop any existing ydbd process and start a new one (default)"
         echo "  stop                                    - Stop any existing ydbd process and exit"
+        echo "  --port PORT                             - Specify GRPC port number (default: 9001)"
         echo "  --port PORT                             - Specify GRPC port number (default: 9001)"
         echo "  --mon-port PORT                         - Specify monitoring port number (default: 8765)"
         exit 1

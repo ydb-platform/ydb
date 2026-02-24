@@ -1,6 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
+import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
@@ -2978,6 +2979,11 @@ message TClusterDiagnosticsConfig {
     optional uint64 CountersMaxInflight = 2 [default = 100];
 }
 
+message TNbsConfig {
+    optional bool Enabled = 1;
+    optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3092,6 +3098,8 @@ message TAppConfig {
     optional TRecoveryShardConfig RecoveryShardConfig = 117;
 
     optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
+
+    optional TNbsConfig NbsConfig = 119;
 }
 
 message TYdbVersion {

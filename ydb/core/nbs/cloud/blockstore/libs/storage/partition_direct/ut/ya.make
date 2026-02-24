@@ -19,6 +19,8 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/ut_blobstorage/lib
+    ydb/core/protos
+    ydb/core/testlib
 )
 
 END()

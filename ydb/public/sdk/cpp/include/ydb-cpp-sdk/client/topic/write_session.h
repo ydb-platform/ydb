@@ -20,11 +20,11 @@ namespace NYdb::inline Dev::NTopic {
 //! If close was successful, returns SUCCESS.
 //! If close was not successful because of timeout, returns TIMEOUT.
 //! If close was not successful because of error, returns ERROR.
-enum class ECloseStatus : uint8_t {
-    SUCCESS = 0,
-    TIMEOUT = 1,
-    ERROR = 2,
-    ALREADY_CLOSED = 3,
+enum class ECloseStatus {
+    Success = 0,
+    Timeout = 1,
+    Error = 2,
+    AlreadyClosed = 3,
 };
 
 //! Description why session was closed.
@@ -38,19 +38,19 @@ struct TCloseResult {
     std::optional<TCloseDescription> ClosedDescription;
 
     bool IsSuccess() const {
-        return Status == ECloseStatus::SUCCESS;
+        return Status == ECloseStatus::Success;
     }
 
     bool IsTimeout() const {
-        return Status == ECloseStatus::TIMEOUT;
+        return Status == ECloseStatus::Timeout;
     }
 
     bool IsError() const {
-        return Status == ECloseStatus::ERROR;
+        return Status == ECloseStatus::Error;
     }
 
     bool IsAlreadyClosed() const {
-        return Status == ECloseStatus::ALREADY_CLOSED;
+        return Status == ECloseStatus::AlreadyClosed;
     }
 };
 
@@ -186,9 +186,35 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 };
 
 template<class T>
-concept SerializableToString =
+concept HasMemberSerializeToString =
     requires(const T& t) {
         { t.Serialize() } -> std::convertible_to<std::string>;
+    };
+
+template<class T>
+concept HasMemberSerializeAsString =
+    requires(const T& t) {
+        { t.SerializeAsString() } -> std::convertible_to<std::string>;
+    };
+
+//! Customization point for converting user payloads to std::string.
+//! By default it supports types with Serialize()/SerializeAsString().
+//! Users can also provide overloads of `SerializeToString(const T&)`
+//! in namespaces associated с их типом; они будут найдены ADL.
+template<class T>
+std::string SerializeToString(const T& value) requires HasMemberSerializeToString<T> {
+    return value.Serialize();
+}
+
+template<class T>
+std::string SerializeToString(const T& value) requires (!HasMemberSerializeToString<T> && HasMemberSerializeAsString<T>) {
+    return value.SerializeAsString();
+}
+
+template<class T>
+concept SerializableToString =
+    requires(const T& t) {
+        { SerializeToString(t) } -> std::convertible_to<std::string>;
     };
 
 //! Contains the message to write and all the options.
@@ -208,7 +234,10 @@ public:
     template<SerializableToString T>
     TWriteMessage(const T& data)
     {
-        DataHolder = data.Serialize();
+        DataHolder = SerializeToString(data);
+        if (DataHolder) {
+            Data = *DataHolder;
+        }
     }
 
     //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
@@ -222,17 +251,6 @@ public:
 
     bool Compressed() const {
         return Codec.has_value();
-    }
-
-    std::optional<std::string_view> GetSerializedData() const {
-        return DataHolder.has_value() ? std::make_optional(std::string_view(*DataHolder)) : std::nullopt;
-    }
-
-    std::string_view GetData() const {
-        if (DataHolder.has_value()) {
-            return std::string_view(*DataHolder);
-        }
-        return Data;
     }
  
     //! Message body.

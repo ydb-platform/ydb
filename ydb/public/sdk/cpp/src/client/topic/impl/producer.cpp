@@ -47,7 +47,7 @@ bool TProducer::TPartitionInfo::IsSplitted() const {
 
 TProducer::TMessageInfo::TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition)
     : Key(key)
-    , Data(message.GetData())
+    , Data(message.Data)
     , Codec(message.Codec)
     , OriginalSize(message.OriginalSize)
     , SeqNo(message.SeqNo_)
@@ -954,7 +954,7 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
 
     if (it->FlushPromise.Initialized()) {
         Producer->FlushPromises.push_back(std::make_pair(it->FlushPromise, TFlushResult{
-            .Status = EFlushStatus::SUCCESS,
+            .Status = EFlushStatus::Success,
             .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
             .ClosedDescription = std::nullopt,
         }));
@@ -967,7 +967,7 @@ bool TProducer::TMessagesWorker::IsMemoryUsageOK() const {
 }
 
 void TProducer::TMessagesWorker::AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition) {
-    MemoryUsage += message.GetData().size();
+    MemoryUsage += message.Data.size();
     PushInFlightMessage(partition, TMessageInfo(key, std::move(message), partition));
 }
 
@@ -1007,7 +1007,7 @@ void TProducer::TMessagesWorker::SetClosedStatusToFlushPromises(std::optional<TC
     for (auto& inFlightMessage : InFlightMessages) {
         if (inFlightMessage.FlushPromise.Initialized()) {
             inFlightMessage.FlushPromise.TrySetValue(TFlushResult{
-                .Status = EFlushStatus::CLOSED,
+                .Status = EFlushStatus::Closed,
                 .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
                 .ClosedDescription = closedDescription,
             });
@@ -1404,7 +1404,7 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     if (Closed.exchange(true)) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return TCloseResult{
-            .Status = ECloseStatus::ALREADY_CLOSED,
+            .Status = ECloseStatus::AlreadyClosed,
             .ClosedDescription = sessionClosedEvent ? std::make_optional<TCloseDescription>(*sessionClosedEvent) : std::nullopt
         };
     }
@@ -1418,19 +1418,19 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     Done.store(true);
 
     if (MessagesWorker->IsQueueEmpty()) {
-        return TCloseResult{ .Status = ECloseStatus::SUCCESS };
+        return TCloseResult{ .Status = ECloseStatus::Success };
     }
 
     auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
     if (sessionClosedEvent && sessionClosedEvent->GetStatus() != EStatus::SUCCESS) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return TCloseResult{
-            .Status = ECloseStatus::ERROR,
+            .Status = ECloseStatus::Error,
             .ClosedDescription = sessionClosedEvent ? std::make_optional<TCloseDescription>(*sessionClosedEvent) : std::nullopt
         };
     }
 
-    return TCloseResult{ .Status = ECloseStatus::TIMEOUT };
+    return TCloseResult{ .Status = ECloseStatus::Timeout };
 }
 
 void TProducer::NonBlockingClose() {
@@ -1728,7 +1728,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         Metrics.IncIncomingMessages();
         if (Closed.load()) {
             return TWriteResult{
-                .Status = EWriteStatus::CLOSED,
+                .Status = EWriteStatus::Closed,
             };
         }
 
@@ -1745,7 +1745,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         if (message.Partition_.has_value()) {
             if (!Partitions[message.Partition_.value()].Children_.empty()) {
                 return TWriteResult{
-                    .Status = EWriteStatus::ERROR,
+                    .Status = EWriteStatus::Error,
                     .ErrorMessage = "Partition was split",
                 };
             }
@@ -1775,7 +1775,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
     }
 
     return TWriteResult{
-        .Status = EWriteStatus::QUEUED,
+        .Status = EWriteStatus::Queued,
     };
 }
 
@@ -1785,7 +1785,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     for (;;) {
         if (Closed.load()) {
             return TWriteResult{
-                .Status = EWriteStatus::CLOSED,
+                .Status = EWriteStatus::Closed,
             };
         }
 
@@ -1801,12 +1801,12 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
                 }
 
                 return TWriteResult{
-                    .Status = EWriteStatus::TIMEOUT,
+                    .Status = EWriteStatus::Timeout,
                 };
             }
 
             return TWriteResult{
-                .Status = EWriteStatus::OVERLOADED,
+                .Status = EWriteStatus::Overloaded,
             };
         }
 
@@ -1831,14 +1831,17 @@ NThreading::TFuture<TFlushResult> TProducer::Flush() {
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return NThreading::MakeFuture(TFlushResult{
-            .Status = EFlushStatus::SUCCESS,
+            .Status = EFlushStatus::Success,
             .LastWrittenSeqNo = LastWrittenSeqNo,
             .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
         });
     }
 
     auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
-    lastInFlightMessage->FlushPromise = NThreading::NewPromise<TFlushResult>();
+    if (!lastInFlightMessage->FlushPromise.Initialized()) {
+        lastInFlightMessage->FlushPromise = NThreading::NewPromise<TFlushResult>();
+    }
+
     return lastInFlightMessage->FlushPromise.GetFuture();
 }
 

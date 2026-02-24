@@ -9,33 +9,35 @@
 namespace NYdb::NTopic {
 
 //! Write status.
-//! If write was successfully added ti buffer, returns QUEUED.
-//! If write was not successful due to overloaded buffer, returns OVERLOADED.
-//! If write was not successful because of closed session, returns CLOSED.
-enum class EWriteStatus : uint8_t {
-    QUEUED = 0,
-    OVERLOADED = 1,
-    CLOSED = 2,
-    TIMEOUT = 3,
-    ERROR = 4,
+//! If write was successfully added ti buffer, returns Queued.
+//! If write was not successful due to overloaded buffer, returns Overloaded.
+//! If write was not successful because of closed session, returns Closed.
+//! If write was not successful because of timeout, returns Timeout.
+//! If write was not successful because of error, returns Error.
+enum class EWriteStatus {
+    Queued = 0,
+    Overloaded = 1,
+    Closed = 2,
+    Timeout = 3,
+    Error = 4,
 };
 
 //! Flush status.
-//! If flush was successful, returns SUCCESS.
-//! If flush was not successful because of closed session, returns CLOSED.
-//! If flush was not successful because of timeout, returns TIMEOUT.
-enum class EFlushStatus : uint8_t {
-    SUCCESS = 0,
-    CLOSED = 1,
-    TIMEOUT = 2,
+//! If flush was successful, returns Success.
+//! If flush was not successful because of closed session, returns Closed.
+//! If flush was not successful because of timeout, returns Timeout.
+enum class EFlushStatus {
+    Success = 0,
+    Closed = 1,
+    Timeout = 2,
 };
 
 //! Result of write operation.
-//! If write was successful, returns SUCCESS.
-//! If write was not successful due to overloaded buffer, returns OVERLOADED.
-//! If write was not successful because of closed session, returns CLOSED.
-//! If write was not successful because of timeout, returns TIMEOUT.
-//! If write was not successful because of error, returns ERROR.
+//! If write was successful, returns Success.
+//! If write was not successful due to overloaded buffer, returns Overloaded.
+//! If write was not successful because of closed session, returns Closed.
+//! If write was not successful because of timeout, returns Timeout.
+//! If write was not successful because of error, returns Error.
 struct TWriteResult {
     //! Status of write operation.
     EWriteStatus Status;
@@ -44,30 +46,30 @@ struct TWriteResult {
     std::optional<std::string> ErrorMessage = std::nullopt;
 
     bool IsSuccess() const {
-        return Status == EWriteStatus::QUEUED;
+        return Status == EWriteStatus::Queued;
     }
 
     bool IsOverloaded() const {
-        return Status == EWriteStatus::OVERLOADED;
+        return Status == EWriteStatus::Overloaded;
     }
 
     bool IsClosed() const {
-        return Status == EWriteStatus::CLOSED;
+        return Status == EWriteStatus::Closed;
     }
 
     bool IsTimeout() const {
-        return Status == EWriteStatus::TIMEOUT;
+        return Status == EWriteStatus::Timeout;
     }
 
     bool IsError() const {
-        return Status == EWriteStatus::ERROR;
+        return Status == EWriteStatus::Error;
     }
 };
 
 //! Result of flush operation.
-//! If flush was successful, returns SUCCESS.
-//! If flush was not successful because of closed session, returns CLOSED.
-//! If flush was not successful because of timeout, returns TIMEOUT.
+//! If flush was successful, returns Success.
+//! If flush was not successful because of closed session, returns Closed.
+//! If flush was not successful because of timeout, returns Timeout.
 struct TFlushResult {
     //! Status of flush operation.
     EFlushStatus Status;
@@ -78,15 +80,15 @@ struct TFlushResult {
     std::optional<TCloseDescription> ClosedDescription;
 
     bool IsSuccess() const {
-        return Status == EFlushStatus::SUCCESS;
+        return Status == EFlushStatus::Success;
     }
 
     bool IsClosed() const {
-        return Status == EFlushStatus::CLOSED;
+        return Status == EFlushStatus::Closed;
     }
 
     bool IsTimeout() const {
-        return Status == EFlushStatus::TIMEOUT;
+        return Status == EFlushStatus::Timeout;
     }
 };
 

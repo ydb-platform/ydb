@@ -40,17 +40,17 @@ template <>
 void Out<NYdb::NTopic::EFlushStatus>(IOutputStream& s, NYdb::NTopic::EFlushStatus v)
 {
     switch (v) {
-        case NYdb::NTopic::EFlushStatus::SUCCESS:
-            s << "EFlushStatus::SUCCESS";
+        case NYdb::NTopic::EFlushStatus::Success:
+            s << "EFlushStatus::Success";
             break;
-        case NYdb::NTopic::EFlushStatus::CLOSED:
-            s << "EFlushStatus::CLOSED";
+        case NYdb::NTopic::EFlushStatus::Closed:
+            s << "EFlushStatus::Closed";
             break;
-        case NYdb::NTopic::EFlushStatus::TIMEOUT:
-            s << "EFlushStatus::TIMEOUT";
+        case NYdb::NTopic::EFlushStatus::Timeout:
+            s << "EFlushStatus::Timeout";
             break;
         default:
-            s << "EFlushStatus::UNKNOWN(" << static_cast<int>(v) << ")";
+            s << "EFlushStatus::Unknown(" << static_cast<int>(v) << ")";
             break;
     }
 }

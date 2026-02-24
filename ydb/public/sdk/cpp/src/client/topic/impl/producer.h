@@ -448,7 +448,6 @@ private:
     std::uint64_t MessagesWritten = 0;
 
     std::atomic<size_t> Epoch = 0;
-    std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
     
     std::list<std::pair<NThreading::TPromise<TFlushResult>, TFlushResult>> FlushPromises;
 

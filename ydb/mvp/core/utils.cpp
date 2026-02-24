@@ -7,6 +7,8 @@
 
 namespace NMVP {
 
+const TStringBuf CONFIG_ERROR_PREFIX = "Configuration error: ";
+
 bool TryLoadTokenFromFile(const TString& tokenPath, TString& token, TString& error, const TString& tokenName) {
     const TString tokenSuffix = tokenName.empty() ? TString() : TStringBuilder() << " for token " << tokenName;
     try {

@@ -20,6 +20,7 @@
 #include <ydb/mvp/core/mvp_swagger.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/utils.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -254,8 +255,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     }
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
-    if (!StartupOptions.Oauth2TokenExchangeTokenName.empty()) {
-        OpenIdConnectSettings.SessionServiceTokenName = StartupOptions.Oauth2TokenExchangeTokenName;
+    if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                               << "SessionServiceTokenName must be specified in oidc config "
+                               "or provided via auth.tokens.oauth2_exchange.";
     }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 

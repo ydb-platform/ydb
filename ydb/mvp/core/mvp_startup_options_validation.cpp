@@ -1,13 +1,12 @@
 #include "mvp_startup_options.h"
 #include "cracked_page.h"
+#include "utils.h"
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 namespace NMVP {
 namespace {
-
-constexpr TStringBuf CONFIG_ERROR_PREFIX = "Configuration error: ";
 
 void RequireNonEmptyField(TStringBuf value, TStringBuf fieldName, TStringBuf context) {
     if (value.empty()) {

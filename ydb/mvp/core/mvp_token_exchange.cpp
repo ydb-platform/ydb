@@ -213,7 +213,7 @@ std::pair<TString, TString> GetCreds(const TOauthCredentials& creds) {
             ythrow yexception() << "alg is required for JWT credentials";
         }
         if (creds.GetPrivateKey().empty()) {
-            ythrow yexception() << "private-key is required for JWT credentials";
+            ythrow yexception() << "private_key is required for JWT credentials";
         }
 
         auto algIt = JwtAlgorithmsFactory.find(creds.GetAlg());

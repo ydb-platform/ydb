@@ -16,8 +16,6 @@
 namespace NMVP {
 namespace {
 
-constexpr TStringBuf CONFIG_ERROR_PREFIX = "Configuration error: ";
-
 template <typename TMessage, typename TNormalizeNameFn>
 void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
                          const google::protobuf::RepeatedPtrField<TMessage>& src,

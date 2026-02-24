@@ -734,6 +734,7 @@ struct TEvBlobStorage {
         EvHugePreCompactResult,
         EvPDiskMetadataLoaded,
         EvBalancingSendPartsOnMain,
+        EvStartCompactionFromDefrag = EvPut + 8 * 512 + 192,        /// 268 636 352
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

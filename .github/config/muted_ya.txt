@@ -6,7 +6,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
-ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
@@ -70,6 +69,7 @@ ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHidd
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1

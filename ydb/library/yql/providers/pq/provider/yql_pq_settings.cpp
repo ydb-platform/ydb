@@ -8,6 +8,12 @@ TPqConfiguration::TPqConfiguration() {
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);
+<<<<<<< HEAD
+=======
+    REGISTER_SETTING(*this, MaxPartitionReadSkew);
+    REGISTER_SETTING(*this, ReadSessionBufferBytes);
+    REGISTER_SETTING(*this, EnableDeduplication);
+>>>>>>> 120b330e336 (YQ-5102 Disable deduplication in pq sink (#34440))
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {

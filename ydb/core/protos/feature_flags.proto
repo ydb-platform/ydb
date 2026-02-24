@@ -243,4 +243,13 @@ message TFeatureFlags {
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+<<<<<<< HEAD
+=======
+    optional bool EnablePDiskDataEncryption = 230 [default = true];
+    optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
+    optional bool EnableSetDropDefaultValue = 234 [ default = false];
+    optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
+>>>>>>> 120b330e336 (YQ-5102 Disable deduplication in pq sink (#34440))
 }

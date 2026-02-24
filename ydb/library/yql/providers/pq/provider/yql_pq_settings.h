@@ -18,6 +18,12 @@ public:
     NCommon::TConfSetting<TString, Static> Consumer;
     NCommon::TConfSetting<TString, Static> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.
     NCommon::TConfSetting<TString, Static> PqReadByRtmrCluster_;
+<<<<<<< HEAD
+=======
+    NCommon::TConfSetting<TDuration, Static> MaxPartitionReadSkew;
+    NCommon::TConfSetting<ui64, Static> ReadSessionBufferBytes;
+    NCommon::TConfSetting<bool, Static> EnableDeduplication;
+>>>>>>> 120b330e336 (YQ-5102 Disable deduplication in pq sink (#34440))
 };
 
 struct TPqClusterConfigurationSettings {

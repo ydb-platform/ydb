@@ -422,8 +422,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
         requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
 
-        requestHandler->Span.EndOk();
-        execSpan.EndOk();
+        execSpan.EndError("out of range");
         return;
     }
 
@@ -716,8 +715,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
 
         requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
 
-        requestHandler->Span.EndOk();
-        execSpan.EndOk();
+        execSpan.EndError("out of range");
         return;
     }
 

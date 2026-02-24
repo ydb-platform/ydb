@@ -16,6 +16,7 @@
 
 #include <ydb/library/workload/abstract/colors.h>
 #include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/fulltext/fulltext.h>
 #include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
@@ -73,6 +74,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());
+    AddHiddenCommand(std::make_unique<TCommandFulltext>());
     AddHiddenCommand(std::make_unique<TCommandTestShard>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));

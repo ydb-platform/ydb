@@ -100,6 +100,11 @@ struct TEnvironmentSetup {
         return response->Get()->Record.GetResponse();
     }
 
+    void Sim(TDuration delta = TDuration::Zero()) {
+        const TInstant barrier = Runtime->GetClock() + delta;
+        Runtime->Sim([&] { return Runtime->GetClock() <= barrier; });
+    }
+
     void RegisterNode() {
         for (ui32 i = 1; i <= NodeCount; ++i) {
             ui32 nodeIndex;
@@ -955,7 +960,15 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            env.Sim(TDuration::Minutes(1));
+
+            request.Clear();
+            request.AddCommand()->MutableQueryBaseConfig();
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
+
+            const auto baseConfig = response.GetStatus(0).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
             const auto firstVSlot = baseConfig.GetVSlot(0);

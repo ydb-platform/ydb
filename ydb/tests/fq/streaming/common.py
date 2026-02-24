@@ -100,9 +100,9 @@ class StreamingTestBase(TestYdsBase):
     def get_completed_checkpoints(self, kikimr: Kikimr, path: str) -> int:
         return self.get_checkpoint_coordinator_metric(kikimr, path, "CompletedCheckpoints")
 
-    def wait_completed_checkpoints(self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150)) -> None:
+    def wait_completed_checkpoints(self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2) -> None:
         current = self.get_completed_checkpoints(kikimr, path)
-        checkpoints_count = current + 2
+        checkpoints_count = current + checkpoints_count
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(kikimr, path)

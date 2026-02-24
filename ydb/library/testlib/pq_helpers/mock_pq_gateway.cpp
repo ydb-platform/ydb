@@ -267,12 +267,10 @@ public:
     void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> /*createTimestamp*/) final {
         const auto lock = Guard();
 
-        if (seqNo) {
-            Events.emplace(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {NYdb::NTopic::TWriteSessionEvent::TWriteAck{
-                .SeqNo = *seqNo,
-                .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
-            }}});
-        }
+        Events.emplace(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {NYdb::NTopic::TWriteSessionEvent::TWriteAck{
+            .SeqNo = seqNo ? *seqNo : 0,
+            .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
+        }}});
 
         Events.emplace(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(continuationToken)));
 

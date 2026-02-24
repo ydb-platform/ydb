@@ -486,3 +486,62 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
+    @pytest.mark.parametrize("local_topics", [False, True])
+    def test_deduplication(self, kikimr, entity_name, local_topics):
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.EnableDeduplication = "{enable}";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;'''
+
+        # Disable deduplication
+
+        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
+        name = "test_deduplication"
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
+        self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
+
+        data1 = 'value1'
+        count1 = 1
+        self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [data1 for i in range(count1)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        data2 = 'value2'
+        count2 = 10
+        for i in range(count2):
+            self.write_stream([data2], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
+        readed_data = self.read_stream(count1 + count2, topic_path=self.output_topic, endpoint=endpoint)
+        expected = [data2 for i in range(count2)] + [data1 for i in range(count1)]
+        assert sorted(readed_data) == sorted(expected)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+        # Enable deduplication
+
+        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10)
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
+        self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
+
+        self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [data1 for i in range(count1)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        for i in range(count2):
+            self.write_stream([data2], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
+        readed_data = self.read_stream(20, topic_path=self.output_topic, endpoint=endpoint)
+        assert len(readed_data) == 10
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

@@ -21,6 +21,7 @@ public:
     NCommon::TConfSetting<TString, Static> PqReadByRtmrCluster_;
     NCommon::TConfSetting<TDuration, Static> MaxPartitionReadSkew;
     NCommon::TConfSetting<ui64, Static> ReadSessionBufferBytes;
+    NCommon::TConfSetting<bool, Static> EnableDeduplication;
 };
 
 struct TPqClusterConfigurationSettings {

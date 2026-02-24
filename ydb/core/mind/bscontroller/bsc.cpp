@@ -109,7 +109,8 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             const TVSlotInfo *slot = VDisksInGroup[index];
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
-            layout.AddDisk({mapper, location, pdiskId, geom}, index, false);
+            const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
+            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
@@ -1230,9 +1231,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        const TPDiskInfo* pdisk = controller->FindPDisk({nodeId, pdiskId});
-        bool decommitted = pdisk && pdisk->Decommitted();
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, decommitted);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();

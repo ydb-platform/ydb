@@ -198,7 +198,18 @@ namespace NKikimr::NStorage {
                         dom->ClearExplicitAllocators();
                         dom->ClearExplicitMediators();
                     }
-                    enrich(domains, replace("domains_config"));
+                    auto replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes = [](auto rootNode, auto protoNode, auto& doc) {
+                        auto m = rootNode.Map().at("config").Map();
+                        // remove top-level storage_pool_types (they are now inside domains_config.domain[0])
+                        if (auto ref = m.pair_at_opt("storage_pool_types")) {
+                            m.Remove(ref);
+                        }
+                        if (auto ref = m.pair_at_opt("domains_config")) {
+                            m.Remove(ref);
+                        }
+                        m.Append(doc.CreateScalar("domains_config"), protoNode);
+                    };
+                    enrich(domains, replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes);
                 } else {
                     throw TExError() << "State storage, state storage board and scheme board configs are not equal";
                 }

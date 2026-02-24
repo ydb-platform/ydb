@@ -728,7 +728,7 @@ namespace NKikimr::NYaml {
 
         if (!domainsConfig.DomainSize()) {
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root"); // TODO: allow override
+            domain.SetName(ephemeralConfig.GetDomainName());
         }
 
         auto& domain = *domainsConfig.MutableDomain(0);
@@ -853,7 +853,7 @@ endDiskTypeCheck:   ;
         if (!config.HasDomainsConfig() || !config.GetDomainsConfig().DomainSize()) {
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root");
+            domain.SetName(ephemeralConfig.GetDomainName());
         }
 
         auto& domainsConfig = *config.MutableDomainsConfig();
@@ -1525,10 +1525,39 @@ endDiskTypeCheck:   ;
         }
 
         if (ephemeralConfig.StoragePoolTypesSize() > 0) {
-            Y_ENSURE_BT(!config.HasDomainsConfig(), "domains_config is not allowed to be set with storage_pool_types");
+            // get domain name: priority is ephemeralConfig.DomainName > domains_config.domain.name > "Root"
+            TString domainName = ephemeralConfig.GetDomainName();
+
+            std::optional<NKikimrConfig::TDomainsConfig::TSecurityConfig> savedSecurityConfig;
+
+            if (config.HasDomainsConfig()) {
+                const auto& existingDomainsConfig = config.GetDomainsConfig();
+
+                if (existingDomainsConfig.HasSecurityConfig()) {
+                    savedSecurityConfig = existingDomainsConfig.GetSecurityConfig();
+                }
+
+                if (existingDomainsConfig.DomainSize() > 0) {
+                    const auto& existingDomain = existingDomainsConfig.GetDomain(0);
+                    Y_ENSURE_BT(
+                        existingDomain.StoragePoolTypesSize() == 0,
+                        "domains_config.domain.storage_pool_types is not allowed with top-level storage_pool_types"
+                    );
+                    if (!ephemeralConfig.HasDomainName() && existingDomain.HasName()) {
+                        domainName = existingDomain.GetName();
+                    }
+                }
+                config.ClearDomainsConfig();
+            }
+
             auto& domainsConfig = *config.MutableDomainsConfig();
+
+            if (savedSecurityConfig.has_value()) {
+                domainsConfig.MutableSecurityConfig()->CopyFrom(savedSecurityConfig.value());
+            }
+
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root");
+            domain.SetName(domainName);
             for (const auto& storagePoolType : ephemeralConfig.GetStoragePoolTypes()) {
                 domain.AddStoragePoolTypes()->CopyFrom(storagePoolType);
             }

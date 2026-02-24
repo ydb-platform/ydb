@@ -10,6 +10,7 @@
 #include <util/generic/yexception.h>
 #include <util/datetime/base.h>
 
+#include <map>
 #include <set>
 #include <utility>
 

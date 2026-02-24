@@ -11,7 +11,6 @@
 #include <ydb/library/actors/http/http_static.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-#include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <ydb/mvp/core/cache_policy.h>
 #include <ydb/mvp/core/core_ydb.h>
@@ -23,7 +22,6 @@
 #include <ydb/mvp/core/utils.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/protobuf/json/json2proto.h>
 #include <yaml-cpp/yaml.h>
 
 #include <util/datetime/base.h>
@@ -37,22 +35,6 @@ NActors::IActor* CreateMemProfiler();
 
 namespace NMVP::NOIDC {
 namespace {
-
-NProtobufJson::TJson2ProtoConfig MakeJson2ProtoConfig() {
-    return NProtobufJson::TJson2ProtoConfig()
-        .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
-        .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
-        .SetAllowUnknownFields(true);
-}
-
-void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& proto) {
-    if (!node || !node.IsDefined() || node.IsNull()) {
-        return;
-    }
-
-    const NJson::TJsonValue json = NKikimr::NYaml::Yaml2Json(node, true);
-    NProtobufJson::MergeJson2Proto(json, proto, MakeJson2ProtoConfig());
-}
 
 } // namespace
 

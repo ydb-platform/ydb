@@ -1,10 +1,7 @@
 #include "mvp_startup_options.h"
 #include "utils.h"
 
-#include <ydb/library/yaml_json/yaml_to_json.h>
-
 #include <google/protobuf/text_format.h>
-#include <library/cpp/protobuf/json/json2proto.h>
 #include <yaml-cpp/yaml.h>
 
 #include <util/generic/yexception.h>
@@ -54,22 +51,6 @@ void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
                          const google::protobuf::RepeatedPtrField<TMessage>& src)
 {
     MergeRepeatedByName(dst, src, [](TMessage*) {});
-}
-
-NProtobufJson::TJson2ProtoConfig MakeJson2ProtoConfig() {
-    return NProtobufJson::TJson2ProtoConfig()
-        .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense)
-        .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
-        .SetAllowUnknownFields(true);
-}
-
-void MergeYamlNodeToProto(const YAML::Node& node, google::protobuf::Message& proto) {
-    if (!node || !node.IsDefined() || node.IsNull()) {
-        return;
-    }
-
-    const NJson::TJsonValue json = NKikimr::NYaml::Yaml2Json(node, true);
-    NProtobufJson::MergeJson2Proto(json, proto, MakeJson2ProtoConfig());
 }
 
 } // namespace

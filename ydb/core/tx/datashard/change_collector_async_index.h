@@ -50,7 +50,7 @@ public:
     bool NeedToReadKeys() const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, const NACLib::TUserContext::TPtr& userCtx) override;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, const NACLib::TUserContext::TPtr userCtx) override;
 
 private:
     mutable THashMap<TTableId, TCachedTags> CachedTags;

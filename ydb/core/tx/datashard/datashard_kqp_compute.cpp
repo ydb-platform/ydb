@@ -14,7 +14,7 @@ using namespace NTable;
 using namespace NUdf;
 
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr&);
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
@@ -26,7 +26,7 @@ struct TKqpDatashardComputationMap {
     THashMap<TString, TCallableDatashardBuilderFunc> Map;
 };
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const NACLib::TUserContext::TPtr& userCtx) {
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const NACLib::TUserContext::TPtr userCtx) {
     MKQL_ENSURE_S(computeCtx);
     MKQL_ENSURE_S(computeCtx->Database);
 

@@ -19,7 +19,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody,
                                    bool usesMvccSnapshot,
-                                   const NACLib::TUserContext::TPtr& userCtx,
+                                   const NACLib::TUserContext::TPtr userCtx,
                                    bool isPropose)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
@@ -353,7 +353,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags,
-                                    const NACLib::TUserContext::TPtr& userCtx)
+                                    const NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
@@ -391,7 +391,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 void TActiveTransaction::FillVolatileTxData(TDataShard *self,
                                             TTransactionContext &txc,
                                             const TActorContext &ctx,
-                                            const NACLib::TUserContext::TPtr& userCtx)
+                                            const NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
@@ -419,7 +419,7 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx,
-                                                       const NACLib::TUserContext::TPtr& userCtx,
+                                                       const NACLib::TUserContext::TPtr userCtx,
                                                        bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
@@ -673,7 +673,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx,
-        const NACLib::TUserContext::TPtr& userCtx)
+        const NACLib::TUserContext::TPtr userCtx)
 {
     UserCtx = userCtx;
     if (!DataTx) {

@@ -118,7 +118,7 @@ void TDataShardUserDb::UpsertRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     const ui32 DefaultFilledColumnCount,
-    const NACLib::TUserContext::TPtr& userCtx
+    const NACLib::TUserContext::TPtr userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -133,7 +133,7 @@ void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const NACLib::TUserContext::TPtr& userCtx
+    const NACLib::TUserContext::TPtr userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -189,7 +189,7 @@ void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
@@ -203,7 +203,7 @@ void TDataShardUserDb::InsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
@@ -224,7 +224,7 @@ void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -253,7 +253,7 @@ void TDataShardUserDb::IncrementRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     bool insertMissing,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
@@ -302,7 +302,7 @@ void TDataShardUserDb::IncrementRow(
 void TDataShardUserDb::EraseRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -361,7 +361,7 @@ void TDataShardUserDb::UpsertRowInt(
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops, 
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 

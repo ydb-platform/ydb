@@ -133,7 +133,7 @@ public:
                      TInstant receivedAt,
                      const TString &txBody,
                      bool usesMvccSnapshot,
-                     const NACLib::TUserContext::TPtr& userCtx,
+                     const NACLib::TUserContext::TPtr userCtx,
                      bool isPropose = false);
 
     ~TValidatedDataTx();
@@ -397,11 +397,11 @@ public:
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags,
-                    const NACLib::TUserContext::TPtr& userCtx);
+                    const NACLib::TUserContext::TPtr userCtx);
     void FillVolatileTxData(TDataShard *self,
                             TTransactionContext &txc,
                             const TActorContext &ctx,
-                            const NACLib::TUserContext::TPtr& userCtx);
+                            const NACLib::TUserContext::TPtr userCtx);
 
     const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {
@@ -439,7 +439,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx, const NACLib::TUserContext::TPtr& userCtx, bool isPropose = false);
+                                       const TActorContext &ctx, const NACLib::TUserContext::TPtr userCtx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
@@ -534,7 +534,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, const NACLib::TUserContext::TPtr& userCtx);
+    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, const NACLib::TUserContext::TPtr userCtx);
     void FinalizeDataTxPlan();
 
     // TOperation iface.

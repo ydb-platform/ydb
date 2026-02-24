@@ -74,7 +74,7 @@ public:
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed,
                               NWilson::TSpan &&datashardTransactionSpan,
-                              const NACLib::TUserContext::TPtr& userCtx);
+                              const NACLib::TUserContext::TPtr userCtx);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;

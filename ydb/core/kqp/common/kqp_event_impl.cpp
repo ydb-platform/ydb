@@ -56,7 +56,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     UserCtx = builder.Build();
 }
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) : TEvQueryRequest()
+TEvKqp::TEvQueryRequest::TEvQueryRequest(const NACLib::TUserContext::TPtr userCtx) : TEvQueryRequest()
 {
     UserCtx = userCtx;
     if (userCtx != nullptr) {

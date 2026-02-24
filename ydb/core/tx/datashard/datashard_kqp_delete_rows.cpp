@@ -96,7 +96,7 @@ public:
 
 public:
     TKqpDeleteRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const NACLib::TUserContext::TPtr& userCtx)
+            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const NACLib::TUserContext::TPtr userCtx)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
@@ -121,7 +121,7 @@ private:
 } // namespace
 
 IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr& userCtx)
+    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr userCtx)
 {
     MKQL_ENSURE_S(callable.GetInputsCount() == 2);
 

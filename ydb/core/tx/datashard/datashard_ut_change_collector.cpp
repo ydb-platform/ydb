@@ -189,7 +189,7 @@ struct TStructRecordBase {
     {
     }
 
-    TStructRecordBase(TChangeRecord::EKind kind, const NACLib::TUserContext::TPtr& userCtx, NTable::ERowOp rop,
+    TStructRecordBase(TChangeRecord::EKind kind, const NACLib::TUserContext::TPtr userCtx, NTable::ERowOp rop,
             const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         {
         }
 
-        TStructRecord(const NACLib::TUserContext::TPtr& userCtx, 
+        TStructRecord(const NACLib::TUserContext::TPtr userCtx, 
                 NTable::ERowOp rop,
                 const TStructKey<ui32>& key,
                 const TStructValue& update = {},
@@ -751,7 +751,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, const NACLib::TUserContext::TPtr& userCtx, const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts, const NACLib::TUserContext::TPtr userCtx, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
@@ -884,7 +884,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, 
-            const NACLib::TUserContext::TPtr& userCtx,
+            const NACLib::TUserContext::TPtr userCtx,
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -1036,7 +1036,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    void CheckPassUserContext(const NACLib::TUserContext::TPtr& userCtx) {
+    void CheckPassUserContext(const NACLib::TUserContext::TPtr userCtx) {
         Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",

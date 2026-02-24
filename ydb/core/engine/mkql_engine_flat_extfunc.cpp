@@ -241,7 +241,7 @@ namespace {
             const NUdf::TUnboxedValue Row;
         };
 
-        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, const NACLib::TUserContext::TPtr& userCtx)
+        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, const NACLib::TUserContext::TPtr userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
@@ -326,7 +326,7 @@ namespace {
         };
 
         TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
-            TStructLiteral* updateStruct, IComputationNode* update, const NACLib::TUserContext::TPtr& userCtx)
+            TStructLiteral* updateStruct, IComputationNode* update, const NACLib::TUserContext::TPtr userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
@@ -742,7 +742,7 @@ namespace {
         return ctx.NodeFactory.CreateImmutableNode(std::move(result));
     }
 
-    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, const NACLib::TUserContext::TPtr& userCtx) {
+    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, const NACLib::TUserContext::TPtr userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -753,7 +753,7 @@ namespace {
             LocateNode(ctx.NodeLocator, callable, 1), userCtx);
     }
 
-    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, const NACLib::TUserContext::TPtr& userCtx) {
+    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, const NACLib::TUserContext::TPtr userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -836,7 +836,7 @@ namespace {
     }
 }
 
-TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const NACLib::TUserContext::TPtr& userCtx) {
+TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const NACLib::TUserContext::TPtr userCtx) {
     auto builtins = GetBuiltinFactory();
     return [builtins, &execData, validateOnly, userCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {

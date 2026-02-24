@@ -57,7 +57,7 @@ public:
         const TString& token, 
         const TLongTxId& longTxId, 
         const TString& dedupId,
-        const NACLib::TUserContext::TPtr& userCtx)
+        const NACLib::TUserContext::TPtr userCtx)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
@@ -258,7 +258,7 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, const NACLib::TUserContext::TPtr& userCtx)
+        std::shared_ptr<NYql::TIssues> issues, const NACLib::TUserContext::TPtr userCtx)
         : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
@@ -307,7 +307,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    const NACLib::TUserContext::TPtr& userCtx) {
+    const NACLib::TUserContext::TPtr userCtx) {
     return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userCtx));
 }
 

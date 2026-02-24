@@ -367,7 +367,7 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            const NACLib::TUserContext::TPtr& userCtx)
+            const NACLib::TUserContext::TPtr userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)

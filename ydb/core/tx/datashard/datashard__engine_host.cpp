@@ -355,7 +355,7 @@ public:
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-        const NACLib::TUserContext::TPtr& userCtx) override 
+        const NACLib::TUserContext::TPtr userCtx) override 
     {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
@@ -374,39 +374,39 @@ public:
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        const ui32 defaultFilledColumnCount, const NACLib::TUserContext::TPtr& userCtx) override 
+        const ui32 defaultFilledColumnCount, const NACLib::TUserContext::TPtr userCtx) override 
     {
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userCtx);
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-        const NACLib::TUserContext::TPtr& userCtx) override 
+        const NACLib::TUserContext::TPtr userCtx) override 
     {
         UserDb.UpsertRow(tableId, key, ops, userCtx);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-        const NACLib::TUserContext::TPtr& userCtx) override 
+        const NACLib::TUserContext::TPtr userCtx) override 
     {
         UserDb.ReplaceRow(tableId, key, ops, userCtx);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const NACLib::TUserContext::TPtr& userCtx) override 
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const NACLib::TUserContext::TPtr userCtx) override 
     {
         UserDb.InsertRow(tableId, key, ops, userCtx);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const NACLib::TUserContext::TPtr& userCtx) override 
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const NACLib::TUserContext::TPtr userCtx) override 
     {
         UserDb.UpdateRow(tableId, key, ops, userCtx);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, const NACLib::TUserContext::TPtr& userCtx) override
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, const NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const NACLib::TUserContext::TPtr& userCtx) override {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const NACLib::TUserContext::TPtr userCtx) override {
 
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
@@ -421,7 +421,7 @@ public:
         UserDb.EraseRow(tableId, key, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const NACLib::TUserContext::TPtr& userCtx) override
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.EraseRow(tableId, key, userCtx);
     }    
@@ -513,7 +513,7 @@ private:
 //
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, 
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
     : StepTxId(stepTxId)
     , KeyValidator(*self)
 {

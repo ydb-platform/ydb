@@ -213,7 +213,6 @@ protected:
 
 class TUserContextBuilder
 {
-    friend class TUserContextBuilder;
 public:
     using TPtr = TIntrusivePtr<TUserContext>;
 

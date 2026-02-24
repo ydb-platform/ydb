@@ -140,7 +140,7 @@ public:
 public:
     TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
             TVector<NScheme::TTypeInfo>&& rowTypes, TVector<i32>&& rowTypeMods,
-            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const NACLib::TUserContext::TPtr& userCtx)
+            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const NACLib::TUserContext::TPtr userCtx)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
@@ -169,7 +169,7 @@ private:
 } // namespace
 
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr& userCtx)
+    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr userCtx)
 {
     MKQL_ENSURE_S(callable.GetInputsCount() >= 3);
 

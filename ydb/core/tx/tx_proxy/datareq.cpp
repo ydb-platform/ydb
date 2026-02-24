@@ -464,7 +464,7 @@ public:
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls,
-             const NACLib::TUserContext::TPtr& userCtx)
+             const NACLib::TUserContext::TPtr userCtx)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxId(txid)
@@ -3068,7 +3068,7 @@ bool TDataReq::IsReadOnlyRequest() const {
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,
-                             const TRequestControls& requestControls, const NACLib::TUserContext::TPtr& userCtx) {
+                             const TRequestControls& requestControls, const NACLib::TUserContext::TPtr userCtx) {
     return new NTxProxy::TDataReq(services, txid, mon, requestControls, userCtx);
 }
 

@@ -263,7 +263,7 @@ public:
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            const NACLib::TUserContext::TPtr& userCtx)
+            const NACLib::TUserContext::TPtr userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -3931,7 +3931,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const NACLib::TUserContext::TPtr& userCtx)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),

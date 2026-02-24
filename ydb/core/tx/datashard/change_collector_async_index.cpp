@@ -69,7 +69,7 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,
-        const NACLib::TUserContext::TPtr& userCtx)
+        const NACLib::TUserContext::TPtr userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
     Y_UNUSED(userCtx);

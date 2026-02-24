@@ -657,7 +657,6 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
-            auto userCtx = ev->Get()->GetUserCtx();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
                 database, false, false, "", "", "", "", "", "", Nothing(), result))
             {

@@ -1033,7 +1033,7 @@ public:
     }
 
     TMaybe<TString> GetUserTraceId() const override {
-        return {};
+        return UserTraceId;
     }
 
     // IRequestProxyCtx

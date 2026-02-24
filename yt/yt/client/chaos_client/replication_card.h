@@ -201,6 +201,8 @@ bool IsReplicaLocationValid(
 
 TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
 
+TReplicationProgress BuildMaxSyncProgress(const THashMap<TReplicaId, TReplicaInfo>& replicas);
+
 TDuration ComputeReplicationProgressLag(
     const TReplicationProgress& maxProgress,
     const TReplicationProgress& replicaProgress);

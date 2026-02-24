@@ -983,6 +983,57 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
 
+    // Test: Victim reads and writes the same table before breaker commits.
+    // Verifies that VictimQuerySpanId correctly identifies the read operation
+    // (which established the lock), not the subsequent write within the same transaction.
+    Y_UNIT_TEST(VictimReadThenWriteSameTable) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateAndSeedTablesWithSecondKey(1);
+
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"VictimWrite\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimWriteText);
+
+        ctx.ExecuteQuery(breakerQueryText);
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText);
+    }
+
+    // Test: Multi-table scenario where victim reads and writes the same table,
+    // plus reads/writes other tables. Simulates TPCC-like workload where a transaction
+    // SELECTs and then UPDATEs the same row (e.g., customer table).
+    Y_UNIT_TEST(VictimReadThenWriteSameTableMultiTable) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateAndSeedTables(3);
+
+        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimUpdateTable1 = "UPDATE `/Root/Tenant1/Table1` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+        const TString victimUpdateTable3 = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimUpdate3\" WHERE Key = 1u";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable1);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable3);
+
+        ctx.ExecuteQuery(breakerQueryText);
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimSelectTable1, victimUpdateTable1,
+            /* expectedBreakerCount */ 2);
+    }
+
     // Test: Victim reads multiple keys, breaker writes them all
     Y_UNIT_TEST(MultipleKeys) {
         TStringStream ss;

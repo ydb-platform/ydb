@@ -74,22 +74,21 @@ class TQueryTextCollector {
 public:
     // First query always stored (for victim stats); subsequent only if TLI enabled
     void AddQueryText(ui64 querySpanId, const TString& queryText) {
-        if (queryText.empty()) {
+        if (querySpanId == 0 || queryText.empty()) {
             return;
         }
+
         TNodeQueryTextCache::Instance().Add(querySpanId, queryText);
 
-        if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            // Deduplicate consecutive identical entries
-            if (QueryTexts.empty() ||
-                QueryTexts.back().first != querySpanId ||
-                QueryTexts.back().second != queryText) {
-                QueryTexts.push_back({querySpanId, queryText});
-                // Keep only the last N queries to prevent unbounded memory growth
-                constexpr size_t MAX_QUERY_TEXTS = 100;
-                while (QueryTexts.size() > MAX_QUERY_TEXTS) {
-                    QueryTexts.pop_front();
-                }
+        // Deduplicate consecutive identical entries
+        if (QueryTexts.empty() ||
+            QueryTexts.back().first != querySpanId ||
+            QueryTexts.back().second != queryText) {
+            QueryTexts.push_back({querySpanId, queryText});
+            // Keep only the last N queries to prevent unbounded memory growth
+            constexpr size_t MAX_QUERY_TEXTS = 100;
+            while (QueryTexts.size() > MAX_QUERY_TEXTS) {
+                QueryTexts.pop_front();
             }
         }
     }

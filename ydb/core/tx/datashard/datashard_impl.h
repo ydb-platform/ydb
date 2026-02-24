@@ -3114,7 +3114,7 @@ private:
     // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
     // Maps (MvccVersion) -> QuerySpanId for writes that may have broken locks
     // Used when InvisibleRowSkips are detected to identify the breaker
-    static constexpr size_t MaxRecentWritesForTli = 1000;
+    static constexpr size_t MaxRecentWritesForTli = 10000;
     struct TRecentWriteForTli {
         TRowVersion WriteVersion;
         ui64 QuerySpanId;

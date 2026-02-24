@@ -110,6 +110,8 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
     , VictimQuerySpanId(row.VictimQuerySpanId)
+    , BreakerQuerySpanId_(row.BreakerQuerySpanId)
+    , BreakerNodeId_(row.BreakerNodeId)
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -417,6 +419,8 @@ void TLockInfo::CleanupConflicts() {
 }
 
 bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
+    SetBreakerInfo(lockRow.BreakerQuerySpanId, lockRow.BreakerNodeId);
+
     auto flags = ELockFlags(lockRow.Flags);
     if (!!(flags & ELockFlags::Persistent)) {
         Y_ENSURE(IsPersistent());
@@ -922,6 +926,7 @@ TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) 
                 // Lock was broken in the previous generation, but that break
                 // has failed to commit. Since subsequent reads may not have
                 // detected conflicts we need to repeat the break.
+                it->second->SetBreakerInfo(row.BreakerQuerySpanId, row.BreakerNodeId);
                 PendingRestoreBreakQueue.PushBack(it->second.Get());
                 return nullptr;
             }
@@ -1148,7 +1153,12 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     brokenLocks.reserve(Update->BreakLocks.Size());
     if (Update->BreakLocks) {
         Locker.BreakLocks(Update->BreakLocks, breakVersion);
-        for (const auto& lock : Update->BreakLocks) {
+        ui64 breakerSpanId = Update->GetEffectiveBreakerQuerySpanId();
+        ui32 breakerNodeId = breakerSpanId != 0 ? Update->LockNodeId : 0;
+        for (auto& lock : Update->BreakLocks) {
+            if (breakerSpanId) {
+                lock.SetBreakerInfo(breakerSpanId, breakerNodeId);
+            }
             brokenLocks.push_back(lock.GetLockId());
         }
     }
@@ -1196,7 +1206,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         } else {
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
-        if (lock && Update->QuerySpanId != 0) {
+        if (lock && Update->QuerySpanId != 0 && lock->GetVictimQuerySpanId() == 0) {
             lock->SetVictimQuerySpanId(Update->QuerySpanId);
         }
         if (!lock) {
@@ -1631,7 +1641,7 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     if (!Update->Lock) {
         return EEnsureCurrentLock::TooMany;
     }
-    if (Update->QuerySpanId != 0) {
+    if (Update->QuerySpanId != 0 && Update->Lock->GetVictimQuerySpanId() == 0) {
         Update->Lock->SetVictimQuerySpanId(Update->QuerySpanId);
     }
 

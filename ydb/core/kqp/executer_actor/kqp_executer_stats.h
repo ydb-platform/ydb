@@ -405,6 +405,12 @@ public:
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
 
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
+
     void CollectLockStats(const NKikimrQueryStats::TTxStats& txStats);
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);

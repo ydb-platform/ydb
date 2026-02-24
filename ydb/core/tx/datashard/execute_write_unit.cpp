@@ -41,6 +41,17 @@ public:
         return !op->HasRuntimeConflicts();
     }
 
+    void FillDeferredBreakerInfo(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
+        auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockTxId);
+        if (!lockInfo || !lockInfo->GetBreakVersion()) {
+            return;
+        }
+        if (lockInfo->GetBreakerQuerySpanId() && !lockInfo->IsBreakerConsumed()) {
+            txStats->AddDeferredBreakerQuerySpanIds(lockInfo->GetBreakerQuerySpanId());
+            txStats->AddDeferredBreakerNodeIds(lockInfo->GetBreakerNodeId());
+        }
+    }
+
     // Filter out self-breaks from locksBrokenByTx, log breaker TLI events, and update TxStats.
     // Returns the count of locks broken by OTHER transactions (excluding self-breaks).
     size_t HandleBreakerLocks(
@@ -94,6 +105,13 @@ public:
 
             NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), message,
                 otherLocksBroken, primaryBreakerSpanId, victimQuerySpanIds);
+
+            for (ui64 lockId : otherLocksBroken) {
+                auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockId);
+                if (lockInfo) {
+                    lockInfo->ConsumeBreakerInfo();
+                }
+            }
         }
         return otherLocksBroken.size();
     }
@@ -232,6 +250,9 @@ public:
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               lockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing(),
                                               querySpanId ? TMaybe<ui64>(querySpanId) : Nothing());
+            if (lockTxId) {
+                FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
+            }
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
@@ -456,6 +477,7 @@ public:
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                       DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
                                                       guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+                    FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
                     return EExecutionStatus::Executed;
                 };
 
@@ -514,6 +536,13 @@ public:
                 NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                   victimQuerySpanId,
                                                   guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+
+                {
+                    auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
+                    for (const auto& brokenLock : brokenLocks) {
+                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
+                    }
+                }
 
                 for (auto& brokenLock : brokenLocks) {
                     writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
@@ -710,6 +739,9 @@ public:
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               guardLocks.LockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId) : Nothing(),
                                               guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+            if (guardLocks.LockTxId) {
+                FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+            }
 
             ResetChanges(userDb, txc);
 

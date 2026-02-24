@@ -1520,6 +1520,15 @@ protected:
                 }
             }
         }
+        // Transfer deferred breaker info from stats to response
+        {
+            THashSet<ui64> seen;
+            for (const auto& breaker : Stats->DeferredBreakers) {
+                if (seen.insert(breaker.QuerySpanId).second) {
+                    ResponseEv->DeferredBreakers.push_back({breaker.QuerySpanId, breaker.NodeId});
+                }
+            }
+        }
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());

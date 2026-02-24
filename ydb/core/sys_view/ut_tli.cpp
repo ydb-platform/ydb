@@ -34,6 +34,7 @@ public:
         , Driver_(DriverConfig_)
         , Client_(Driver_)
     {
+        Env_.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
         CreateTenant(Env_, "Tenant1", true);
         Session_.emplace(Client_.CreateSession().GetValueSync().GetSession());
         VictimSession_.emplace(Client_.CreateSession().GetValueSync().GetSession());
@@ -368,6 +369,40 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
         UNIT_ASSERT_GE(stats.VictimCount, 1u);
+    }
+    // Many upserts in a single transaction, the breaker is the middle upsert
+    Y_UNIT_TEST(ManyUpserts) {
+        TTliTestHelper h;
+
+        // Create 6 tables for the test scenario
+        h.CreateTables({"Table1", "Table2", "Table3", "Table4", "Table5", "Table6"});
+
+        // Seed initial data in all tables
+        for (int i = 1; i <= 6; ++i) {
+            h.InsertData(Sprintf("UPSERT INTO `/Root/Tenant1/Table%d` (Key, Value) VALUES (1u, \"Init%d\")", i, i));
+        }
+
+        // Victim: read tables 1,2,3, then update table 4 (without commit)
+        auto victimTx = h.VictimBeginRead("SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u /* victim-s1 */");
+        h.VictimRead(victimTx, "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u /* victim-s2 */");
+        h.VictimRead(victimTx, "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u /* victim-s3 */");
+        victimTx = h.VictimWrite(victimTx, "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u /* victim-u4 */");
+
+        // Breaker: update tables 5,2,6, then commit (breaks victim's lock on table 2)
+        h.BreakerWrite("UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u /* breaker-u5 */");
+        h.BreakerWrite("UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u /* breaker-u2 */");
+        h.BreakerWrite("UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u /* breaker-u6 */");
+
+        // Victim tries to commit -> should be aborted
+        auto status = h.VictimCommitWrite(victimTx,"UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"VictimFinal\") /* victim-final */");
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        // Check that both breaker and victim are recorded in query metrics
+        auto stats = h.WaitForLockStats("breaker-u2", "victim-s2", "many-upserts");
+        UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found in metrics");
+        UNIT_ASSERT_C(stats.FoundVictim, "Victim not found in metrics");
+        UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.VictimCount, 1u);
     }
 }
 

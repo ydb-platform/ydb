@@ -29,7 +29,6 @@ private:
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(NACLib::TUserContext::TPtr, UserCtx);
-    YDB_READONLY_DEF(TString, UserTraceId);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {

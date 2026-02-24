@@ -905,7 +905,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         TString userTraceId;
         
         auto userCtx = record.GetUserCtx();
-        if (userCtx!=nullptr) {
+        if (userCtx != nullptr) {
             userSID = userCtx->GetUserSID();
             userTraceId = userCtx->GetUserTraceId();
         } else {

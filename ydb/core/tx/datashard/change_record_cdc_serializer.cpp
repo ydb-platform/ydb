@@ -541,7 +541,7 @@ protected:
         }
 
         auto userCtx = record.GetUserCtx();
-        if (userCtx!=nullptr) {
+        if (userCtx != nullptr) {
             if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
                 auto& userIdentityJson = json["userIdentity"];
                 if (userCtx->GetUserSID() == BUILTIN_ACL_CDC_TTL) {

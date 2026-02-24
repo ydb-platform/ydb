@@ -1979,7 +1979,7 @@ public:
             builder.WithUserSID(UserCtx->GetUserSID());
         }
 
-        if (QueryState !=nullptr) {
+        if (QueryState != nullptr) {
             builder.WithUserTraceId(QueryState->UserTraceId);
         }
 

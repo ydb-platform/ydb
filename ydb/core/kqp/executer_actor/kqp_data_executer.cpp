@@ -136,7 +136,7 @@ public:
     }
 
     NACLib::TUserContext::TPtr GetUserCtx() const {
-        TString userSID = (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        const TString userSID = (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
         return NACLib::TUserContextBuilder().WithUserSID(userSID).Build();
     }
 
@@ -2410,7 +2410,7 @@ private:
                 } else {
                     auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
                     auto userCtx = GetUserCtx();
-                    if (userCtx!=nullptr) {
+                    if (userCtx != nullptr) {
                         ev->SetUserSID(userCtx->GetUserSID());
                         ev->SetUserTraceId(userCtx->GetUserTraceId());
                     }

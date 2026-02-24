@@ -128,6 +128,23 @@ generic:
             "'token_endpoint' must use grpc in 'auth.tokens.oauth2_exchange'.");
     }
 
+    Y_UNIT_TEST(FixedCredentialsWithTokenAndTokenFileThrows) {
+        AssertYamlThrows(TStringBuilder() << R"(
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    tokens:
+      oauth2_exchange:
+        - name: "nebiusJwt"
+          token_endpoint: "grpcs://token.endpoint:443"
+          subject_credentials:
+            type: "FIXED"
+            token: "service-account-id"
+            token_file: "/var/run/secrets/tokens/jwt"
+)",
+            "must not set both token and token_file");
+    }
+
     Y_UNIT_TEST(HostPortEndpointAccepted) {
         AssertYamlNoThrow(TStringBuilder() << R"(
 generic:

@@ -80,6 +80,10 @@ void TMvpStartupOptions::ValidateOAuth2CredentialsFields(
             ythrow yexception() << CONFIG_ERROR_PREFIX << credsRole
                                 << " credentials require either token or token_file for oauth2_exchange token " << tokenName << ".";
         }
+        if (!creds.GetToken().empty() && !creds.GetTokenFile().empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << credsRole
+                                << " credentials must not set both token and token_file for oauth2_exchange token " << tokenName << ".";
+        }
         return;
     }
 

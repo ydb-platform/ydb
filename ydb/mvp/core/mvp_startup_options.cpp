@@ -219,7 +219,10 @@ void TMvpStartupOptions::OverrideTokensConfig() {
         Tokens.MutableStaffApiUserTokenInfo()->MergeFrom(override.GetStaffApiUserTokenInfo());
     }
     if (override.HasAccessServiceType()) {
-        Tokens.SetAccessServiceType(override.GetAccessServiceType());
+        if (override.GetAccessServiceType() != AccessServiceType) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "auth.tokens.access_service_type must match access_service_type";
+        }
     }
 
     MergeRepeatedByName(Tokens.MutableJwtInfo(), override.GetJwtInfo());
@@ -230,6 +233,7 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
     MigrateJwtInfoToOAuth2Exchange();
     ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
+    Tokens.SetAccessServiceType(AccessServiceType);
 
     Oauth2TokenExchangeTokenName.clear();
     for (size_t i = 0; i < static_cast<size_t>(override.OAuth2ExchangeSize()); ++i) {

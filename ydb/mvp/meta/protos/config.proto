@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 package NMvp.NMeta;
 
 import "ydb/mvp/core/protos/mvp.proto";

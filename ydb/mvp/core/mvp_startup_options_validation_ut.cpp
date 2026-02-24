@@ -142,4 +142,15 @@ generic:
             token: "service-account-id"
 )");
     }
+
+    Y_UNIT_TEST(AuthTokensAccessServiceTypeMismatchThrows) {
+        AssertYamlThrows(TStringBuilder() << R"(
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    tokens:
+      access_service_type: "yandex_v2"
+)",
+            "auth.tokens.access_service_type must match access_service_type");
+    }
 }

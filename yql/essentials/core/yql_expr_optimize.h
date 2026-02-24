@@ -26,6 +26,7 @@ struct TOptimizeExprSettings {
     bool VisitTuples = false;
     std::function<bool(const TExprNode&)> VisitChecker;
     bool TrackFrames = false;
+    bool ReuseLambda = false;
 };
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,

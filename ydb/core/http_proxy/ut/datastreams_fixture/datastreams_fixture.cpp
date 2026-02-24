@@ -443,12 +443,12 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                 client.AlterUserAttributes("/", "Root", {{"folder_id", "folder4"},
                                                                         {"cloud_id", "cloud4"},
-                                                                        {"database_id", "database4"}}));
+                                                                        {"database_id", "database4"}}, {}, {}, "root@builtin"));
     NACLib::TDiffACL acl;
     acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "Service1_id@as");
     acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "proxy_sa@as");
 
-    client.ModifyACL("/", "Root", acl.SerializeAsString());
+    client.ModifyACL("/", "Root", acl.SerializeAsString(), "root@builtin");
 
     client.MkDir("/Root", "SQS");
 

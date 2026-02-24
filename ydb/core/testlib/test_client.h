@@ -623,7 +623,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description);
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
         NMsgBusProxy::EResponseStatus AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {});
+        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {}, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString &parent, const TString &description, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
@@ -704,9 +704,9 @@ namespace Tests {
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
 
         // ACL operations
-        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken = "");
         void TestModifyOwner(const TString& parent, const TString& name, const TString& owner);
-        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken = "");
         void TestModifyACL(const TString& parent, const TString& name, const TString& acl);
 
         NMsgBusProxy::EResponseStatus Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);

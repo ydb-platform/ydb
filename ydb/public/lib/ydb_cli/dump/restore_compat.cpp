@@ -15,7 +15,7 @@ class TDataWriter;
 class TDataAccumulator: public NPrivate::IDataAccumulator, protected TQueryBuilder {
     friend class TDataWriter;
 
-    ui64 RecordSize(const TString& line) const {
+    static ui64 RecordSize(const TString& line) {
         return line.size();
     }
 
@@ -131,7 +131,7 @@ public:
         opts.Rate = settings.RateLimiterSettings_.Rate_;
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
-        opts.RetryOperationMaxRetries =  settings.MaxRetries_;
+        opts.RetryOperationMaxRetries = settings.MaxRetries_;
 
         Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
     }

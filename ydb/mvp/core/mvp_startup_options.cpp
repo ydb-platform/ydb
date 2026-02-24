@@ -1,6 +1,4 @@
 #include "mvp_startup_options.h"
-#include "cracked_page.h"
-#include "mvp_startup_options_migration.h"
 #include "utils.h"
 
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -9,7 +7,6 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <yaml-cpp/yaml.h>
 
-#include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
@@ -18,6 +15,8 @@
 
 namespace NMVP {
 namespace {
+
+constexpr TStringBuf CONFIG_ERROR_PREFIX = "Configuration error: ";
 
 template <typename TMessage, typename TNormalizeNameFn>
 void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
@@ -85,6 +84,7 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     startupOptions.SetPorts();
     startupOptions.LoadTokens();
     startupOptions.OverrideTokensConfig();
+    startupOptions.ValidateTokensConfig();
     startupOptions.LoadCertificates();
 
     return startupOptions;
@@ -92,7 +92,7 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
 
 TString TMvpStartupOptions::GetLocalEndpoint() const {
     if (!HttpPort && !HttpsPort) {
-        ythrow yexception() << "At least one of HTTP or HTTPS ports must be specified";
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "At least one of HTTP or HTTPS ports must be specified";
     }
 
     return HttpsPort
@@ -158,9 +158,7 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
         }
 
         if (auth.HasTokens()) {
-            if (AccessServiceType != NMvp::nebius_v1) {
-                ythrow yexception() << "auth.tokens overrides are only supported for Nebius access service type";
-            }
+            ValidateTokensOverrideConfig(auth.GetTokens());
             TokensOverrideConfig = auth.GetTokens();
         }
     }
@@ -187,7 +185,7 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
 void TMvpStartupOptions::SetPorts() {
     if (HttpsPort) {
         if (SslCertificateFile.empty()) {
-            ythrow yexception() << "SSL certificate file must be provided for HTTPS";
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "SSL certificate file must be provided for HTTPS";
         }
     }
 
@@ -215,7 +213,9 @@ void TMvpStartupOptions::LoadTokens() {
     }
 
     if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
-        MigrateJwtInfoToOAuth2ExchangeIfNeeded(&Tokens, AccessServiceType);
+        MigrateJwtInfoToOAuth2ExchangeIfNeeded();
+        ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
+        ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
         if (Tokens.HasStaffApiUserTokenInfo()) {
             UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
         } else if (Tokens.HasStaffApiUserToken()) {
@@ -223,7 +223,7 @@ void TMvpStartupOptions::LoadTokens() {
         }
         UserToken = AddSchemeToUserToken(UserToken, "OAuth");
     } else {
-        ythrow yexception() << "Invalid ydb token file format";
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
     }
 }
 
@@ -250,53 +250,29 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
-    MigrateJwtInfoToOAuth2ExchangeIfNeeded(&Tokens, AccessServiceType);
+    MigrateJwtInfoToOAuth2ExchangeIfNeeded();
+    ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
 
-    THashSet<TString> overriddenTokenExchangeNames;
     Oauth2TokenExchangeTokenName.clear();
     for (size_t i = 0; i < static_cast<size_t>(override.OAuth2ExchangeSize()); ++i) {
         const auto& tokenExchangeInfo = override.GetOAuth2Exchange(static_cast<int>(i));
-        if (tokenExchangeInfo.GetName().empty()) {
-            ythrow yexception() << "Configuration error: 'name' must be specified in 'auth.tokens.oauth2_exchange'.";
-        }
         if (i == 0) {
             Oauth2TokenExchangeTokenName = tokenExchangeInfo.GetName();
         }
-        overriddenTokenExchangeNames.insert(tokenExchangeInfo.GetName());
     }
-
-    for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
-        if (overriddenTokenExchangeNames.find(tokenExchangeInfo.GetName()) == overriddenTokenExchangeNames.end()) {
-            continue;
-        }
-        if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
-            ythrow yexception() << "Configuration error: 'token_endpoint' must be specified in 'auth.tokens.oauth2_exchange'.";
-        }
-    }
-
-    for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
-        if (tokenExchangeInfo.GetTokenEndpoint().empty()) {
-            continue;
-        }
-        const TCrackedPage cracked(tokenExchangeInfo.GetTokenEndpoint());
-        if (!cracked.IsGrpcSchemeAllowed()) {
-            ythrow yexception() << "Configuration error: 'token_endpoint' must use grpc.";
-        }
-    }
-
 }
 
 void TMvpStartupOptions::LoadCertificates() {
     if (!CaCertificateFile.empty()) {
         CaCertificate = TUnbufferedFileInput(CaCertificateFile).ReadAll();
         if (CaCertificate.empty()) {
-            ythrow yexception() << "Invalid CA certificate file";
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid CA certificate file";
         }
     }
     if (!SslCertificateFile.empty()) {
         SslCertificate = TUnbufferedFileInput(SslCertificateFile).ReadAll();
         if (SslCertificate.empty()) {
-            ythrow yexception() << "Invalid SSL certificate file";
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid SSL certificate file";
         }
     }
 }

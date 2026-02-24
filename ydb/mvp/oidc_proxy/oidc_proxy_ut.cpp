@@ -1599,7 +1599,7 @@ Y_UNIT_TEST_SUITE(Utils) {
         for (size_t i = 0; i < 100; ++i) {
             seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
         }
-        UNIT_ASSERT(seen.size() > 95); // soft threshold
+        UNIT_ASSERT(seen.size() > 95); // Soft uniqueness threshold: allow a few duplicates in this probabilistic test.
     }
 
 } // Y_UNIT_TEST_SUITE(Utils)

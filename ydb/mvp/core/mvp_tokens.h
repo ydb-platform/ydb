@@ -109,7 +109,6 @@ protected:
         NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
-        const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
         const NMvp::TOAuth2Exchange* GetOAuth2ExchangeConfig(const TString& name);
         const NMvp::TOAuthInfo* GetOAuthTokenConfig(const TString& name);
         const NMvp::TStaticCredentialsInfo* GetStaticCredentialsTokenConfig(const TString& name);
@@ -158,7 +157,6 @@ protected:
     }
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
-    void UpdateJwtToken(const NMvp::TJwtInfo* iwtInfo);
     void UpdateOAuth2ExchangeToken(const NMvp::TOAuth2Exchange* tokenExchangeInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);

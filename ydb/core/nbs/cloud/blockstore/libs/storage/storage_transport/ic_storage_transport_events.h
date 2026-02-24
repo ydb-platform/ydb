@@ -193,6 +193,25 @@ struct TEvICStorageTransportPrivate
         {}
     };
 
+    struct TListPersistentBuffer
+    {
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const ui64 RequestId;
+        NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> Promise;
+
+        TListPersistentBuffer(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials credentials,
+            const ui64 requestId,
+            NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> promise)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , RequestId(requestId)
+            , Promise(std::move(promise))
+        {}
+    };
+
     enum EEvents
     {
         EvConnect,
@@ -201,6 +220,7 @@ struct TEvICStorageTransportPrivate
         EvReadPersistentBuffer,
         EvRead,
         EvSyncWithPersistentBuffer,
+        EvListPersistentBuffer,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -219,6 +239,11 @@ struct TEvICStorageTransportPrivate
     using TEvSyncWithPersistentBuffer = TRequestEvent<
         TSyncWithPersistentBuffer,
         EEvents::EvSyncWithPersistentBuffer>;
+
+    using TEvListPersistentBuffer = TRequestEvent<
+        TListPersistentBuffer,
+        EEvents::EvListPersistentBuffer>;
+
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

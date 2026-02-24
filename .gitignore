@@ -13,6 +13,9 @@
 
 /canonization_show_res.log
 
+*.un~
+*.swp
+
 # C libraries
 *.so
 *.a

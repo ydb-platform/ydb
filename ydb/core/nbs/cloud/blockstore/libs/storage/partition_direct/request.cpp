@@ -325,4 +325,51 @@ void TReadRequestHandler::SetResponse(NProto::TError error)
     Future.SetValue(std::move(response));
 }
 
+TOverallAckRequestHandler::TOverallAckRequestHandler(
+    NActors::TActorSystem* actorSystem,
+    NWilson::TTraceId traceId,
+    TString name,
+    ui64 tabletId,
+    ui8 requiredAckCount)
+    : TBaseRequestHandler(actorSystem, {})
+    , RequiredAckCount(requiredAckCount)
+    , Name(std::move(name))
+{
+    Span = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsTopLevel,
+        std::move(traceId),
+        Name,
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+    Span.Attribute("tablet_id", static_cast<i64>(tabletId));
+}
+
+NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(
+    ui64 requestId,
+    TString eventName
+)
+{
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        Name,
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+    childSpan.Attribute("RequestId", static_cast<i64>(requestId));
+    childSpan.Event(eventName);
+
+    return childSpan;
+}
+
+bool TOverallAckRequestHandler::IsCompleted() const
+{
+    return AckCount == RequiredAckCount;
+}
+
+bool TOverallAckRequestHandler::IsCompleted(ui64 requestId)
+{
+    Y_UNUSED(requestId);
+    return IsCompleted();
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

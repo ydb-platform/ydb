@@ -58,6 +58,9 @@ public:
         std::shared_ptr<TZeroBlocksLocalRequest> request) override;
 
     void ReportIOError() override;
+
+private:
+    NWilson::TTraceId SpanTrace();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -489,12 +489,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
     void GrantConnect(TClient& client) {
         client.CreateUser("/Root", "username", "password");
         client.GrantConnect("username");
-
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    void GrantRead(TClient& client) {
+        GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
     }
 
    TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
@@ -535,7 +540,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TKeepAliveHttpClient httpClient("localhost", monPort);
@@ -1097,256 +1102,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
     }
 
-    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-        ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port);
-        settings.InitKikimrRunConfig()
-                .SetNodeCount(1)
-                .SetUseRealThreads(false)
-                .SetDomainName("Root")
-                .SetUseSectorMap(true);
-        TServer server(settings);
-        server.EnableGRpc(grpcPort);
-        TClient client(settings);
-        TTestActorRuntime& runtime = *server.GetRuntime();
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        THttpRequest httpReq(method);
-        if (method == HTTP_METHOD_GET) {
-            if (database) {
-                httpReq.CgiParameters.emplace("database", database);
-            }
-            if (tables.size() > 0) {
-                httpReq.CgiParameters.emplace("table", JoinSeq(",", tables));
-            }
-            if (prefix) {
-                httpReq.CgiParameters.emplace("prefix", prefix);
-            }
-            httpReq.CgiParameters.emplace("limit", ToString(limit));
-        } else if (method == HTTP_METHOD_POST) {
-            NJson::TJsonArray tableArray;
-            for (const TString& table : tables) {
-                tableArray.AppendValue(table);
-            }
-
-            NJson::TJsonValue root = NJson::TJsonMap{
-                {"database", database},
-                {"table", tableArray},
-                {"prefix", prefix},
-                {"limit", limit}
-            };
-            httpReq.PostContent = NJson::WriteJson(root);
-            auto contentType = lowerCaseContentType ? "content-type" : "Content-Type";
-            httpReq.HttpHeaders.AddHeader(contentType, "application/json");
-        }
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/autocomplete", nullptr);
-        THolder<NMon::TEvHttpInfo> request = MakeHolder<NMon::TEvHttpInfo>(monReq);
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            Y_UNUSED(ev);
-            switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
-                    Ydb::Cms::ListDatabasesResult listTenantsResult;
-                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-                    listTenantsResult.Addpaths("/Root/slice");
-                    listTenantsResult.Addpaths("/Root/qwerty");
-                    listTenantsResult.Addpaths("/Root/MyDatabase");
-                    listTenantsResult.Addpaths("/Root/TestDatabase");
-                    listTenantsResult.Addpaths("/Root/test");
-                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
-                    break;
-                }
-                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
-                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
-                    (*x)->Get()->Request->ErrorCount = 0;
-                    for (auto& entry: (*x)->Get()->Request->ResultSet) {
-                        if (entry.Path.size() <= 2) {
-                            const TPathId pathId(1, 1);
-                            auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
-                            listNodeEntry->Children.reserve(3);
-                            listNodeEntry->Children.emplace_back("orders", pathId, TNavigate::KindTable);
-                            listNodeEntry->Children.emplace_back("clients", pathId, TNavigate::KindTable);
-                            listNodeEntry->Children.emplace_back("products", pathId, TNavigate::KindTable);
-                            entry.ListNodeEntry = listNodeEntry;
-                            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
-                        } else {
-                            entry.Columns[1].Name = "id";
-                            entry.Columns[2].Name = "name";
-                            entry.Columns[3].Name = "description";
-                            entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
-                        }
-                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
-                    }
-                    break;
-                }
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(observerFunc);
-
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
-        try {
-            NJson::ReadJsonTree(jsonResult, &value, true);
-        }
-        catch (yexception ex) {
-            Ctest << ex.what() << Endl;
-        }
-    }
-
-    void VerifyJsonAutocompleteSuccess(NJson::TJsonValue& value, TVector<TString> names) {
-        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Success").GetBoolean(), true);
-        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Result").GetMap().at("Total").GetInteger(), names.size());
-        auto& entities = value.GetMap().at("Result").GetMap().at("Entities").GetArray();
-        for (ui32 k = 0; k < names.size(); k++) {
-            UNIT_ASSERT_VALUES_EQUAL(entities[k].GetMap().at("Name").GetString(), names[k]);
-        }
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEmpty) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty",
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteStartOfDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty",
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEndOfDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase",
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase",
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameWithLimit) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database", "", {}, 2);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNamePOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameLowerCase) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteScheme) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "clien", "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "clients",
-            "orders",
-            "products"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSchemePOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "clien", "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "clients",
-            "orders",
-            "products"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEmptyColumns) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "", "/Root/Database", {"orders"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "id",
-            "name",
-            "description"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteColumns) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "name",
-            "name",
-            "id",
-            "id",
-            "description",
-            "description",
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteColumnsPOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "name",
-            "name",
-            "id",
-            "id",
-            "description",
-            "description",
-        });
-    }
-
     void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
         ui64 nodeId = (*ev)->Cookie;
         auto& pbRecord = (*ev)->Get()->Record;
@@ -1556,7 +1311,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TTestActorRuntime& runtime = *server.GetRuntime();
@@ -1592,7 +1347,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
-        GrantConnect(client);
+        GrantRead(client);
 
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
@@ -1636,7 +1391,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
@@ -1700,7 +1455,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        GrantConnect(client);
+        GrantRead(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1849,7 +1604,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 

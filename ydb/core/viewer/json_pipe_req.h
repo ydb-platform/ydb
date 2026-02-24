@@ -48,6 +48,7 @@ protected:
     bool PassedAway = false;
     bool ReplySent = false;
     bool UseCache = false;
+    bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
     TString Error;
     i32 MaxRequestsInFlight = 200;

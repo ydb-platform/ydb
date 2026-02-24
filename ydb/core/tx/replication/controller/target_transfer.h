@@ -11,6 +11,9 @@ namespace NKikimrProto::NMetricsConfig {
 
 namespace NKikimr::NReplication::NController {
 
+class TTransferStats;
+class TTransferCounters;
+
 class TTargetTransfer: public TTargetWithStream {
     using TBase = TTargetWithStream;
 
@@ -46,6 +49,9 @@ public:
     void RemoveWorker(ui64 id) override;
 
 private:
+    std::unique_ptr<TTransferStats> Stats;
+    std::unique_ptr<TTransferCounters> Counters;
+
     TActorId StreamConsumerRemover;
     THolder<NKikimrProto::NMetricsConfig::TMetricsConfig> MetricsConfig;
 };

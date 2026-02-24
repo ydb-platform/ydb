@@ -513,13 +513,8 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                     }
                 }
 
-<<<<<<< HEAD
                 // UpdateNextCondErase also changes LastCondEraseLag
                 tableInfo->UpdateNextCondErase(i.ShardIdx, now, i.Next);
-=======
-                // ScheduleNextCondErase (also) changes LastCondEraseLag
-                tableInfo->ScheduleNextCondErase(i.ShardIdx, now, i.Next);
->>>>>>> 057f643c8f7 (schemeshard: add batch processing for ttl responses (#33867))
 
                 {
                     const auto& lag = tableInfo->GetPartitions().at(i.PartitionIdx).LastCondEraseLag;
@@ -538,7 +533,6 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 Self->PersistTablePartitionCondErase(db, tablePathId, i.PartitionIdx, tableInfo);
             }
         }
-<<<<<<< HEAD
 
         // schedule next CondErase (once per shard)
         for (const auto& item : AffectedTables | std::views::values) {
@@ -549,8 +543,6 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 }
             }
         }
-=======
->>>>>>> 057f643c8f7 (schemeshard: add batch processing for ttl responses (#33867))
 
         return true;
     }
@@ -572,11 +564,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
         // Trigger one TTxRunConditionalErase per affected table
         for (const auto& [tablePathId, item] : AffectedTables) {
-<<<<<<< HEAD
             Self->Execute(new TTxRunConditionalErase(Self, item.TableInfo, tablePathId), ctx);
-=======
-            Self->Execute(new TTxRunConditionalErase(Self, item.TableInfo), ctx);
->>>>>>> 057f643c8f7 (schemeshard: add batch processing for ttl responses (#33867))
         }
     }
 

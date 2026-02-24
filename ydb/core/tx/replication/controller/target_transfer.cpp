@@ -148,9 +148,11 @@ public:
     TInstant LastWorkerStartTime = TInstant::Zero();
 };
 
-struct TTransferCounters: public TTragetWithStreamCounters {
+class TTransferCounters: public TTragetWithStreamCounters {
+private:
     NMonitoring::TDynamicCounterPtr AggeregatedCounters;
 
+public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingCpuTime;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingErrors;

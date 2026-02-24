@@ -52,7 +52,9 @@ public:
     TInstant CollectionStartTime;
 };
 
-struct TTragetWithStreamCounters {
+class TTragetWithStreamCounters {
+public:
+
     NMonitoring::TDynamicCounterPtr CountersGroup;
 
     NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
@@ -88,12 +90,14 @@ public:
 
     void SetLocation();
 
+
 protected:
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;
+
+private:
     std::unique_ptr<TTargetWithStreamStats> Stats;
     std::unique_ptr<TTragetWithStreamCounters> Counters;
 
-private:
     bool NameAssignmentInProcess = false;
     TActorId StreamCreator;
     TActorId StreamRemover;

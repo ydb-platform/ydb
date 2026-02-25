@@ -54,16 +54,14 @@ private:
 
 //! Write status.
 //! If write was successfully added to buffer, returns Queued.
-//! If write was not successful due to overloaded buffer, returns Overloaded.
 //! If write was not successful because of closed session, returns Closed.
-//! If write was not successful because of timeout, returns Timeout.
+//! If write was not successful because of timeout, returns Timeout. Usually it means that the producer's buffer is overloaded. You can try to increase MaxBlock setting or try to write later.
 //! If write was not successful because of error, returns Error.
 enum class EWriteStatus {
     Queued = 0,
-    Overloaded = 1,
-    ProducerClosed = 2,
-    Timeout = 3,
-    Error = 4,
+    ProducerClosed = 1,
+    Timeout = 2,
+    Error = 3,
 };
 
 //! Flush status.
@@ -80,7 +78,7 @@ enum class EFlushStatus {
 //! If write was successful, returns Queued. This status means that write was successfully added to buffer.
 //! If write was not successful due to overloaded buffer, returns Overloaded.
 //! If write was not successful because of closed session, returns Closed.
-//! If write was not successful because of timeout, returns Timeout.
+//! If write was not successful because of timeout, returns Timeout. Usually it means that the producer's buffer is overloaded. You can try to increase MaxBlock setting or try to write later.
 //! If write was not successful because of error, returns Error.
 struct TWriteResult {
     //! Status of write operation.
@@ -91,10 +89,6 @@ struct TWriteResult {
 
     bool IsSuccess() const {
         return Status == EWriteStatus::Queued;
-    }
-
-    bool IsOverloaded() const {
-        return Status == EWriteStatus::Overloaded;
     }
 
     bool IsClosed() const {

@@ -1791,7 +1791,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
             }
 
             return TWriteResult{
-                .Status = EWriteStatus::Overloaded,
+                .Status = EWriteStatus::Timeout,
             };
         }
 

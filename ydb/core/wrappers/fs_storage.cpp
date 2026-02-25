@@ -23,6 +23,12 @@ namespace NKikimr::NWrappers::NExternalStorage {
 #define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 
+#define FS_LOG_T_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_T(stream); } } while (false)
+#define FS_LOG_I_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_I(stream); } } while (false)
+#define FS_LOG_D_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_D(stream); } } while (false)
+#define FS_LOG_W_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_W(stream); } } while (false)
+#define FS_LOG_E_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_E(stream); } } while (false)
+
 namespace {
 
 class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
@@ -149,27 +155,21 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        if (TlsActivationContext) {
-            FS_LOG_D("TFsOperationActor: cleaning up"
-                << ": active MPU sessions# " << ActiveUploads.size());
-        }
+        FS_LOG_D_SAFE("TFsOperationActor: cleaning up"
+            << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
                 const TString filePath = session.Key;
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                if (TlsActivationContext) {
-                    FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
-                        << ": uploadId# " << uploadId
-                        << ", file# " << filePath);
-                }
+                FS_LOG_T_SAFE("TFsOperationActor: closed and deleted incomplete file"
+                    << ": uploadId# " << uploadId
+                    << ", file# " << filePath);
             } catch (const std::exception& ex) {
-                if (TlsActivationContext) {
-                    FS_LOG_W("Failed to cleanup MPU session"
-                        << ": uploadId# " << uploadId
-                        << ", error# " << ex.what());
-                }
+                FS_LOG_W_SAFE("Failed to cleanup MPU session"
+                    << ": uploadId# " << uploadId
+                    << ", error# " << ex.what());
             }
         }
         ActiveUploads.clear();

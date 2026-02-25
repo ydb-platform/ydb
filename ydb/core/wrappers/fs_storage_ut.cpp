@@ -6,7 +6,6 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/wrappers/events/common.h>
-#include <ydb/core/wrappers/events/get_object.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -78,36 +77,39 @@ class TFsStorageTests : public TFsStorageTestBase {
 public:
     void PutObjectDoesNotTruncateLockedFile() {
         const TString key = KeyPath("data.csv");
-        const TString originalContent = "generation1_data_long_enough_to_notice_truncation";
-        const TString newContent      = "generation2_short";
+        const TVector<TString> originalContent = {"generation1.0", "generation1.1"};
+        const TString newContent      = "generation2";
 
         {
             TFileOutput f(key);
-            f.Write(originalContent);
+            f.Write(originalContent[0]);
         }
 
         TFile externalLock(key, OpenExisting | RdWr);
         externalLock.Flock(LOCK_EX | LOCK_NB);
 
-        auto result = PutObject(key, newContent);
-        UNIT_ASSERT_C(!result.IsSuccess(),
-            "Expected PutObject to fail while file is locked by external holder");
-        UNIT_ASSERT_C(result.GetError().ShouldRetry(),
-            "Expected retryable EWOULDBLOCK error, got: " << result.GetError().GetMessage());
-
         {
+            auto result = PutObject(key, newContent);
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetError().ShouldRetry());
+
             TFileInput f(key);
             const TString actualContent = f.ReadAll();
-            UNIT_ASSERT_VALUES_EQUAL(actualContent, originalContent);
+            UNIT_ASSERT_VALUES_EQUAL(actualContent, originalContent[0]);
+        }
+
+        {
+            TFileOutput f(key);
+            f.Write(originalContent[1]);
         }
 
         externalLock.Flock(LOCK_UN);
         externalLock.Close();
 
-        auto result2 = PutObject(key, newContent);
-        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetError().GetMessage());
-
         {
+            auto result = PutObject(key, newContent);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+
             TFileInput f(key);
             UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), newContent);
         }

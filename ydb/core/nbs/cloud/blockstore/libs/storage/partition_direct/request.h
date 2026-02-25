@@ -15,10 +15,12 @@ class TBaseRequestHandler
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    ui32 VChunkIndex;
 
 public:
     TBaseRequestHandler(
-        NActors::TActorSystem* actorSystem);
+        NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex);
 
     virtual ~TBaseRequestHandler() = default;
 
@@ -29,6 +31,8 @@ public:
     void ChildSpanEndOk(ui64 childRequestId);
 
     void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
+
+    [[nodiscard]] ui32 GetVChunkIndex() const;
 
     NWilson::TSpan Span;
     std::unordered_map<ui64, NWilson::TSpan> ChildSpanByRequestId;
@@ -42,10 +46,10 @@ private:
 public:
     TIORequestsHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         TBlockRange64 range);
 
     virtual ~TIORequestsHandler() = default;
-
 
     [[nodiscard]] ui64 GetStartIndex() const;
     [[nodiscard]] ui64 GetStartOffset() const;
@@ -68,6 +72,7 @@ public:
 
     TWriteRequestHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
         ui64 tabletId);
@@ -109,6 +114,7 @@ public:
 
     TSyncRequestHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         NWilson::TTraceId traceId,
         ui64 tabletId);
@@ -164,6 +170,7 @@ class TReadRequestHandler: public TIORequestsHandler
 public:
     TReadRequestHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
         ui64 tabletId);

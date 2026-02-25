@@ -499,7 +499,7 @@ bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
 
 bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
     bool eventsTransferred = false;
-    bool shouldAddReadyToAcceptEvent = false;
+    bool shouldAddContinuationToken = false;
     std::unordered_map<std::uint32_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Producer->MessagesWorker;
@@ -515,13 +515,13 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         acksQueue.pop_front();
         return ackEvent;
     };
-    auto finishWithAck = [this, messagesWorker, &shouldAddReadyToAcceptEvent](std::uint64_t seqNo) {
+    auto finishWithAck = [this, messagesWorker, &shouldAddContinuationToken](std::uint64_t seqNo) {
         Producer->LastWrittenSeqNo = std::max(Producer->LastWrittenSeqNo, seqNo);
         Producer->MessagesWritten++;
         bool wasMemoryUsageOk = messagesWorker->IsMemoryUsageOK();
         messagesWorker->HandleAck();
         if (messagesWorker->IsMemoryUsageOK() && !wasMemoryUsageOk) {
-            shouldAddReadyToAcceptEvent = true;
+            shouldAddContinuationToken = true;
         }
     };
 
@@ -574,7 +574,7 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         }
     }
 
-    if (shouldAddReadyToAcceptEvent) {
+    if (shouldAddContinuationToken) {
         AddContinuationToken();
     }
 

@@ -357,7 +357,7 @@ public:
             manifestFile.Flush();
 
             const auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            const TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
 
             auto checksumPath = SnapshotPath.Child("manifest.json.sha256");
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
@@ -371,7 +371,7 @@ public:
             TFile snapshotDir(SnapshotPath, EOpenModeFlag::RdOnly);
             snapshotDir.Flush();
         } catch (const TIoException& e) {
-            return ReplyAndDie(false, TStringBuilder() << "Failed to fsync temporary snapshot dir " << SnapshotPath << ": " << e.what());
+            return ReplyAndDie(false, TStringBuilder() << "Failed to flush temporary snapshot dir " << SnapshotPath << ": " << e.what());
         }
 
         try {
@@ -384,7 +384,7 @@ public:
             TFile parentDir(FinalSnapshotPath.Parent(), EOpenModeFlag::RdOnly);
             parentDir.Flush();
         } catch (const TIoException& e) {
-            return ReplyAndDie(false, TStringBuilder() << "Failed to fsync parent dir after rename " << FinalSnapshotPath.Parent() << ": " << e.what());
+            return ReplyAndDie(false, TStringBuilder() << "Failed to flush parent dir after rename " << FinalSnapshotPath.Parent() << ": " << e.what());
         }
 
         return ReplyAndDie();

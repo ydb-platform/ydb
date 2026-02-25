@@ -8,7 +8,7 @@ namespace NKikimr {
 struct TChunkRecord {
     ui32 ChunkIdx;
     ui32 Subsystem;
-    bool ShreddingRequested;
+    bool ShredRequested;
 };
 
 struct TChunkKeeperData {

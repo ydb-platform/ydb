@@ -11,6 +11,7 @@ namespace NKikimr {
 /// 1. TEvChunkKeeperAllocate(subsystem)
 /// - Allocates chunk on PDisk and persistently commit it as owned by given subsystem
 /// - May return ERROR on PDisk failures
+/// - When returns OK ChunkIdx is non-nullopt
 ///
 /// 2. TEvChunkKeeperFree(chunkIdx, subsystem)
 /// - Deallocates chunk with given chunkIdx if it is owned by given subsystem
@@ -23,7 +24,7 @@ namespace NKikimr {
 ///   TEvChunkKeeperAllocateResult when sent in-between these events
 /// - May not return chunks deallocated by TEvChunkKeeperFree before subsystem receives
 ///   TEvChunkKeeperFreeResult when sent in-between these events
-/// - Always succeeds
+/// - Fails if and only if chunk keeper is disabled
 ///
 /// Simultaneous allocation and/or deallocation requests in the same subsystem
 /// are not allowed
@@ -79,16 +80,16 @@ struct TEvChunkKeeperDiscoverResult : TEventLocal<TEvChunkKeeperDiscoverResult,
         TEvBlobStorage::EvChunkKeeperDiscoverResult> {
     struct TChunkInfo {
         ui32 ChunkIdx;
-        bool ShreddingRequested;
+        bool ShredRequested;
     };
 
     std::vector<TChunkInfo> Chunks;
 
-    // Always succeeds
-    // NKikimrProto::EReplyStatus Status;
-    // TString ErrorReason;
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
 
-    TEvChunkKeeperDiscoverResult(std::vector<TChunkInfo>&& chunks);
+    TEvChunkKeeperDiscoverResult(std::vector<TChunkInfo>&& chunks, NKikimrProto::EReplyStatus status,
+            TString errorReason = "");
 };
 
 } // namespace NKikimr

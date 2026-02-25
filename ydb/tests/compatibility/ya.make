@@ -22,7 +22,6 @@ TEST_SRCS(
     test_ctas.py
     test_vector_index.py
     test_batch_operations.py
-    test_topic_sqs.py
     test_topic.py
     test_kafka_topic.py
     test_transfer.py

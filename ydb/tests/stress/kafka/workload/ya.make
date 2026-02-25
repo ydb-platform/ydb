@@ -17,7 +17,6 @@ PEERDIR(
     library/python/resource
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
-    ydb/tests/library
 )
 
 END()

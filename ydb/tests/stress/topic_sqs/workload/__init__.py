@@ -123,12 +123,7 @@ class Workload:
                     future.result()
                     logging.info("Workload task completed")
                 except Exception:
-                    logging.exception("Workload task failed")
-                    pass
-
-            logging.info("Checking results")
-            for runner in runners:
-                runner.result()
+                    raise
 
     def __enter__(self):
         return self

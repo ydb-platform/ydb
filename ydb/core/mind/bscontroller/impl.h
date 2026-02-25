@@ -1602,9 +1602,17 @@ private:
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
 
-    bool CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription,
+    bool ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
+        bool suppressDisintegratedGroupsChecking, TString *errorDescription,
         NKikimrBlobStorage::TConfigResponse *response = nullptr);
+
+    std::optional<TString> ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
+        TConfigTxFlags flags, TTransactionContext& txc,
+        NKikimrBlobStorage::TConfigResponse *response = nullptr);
+
+    void RollbackConfigUpdate(std::optional<TConfigState>& state);
+
+    void CommitConfigUpdates(TConfigState& state, TTransactionContext& txc);
 
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);

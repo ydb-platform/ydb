@@ -209,6 +209,8 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
 bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+
+    YQL_ENSURE(HasResult(txIndex, resultIndex));
     return TxResults[txIndex][resultIndex].HasTrailingResults();
 }
 

@@ -167,11 +167,17 @@ class CanonicalCaptureAuditFileOutput:
     def __validate_audit_record(self, json_record):
         self.__validate_field_exists_and_not_empty(json_record, 'component')
         self.__validate_field_exists_and_not_empty(json_record, 'operation')
-        self.__validate_field_exists_and_not_empty(json_record, 'subject')
         self.__validate_field_has_value(json_record, 'status', ['SUCCESS', 'ERROR', 'IN-PROCESS'])
-        if json_record.get('subject') != 'metadata@system':
-            self.__validate_field_exists_and_not_empty(json_record, 'sanitized_token')
-            self.__validate_field_exists_and_not_empty(json_record, 'remote_address')
+        subject = self.__validate_field(json_record, 'subject')
+        sanitized_token = self.__validate_field(json_record, 'sanitized_token')
+
+        if subject == 'metadata@system':
+            return
+        self.__validate_field_exists_and_not_empty(json_record, 'remote_address')
+        if sanitized_token == '{none}':
+            assert subject == '{none}', f'Subject must be "{{none}}" when sanitized token is "{{none}}". Line: {json.dumps(json_record, sort_keys=True)}'
+        else:
+            assert subject != '{none}', f'Sanitized token is expected to be nontrivial. Line: {json.dumps(json_record, sort_keys=True)}'
 
     def __exit__(self, *exc):
         last_read_time = time.time()

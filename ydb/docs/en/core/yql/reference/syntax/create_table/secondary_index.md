@@ -23,7 +23,7 @@ where:
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
-For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), you can define **local Bloom skip indexes** in `CREATE TABLE` using `INDEX ... LOCAL USING bloom_filter` or `INDEX ... LOCAL USING bloom_ngram_filter`. See [ALTER TABLE ADD INDEX — Local Bloom skip indexes](../../../alter_table/indexes.md#local-bloom-column) for parameters and index types.
+For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), you can define **local Bloom skip indexes** in `CREATE TABLE` using `INDEX ... LOCAL USING bloom_filter` or `INDEX ... LOCAL USING bloom_ngram_filter`. See [ALTER TABLE ADD INDEX — Local Bloom skip indexes](../alter_table/indexes.md#local-bloom-column) for parameters and index types.
 
 ## Example
 

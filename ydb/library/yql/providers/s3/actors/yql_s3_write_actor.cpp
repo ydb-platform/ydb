@@ -846,7 +846,7 @@ class TS3BlockWriteActor : public TS3WriteActorBase {
 
     class TBlockWriter : public arrow::io::OutputStream {
     public:
-        TBlockWriter(TS3BlockWriteActor& self)
+        explicit TBlockWriter(TS3BlockWriteActor& self)
             : Self(self)
             , SerializedOutput(Self.SerializedData)
         {}
@@ -907,9 +907,8 @@ private:
         data.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
             SerializeValue(values, width);
 
-            const bool finishFile = FileSize > MaxFileSize || finished || !Multipart;
-            if (BatchSize > MaxBlockSize || finishFile) {
-                FlushWriter(finishFile);
+            if (const bool finishFile = FileSize > MaxFileSize; BatchSize > MaxBlockSize || finishFile) {
+                FlushWriter(finishFile || !Multipart);
             }
         });
 

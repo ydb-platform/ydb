@@ -233,8 +233,8 @@ private:
 
         SignalHandlerPool_ = MakeHolder<TThreadPool>();
         SignalHandlerPool_->Start(1);
-        Y_ENSURE(SignalHandlerPool_->AddFunc([]() {
-            while (true) {
+        Y_ENSURE(SignalHandlerPool_->AddFunc([finished = Finished_]() {
+            while (!finished->load()) {
                 const auto signal = CurrentSignal_.load();
                 if (!signal) {
                     Sleep(TDuration::MilliSeconds(100));
@@ -566,6 +566,7 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
+        , Finished_(std::make_shared<std::atomic_bool>(false))
     {
         TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         InitializeYqlLogger();
@@ -600,6 +601,16 @@ public:
                     Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
                 }
             }
+        }
+    }
+
+    ~TImpl() {
+        if (Finished_) {
+            Finished_->store(true);
+        }
+
+        if (SignalHandlerPool_) {
+            SignalHandlerPool_->Stop();
         }
     }
 
@@ -859,6 +870,7 @@ private:
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
     THolder<TThreadPool> SignalHandlerPool_;
+    std::shared_ptr<std::atomic_bool> Finished_;
 };
 
 

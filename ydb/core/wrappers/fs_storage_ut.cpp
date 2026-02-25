@@ -34,7 +34,7 @@ protected:
         settings.SetBasePath(TempDir->Name());
         auto config = std::make_shared<TFsExternalStorageConfig>(settings);
 
-        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(config->ConstructStorageOperator()));
+        Wrapper = Runtime->Register(NWrappers::CreateStorageWrapper(config->ConstructStorageOperator()));
         Edge = Runtime->AllocateEdgeActor();
     }
 

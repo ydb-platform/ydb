@@ -18,6 +18,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+// See API description at https://kafka.apache.org/protocol#The_Messages_OffsetFetch
+
 namespace NKafka {
 
 const TString FETCH_ASSIGNMENTS = R"sql(

@@ -418,7 +418,6 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
 
-<<<<<<< HEAD
     def test_invalid_change_static_pdisk(self):
         fetched_config = fetch_config(self.cluster.config_client)
         dumped_fetched_config = yaml.safe_load(fetched_config)
@@ -435,8 +434,6 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
         assert_that("failed to remove PDisk# 1:1 as it has active VSlots" in replace_config_response.operation.issues[0].message)
 
-=======
->>>>>>> 6182d7e1faf (Add block for V1 API when V2 is enabled (#30863))
     def test_v1_blocked_when_v2_is_enabled(self):
         fetched_config = fetch_config(self.cluster.config_client)
         replace_config_response = self.dynconfig_client.replace_config(fetched_config)

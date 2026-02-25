@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+
+option cc_enable_arenas = true;
+
+package NYdb.NBS.PartitionDirect.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
+
+message TConnectionsInfo {
+    message TConnectionInfo {
+        NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
+        NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+    }
+    repeated TConnectionInfo Connections = 1;
+    string DDiskPoolName = 2;
+}

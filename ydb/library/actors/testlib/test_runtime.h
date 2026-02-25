@@ -325,6 +325,7 @@ namespace NActors {
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
+        static void ResetFirstNodeId();
         ui64 AllocateLocalId();
         ui32 InterconnectPoolId() const;
         TString GetTempDir();

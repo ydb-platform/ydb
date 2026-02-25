@@ -81,10 +81,6 @@ def fetch_config(config_client, transform=None, failure_check=None):
         return None
 
 
-<<<<<<< HEAD
-class TestConfigMigrationToV2(object):
-    erasure = Erasure.BLOCK_4_2
-=======
 def check_kikimr_is_operational(cluster, table_path, tablet_ids):
     for partition_id, tablet_id in enumerate(tablet_ids):
         write_resp = cluster.kv_client.kv_write(
@@ -321,7 +317,6 @@ def migration_to_v1(cluster, config_client, dynconfig_client, swagger_client, ta
 
 class TestConfigMigrationFromV1(object):
     erasure = Erasure.MIRROR_3_DC
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
     separate_node_configs = True
     metadata_section = {
         "kind": "MainConfig",
@@ -329,15 +324,9 @@ class TestConfigMigrationFromV1(object):
         "cluster": "",
     }
 
-<<<<<<< HEAD
-    @classmethod
-    def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
-=======
     @pytest.fixture(autouse=True)
     def setup_test(self):
         nodes_count = 3
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'TX_PROXY': LogLevels.DEBUG,

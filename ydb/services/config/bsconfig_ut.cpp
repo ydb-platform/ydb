@@ -7,13 +7,10 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
@@ -30,6 +27,7 @@
 #include <grpcpp/create_channel.h>
 
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 #include <util/system/thread.h>
 
 #include <functional>
@@ -295,13 +293,9 @@ config:
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
-<<<<<<< HEAD
-        TString yamlConfig = R"(
-=======
         EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
 metadata:
   kind: MainConfig
   cluster: ""
@@ -329,14 +323,13 @@ config:
       expected_slot_count: 9
   - host_config_id: 2
     drive:
-    - path: SectorMap:3:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
   hosts:
   - host: ::1
     port: 12001
     host_config_id: 2
-)";
+)", pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
@@ -350,13 +343,9 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
         TKikimrWithGrpcAndRootSchema server;
-<<<<<<< HEAD
-        TString yamlConfig = R"(
-=======
         EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
 metadata:
   kind: MainConfig
   cluster: ""
@@ -365,17 +354,15 @@ config:
   host_configs:
   - host_config_id: 1
     drive:
-    - path: SectorMap:1:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
-    - path: SectorMap:1:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
   hosts:
   - host: ::1
     port: 12001
     host_config_id: 1
-)";
+)", pdiskPath.c_str(), pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
@@ -383,6 +370,7 @@ config:
                 UNIT_ASSERT_C(opDebugString.Contains("duplicate path"), opDebugString);
             });
     }
+
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -423,14 +411,12 @@ config:
     }
 
     Y_UNIT_TEST(CheckV1IsBlocked) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+
         TKikimrWithGrpcAndRootSchema server;
-<<<<<<< HEAD
-        TString yamlConfig = R"(
-=======
         EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
 metadata:
   kind: MainConfig
   cluster: ""
@@ -446,7 +432,7 @@ config:
       type: SSD
   - host_config_id: 2
     drive:
-    - path: SectorMap:3:64
+    - path: %s
       type: SSD
   hosts:
   - host: ::1
@@ -454,7 +440,7 @@ config:
     host_config_id: 2
   feature_flags:
     switch_to_config_v2: true
-)";
+)", pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);

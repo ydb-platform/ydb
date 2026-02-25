@@ -211,15 +211,7 @@ namespace NKikimr::NStorage {
 
         if (!PersistQ.empty()) {
             auto& front = PersistQ.front();
-<<<<<<< HEAD
             WriteConfig(front.Drives, front.Record);
-=======
-            WriteConfig(std::move(front.MetadataByPath));
-        } else if (!PathsToRetry.empty()) {
-            // no pending writes -- retry failed ones
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvRetryPersistConfig,
-                0, SelfId(), {}, nullptr, 0));
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
         }
     }
 

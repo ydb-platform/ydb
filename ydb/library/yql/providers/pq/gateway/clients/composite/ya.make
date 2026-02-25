@@ -11,8 +11,8 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/services
     ydb/library/signals
-    ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/common
+    ydb/library/yql/providers/pq/common
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/topic
 )

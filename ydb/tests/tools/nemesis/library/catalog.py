@@ -180,7 +180,7 @@ def basic_kikimr_nemesis_list(
     logger.info("Adding all light nemesis")
     nemesis_list.extend(light_nemesis_list)
     logger.info("Adding all harmful nemesis")
-    nemesis_list.extend(harmful_nemesis_list)
+    nemesis_list = bridge_pile_nemesis_list(cluster)
 
     logger.info("Final nemesis list count: %d", len(nemesis_list))
     return nemesis_list

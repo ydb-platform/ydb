@@ -10,7 +10,11 @@
 
 - на сервере кластера установлен жесткий диск на замену старому.
 
+{% cut "Индикация состояния замененного диска красного цвета" %}
+
 ![_](_assets/step-0-1.png)
+
+{% endcut %}
 
 ### Определите `label` заменяемого диска
 
@@ -72,9 +76,9 @@ ansible-playbook ydb_platform.ydb.update_config
 
 ```bash
 PLAY RECAP *************************************************************************************************************
-static-node-andrei-1.ydb-cluster.com : ok=46   changed=6    unreachable=0    failed=0    skipped=46   rescued=0    ignored=0
-static-node-andrei-2.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
-static-node-andrei-3.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
+static-node-1.ydb-cluster.com : ok=46   changed=6    unreachable=0    failed=0    skipped=46   rescued=0    ignored=0
+static-node-2.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
+static-node-3.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
 ```
 
 {% cut "Индикация состояния замененного диска зеленого цвета" %}

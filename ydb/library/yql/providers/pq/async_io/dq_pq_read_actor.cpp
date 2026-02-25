@@ -5,7 +5,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -356,9 +355,10 @@ public:
                     .TaskId = TaskId,
                     .Cluster = TString(clusterState.Info.Name),
                     .AmountPartitionsCount = amountPartitions,
+                    .InputIndex = InputIndex,
                     .Counters = counters,
                     .BaseSettings = GetReadSessionSettings(clusterState),
-                    .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
+                    .IdleTimeout = NProtoInterop::CastFromProto(SourceParams.GetPartitionsBalancingIdleTimeout()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
                     .AggregatorActor = InfoAggregator,
                 });
@@ -1102,9 +1102,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         TActorId infoAggregator;
-        if (const auto it = args.TaskParams.find("dq_info_aggregator"); it != args.TaskParams.end()) {
+        if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
             NActorsProto::TActorId actorIdProto;
-            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse dq_info_aggregator");
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
             infoAggregator = ActorIdFromProto(actorIdProto);
         }
 

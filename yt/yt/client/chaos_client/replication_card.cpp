@@ -905,7 +905,7 @@ TDuration ComputeReplicationProgressLag(
     return lag;
 }
 
-THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+TReplicationProgress BuildMaxSyncProgress(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
 
@@ -924,6 +924,13 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
             }
         }
     }
+
+    return syncProgress;
+}
+
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+{
+    auto syncProgress = BuildMaxSyncProgress(replicas);
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {

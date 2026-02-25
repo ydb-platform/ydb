@@ -239,9 +239,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
                 upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,
                     false /*forDelete*/, insert.Pos(), ctx);
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc);
-                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
                 if (withRelevance) {
                     // Update dictionary rows
                     const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()

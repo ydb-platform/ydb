@@ -10,9 +10,9 @@
 
 #include <unistd.h>
 
-// liburing.h must be included AFTER YDB headers because <linux/fs.h> (pulled
-// in by liburing) defines a BLOCK_SIZE macro that clashes with bitmap.h.
-#include <liburing.h>
+// Must be included AFTER YDB headers because linux/uapi headers pulled by
+// liburing may define macros that clash with project headers.
+#include "liburing_compat.h"
 
 #include <cerrno>
 #include <cstring>

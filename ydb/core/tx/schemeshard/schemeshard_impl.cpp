@@ -1723,6 +1723,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMkDir:
     case TTxState::TxCreateTable:
     case TTxState::TxCopyTable:
+    case TTxState::TxReadOnlyCopyColumnTable:
     case TTxState::TxCreatePQGroup:
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
@@ -2639,7 +2640,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
 
         TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
-    } else if (txState.TxType == TTxState::TxCopyTable) {
+    } else if (txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         if (txState.TargetPathTargetState) {
@@ -3729,6 +3730,14 @@ void TSchemeShard::PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, T
             NIceDb::TUpdate<Schema::MigratedShards::OwnerPathId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::MigratedShards::LocalPathId>(pathId.LocalPathId));
     }
+}
+
+void TSchemeShard::PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Update();
+}
+
+void TSchemeShard::PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {

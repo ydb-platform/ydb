@@ -607,7 +607,12 @@ class KikimrConfigGenerator(object):
                 self.yaml_config["grpc_config"]["services"].append("config")
 
             self.yaml_config["default_disk_type"] = "ROT"
-            self.yaml_config["fail_domain_type"] = "rack"
+
+            if self.static_erasure == Erasure.MIRROR_3_DC and len(self.__node_ids) == 3:
+                self.yaml_config["fail_domain_type"] = "disk"
+            else:
+                self.yaml_config["fail_domain_type"] = "rack"
+
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
@@ -637,6 +642,13 @@ class KikimrConfigGenerator(object):
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        elif self.use_self_management:
+            self.full_config["metadata"] = {
+                "kind": "MainConfig",
+                "version": 0,
+                "cluster": "",
+            }
             self.full_config["config"] = self.yaml_config
         else:
             self.full_config = self.yaml_config

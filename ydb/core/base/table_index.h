@@ -54,7 +54,6 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
 std::span<const std::string_view> GetImplTables(
     NKikimrSchemeOp::EIndexType indexType,
     std::span<const TString> indexKeys);
-std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 

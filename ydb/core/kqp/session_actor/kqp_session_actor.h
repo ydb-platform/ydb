@@ -34,6 +34,7 @@ struct TKqpWorkerSettings {
     TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
     NKikimrConfig::TTableServiceConfig TableService;
     NKikimrConfig::TQueryServiceConfig QueryService;
+    NKikimrConfig::TTliConfig TliConfig;
 
     TControlWrapper MkqlInitialMemoryLimit;
     TControlWrapper MkqlMaxMemoryLimit;
@@ -42,7 +43,7 @@ struct TKqpWorkerSettings {
 
     explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
             const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const TIntrusivePtr<TExecuterMutableConfig> mutableExecuterConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-            const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TKqpDbCountersPtr dbCounters)
+            const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const NKikimrConfig::TTliConfig& tliConfig, TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
         , ApplicationName(applicationName)
@@ -50,6 +51,7 @@ struct TKqpWorkerSettings {
         , MutableExecuterConfig(mutableExecuterConfig)
         , TableService(tableServiceConfig)
         , QueryService(queryServiceConfig)
+        , TliConfig(tliConfig)
         , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())
         , MkqlMaxMemoryLimit(1073741824, 1, Max<i64>())
         , DbCounters(dbCounters)

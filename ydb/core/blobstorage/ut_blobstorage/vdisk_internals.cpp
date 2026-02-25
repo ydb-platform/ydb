@@ -7,7 +7,7 @@
 #include <util/random/random.h>
 #include <util/stream/null.h>
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 namespace NKikimr {
 

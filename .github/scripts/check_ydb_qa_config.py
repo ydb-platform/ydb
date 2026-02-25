@@ -22,7 +22,7 @@ try:
     try:
         # Determine config file path (same logic as YDBWrapper)
         script_dir = os.path.dirname(__file__)
-        config_file_path = f"{script_dir}/config/ydb_qa_config.json"
+        config_file_path = os.path.normpath(f"{script_dir}/../config/ydb_qa_config.json")
         
         # Check if config file exists
         if os.path.exists(config_file_path):

@@ -140,7 +140,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
 
     - name: Setup cache
       shell: bash
@@ -290,6 +290,7 @@ runs:
 
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
+            params+=(--retest)
         fi
 
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -329,11 +330,6 @@ runs:
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
-          params+=(--retest)
         fi
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out

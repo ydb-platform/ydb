@@ -5,7 +5,11 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -86,10 +90,10 @@ public:
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        // Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY, NActors::NLog::PRI_DEBUG);
+        // Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        // Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::BS_CONTROLLER, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::STATESTORAGE, NActors::NLog::PRI_DEBUG);
@@ -219,6 +223,31 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         checker(response);
     }
 
+    void EnableConfigV2(auto& channel) {
+        TString enableV2Config = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    switch_to_config_v2: true
+)";
+
+        std::unique_ptr<Ydb::DynamicConfig::V1::DynamicConfigService::Stub> stub;
+        stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(channel);
+
+        Ydb::DynamicConfig::ReplaceConfigRequest request;
+        request.set_config(enableV2Config);
+
+        Ydb::DynamicConfig::ReplaceConfigResponse response;
+        grpc::ClientContext context;
+        AdjustCtxForDB(context);
+
+        stub->ReplaceConfig(&context, request, &response);
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+    }
+
     void FetchConfig(
             auto& channel,
             bool dedicatedStorageSection,
@@ -264,12 +293,13 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
-  version: 0
+  version: 1
 
 allowed_labels:
   node_id:
@@ -313,12 +343,13 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
         TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
-  version: 0
+  version: 1
 config:
   host_configs:
   - host_config_id: 1
@@ -342,22 +373,54 @@ config:
 
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
-        UNIT_ASSERT(!yamlConfigFetched);
-        UNIT_ASSERT(!storageYamlConfigFetched);
+
+        EnableConfigV2(server.GetChannel());
+
+        auto* runtime = server.GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        ui64 bscId = MakeBSControllerID();
+        ForwardToTablet(*runtime, bscId, sender, new TEvents::TEvPoisonPill(), 0, true);
+
+        bool switchToConfigV2 = false;
+        for (int i = 0; i < 10; ++i) {
+            auto& appData = runtime->GetAppData(0);
+            if (appData.FeatureFlags.GetSwitchToConfigV2()) {
+                switchToConfigV2 = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(switchToConfigV2);
+
+        std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
+        stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+
+        Ydb::Config::FetchConfigRequest request;
+        request.mutable_all();
+
+        Ydb::Config::FetchConfigResponse response;
+        grpc::ClientContext fetchConfigCtx;
+        AdjustCtxForDB(fetchConfigCtx);
+        stub->FetchConfig(&fetchConfigCtx, request, &response);
+        const auto status = response.operation().status();
+        UNIT_ASSERT_C(
+            status == Ydb::StatusIds::UNSUPPORTED,
+            "unexpected FetchConfig status after restart: " << Ydb::StatusIds::StatusCode_Name(status)
+                << " issues# " << response.operation().issues()
+        );
     }
 
     Y_UNIT_TEST(CheckV1IsBlocked) {
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
 
         TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(server.GetChannel());
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
-  version: 0
+  version: 1
 
 config:
   host_configs:

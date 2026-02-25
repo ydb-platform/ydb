@@ -65,6 +65,7 @@ public:
     class TTxGroupMetricsExchange;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
+    class TTxUpdateEnableConfigV2;
     class TTxConfigCmd;
     class TTxCommitConfig;
     class TTxProposeGroupKey;
@@ -1513,6 +1514,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool Loaded = false;
     bool EnableConfigV2 = false;
+    bool PendingV2MigrationCheck = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
     TMonotonic LoadedAt;
 
@@ -1940,6 +1942,7 @@ private:
     ITransaction* CreateTxInitScheme();
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
+    ITransaction* CreateTxUpdateEnableConfigV2(bool value);
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
 
     struct TAuditLogInfo {

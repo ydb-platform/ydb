@@ -61,4 +61,5 @@ RECURSE(
     olap
     streaming
     result_set_format
+    distconf
 )

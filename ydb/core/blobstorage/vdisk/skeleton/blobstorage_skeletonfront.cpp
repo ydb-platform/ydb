@@ -1139,10 +1139,7 @@ namespace NKikimr {
                 queue->UpdateCounters();
             }
 
-            // repeat later
-            if (schedule) {
-                ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats);
-            }
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats);
         }
 
         ////////////////////////////////////////////////////////////////////////

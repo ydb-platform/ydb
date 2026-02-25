@@ -47,6 +47,10 @@ class ShowCreateTableWorkload:
         self.failed_cycles = 0
         self.no_signal_cycles = 0
 
+        self.list_all_successful_cycles = 0
+        self.list_all_failed_cycles = 0
+        self.list_all_no_signal_cycles = 0
+
         self._stats_lock = threading.Lock()
         self._stop_event = threading.Event()
         self.overall_workload_error_occurred = False
@@ -63,6 +67,19 @@ class ShowCreateTableWorkload:
     def _increment_no_signal_cycles(self):
         with self._stats_lock:
             self.no_signal_cycles += 1
+
+    def _increment_list_all_successful_cycles(self):
+        with self._stats_lock:
+            self.list_all_successful_cycles += 1
+
+    def _increment_list_all_failed_cycles(self):
+        with self._stats_lock:
+            self.list_all_failed_cycles += 1
+            self.overall_workload_error_occurred = True
+
+    def _increment_list_all_no_signal_cycles(self):
+        with self._stats_lock:
+            self.list_all_no_signal_cycles += 1
 
     def _mark_overall_workload_error(self):
         with self._stats_lock:
@@ -191,18 +208,109 @@ class ShowCreateTableWorkload:
 
         logger.info(f"[{thread_name}] stopped.")
 
+    def _get_all_tables_recursively(self, path):
+        """Рекурсивно получает список всех таблиц в указанном пути."""
+        tables = []
+        try:
+            entries = self.driver.scheme_client.list_directory(path).children
+            for entry in entries:                
+                entry_path = "/".join([path, entry.name])
+                
+                # Если это таблица, добавляем в список
+                if entry.is_table() or entry.is_column_table():
+                    tables.append(entry_path)
+                # Если это директория, рекурсивно обходим её
+                elif entry.is_directory():
+                    tables.extend(self._get_all_tables_recursively(entry_path))
+        except Exception as e:
+            logger.debug(f"Failed to list directory {path}: {e}")
+        return tables
+
+    def _list_and_show_all_tables_loop(self):
+        """Активность, которая получает список всех таблиц и для каждой выполняет SHOW CREATE TABLE."""
+        thread_name = threading.current_thread().name
+        logger.info(f"[{thread_name}] started.")
+
+        while not self._stop_event.is_set():
+            try:
+                # Получаем список всех таблиц в базе данных
+                all_tables = self._get_all_tables_recursively(self.database)
+                logger.debug(f"[{thread_name}] Found {len(all_tables)} tables in database")
+
+                if not all_tables:
+                    logger.debug(f"[{thread_name}] No tables found, skipping iteration")
+                    time.sleep(0.5)
+                    continue
+
+                # Для каждой таблицы выполняем SHOW CREATE TABLE
+                for table_path in all_tables:
+                    if self._stop_event.is_set():
+                        break
+
+                    show_was_successful = False
+                    show_had_critical_error = False
+
+                    try:
+                        show_create_query = f"SHOW CREATE TABLE `{table_path}`;"
+                        result_sets = self.pool.execute_with_retries(show_create_query)
+
+                        if not (result_sets and result_sets[0].rows and result_sets[0].rows[0]):
+                            logger.debug(f"[{thread_name}] SHOW CREATE TABLE `{table_path}` returned no data.")
+                            show_had_critical_error = True
+                        else:
+                            create_query_column_index = -1
+                            for i, col in enumerate(result_sets[0].columns):
+                                if col.name == "CreateQuery":
+                                    create_query_column_index = i
+                                    break
+                            if create_query_column_index == -1:
+                                logger.warning(
+                                    f"[{thread_name}] Column 'CreateQuery' not found in SHOW CREATE TABLE result for {table_path}."
+                                )
+                                show_had_critical_error = True
+                            else:
+                                create_query = result_sets[0].rows[0][create_query_column_index]
+                                logger.debug(f"[{thread_name}] SHOW CREATE TABLE `{table_path}` result:\n{create_query}")
+                                show_was_successful = True
+                    except ydb.SchemeError:
+                        logger.debug(
+                            f"[{thread_name}] SHOW CREATE TABLE `{table_path}` failed as expected (table likely gone)."
+                        )
+                    except Exception as e:
+                        logger.warning(f"[{thread_name}] SHOW CREATE TABLE `{table_path}` failed with error: {e}")
+                        show_had_critical_error = True
+
+                    if show_was_successful:
+                        self._increment_list_all_successful_cycles()
+                    elif show_had_critical_error:
+                        self._increment_list_all_failed_cycles()
+                    else:
+                        self._increment_list_all_no_signal_cycles()
+
+                # Небольшая пауза перед следующим циклом
+                time.sleep(0.5)
+
+            except Exception as e:
+                logger.warning(f"[{thread_name}] Error in list and show all tables loop: {e}")
+                self._increment_list_all_failed_cycles()
+                time.sleep(1.0)
+
+        logger.info(f"[{thread_name}] stopped.")
+
     def loop(self):
         logger.info(f"Starting workload loop for {self.duration} seconds...")
 
         recreation_thread = threading.Thread(target=self._recreation_loop, name="Recreation-Thread")
         showing_thread = threading.Thread(target=self._showing_loop, name="Showing-Thread")
+        list_all_thread = threading.Thread(target=self._list_and_show_all_tables_loop, name="ListAll-Thread")
 
         recreation_thread.start()
         showing_thread.start()
+        list_all_thread.start()
 
         main_start_time = time.time()
         while time.time() - main_start_time < self.duration:
-            if not recreation_thread.is_alive() or not showing_thread.is_alive():
+            if not recreation_thread.is_alive() or not showing_thread.is_alive() or not list_all_thread.is_alive():
                 logger.warning("A worker thread stopped prematurely.")
                 self._mark_overall_workload_error()
                 break
@@ -213,6 +321,7 @@ class ShowCreateTableWorkload:
 
         recreation_thread.join(timeout=5)
         showing_thread.join(timeout=5)
+        list_all_thread.join(timeout=5)
 
         if recreation_thread.is_alive():
             error_msg = "Recreation thread did not join in time."
@@ -222,17 +331,26 @@ class ShowCreateTableWorkload:
             error_msg = "Showing thread did not join in time."
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+        if list_all_thread.is_alive():
+            error_msg = "ListAll thread did not join in time."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
         logger.info(
             f"Final showing loop stats: successful cycles = {self.successful_cycles}, failed cycles = {self.failed_cycles}, no signal cycles = {self.no_signal_cycles}"
         )
+        logger.info(
+            f"Final list all tables loop stats: successful cycles = {self.list_all_successful_cycles}, failed cycles = {self.list_all_failed_cycles}, no signal cycles = {self.list_all_no_signal_cycles}"
+        )
 
         if self.overall_workload_error_occurred:
             logger.error("Workload finished with critical errors.")
-        elif self.failed_cycles > 0:
-            logger.error(f"Workload finished with {self.failed_cycles} failed showing cycles.")
-        elif self.successful_cycles == 0:
-            logger.warning("Workload completed with zero showing cycles attempted or recorded.")
+        elif self.failed_cycles > 0 or self.list_all_failed_cycles > 0:
+            logger.error(
+                f"Workload finished with {self.failed_cycles} failed showing cycles and {self.list_all_failed_cycles} failed list-all cycles."
+            )
+        elif self.successful_cycles == 0 and self.list_all_successful_cycles == 0:
+            logger.warning("Workload completed with zero cycles attempted or recorded.")
 
     def __enter__(self):
         try:

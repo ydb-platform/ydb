@@ -574,30 +574,10 @@ void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 in
     TTaskInputMeta meta;
     meta.SequencerSettings = settings;
 
-    if (stageInfo.Tasks.size() == inputStageInfo.Tasks.size()) {
-        BuildTransformChannels(transform, meta, "Sequencer/Map", stageInfo, inputIndex,
-            inputStageInfo, outputIndex, enableSpilling, logFunc);
-        return;
-    }
-
-    // Different task counts: distribute input tasks to stage tasks in round-robin (e.g. UPSERT INTO ... SELECT without LIMIT)
-    const ui64 inputStageTasksSize = inputStageInfo.Tasks.size();
-    const ui64 originStageTasksSize = stageInfo.Tasks.size();
-    Y_ENSURE(originStageTasksSize, "Sequencer target stage must have at least one task");
-
-    ui64 nextOriginTaskId = 0;
-    for (ui64 i = 0; i < inputStageTasksSize; ++i) {
-        const auto originTaskId = inputStageInfo.Tasks[i];
-        const auto targetTaskId = stageInfo.Tasks[nextOriginTaskId];
-        BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex, enableSpilling,
-            [&logFunc](ui64 channelId, ui64 src, ui64 dst, const TString&, bool inMemory) { logFunc(channelId, src, dst, "Sequencer/Map", inMemory); });
-
-        auto& targetTask = GetTask(targetTaskId);
-        targetTask.Inputs[inputIndex].Meta = meta;
-        targetTask.Inputs[inputIndex].Transform = transform;
-
-        nextOriginTaskId = (nextOriginTaskId + 1) % originStageTasksSize;
-    }
+    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size(),
+        "Sequencer requires 1-1 task count; stage tasks: " << stageInfo.Tasks.size() << ", input stage tasks: " << inputStageInfo.Tasks.size());
+    BuildTransformChannels(transform, meta, "Sequencer/Map", stageInfo, inputIndex,
+        inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
 
 void TKqpTasksGraph::BuildChannelBetweenTasks(const TStageInfo& stageInfo, const TStageInfo& inputStageInfo, ui64 originTaskId,
@@ -1972,6 +1952,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kMerge:
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                 case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kSequencer:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
@@ -1997,6 +1978,14 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kMap: {
+                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
+                partitionsCount = originStageInfo.Tasks.size();
+                forceMapTasks = true;
+                ++mapConnectionCount;
+                break;
+            }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                // Sequencer is 1-1 like Map: stage must have same task count as input
                 tasksReason = TTaskType::PREV_STAGE_COMPUTE;
                 partitionsCount = originStageInfo.Tasks.size();
                 forceMapTasks = true;

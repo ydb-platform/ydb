@@ -69,6 +69,43 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         UNIT_ASSERT(!result.IsSuccess());
     }
 
+    // Regression test for issue #30562: Sequencer stage must get the same task count as its input (1-1 like Map).
+    // UPSERT INTO table_with_serial SELECT ... FROM multi-shard_table (no LIMIT) used to fail in BuildSequencerChannels
+    // because the scan stage had multiple tasks and the write stage had one. Fix: BuildComputeTasks treats kSequencer
+    // like kMap and sets partitionsCount = input stage task count.
+    Y_UNIT_TEST(SequencerStageTaskCountMatchesInput) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto querySession = kikimr.RunCall([&] { return queryClient.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                CREATE TABLE `/Root/SequencerTarget` (
+                    Key BigSerial,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // UPSERT INTO ... SELECT from TwoShard (2 shards) without LIMIT: scan stage gets multiple tasks,
+        // sequencer (write) stage must get the same count (fixed in BuildComputeTasks), then BuildSequencerChannels 1-1 succeeds.
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/SequencerTarget` (Value)
+            SELECT Value1 FROM `/Root/TwoShard`;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto selectResult = session.ExecuteDataQuery("SELECT Key, Value FROM `/Root/SequencerTarget` ORDER BY Key;",
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+        UNIT_ASSERT(selectResult.GetResultSet(0).RowsCount() >= 1);
+    }
+
     // TODO: Test shard write shuffle.
     /*
     Y_UNIT_TEST(BlindWriteDistributed) {

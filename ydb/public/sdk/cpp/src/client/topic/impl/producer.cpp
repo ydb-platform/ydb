@@ -576,7 +576,6 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
 
     if (shouldAddReadyToAcceptEvent) {
         AddContinuationToken();
-        Producer->Metrics.IncContinuationTokensSent();
     }
 
     return eventsTransferred;

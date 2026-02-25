@@ -47,6 +47,8 @@ message TTxStats {
     optional uint64 LocksBrokenAsBreaker = 5; // locks broken by this transaction
     optional uint64 LocksBrokenAsVictim = 6;  // this transaction's locks were broken by others
     repeated uint64 BreakerQuerySpanIds = 9; // QuerySpanIds of queries that wrote to this shard and broke other locks
+    repeated uint64 DeferredBreakerQuerySpanIds = 10; // QuerySpanIds of breakers found via deferred lock validation at commit
+    repeated uint32 DeferredBreakerNodeIds = 11; // Node IDs matching DeferredBreakerQuerySpanIds
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

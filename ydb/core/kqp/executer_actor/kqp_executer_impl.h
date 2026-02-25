@@ -167,6 +167,9 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
@@ -1517,6 +1520,15 @@ protected:
             for (ui64 id : Stats->BreakerQuerySpanIds) {
                 if (seen.insert(id).second) {
                     ResponseEv->BreakerQuerySpanIds.push_back(id);
+                }
+            }
+        }
+        // Transfer deferred breaker info from stats to response
+        {
+            THashSet<ui64> seen;
+            for (const auto& breaker : Stats->DeferredBreakers) {
+                if (seen.insert(breaker.QuerySpanId).second) {
+                    ResponseEv->DeferredBreakers.push_back({breaker.QuerySpanId, breaker.NodeId});
                 }
             }
         }

@@ -11,11 +11,13 @@
 #include <poll.h>
 #include <string.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include "liburing.h"
 #include "helpers.h"
 
 static int fds[2][2];
 static int no_epoll_wait;
+static atomic_bool keep_running;
 
 static int test_ready(struct io_uring *ring, int efd)
 {
@@ -194,8 +196,8 @@ static int test_remove(struct io_uring *ring, int efd)
 	return 0;
 }
 
-#define LOOPS	500
 #define NPIPES	8
+#define MAX_QE 1000
 
 struct d {
 	int pipes[NPIPES][2];
@@ -204,9 +206,9 @@ struct d {
 static void *thread_fn(void *data)
 {
 	struct d *d = data;
-	int i, j;
+	int i;
 
-	for (j = 0; j < LOOPS; j++) {
+	while (atomic_load_explicit(&keep_running, memory_order_relaxed)) {
 		usleep(150);
 		for (i = 0; i < NPIPES; i++) {
 			int ret;
@@ -241,8 +243,12 @@ static int test_race(int flags)
 	struct epoll_event ev;
 	struct epoll_event out[NPIPES];
 	pthread_t thread;
-	int i, j, efd, ret;
+	int i, efd, ret;
 	void *tret;
+	int sqe_id = 0;
+	int submitted = 0, completed = 0;
+	int sqe_ids[MAX_QE];
+	int cqe_ids[MAX_QE];
 
 	ret = t_create_ring(32, &ring, flags);
 	if (ret == T_SETUP_SKIP) {
@@ -279,16 +285,19 @@ static int test_race(int flags)
 	io_uring_prep_epoll_wait(sqe, efd, out, NPIPES, 0);
 	io_uring_submit(&ring);
 
+	atomic_store(&keep_running, true);
 	pthread_create(&thread, NULL, thread_fn, &d);
 
-	for (j = 0; j < LOOPS; j++) {
+	while (completed < 1000) {
 		io_uring_submit_and_wait(&ring, 1);
-
+		sqe_ids[submitted] = sqe->user_data;
 		ret = io_uring_wait_cqe(&ring, &cqe);
 		if (ret) {
 			fprintf(stderr, "wait %d\n", ret);
 			return 1;
 		}
+		cqe_ids[completed] = cqe->user_data;
+		completed++;
 		if (cqe->res < 0) {
 			fprintf(stderr, "race res %d\n", cqe->res);
 			return 1;
@@ -298,9 +307,26 @@ static int test_race(int flags)
 		usleep(100);
 		sqe = io_uring_get_sqe(&ring);
 		io_uring_prep_epoll_wait(sqe, efd, out, NPIPES, 0);
+		sqe->user_data = ++sqe_id;
+		submitted++;
 	}
 
+	atomic_store(&keep_running, false);
 	pthread_join(thread, &tret);
+
+	if (submitted != completed) {
+		fprintf(stderr, "SQE/CQE mismatch: submitted=%d completed=%d\n",
+			submitted, completed);
+		return 1;
+	}
+
+	for (i = 0; i < completed; i++) {
+		if (sqe_ids[i] != cqe_ids[i]) {
+			fprintf(stderr, "user_data mismatch at %d: sqe=%d cqe=%d\n",
+				i, sqe_ids[i], cqe_ids[i]);
+			return 1;
+		}
+	}
 
 	for (i = 0; i < NPIPES; i++) {
 		close(d.pipes[i][0]);

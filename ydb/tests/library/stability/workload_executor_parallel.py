@@ -1,3 +1,4 @@
+from typing import Optional
 import warnings
 import allure
 import logging
@@ -65,7 +66,7 @@ class ParallelWorkloadTestBase:
         workload_params: dict[str, dict],
         duration_value: float = None,
         nemesis_enabled: bool = False,
-        nodes_percentage: int = 100,
+        nodes_percentage: Optional[int] = None,
     ) -> None:
         """
         Executes full workload test cycle with three phases:
@@ -92,7 +93,7 @@ class ParallelWorkloadTestBase:
             duration_value = self.timeout
 
         # Validate nodes percentage
-        if nodes_percentage < 1 or nodes_percentage > 100:
+        if nodes_percentage and (nodes_percentage < 1 or nodes_percentage > 100):
             raise ValueError(
                 f"nodes_percentage must be between 1 and 100, got: {nodes_percentage}"
             )

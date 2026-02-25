@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.0.0)
+VERSION(4.1.0)
 
 LICENSE(MIT)
 
@@ -33,6 +33,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/top_level.txt
     jaraco/text/Lorem_ipsum.txt
+    jaraco/text/py.typed
 )
 
 END()

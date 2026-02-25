@@ -20,12 +20,12 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
             if (Self->InProgressForcedCompactionsByShard.erase(shardIdx)) {
                 forcedCompactionInfo->DoneShardCount++;
             }
-            CompactionsToPersist.insert(forcedCompactionInfo);
+            CompactionsToPersist.emplace(forcedCompactionInfo, false);
             Self->PersistForcedCompactionDoneShard(db, shardIdx);
         }
 
         for (auto cancelling : Self->CancellingForcedCompactions) {
-            CompactionsToPersist.insert(cancelling.Info);
+            CompactionsToPersist.emplace(cancelling.Info, false);
             if (cancelling.Waiter) {
                 auto cancelResponse = MakeHolder<TEvForcedCompaction::TEvCancelResponse>(cancelling.Waiter->TxId);
                 cancelResponse->Record.SetStatus(Ydb::StatusIds::SUCCESS);
@@ -37,10 +37,11 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
             }
         }
 
-        for (auto& forcedCompactionInfo : CompactionsToPersist) {
+        for (auto& [forcedCompactionInfo, completed] : CompactionsToPersist) {
             const auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(forcedCompactionInfo->TablePathId);
             bool compactionCompleted = (!shardsQueue || shardsQueue->Empty()) && forcedCompactionInfo->ShardsInFlight.empty();
             if (compactionCompleted) {
+                completed = true;
                 if (!shardsQueue || shardsQueue->Empty()) {
                     Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo->TablePathId);
                     Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo->TablePathId);
@@ -60,8 +61,10 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxProgress DoComplete");
-        for (auto& info : CompactionsToPersist) {
-            TransitToFinalState(*info);
+        for (auto& [info, completed] : CompactionsToPersist) {
+            if (completed) {
+                TransitToFinalState(*info);
+            }
         }
         Self->DoneShardsToPersist.clear();
         Self->CancellingForcedCompactions.clear();
@@ -100,7 +103,7 @@ private:
 
 private:
     TSideEffects SideEffects;
-    THashSet<TForcedCompactionInfo::TPtr> CompactionsToPersist;
+    THashMap<TForcedCompactionInfo::TPtr, bool> CompactionsToPersist;
 };
 
 ITransaction* TSchemeShard::CreateTxProgressForcedCompaction() {

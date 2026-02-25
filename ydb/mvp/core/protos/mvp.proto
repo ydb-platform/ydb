@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 package NMvp;
 
 message TJwtInfo {
@@ -8,6 +10,41 @@ message TJwtInfo {
     optional string PublicKey = 5;
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
+}
+
+message TOAuth2Exchange {
+    message TCredentials {
+        enum EType {
+            TYPE_UNSPECIFIED = 0;
+            JWT = 1;
+            FIXED = 2;
+        }
+
+        optional EType Type = 1 [default = TYPE_UNSPECIFIED];
+        optional string TokenType = 2;
+        optional string Token = 3;
+        optional string TokenFile = 4;
+
+        // JWT signing algorithm (RS256/RS384/RS512, ES256/ES384/ES512, PS256/PS384/PS512, HS256/HS384/HS512)
+        optional string Alg = 5;
+        optional string PrivateKey = 6;
+        optional string Kid = 7;
+        optional string Iss = 8;
+        optional string Sub = 9;
+        repeated string Aud = 10;
+        optional string Jti = 11;
+        optional string Ttl = 12 [default = "1h"];
+    }
+
+    optional string Name = 1;
+    optional string GrantType = 2 [default = "urn:ietf:params:oauth:grant-type:token-exchange"];
+    optional string RequestedTokenType = 3 [default = "urn:ietf:params:oauth:token-type:access_token"];
+    optional string TokenEndpoint = 4;
+    repeated string Res = 5;
+    repeated string Aud = 6;
+    repeated string Scope = 7;
+    optional TCredentials SubjectCredentials = 8;
+    optional TCredentials ActorCredentials = 9;
 }
 
 message TOAuthInfo {
@@ -45,19 +82,40 @@ enum EAccessServiceType {
 
 message TTokensConfig {
     optional string StaffApiUserToken = 1; // Ydb auth config
-    repeated TJwtInfo JwtInfo = 2; // JWT data for TTokensConfig
+    repeated TJwtInfo JwtInfo = 2; // Deprecated, will be migrated to TOAuth2Exchange
     repeated TOAuthInfo OAuthInfo = 3; // OAuth data for TTokensConfig
     repeated TSecretInfo SecretInfo = 4; // Secrets for OpenId client
     repeated TMetadataTokenInfo MetadataTokenInfo = 5; // IAM token from metadata
     repeated TStaticCredentialsInfo StaticCredentialsInfo = 6; // Data for create token from static credentials
     optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
     optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
+    repeated TOAuth2Exchange OAuth2Exchange = 9; // Unified OAuth2 token exchange config
 }
 
-message TOpenIdClientConfig {
-    optional string SecretName = 1;
-    optional string SessionServiceEndpoint = 2;
-    optional string SessionServiceTokenName = 3;
-    optional string AuthorizationServerAddress = 4;
-    repeated string AllowedProxyHosts = 5;
+message TLoggingConfig {
+    optional bool Stderr = 1 [default = false];
+}
+
+message TServerConfig {
+    optional uint32 HttpPort = 1;
+    optional uint32 HttpsPort = 2;
+    optional string CaCertFile = 3;
+    optional string SslCertFile = 4;
+}
+
+message TAuthConfig {
+    optional string TokenFile = 1;
+    optional TTokensConfig Tokens = 2;
+}
+
+message TGenericConfig {
+    optional EAccessServiceType AccessServiceType = 1 [default = yandex_v2];
+    optional bool Mlock = 2 [default = false];
+    optional TLoggingConfig Logging = 3;
+    optional TServerConfig Server = 4;
+    optional TAuthConfig Auth = 5;
+}
+
+message TMvpAppConfig {
+    optional TGenericConfig Generic = 1;
 }

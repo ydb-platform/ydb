@@ -1,0 +1,41 @@
+generic:
+  access_service_type: "nebius_v1"
+
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    token_file: ydb/mvp/oidc_proxy/examples/token_file.pb.txt
+
+    tokens:
+      oauth2_exchange:
+        - name: "static-creds-token"
+          token_endpoint: "grpcs://tokens.net:443"
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange"
+          requested_token_type: "urn:ietf:params:oauth:token-type:access_token"
+          subject_credentials:
+            type: JWT
+            token_type: "urn:ietf:params:oauth:token-type:jwt"
+            alg: "RS256"
+            kid: "replace-with-key-id"
+            iss: "service-account-id"
+            sub: "service-account-id"
+            ttl: "1h"
+
+oidc:
+  client_id: "client-id"
+  secret_name: "secret-name"
+  session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.net:8655"
+  session_service_token_name: "static-creds-token"
+  authorization_server_address: "https://auth-preprod.cloud.ru"
+  allowed_proxy_hosts:
+    - "*.host.net"
+    - "*.host-team.ru"

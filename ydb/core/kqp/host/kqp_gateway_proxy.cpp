@@ -1759,6 +1759,7 @@ public:
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                 phyTx.MutableSchemeOperation()->MutableBackup()->Swap(&tx);
+                AddOperationIdResultBinding(phyQuery);
 
                 TGenericResult result;
                 result.SetSuccess();
@@ -1802,6 +1803,7 @@ public:
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                 phyTx.MutableSchemeOperation()->MutableBackupIncremental()->Swap(&tx);
+                AddOperationIdResultBinding(phyQuery);
 
                 TGenericResult result;
                 result.SetSuccess();
@@ -1845,6 +1847,7 @@ public:
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                 phyTx.MutableSchemeOperation()->MutableRestore()->Swap(&tx);
+                AddOperationIdResultBinding(phyQuery);
 
                 TGenericResult result;
                 result.SetSuccess();
@@ -3453,6 +3456,21 @@ private:
         }
 
         return SessionCtx->Query().PrepareOnly;
+    }
+
+    void AddOperationIdResultBinding(NKqpProto::TKqpPhyQuery& phyQuery) {
+        auto txIndex = phyQuery.TransactionsSize() - 1;
+        auto& queryBinding = *phyQuery.AddResultBindings();
+        auto& txBinding = *queryBinding.MutableTxResultBinding();
+        txBinding.SetTxIndex(txIndex);
+        txBinding.SetResultIndex(0);
+
+        auto* meta = queryBinding.MutableResultSetMeta();
+        auto* col = meta->add_columns();
+        col->set_name("operation_id");
+        col->mutable_type()->set_type_id(Ydb::Type::UTF8);
+
+        SessionCtx->Query().PreparingQuery->AddResults();
     }
 
     TString GetDatabase() const {

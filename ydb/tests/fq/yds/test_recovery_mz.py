@@ -126,6 +126,9 @@ class TestRecovery(TestYdsBase):
             d[n] = 1
 
         self.dump_workers(2, 4)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
         node_to_restart = None
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
@@ -155,6 +158,10 @@ class TestRecovery(TestYdsBase):
                 d[n] = d[n] + 1
             else:
                 d[n] = 1
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
         logging.debug("Restart Master node {}".format(master_node_index))
 

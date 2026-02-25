@@ -7,7 +7,7 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
-#include <yaml-cpp/yaml.h>
+#include <optional>
 
 namespace NLastGetopt { class TOptsParseResult; }
 
@@ -25,7 +25,7 @@ private:
     TString SslCertificateFile;
 
 public:
-    YAML::Node Config;
+    std::optional<NMvp::TTokensConfig> TokensOverrideConfig;
 
     bool LogToStderr = false;
     bool Mlock = false;
@@ -40,13 +40,25 @@ public:
 
     static TMvpStartupOptions Build(int argc, const char* argv[]);
     TString GetLocalEndpoint() const;
+    const TString& GetYamlConfigPath() const;
 
 private:
     NLastGetopt::TOptsParseResult ParseArgs(int argc, const char* argv[]);
     void LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
-    void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
+    void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic);
     void SetPorts();
     TString AddSchemeToUserToken(const TString& token, const TString& scheme);
+    void MigrateJwtInfoToOAuth2Exchange();
+    void ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride);
+    void ValidateOAuth2ExchangeTokenEndpointScheme(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
+                                                   const TString& configSource);
+    void ValidateOAuth2ExchangeTokenNames(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
+                                          const TString& configSource);
+    void ValidateOAuth2CredentialsFields(const NMvp::TOAuth2Exchange::TCredentials& creds,
+                                         const TString& credsRole,
+                                         const TString& tokenName);
+    void OverrideTokensConfig();
+    void ValidateTokensConfig();
     void LoadTokens();
     void LoadCertificates();
 };

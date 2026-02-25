@@ -33,7 +33,7 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
-    void EstablishConnections() override;
+    void EstablishConnections(NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,

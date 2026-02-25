@@ -1899,6 +1899,11 @@ message TEvFilterKMeansResponse {
     repeated bytes LastKeyRows = 10;
 }
 
+enum EFulltextIndexType {
+    FulltextPlain = 0;
+    FulltextRelevance = 1;
+}
+
 message TEvBuildFulltextIndexRequest {
     optional uint64 Id = 1;
 
@@ -1921,6 +1926,8 @@ message TEvBuildFulltextIndexRequest {
     optional string DatabaseName = 12;
 
     optional string DocsTableName = 13;
+
+    optional EFulltextIndexType IndexType = 14;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -2551,6 +2558,8 @@ message TInMemoryLockInfo {
     repeated NKikimrProto.TPathID ReadTables = 8;
     repeated NKikimrProto.TPathID WriteTables = 9;
     optional uint64 VictimQuerySpanId = 10;
+    optional uint64 BreakerQuerySpanId = 11;
+    optional uint32 BreakerNodeId = 12;
 }
 
 // In-memory ranges associated with the lock

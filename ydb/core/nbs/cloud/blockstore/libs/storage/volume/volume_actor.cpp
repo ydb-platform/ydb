@@ -71,6 +71,7 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
 
 STFUNC(TVolumeActor::StateWork)
 {
+    auto ctx = NActors::TActivationContext::AsActorContext();
     LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
               "Processing event: %s from sender: %lu", ev->GetTypeName().data(),
               ev->Sender.LocalId());
@@ -228,7 +229,7 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
         NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
     response->Record.SetTxId(txId);
     response->Record.SetOrigin(TabletID());
-    response->Record.SetStatus(msg->Record.GetStatus();
+    response->Record.SetStatus(msg->Record.GetStatus());
 
     LOG_INFO_S(
         ctx,

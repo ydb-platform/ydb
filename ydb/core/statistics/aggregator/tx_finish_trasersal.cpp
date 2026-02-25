@@ -67,59 +67,12 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         }
     }
 };
-void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {
+
+void TStatisticsAggregator::DispatchFinishTraversalTx(
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
+        NYql::TIssues issues) {
     Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS),
-        TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
-    NYql::TIssue error(TStringBuilder() << "Could not find table id: "
-        << TraversalPathId.LocalPathId << ", deleted its statistics");
-    Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error}),
-        TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
-    if (ev->Sender != AnalyzeActorId) {
-        return;
-    }
-
-    using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
-    switch (ev->Get()->Status) {
-    case EStatus::Success:
-        std::move(
-            ev->Get()->Statistics.begin(), ev->Get()->Statistics.end(),
-            std::back_inserter(StatisticsToSave));
-        SaveStatisticsToTable();
-        return;
-    case EStatus::TableNotFound:
-        DeleteStatisticsFromTable();
-        return;
-    case EStatus::InternalError:
-        Execute(
-            new TTxFinishTraversal(
-                this, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues)),
-            TActivationContext::AsActorContext());
-        return;
-    }
-}
-
-void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
-    const auto& operationId = ev->Get()->Record.GetOperationId();
-    if (operationId != ForceTraversalOperationId) {
-        SA_LOG_N("Got unexpected TEvAnalyzeCancel with"
-            << " operationId: " << operationId.Quote()
-            << ", expected: " << ForceTraversalOperationId.Quote() << ", ignoring");
-        return;
-    }
-
-    SA_LOG_D("Got TEvAnalyzeCancel, operationId: " << operationId.Quote());
-    if (AnalyzeActorId) {
-        Send(AnalyzeActorId, new TEvents::TEvPoison());
-    }
-
-    Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED),
+        new TTxFinishTraversal(this, status, std::move(issues)),
         TActivationContext::AsActorContext());
 }
 

@@ -25,7 +25,7 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
-    virtual void EstablishConnections() = 0;
+    virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -47,45 +47,6 @@ class TDirectBlockGroup
     , public std::enable_shared_from_this<TDirectBlockGroup>
 {
 private:
-    struct TBlockMeta
-    {
-        TVector<ui64> LsnByPersistentBufferIndex;
-        TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
-
-        explicit TBlockMeta(size_t persistentBufferCount)
-            : LsnByPersistentBufferIndex(persistentBufferCount, 0)
-            , IsFlushedToDDiskByPersistentBufferIndex(
-                  persistentBufferCount,
-                  false)
-        {}
-
-        void OnWriteCompleted(
-            const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
-        {
-            LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
-            IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
-        }
-
-        void OnFlushCompleted(size_t persistentBufferIndex, ui64 lsn)
-        {
-            if (LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
-                LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
-                IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] =
-                    true;
-            }
-        }
-
-        [[nodiscard]] bool IsWritten() const
-        {
-            return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
-        }
-
-        [[nodiscard]] bool IsFlushedToDDisk() const
-        {
-            return IsFlushedToDDiskByPersistentBufferIndex[0];
-        }
-    };
-
     struct TDDiskConnection
     {
         NKikimr::NBsController::TDDiskId DDiskId;
@@ -117,9 +78,11 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    ui32 SyncRequestsBatchSize;
 
-    TVector<TBlockMeta> BlocksMeta;
-    TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
+    class TDirtyMap;
+    std::unique_ptr<TDirtyMap> DirtyMap;
+    TVector<std::shared_ptr<TSyncRequestHandler>> SyncRequestsByDDiskId;
 
     std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
@@ -131,11 +94,12 @@ public:
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
-        ui64 blocksCount);
+        ui64 blocksCount,
+        ui32 syncRequestsBatchSize);
 
     ~TDirectBlockGroup() override;
 
-    void EstablishConnections() override;
+    void EstablishConnections(NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -148,11 +112,13 @@ public:
         NWilson::TTraceId traceId) override;
 
 private:
-    void DoEstablishPersistentBufferConnection(size_t i);
+    void DoEstablishPersistentBufferConnection(
+        size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void HandlePersistentBufferConnected(
         size_t index,
-        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void DoEstablishDDiskConnection(size_t i);
 
@@ -170,12 +136,13 @@ private:
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
 
-    void ProcessSyncQueue();
+    void ProcessSyncQueue(size_t ddiskId);
 
-    void RequestBlockErase(const TSyncRequestHandler& requestHandler);
+    void RequestBlockErase(std::shared_ptr<TSyncRequestHandler> requestHandler);
 
     void HandleErasePersistentBufferResult(
         std::shared_ptr<TEraseRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);
 
@@ -189,8 +156,19 @@ private:
 
     void HandleSyncWithPersistentBufferResult(
         std::shared_ptr<TSyncRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
+
+    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId);
+    void DoRestoreFromPersistentBuffer(
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
+    void HandleListPersistentBufferResultOnRestore(
+        ui64 storageRequestId,
+        const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
+        size_t persistentBufferIndex,
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
+    void RestoreFromPersistentBufferFinised();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

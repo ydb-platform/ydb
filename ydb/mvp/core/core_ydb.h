@@ -1,6 +1,10 @@
 #pragma once
 
+#include "grpc_log.h"
+
 #include <ydb/mvp/security/simple/security.h>
+#include <ydb/core/viewer/json/json.h>
+#include <ydb/library/actors/http/http.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -11,14 +15,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
+
 #include <util/generic/strbuf.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include "grpc_log.h"
 
 template <typename T>
 class TAtomicSingleton {

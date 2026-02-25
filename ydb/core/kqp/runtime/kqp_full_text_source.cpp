@@ -325,13 +325,15 @@ class TDocumentInfo : public TSimpleRefCount<TDocumentInfo> {
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
     ui64 DocumentLength = std::numeric_limits<ui64>::max();
+
 public:
     using TPtr = TIntrusivePtr<TDocumentInfo>;
-
+    ui64 DocumentNumId = 0;
     std::vector<ui32> TokenFrequencies;
 
-    TDocumentInfo(TOwnedCellVec&& keyCells)
+    TDocumentInfo(TOwnedCellVec&& keyCells, ui64 documentNumId)
         : KeyCells(std::move(keyCells))
+        , DocumentNumId(documentNumId)
     {}
 
     void SetDocumentLength(ui64 documentLength) {
@@ -942,7 +944,7 @@ public:
                 break;
             }
 
-            auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(candidate)));
+            auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(candidate)), candidate.DocId);
             if (WithFrequencies) {
                 match->TokenFrequencies.resize(TokenCount, 0);
                 for (ui32 tokenIndex : MatchedTokens) {
@@ -1003,7 +1005,7 @@ public:
             }
 
             if (matchedTokens.size() >= MinShouldMatch) {
-                auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(doc)));
+                auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(doc)), doc.DocId);
                 if (WithFrequencies) {
                     match->TokenFrequencies.resize(TokenCount, 0);
                     for (ui32 tokenIndex : matchedTokens) {
@@ -1032,9 +1034,9 @@ public:
 };
 
 class TDocsTableReader : public TTableReader<TDocsTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
+    NKqpProto::EKqpFullTextIndexType IndexType;
 public:
-    TDocsTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
+    TDocsTableReader(const NKqpProto::EKqpFullTextIndexType& indexType,
         const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -1043,7 +1045,7 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
+        , IndexType(indexType)
     {}
 
     static TIntrusivePtr<TDocsTableReader> FromSettings(
@@ -1053,7 +1055,6 @@ public:
         const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         if (!withRelevance) {
             return nullptr;
         }
@@ -1085,18 +1086,28 @@ public:
             resultKeyColumnIds.push_back(column.GetId());
         }
 
+        bool useArrowFormat = false;
+
+        // arrow format is only supported when key is a single Uint64 column
+        // doc_id (Uint64), [freq (Uint32)]
+        if (resultKeyColumnTypes.size() == 1 && resultKeyColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
+            useArrowFormat = true;
+        }
+
         YQL_ENSURE(docLengthColumnIndex != -1);
         resultKeyColumnTypes.push_back(docLengthColumnType);
         resultKeyColumnIds.push_back(docLengthColumnIndex);
 
-        return MakeIntrusive<TDocsTableReader>(
-            indexDescription.GetSettings().layout(), counters,
+        auto reader = MakeIntrusive<TDocsTableReader>(
+            settings->GetIndexType(), counters,
             FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+        reader->SetUseArrowFormat(useArrowFormat);
+        return reader;
     }
 
     ui64 GetDocumentLength(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[GetResultColumnTypes().size() - 1].AsValue<ui32>();
             default:
                 return 0;
@@ -1105,9 +1116,9 @@ public:
 };
 
 class TStatsTableReader : public TTableReader<TStatsTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
+    NKqpProto::EKqpFullTextIndexType IndexType;
 public:
-    TStatsTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
+    TStatsTableReader(const NKqpProto::EKqpFullTextIndexType& indexType,
         const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -1116,7 +1127,7 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
+        , IndexType(indexType)
     {}
 
     static TIntrusivePtr<TStatsTableReader> FromSettings(
@@ -1126,7 +1137,6 @@ public:
         const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         if (!withRelevance) {
             return nullptr;
         }
@@ -1177,13 +1187,13 @@ public:
         resultKeyColumnIds.push_back(sumDocLengthColumnIndex);
 
         return MakeIntrusive<TStatsTableReader>(
-            indexDescription.GetSettings().layout(), counters,
+            settings->GetIndexType(), counters,
             FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[0].AsValue<ui64>();
             default:
                 return 0;
@@ -1210,8 +1220,8 @@ public:
     }
 
     ui64 GetSumDocLength(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[1].AsValue<ui64>();
             default:
                 return 0;
@@ -1237,8 +1247,7 @@ public:
         const TString& logPrefix,
         const NKikimrKqp::TKqpFullTextSourceSettings* settings)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (settings->GetIndexType() != NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             return nullptr;
         }
 
@@ -1407,7 +1416,7 @@ public:
             }
         }
 
-        withRelevance = withRelevance && settings->GetIndexDescription().GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        withRelevance = withRelevance && settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
 
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()),
             snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
@@ -2038,7 +2047,7 @@ private:
         request->DatabaseName = Database;
         MainTableReader->AddResolvePartitioningRequest(request);
         IndexTableReader->AddResolvePartitioningRequest(request);
-        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             DictTableReader->AddResolvePartitioningRequest(request);
             if (DocsTableReader) {
                 DocsTableReader->AddResolvePartitioningRequest(request);
@@ -2331,7 +2340,7 @@ public:
         YQL_ENSURE(resultSet.size() >= 2, "Expected at least 2 tables for fulltext index");
         MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
         IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
-        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             size_t count = 3 + (DocsTableReader ? 1 : 0) + (StatsTableReader ? 1 : 0);
             YQL_ENSURE(resultSet.size() == count, "Expected " << count << " tables for flat relevance index");
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);
@@ -2403,7 +2412,53 @@ public:
         return row.subspan(0, MainTableReader->GetKeyColumnTypes().size());
     }
 
+    void DocumentStatsResultArrow(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+
+        auto& readItems = DocsReadingQueue.GetReadItems(readId);
+        std::vector<TDocumentInfo::TPtr> documentInfos;
+        auto batch = msg.GetArrowBatch();
+        YQL_ENSURE(batch);
+        YQL_ENSURE(batch->columns().size() >= 2);
+        auto docIds = std::static_pointer_cast<arrow::UInt64Array>(batch->column(0));
+        YQL_ENSURE(docIds);
+        auto freq_array = std::static_pointer_cast<arrow::UInt32Array>(batch->column(1));
+        YQL_ENSURE(freq_array);
+        YQL_ENSURE(freq_array->length() == docIds->length());
+
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            TDocumentInfo::TPtr doc = readItems.GetItem();
+            YQL_ENSURE(doc->DocumentNumId == docIds->Value(i), "detected out of order document reading");
+            doc->SetDocumentLength(freq_array->Value(i));
+
+            if (Limit > 0) {
+                TopKQueue.emplace_back(doc->GetBM25Score(QueryCtx.GetRef()), std::move(doc));
+                std::push_heap(TopKQueue.begin(), TopKQueue.end());
+                if (TopKQueue.size() > (size_t)Limit) {
+                    std::pop_heap(TopKQueue.begin(), TopKQueue.end());
+                    TopKQueue.pop_back();
+                }
+
+            } else {
+                documentInfos.emplace_back(std::move(doc));
+            }
+
+            readItems.PopItem();
+        }
+
+        DocsReadingQueue.UpdateReadStatus(readId, readItems, finished);
+
+        FetchDocumentDetails(documentInfos);
+
+        if (ReadsState.Empty()) {
+            ProcessTopKQueue();
+        }
+    }
+
     void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+        if (DocsTableReader->GetUseArrowFormat()) {
+            DocumentStatsResultArrow(msg, readId, finished);
+            return;
+        }
 
         auto& readItems = DocsReadingQueue.GetReadItems(readId);
         std::vector<TDocumentInfo::TPtr> documentInfos;

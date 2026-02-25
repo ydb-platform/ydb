@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(v1.0.7)
+VERSION(v1.0.10)
 
 SRCS(
     bool.go
@@ -50,6 +50,7 @@ SRCS(
 )
 
 GO_TEST_SRCS(
+    bool_func_go1.21_test.go
     bool_func_test.go
     bool_slice_test.go
     bool_test.go
@@ -61,6 +62,7 @@ GO_TEST_SRCS(
     flag_test.go
     float32_slice_test.go
     float64_slice_test.go
+    func_go1.21_test.go
     func_test.go
     golangflag_test.go
     int32_slice_test.go

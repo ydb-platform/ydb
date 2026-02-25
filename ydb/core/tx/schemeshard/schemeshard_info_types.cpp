@@ -2743,22 +2743,19 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
-    Y_ABORT_UNLESS(Kind == EKind::S3);
-    auto settings = GetS3Settings();
-
     if (TString err; !CompileExcludeRegexps(err)) {
         result.AddError(err);
         return result;
     }
 
     TString dstRoot;
-    if (settings.destination_path().empty()) {
+    if (GetDestinationPath().empty()) {
         dstRoot = CanonizePath(ss->RootPathElements);
     } else {
-        dstRoot = CanonizePath(settings.destination_path());
+        dstRoot = CanonizePath(GetDestinationPath());
     }
 
-    TString sourcePrefix = NBackup::NormalizeExportPrefix(settings.source_prefix());
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(GetSource());
     if (sourcePrefix) {
         sourcePrefix.push_back('/');
     }
@@ -2907,6 +2904,10 @@ void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
 
 float TForcedCompactionInfo::CalcProgress() const {
     return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
+}
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
 } // namespace NSchemeShard

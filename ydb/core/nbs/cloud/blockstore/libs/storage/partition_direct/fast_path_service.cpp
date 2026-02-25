@@ -49,7 +49,7 @@ TFastPathService::TFastPathService(
     ui32 blockSize,
     ui64 blocksCount,
     ui32 storageMedia,
-    const NProto::TStorageConfig& storageConfig,
+    const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , TraceSamplePeriod(
@@ -77,10 +77,22 @@ TFastPathService::TFastPathService(
                 std::move(ddiskIds),
                 std::move(persistentBufferDDiskIds),
                 blockSize,
-                blocksCount);
+                blocksCount,
+                storageConfig.GetSyncRequestsBatchSize());
     }
 
-    DirectBlockGroup->EstablishConnections();
+    DirectBlockGroup->EstablishConnections(SpanTrace());
+}
+
+NWilson::TTraceId TFastPathService::SpanTrace()
+{
+    return NWilson::TTraceId::NewTraceIdThrottled(
+        15,                           // verbosity
+        4095,                         // timeToLive
+        LastTraceTs,                  // atomic counter for throttling
+        NActors::TMonotonic::Now(),   // current monotonic time
+        TraceSamplePeriod             // 100ms between samples
+    );
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -88,13 +100,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
     with_lock (Lock) {
-        auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
-            15,                           // verbosity
-            4095,                         // timeToLive
-            LastTraceTs,                  // atomic counter for throttling
-            NActors::TMonotonic::Now(),   // current monotonic time
-            TraceSamplePeriod             // 100ms between samples
-        );
+        auto traceId = SpanTrace();
 
         Counters.RequestStarted(
             EBlockStoreRequest::ReadBlocks,

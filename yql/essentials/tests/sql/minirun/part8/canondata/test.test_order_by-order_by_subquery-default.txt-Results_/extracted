@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:5:7: Warning: ORDER BY without LIMIT in subquery will be ignored
+    	$x = (select * from $input order by value);
+	      ^
+    <tmp_path>/program.sql:<main>:8:16: Warning: ORDER BY without LIMIT in subquery will be ignored
+    	select * from (select * from $input order by value);
+	               ^
+    <tmp_path>/program.sql:<main>:10:16: Warning: ORDER BY without LIMIT in subquery will be ignored
+    	select * from (select 1 from $input as a join $input as b using(key) order by a.value);
+	               ^
+    <tmp_path>/program.sql:<main>:13:1: Warning: ORDER BY without LIMIT in subquery will be ignored
+    	select * from $input
+	^
+    <tmp_path>/program.sql:<main>:19:1: Warning: ORDER BY without LIMIT in subquery will be ignored
+    	SELECT
+	^

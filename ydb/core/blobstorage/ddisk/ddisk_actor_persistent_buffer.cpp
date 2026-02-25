@@ -1,5 +1,6 @@
 #include "ddisk_actor.h"
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
@@ -9,13 +10,17 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::InitPersistentBuffer() {
+    void TDDiskActor::InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format) {
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
         ChunkSize = DiskFormat->ChunkSize;
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
+        MaxChunks = format->MaxChunks;
+        PersistentBufferInitChunks = format->InitChunks;
+        MaxPersistentBufferInMemoryCache = format->MaxInMemoryCache;
+        MaxPersistentBufferChunkRestoreInflight = format->MaxChunkRestoreInflight;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
     }
 

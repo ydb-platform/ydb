@@ -134,6 +134,9 @@ public:
         initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
+        initReply->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
+            delete ptr;
+        });
         SendPDiskResponse(disk, *init, initReply.release());
 
         auto readLog = WaitPDiskRequest<NPDisk::TEvReadLog>(disk);

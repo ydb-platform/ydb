@@ -395,6 +395,11 @@ message TKqpPhyConnection {
     };
 }
 
+enum EKqpFullTextIndexType {
+    EKqpFullTextPlain = 0;
+    EKqpFullTextRelevance = 1;
+}
+
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
@@ -426,6 +431,8 @@ message TKqpFullTextSource {
     TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
     TKqpPhyValue Mode = 14;
+
+    optional EKqpFullTextIndexType IndexType = 15;
 }
 
 message TKqpReadRangesSource {
@@ -445,6 +452,18 @@ message TKqpReadRangesSource {
     bool IsTableImmutable = 10;
     // Vector top-K pushdown for brute force vector search
     TKqpPhyVectorTopK VectorTopK = 11;
+}
+
+message TKqpSysViewSource {
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
+    TKqpPhyValue ItemsLimit = 3;
+    bool Reverse = 4;
+
+    oneof RangesExpr {
+        TKqpPhyParamValue Ranges = 5;
+        TKqpPhyKeyRange KeyRange = 6;
+    }
 }
 
 message TKqpExternalSource {
@@ -472,6 +491,7 @@ message TKqpSource {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
         TKqpFullTextSource FullTextSource = 5;
+        TKqpSysViewSource SysViewSource = 6;
     }
 }
 

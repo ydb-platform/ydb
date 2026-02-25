@@ -412,4 +412,275 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             }
         });
     }
+
+    Y_UNIT_TEST(CopyWithRebootsAtCommit) {
+        TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "key3" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, CopyColumnTableRequest(++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::ChildrenCount(3)});
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
+                                   {NLs::Finished, NLs::IsColumnTable});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(DropCopyWithRebootsAtCommit) {
+        TTestWithReboots t(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "key3" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, DropColumnTableRequest(++t.TxId, "/MyRoot", "Table"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
+            t.TestEnv->ReliablePropose(runtime, DropColumnTableRequest(++t.TxId, "/MyRoot", "NewTable"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable"),
+                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                                   {NLs::PathNotExist});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(AlterCopyWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Alter the table
+            TestAlterColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "Table"
+                AlterSchema {
+                    AddColumns { Name: "add_1" Type: "Uint64" }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "Table");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CopyAlterWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Copy the table
+            TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestAlterColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "NewTable"
+                AlterSchema {
+                    AddColumns { Name: "add_2" Type: "Uint64" }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "Table");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CopyTableAndDropWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "key3" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "Table");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST(CopyTableAndDropWithReboots2) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "key3" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            AsyncDropColumnTable(runtime, ++t.TxId, "/MyRoot", "Table");
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            AsyncDropColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable");
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable"),
+                                   {NLs::PathNotExist});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ChainedCopyTableAndDropWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const int maxTableIdx = 4;
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "key3" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2", "key3"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Make a chain of copy-of-copy
+                for (int i = 2; i <= maxTableIdx; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("Table%d", i), Sprintf("/MyRoot/Table%d", i-1));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+
+                // Drop all intermediate copies
+                for (int i = 1; i < maxTableIdx; ++i) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("Table%d", i));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            // Drop the last table
+            TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("Table%d", maxTableIdx));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = 1; i <= maxTableIdx; ++i) {
+                    TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/Table%d", i)),
+                                       {NLs::PathNotExist});
+                }
+            }
+        });
+    }
 }

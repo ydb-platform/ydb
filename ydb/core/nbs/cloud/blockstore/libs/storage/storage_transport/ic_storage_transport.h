@@ -40,8 +40,8 @@ public:
     ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
+        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+        TVector<ui64> lsns,
         NWilson::TSpan& span) override;
 
     NThreading::TFuture<
@@ -68,11 +68,16 @@ public:
     SyncWithPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
+        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+        TVector<ui64> lsns,
         const std::tuple<ui32, ui32, ui32> ddiskId,
         const ui64 ddiskInstanceGuid,
         NWilson::TSpan& span) override;
+
+    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> ListPersistentBuffer(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const ui64 requestId) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -94,6 +99,8 @@ private:
     THashMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
     THashMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
         SyncEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvListPersistentBuffer>
+        ListPersistentBufferEventsByRequestId;
 
 public:
     TICStorageTransportActor() = default;
@@ -150,6 +157,14 @@ private:
 
     void HandleSyncWithPersistentBufferResult(
         const NKikimr::NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleListPersistentBuffer(
+        const TEvICStorageTransportPrivate::TEvListPersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleListPersistentBufferResult(
+        const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

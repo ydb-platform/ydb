@@ -52,6 +52,30 @@ std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortion
     return result;
 }
 
+TConclusion<std::vector<TReadPortionInfoWithBlobs>> TReadPortionInfoWithBlobs::TryRestorePortions(
+    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
+    std::vector<TReadPortionInfoWithBlobs> result;
+    for (auto&& i : portions) {
+        const auto schema = i.GetPortionInfo().GetSchema(tables);
+        const auto& idxInfo = schema->GetIndexInfo();
+        for (auto&& rec : i.GetRecordsVerified()) {
+            if (!idxInfo.HasColumnId(rec.GetColumnId())) {
+                return TConclusionStatus::Fail(TStringBuilder() << "missing column id " << rec.GetColumnId() << " in portion schema");
+            }
+        }
+
+        for (auto&& idxChunk : i.GetIndexesVerified()) {
+            if (!idxInfo.HasIndexId(idxChunk.GetIndexId())) {
+                return TConclusionStatus::Fail(TStringBuilder() << "missing index id " << idxChunk.GetIndexId() << " in portion schema");
+            }
+        }
+
+        result.emplace_back(RestorePortion(i, blobs, idxInfo));
+    }
+
+    return result;
+}
+
 std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEntityChunks(const ui32 entityId) const {
     std::map<TChunkAddress, std::shared_ptr<IPortionDataChunk>> sortedChunks;
     for (auto&& i : Chunks) {

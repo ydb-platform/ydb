@@ -1595,6 +1595,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 auto s = (seq % 4 == 0) ? producer2 : producer1;
                 writeMessage(s, msgData, seq);
             }
+            Sleep(TDuration::Seconds(5));
             UNIT_ASSERT_C(producer1->Flush().GetValueSync().IsSuccess(), "Failed to flush producer1");
             UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer2");
         }

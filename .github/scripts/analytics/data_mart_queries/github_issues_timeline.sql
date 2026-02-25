@@ -4,7 +4,24 @@
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
 --
 $timeline_days = 365;
-$recent_days = 2;  -- only these days are selected (today and $recent_days-1 days back)
+$recent_days = 365;  -- only these days are selected (today and $recent_days-1 days back)
+
+-- Owner by area (prefix match): area/cs/analytics -> area/cs in mapping. Return matched_area (om.area) for output.
+-- Distinct areas from source github_data/issues. New areas get owner/area from fallback in output.
+$owner_mapping = (
+    SELECT area AS area, owner_team AS owner_team, matched_area AS matched_area
+    FROM (
+        SELECT
+            a.area AS area,
+            om.owner_team AS owner_team,
+            om.area AS matched_area,
+            ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
+        FROM (SELECT DISTINCT COALESCE(JSON_VALUE(info, "$.area"), 'area/-') AS area FROM `github_data/issues`) AS a
+        CROSS JOIN `test_results/analytics/area_to_owner_mapping` AS om
+        WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')
+    )
+    WHERE rn = 1
+);
 
 SELECT
     dt.d AS date,
@@ -94,10 +111,15 @@ CROSS JOIN (
         COALESCE(JSON_VALUE(t.info, "$.env"), 'env:-') AS env,
         COALESCE(JSON_VALUE(t.info, "$.priority"), 'priority:-') AS priority,
         COALESCE(JSON_VALUE(t.info, "$.branch"), '-') AS branch,
-        COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS area
+        Coalesce(m.matched_area,
+            CASE
+                WHEN ListLength(String::SplitToList(Cast(COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS String), '/')) >= 2
+                THEN String::SplitToList(Cast(COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS String), '/')[0] || '/' || String::SplitToList(Cast(COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS String), '/')[1]
+                ELSE COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
+            END
+        ) AS area
     FROM `github_data/issues` AS t
-    LEFT JOIN `test_results/analytics/area_to_owner_mapping` AS m
-        ON m.area = COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
+    LEFT JOIN $owner_mapping AS m ON m.area = COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
     WHERE t.created_date <= CurrentUtcDate()
       AND (t.closed_at IS NULL OR Cast(t.closed_at AS Date) >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 ) AS i

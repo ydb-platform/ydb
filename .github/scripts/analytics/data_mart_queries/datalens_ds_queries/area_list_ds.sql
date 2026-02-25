@@ -11,6 +11,7 @@ FROM (
     SELECT area AS area
     FROM `test_results/analytics/github_issues_timeline`
     WHERE area IS NOT NULL
+    and max_branch != '-'
     UNION
     SELECT area AS area
     FROM `test_results/analytics/area_to_owner_mapping`
@@ -18,4 +19,4 @@ FROM (
     SELECT 'area/-' AS area
 ) AS r
 WHERE r.area IS NOT NULL AND r.area != ''
-ORDER BY area;
+ORDER BY area

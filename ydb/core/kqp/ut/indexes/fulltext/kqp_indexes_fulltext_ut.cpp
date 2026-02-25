@@ -2,6 +2,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -145,17 +146,19 @@ TString CondenseToYsonString(Ydb::TableStats::QueryStats& stats) {
     return out.Str();
 }
 
-Ydb::TableStats::QueryStats DoValidateRelevanceSingleQuery(NQuery::TQueryClient& db, const TString& relevanceQuery, std::vector<std::pair<ui64, double>> expectedResults) {
+Ydb::TableStats::QueryStats DoValidateRelevanceSingleQuery(TKikimrRunner& kikimr, NQuery::TQueryClient& db, const TString& relevanceQuery, std::vector<std::pair<ui64, double>> expectedResults) {
     // Get the actual relevance score
     auto settings = NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
-    auto result = db.ExecuteQuery(
-        relevanceQuery, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+    auto result = kikimr.RunCall([&] { return db.ExecuteQuery(
+        relevanceQuery, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync(); });
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, "Expected 1 result set");
     auto resultSet = result.GetResultSet(0);
     UNIT_ASSERT_C(resultSet.RowsCount() == expectedResults.size(),
-        "Expected " + std::to_string(expectedResults.size()) + " results for query: " + relevanceQuery);
+        "Expected " + std::to_string(expectedResults.size()) + " results for query: "
+        + "Actual " + std::to_string(resultSet.RowsCount()) + "\n"
+        + relevanceQuery);
     NYdb::TResultSetParser parser(resultSet);
     size_t idx = 0;
     while (parser.TryNextRow()) {
@@ -5230,8 +5233,12 @@ Y_UNIT_TEST_TWIN(FullTextDeliveryProblem, LimitRowsPerRequest) {
     if (LimitRowsPerRequest) {
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
-
     }
+
+    Y_DEFER {
+        SetDefaultIteratorQuotaSettings(32767, 5_MB);
+    };
+
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
     TKikimrRunner kikimr(settings);
@@ -5367,8 +5374,26 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithUtf8KeyAndNgram) {
 // Test L2 reads with imbalanced word frequencies in relevance index.
 // When one word is much more frequent than another (>10x), the fulltext source
 // uses a two-layer merge: L1 for the rare word, L2 for the common word.
-Y_UNIT_TEST(FulltextRelevanceL2Reads) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_QUAD(FulltextRelevanceL2Reads, LimitRowsPerRequest, InjectFail) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    if (InjectFail) {
+        settings.SetUseRealThreads(false);
+    }
+
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    if (LimitRowsPerRequest) {
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
+    }
+
+    Y_DEFER {
+        SetDefaultIteratorQuotaSettings(32767, 5_MB);
+    };
+
+    auto kikimr = TKikimrRunner(settings);
     auto db = kikimr.GetQueryClient();
 
     { // Create table
@@ -5379,7 +5404,7 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
                 PRIMARY KEY (Key)
             );
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -5403,7 +5428,7 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
                 (14, "the quantum realm is fascinating"),
                 (15, "the sky is blue")
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        auto result = kikimr.RunCall([&]{ return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -5414,12 +5439,93 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
                 ON (Text)
                 WITH (tokenizer=standard, use_filter_lowercase=true)
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    using namespace NTableIndex;
+    using namespace NTableIndex::NFulltext;
+
+    auto sender = kikimr.GetTestServer().GetRuntime()->AllocateEdgeActor();
+
+    // Get shards for the index posting table
+    auto docsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Articles/fulltext_idx", DocsTable}));
+    auto implShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Articles/fulltext_idx", ImplTable}));
+    auto dictShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Articles/fulltext_idx", DictTable}));
+    auto statsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Articles/fulltext_idx", StatsTable}));
+    auto mainShards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/Articles");
+
+    THashMap<ui64, int> shardSet;
+
+    UNIT_ASSERT(!docsShards.empty());
+    UNIT_ASSERT(!implShards.empty());
+    UNIT_ASSERT(!dictShards.empty());
+    UNIT_ASSERT(!statsShards.empty());
+    UNIT_ASSERT(!mainShards.empty());
+
+    for (auto shard : implShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : dictShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : statsShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : mainShards) {
+        shardSet[shard] = 0;
+    }
+
+    for (auto shard : docsShards) {
+        shardSet[shard] = 0;
+    }
+
+    int readCount = 0;
+    int resultsCount = 0;
+
+    // Set up observer to inject delivery problem on first TEvForward with TEvRead to our shards
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        bool drop = false;
+        if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvForward::EventType) {
+            auto* forward = ev->Get<NKikimr::TEvPipeCache::TEvForward>();
+            // Check if this is a TEvRead going to one of our shards
+            if (forward->Ev->Type() == NKikimr::TEvDataShard::TEvRead::EventType &&
+                shardSet.contains(forward->TabletId)) {
+                int& cnt = shardSet[forward->TabletId];
+
+                Cerr << "Observed TEvRead #" << readCount << " to shard " << forward->TabletId
+                     << ", sender: " << ev->Sender << Endl;
+
+                readCount++;
+                if ((cnt & 1) == 0 && (resultsCount % 3) == 2) {
+                    resultsCount = 0;
+                    Cerr << "Injecting delivery problem for shard " << forward->TabletId
+                         << " to actor " << ev->Sender << Endl;
+                    auto undelivery = MakeHolder<NKikimr::TEvPipeCache::TEvDeliveryProblem>(forward->TabletId, true);
+                    kikimr.GetTestServer().GetRuntime()->Send(new NActors::IEventHandle(ev->Sender, sender, undelivery.Release()));
+                    drop = true;
+                }
+                cnt++;
+            }
+        }
+
+        if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+            auto* msg = ev->Get<NKikimr::TEvDataShard::TEvReadResult>();
+            auto readId = msg->Record.GetReadId();
+            Y_UNUSED(readId);
+            resultsCount++;
+        }
+
+        if (drop) {
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+
+    kikimr.GetTestServer().GetRuntime()->SetObserverFunc(observer);
+
     {
-        auto stats = DoValidateRelevanceSingleQuery(db, R"sql(
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
             SELECT Key, FulltextScore(Text, "the quantum") as Relevance
             FROM `/Root/Articles` VIEW `fulltext_idx`
             WHERE FulltextScore(Text, "the quantum") > 0
@@ -5436,7 +5542,7 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
     }
 
     {
-        auto stats = DoValidateRelevanceSingleQuery(db, R"sql(
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
             SELECT Key, Text, FulltextScore(Text, "the quantum") as Relevance
             FROM `/Root/Articles` VIEW `fulltext_idx`
             WHERE FulltextScore(Text, "the quantum") > 0
@@ -5453,7 +5559,7 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
     }
 
     {
-        auto stats = DoValidateRelevanceSingleQuery(db, R"sql(
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
             SELECT Key, FulltextScore(Text, "the computing") as Relevance
             FROM `/Root/Articles` VIEW `fulltext_idx`
             WHERE FulltextScore(Text, "the computing") > 0
@@ -5470,7 +5576,7 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
     }
 
     {
-        auto stats = DoValidateRelevanceSingleQuery(db, R"sql(
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
             SELECT Key, FulltextScore(Text, "the fast river") as Relevance
             FROM `/Root/Articles` VIEW `fulltext_idx`
             WHERE FulltextScore(Text, "the fast river") > 0
@@ -5485,6 +5591,256 @@ Y_UNIT_TEST(FulltextRelevanceL2Reads) {
             ["/Root/Articles/fulltext_idx/indexImplTable";4u;48u]
         ])", CondenseToYsonString(stats));
     }
+}
+
+Y_UNIT_TEST_TWIN(FullTextReadResultStatusRetry, LimitRowsPerRequest) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+    settings.SetUseRealThreads(false);
+    if (LimitRowsPerRequest) {
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
+    }
+
+    Y_DEFER {
+        SetDefaultIteratorQuotaSettings(32767, 5_MB);
+    };
+
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+
+    kikimr.RunCall([&]() { CreateTexts(db); return true; });
+    kikimr.RunCall([&]() { UpsertTexts(db); return true; });
+    kikimr.RunCall([&]() { AddIndex(db, "fulltext_relevance"); return true; });
+
+    int errorsInjected = 0;
+
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+            auto* msg = ev->Get<NKikimr::TEvDataShard::TEvReadResult>();
+            if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+                Ydb::StatusIds::StatusCode errorCode;
+                switch (errorsInjected % 3) {
+                    case 0: errorCode = Ydb::StatusIds::OVERLOADED; break;
+                    case 1: errorCode = Ydb::StatusIds::INTERNAL_ERROR; break;
+                    default: errorCode = Ydb::StatusIds::NOT_FOUND; break;
+                }
+                if (errorsInjected < 6) {
+                    Cerr << "Injecting " << Ydb::StatusIds::StatusCode_Name(errorCode)
+                         << " for ReadId=" << msg->Record.GetReadId() << Endl;
+                    msg->Record.MutableStatus()->SetCode(errorCode);
+                    msg->Record.ClearArrowBatch();
+                    msg->Record.ClearCellVec();
+                    msg->Record.SetRowCount(0);
+                    msg->Record.SetFinished(false);
+                    errorsInjected++;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    runtime.SetObserverFunc(observer);
+
+    auto result = kikimr.RunCall([&]() {
+        TString query = R"sql(
+            SELECT Key, Text, FulltextScore(Text, "cats") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "cats") > 0
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql";
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT(resultSet.RowsCount() == 3);
+
+    UNIT_ASSERT(errorsInjected > 0);
+    Cerr << "Test completed successfully, errors injected: " << errorsInjected << Endl;
+}
+
+Y_UNIT_TEST(FullTextReadResultStatusAbort) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+    settings.SetUseRealThreads(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+
+    kikimr.RunCall([&]() { CreateTexts(db); return true; });
+    kikimr.RunCall([&]() { UpsertTexts(db); return true; });
+    kikimr.RunCall([&]() { AddIndex(db, "fulltext_relevance"); return true; });
+
+    bool errorInjected = false;
+
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+            auto* msg = ev->Get<NKikimr::TEvDataShard::TEvReadResult>();
+            if (!errorInjected && msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+                Cerr << "Injecting BAD_SESSION for ReadId=" << msg->Record.GetReadId() << Endl;
+                msg->Record.MutableStatus()->SetCode(Ydb::StatusIds::BAD_SESSION);
+                msg->Record.ClearArrowBatch();
+                msg->Record.ClearCellVec();
+                msg->Record.SetRowCount(0);
+                msg->Record.SetFinished(false);
+                errorInjected = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    runtime.SetObserverFunc(observer);
+
+    auto result = kikimr.RunCall([&]() {
+        TString query = R"sql(
+            SELECT Key, Text, FulltextScore(Text, "cats") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "cats") > 0
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql";
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    });
+
+    UNIT_ASSERT(errorInjected);
+    UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+    Cerr << "Non-retryable error correctly aborted the query, status: "
+         << result.GetStatus() << Endl;
+}
+
+Y_UNIT_TEST_TWIN(FullTextReadResultStatusRetryL2, LimitRowsPerRequest) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+    settings.SetUseRealThreads(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    if (LimitRowsPerRequest) {
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
+        settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
+    }
+
+    Y_DEFER {
+        SetDefaultIteratorQuotaSettings(32767, 5_MB);
+    };
+
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Articles` (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Articles` (Key, Text) VALUES
+                (1,  "the quick brown fox"),
+                (2,  "the lazy dog sleeps"),
+                (3,  "the cat sat on the mat"),
+                (4,  "the rain in spain"),
+                (5,  "the sun is shining"),
+                (6,  "the moon is bright"),
+                (7,  "the stars are beautiful"),
+                (8,  "the world is vast"),
+                (9,  "the ocean is deep"),
+                (10, "the mountain is tall"),
+                (11, "the river flows fast"),
+                (12, "the forest is dense"),
+                (13, "quantum computing is revolutionary and fast developing"),
+                (14, "the quantum realm is fascinating"),
+                (15, "the sky is blue")
+        )sql";
+        auto result = kikimr.RunCall([&]{ return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_relevance
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    int errorsInjected = 0;
+
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+            auto* msg = ev->Get<NKikimr::TEvDataShard::TEvReadResult>();
+            if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+                Ydb::StatusIds::StatusCode errorCode;
+                switch (errorsInjected % 3) {
+                    case 0: errorCode = Ydb::StatusIds::OVERLOADED; break;
+                    case 1: errorCode = Ydb::StatusIds::INTERNAL_ERROR; break;
+                    default: errorCode = Ydb::StatusIds::NOT_FOUND; break;
+                }
+                if (errorsInjected < 6) {
+                    Cerr << "Injecting " << Ydb::StatusIds::StatusCode_Name(errorCode)
+                         << " for ReadId=" << msg->Record.GetReadId() << Endl;
+                    msg->Record.MutableStatus()->SetCode(errorCode);
+                    msg->Record.ClearArrowBatch();
+                    msg->Record.ClearCellVec();
+                    msg->Record.SetRowCount(0);
+                    msg->Record.SetFinished(false);
+                    errorsInjected++;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    runtime.SetObserverFunc(observer);
+
+    {
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
+            SELECT Key, FulltextScore(Text, "the quantum") as Relevance
+            FROM `/Root/Articles` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "the quantum") > 0
+            ORDER BY Relevance DESC
+            LIMIT 100
+        )sql", { { 14, 0.841570 } });
+    }
+
+    UNIT_ASSERT(errorsInjected > 0);
+    Cerr << "L2 test completed successfully, errors injected: " << errorsInjected << Endl;
+
+    errorsInjected = 0;
+
+    {
+        auto stats = DoValidateRelevanceSingleQuery(kikimr, db, R"sql(
+            SELECT Key, FulltextScore(Text, "the fast river") as Relevance
+            FROM `/Root/Articles` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "the fast river") > 0
+            ORDER BY Relevance DESC
+            LIMIT 100
+        )sql", { {11, 2.040364 } });
+    }
+
+    UNIT_ASSERT(errorsInjected > 0);
+    Cerr << "L2 three-word test completed, errors injected: " << errorsInjected << Endl;
 }
 
 }

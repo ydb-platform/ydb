@@ -240,6 +240,7 @@ message TEvProposeTransactionStatus {
     optional uint64 PathId = 34;
     optional uint64 PathCreateTxId = 35;
     optional uint64 PathDropTxId = 36;
+    optional string SchemeShardOperationId = 37;
 
     optional fixed64 DataShardTabletId = 40;
 

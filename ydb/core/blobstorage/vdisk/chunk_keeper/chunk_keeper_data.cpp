@@ -13,7 +13,7 @@ TChunkKeeperData::TChunkKeeperData(const NKikimrVDiskData::TChunkKeeperEntryPoin
         Chunks[chunkIdx] = TChunkRecord{
             .ChunkIdx = chunkIdx,
             .Subsystem = subsystem,
-            .ShreddingRequested = false,
+            .ShredRequested = false,
         };
         ChunksBySubsystem[subsystem].insert(chunkIdx);
     }

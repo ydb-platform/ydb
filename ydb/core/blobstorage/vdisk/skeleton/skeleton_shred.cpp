@@ -20,6 +20,7 @@ namespace NKikimr {
             HUGE_CHUNK,
             SYNCLOG,
             INDEX,
+            CHUNK_KEEPER,
         };
 
         THashMap<TChunkIdx, EChunkType> ChunkTypes;
@@ -93,6 +94,7 @@ namespace NKikimr {
             };
             update(msg->ChunksHuge, EChunkType::HUGE_CHUNK);
             update(msg->ChunksSyncLog, EChunkType::SYNCLOG);
+            update(msg->ChunksChunkKeeper, EChunkType::CHUNK_KEEPER);
 
             if (!--RepliesPending) {
                 Send(ShredCtx->SkeletonId, new TEvTakeHullSnapshot(true));
@@ -274,6 +276,10 @@ namespace NKikimr {
 
                                     case EChunkType::SYNCLOG:
                                         color = "blue";
+                                        break;
+
+                                    case EChunkType::CHUNK_KEEPER:
+                                        color = "green";
                                         break;
                                 }
                                 s << std::exchange(sp, " ") << "<font color=" << color << ">" << chunkId << "</font>";

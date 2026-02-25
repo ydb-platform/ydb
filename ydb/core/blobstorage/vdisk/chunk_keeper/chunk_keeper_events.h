@@ -11,6 +11,7 @@ namespace NKikimr {
 /// 1. TEvChunkKeeperAllocate(subsystem)
 /// - Allocates chunk on PDisk and persistently commit it as owned by given subsystem
 /// - May return ERROR on PDisk failures
+/// - When returns OK ChunkIdx is non-nullopt
 ///
 /// 2. TEvChunkKeeperFree(chunkIdx, subsystem)
 /// - Deallocates chunk with given chunkIdx if it is owned by given subsystem
@@ -79,7 +80,7 @@ struct TEvChunkKeeperDiscoverResult : TEventLocal<TEvChunkKeeperDiscoverResult,
         TEvBlobStorage::EvChunkKeeperDiscoverResult> {
     struct TChunkInfo {
         ui32 ChunkIdx;
-        bool ShreddingRequested;
+        bool ShredRequested;
     };
 
     std::vector<TChunkInfo> Chunks;

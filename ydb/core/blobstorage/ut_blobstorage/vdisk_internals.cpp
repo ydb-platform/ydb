@@ -7,7 +7,7 @@
 #include <util/random/random.h>
 #include <util/stream/null.h>
 
-#define Ctest Cnull
+#define Ctest Cerr
 
 namespace NKikimr {
 
@@ -218,10 +218,81 @@ Y_UNIT_TEST(Random) {
 
 class TTestSubsystem : public TActorBootstrapped<TTestSubsystem> {
 public:
+    TTestSubsystem(TActorId chunkKeeperId)
+        : ChunkKeeperId(chunkKeeperId)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(ChunkKeeperId, new TEvChunkKeeperAllocate(Subsystem));
+    }
 
 private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvChunkKeeperAllocateResult, Handle)
+        hFunc(TEvChunkKeeperDiscoverResult, Handle)
+        hFunc(TEvChunkKeeperFreeResult, Handle)
+        cFunc(TEvents::TEvWakeup::EventType, HandleWakeup)
+    );
 
+    void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+        Ctest << "Allocated ChunkIdx# " << *ev->Get()->ChunkIdx << Endl;
+        Schedule(TDuration::Minutes(10), new TEvents::TEvWakeup);
+    }
+
+    void Handle(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
+        Ctest << "Handle TEvChunkKeeperDiscoverResult" << Endl;
+        for (const auto& chunk : ev->Get()->Chunks) {
+            Ctest << "ChunkIdx# " << chunk.ChunkIdx << " ShredRequested# " << chunk.ShredRequested << Endl;
+            if (chunk.ShredRequested) {
+                Send(ChunkKeeperId, new TEvChunkKeeperFree(chunk.ChunkIdx, Subsystem));
+            }
+        }
+    }
+
+    void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+    }
+
+    void HandleWakeup() {
+        Send(ChunkKeeperId, new TEvChunkKeeperDiscover(Subsystem));
+        Schedule(TDuration::Minutes(10), new TEvents::TEvWakeup);
+    }
+
+private:
+    constexpr static NKikimrVDiskData::TChunkKeeperEntryPoint::ESubsystem Subsystem =
+            NKikimrVDiskData::TChunkKeeperEntryPoint::Test1;
+    TActorId ChunkKeeperId;
 };
+
+Y_UNIT_TEST(Shred) {
+    TTestCtx ctx;
+    ctx.Initialize();
+    ctx.UpdateChunkKeeperId();
+
+    {
+        TTestSubsystem* actor = new TTestSubsystem(ctx.ChunkKeeperId);
+        ctx.Env->Runtime->Register(actor, ctx.ChunkKeeperId.NodeId());
+    }
+
+    ctx.Env->Sim(TDuration::Seconds(5));
+
+    while (true) {
+        const TActorId edge = ctx.Env->Runtime->AllocateEdgeActor(ctx.Env->Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(1);
+        ctx.Env->Runtime->SendToPipe(ctx.Env->TabletId, edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerShredResponse>(edge, false,
+                TAppData::TimeProvider->Now() + TDuration::Hours(3));
+        UNIT_ASSERT(res);
+        if (res->Get()->Record.GetCompleted()) {
+            break;
+        }
+        ctx.Env->Sim(TDuration::Minutes(10));
+    }
+
+    ctx.Env->Sim(TDuration::Seconds(5));
+}
 
 }
 

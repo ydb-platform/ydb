@@ -250,11 +250,9 @@ enum EServiceKikimr {
     KQP_COMPILE_COMPUTATION_PATTERN_SERVICE = 546;
     KQP_WORKLOAD_SERVICE = 547;
     KQP_COMPUTE_SCHEDULER = 548;
-<<<<<<< HEAD
-=======
+
     KQP_CHANNELS = 549;
     KQP_WORKLOAD_SERVICE_REQ = 562;
->>>>>>> 82d6649be89 (YQ-5083: WM: add SQL text tracking and debug logging to workload serv… (#34024))
 
     TABLET_RESOURCE_BROKER = 540;
 

@@ -13717,12 +13717,13 @@ END DO)",
         TestTruncateTable(tableName, useQueryClient, createSecondaryIndex);
     }
 
-    Y_UNIT_TEST(AlterTableCompact) {
+    Y_UNIT_TEST_TWIN(AlterTableCompact, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
 
         {
             auto query = R"sql(
@@ -13733,7 +13734,7 @@ END DO)",
                 ) WITH (
                     PARTITION_AT_KEYS = (250, 500, 750)
                 );)sql";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -13750,9 +13751,10 @@ END DO)",
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
-            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << R"sql(
+            auto query = R"sql(
                 ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
-            )sql").ExtractValueSync();
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 

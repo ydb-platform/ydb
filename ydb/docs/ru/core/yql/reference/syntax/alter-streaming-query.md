@@ -1,6 +1,6 @@
 # ALTER STREAMING QUERY
 
-`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст [потоковых запросов](../../../concepts/streaming-query.md) {% endif %}, а также управляет их состоянием: запуском и остановкой.
+`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст {% endif %} [потоковых запросов](../../../concepts/streaming-query.md), а также управляет их состоянием: запуском и остановкой.
 
 ## Синтаксис
 

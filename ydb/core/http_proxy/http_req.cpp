@@ -1089,6 +1089,9 @@ namespace NKikimr::NHttpProxy {
                 , ProtoCall(protoCall)
                 , Method(method)
             {
+                if (Signature && Signature->Empty()) {
+                    Signature.Reset();
+                }
             }
 
             TStringBuilder LogPrefix() const {
@@ -1385,10 +1388,17 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (HttpContext.IamToken.empty() && Signature) {
+                if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
+                    if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                        return ReplyWithMessageQueueError(
+                            ctx,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.HttpStatusCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.ErrorCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.DefaultMessage);
+                    }
                     SendGrpcRequestNoDriver(ctx);
                 }
 

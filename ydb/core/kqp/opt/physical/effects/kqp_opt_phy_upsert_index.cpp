@@ -941,8 +941,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         }
 
         TVector<TExprBase> fulltextDictDelta;
-        const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-        const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
         TMaybeNode<TKqpTable> docsTableNode;
         TMaybeNode<TExprBase> addedDocs, removedDocs;
         if (withRelevance) {

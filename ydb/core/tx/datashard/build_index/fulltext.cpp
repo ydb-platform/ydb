@@ -30,8 +30,8 @@ using namespace NKikimr::NFulltext;
  * This scan takes the main table and writes output to indexImplTable.
  *
  * Source columns: <PK columns>, <text column>, <data columns>
- * Destination columns with FLAT index layout: __ydb_token, <PK columns>, __ydb_freq
- * Destination columns with FLAT_RELEVANCE index layout: __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, __ydb_freq
+ * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, <data columns>
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -42,7 +42,7 @@ using namespace NKikimr::NFulltext;
  * Execution Flow:
  * - TBuildFulltextIndexScan scans the whole input shard
  * - Extracts tokens from the text column using tokenizers set in the index settings
- * - When the index layout is FLAT_RELEVANCE it also calculates __ydb_freq for each token
+ * - When the index has FulltextRelevance type, it also calculates __ydb_freq for each token
  *   as the number of its occurrences in the document
  * - Tokens are inserted into the index table with their __ydb_freqs if required
  */
@@ -125,7 +125,7 @@ public:
             for (const auto& column : table.KeyColumnIds) {
                 addType(uploadTypes, table.Columns.at(column).Name);
             }
-            if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
                 Ydb::Type type;
                 type.set_type_id(TokenCountType);
                 uploadTypes->emplace_back(FreqColumn, type);
@@ -137,7 +137,7 @@ public:
             UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
         }
 
-        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             for (const auto& column : table.KeyColumnIds) {
                 addType(uploadTypes, table.Columns.at(column).Name);
@@ -192,7 +192,7 @@ public:
 
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
-        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             ui32 totalTokens = 0;
             THashMap<TString, ui32> tokenFreq;
             for (const auto& token : tokens) {
@@ -484,7 +484,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
-            if (request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE &&
+            if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance &&
                 !request.GetDocsTableName()) {
                 badRequest(TStringBuilder() << "Empty index documents table name");
             }

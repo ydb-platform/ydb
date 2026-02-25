@@ -106,9 +106,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 const auto deletePrecompute = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
                 deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deletePrecompute, indexTableColumnsSet, indexTableColumns,
                     true /*forDelete*/, del.Pos(), ctx);
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc);
-                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
                 if (withRelevance) {
                     // Update dictionary rows
                     const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()

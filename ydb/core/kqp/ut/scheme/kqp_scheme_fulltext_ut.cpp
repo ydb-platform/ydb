@@ -54,7 +54,6 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         {
             TFulltextIndexSettings indexSettings;
-            indexSettings.Layout = TFulltextIndexSettings::ELayout::Flat;
 
             TFulltextIndexSettings::TAnalyzers analyzers;
             analyzers.Tokenizer = TFulltextIndexSettings::ETokenizer::Whitespace;
@@ -91,7 +90,6 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Data");
             auto indexSettings = std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings());
-            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout.value_or(TFulltextIndexSettings::ELayout::Unspecified), TFulltextIndexSettings::ELayout::Flat);
             UNIT_ASSERT_VALUES_EQUAL(indexSettings.Columns.size(), 1);
             auto columnSettings = indexSettings.Columns[0];
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Column, "Text");
@@ -152,7 +150,6 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
         }
         {
             TFulltextIndexSettings indexSettings;
-            indexSettings.Layout = TFulltextIndexSettings::ELayout::Flat;
 
             TFulltextIndexSettings::TAnalyzers analyzers;
             analyzers.Tokenizer = TFulltextIndexSettings::ETokenizer::Whitespace;
@@ -186,7 +183,6 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Data");
             auto indexSettings = std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings());
-            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout.value_or(TFulltextIndexSettings::ELayout::Unspecified), TFulltextIndexSettings::ELayout::Flat);
             UNIT_ASSERT_VALUES_EQUAL(indexSettings.Columns.size(), 1);
             auto columnSettings = indexSettings.Columns[0];
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Column, "Text");

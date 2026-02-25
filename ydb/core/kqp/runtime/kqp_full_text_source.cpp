@@ -1034,9 +1034,9 @@ public:
 };
 
 class TDocsTableReader : public TTableReader<TDocsTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
+    NKqpProto::EKqpFullTextIndexType IndexType;
 public:
-    TDocsTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
+    TDocsTableReader(const NKqpProto::EKqpFullTextIndexType& indexType,
         const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -1045,7 +1045,7 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
+        , IndexType(indexType)
     {}
 
     static TIntrusivePtr<TDocsTableReader> FromSettings(
@@ -1055,7 +1055,6 @@ public:
         const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         if (!withRelevance) {
             return nullptr;
         }
@@ -1100,15 +1099,15 @@ public:
         resultKeyColumnIds.push_back(docLengthColumnIndex);
 
         auto reader = MakeIntrusive<TDocsTableReader>(
-            indexDescription.GetSettings().layout(), counters,
+            settings->GetIndexType(), counters,
             FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
     }
 
     ui64 GetDocumentLength(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[GetResultColumnTypes().size() - 1].AsValue<ui32>();
             default:
                 return 0;
@@ -1117,9 +1116,9 @@ public:
 };
 
 class TStatsTableReader : public TTableReader<TStatsTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
+    NKqpProto::EKqpFullTextIndexType IndexType;
 public:
-    TStatsTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
+    TStatsTableReader(const NKqpProto::EKqpFullTextIndexType& indexType,
         const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -1128,7 +1127,7 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
+        , IndexType(indexType)
     {}
 
     static TIntrusivePtr<TStatsTableReader> FromSettings(
@@ -1138,7 +1137,6 @@ public:
         const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         if (!withRelevance) {
             return nullptr;
         }
@@ -1189,13 +1187,13 @@ public:
         resultKeyColumnIds.push_back(sumDocLengthColumnIndex);
 
         return MakeIntrusive<TStatsTableReader>(
-            indexDescription.GetSettings().layout(), counters,
+            settings->GetIndexType(), counters,
             FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[0].AsValue<ui64>();
             default:
                 return 0;
@@ -1222,8 +1220,8 @@ public:
     }
 
     ui64 GetSumDocLength(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+        switch (IndexType) {
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
                 return row[1].AsValue<ui64>();
             default:
                 return 0;
@@ -1249,8 +1247,7 @@ public:
         const TString& logPrefix,
         const NKikimrKqp::TKqpFullTextSourceSettings* settings)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (settings->GetIndexType() != NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             return nullptr;
         }
 
@@ -1419,7 +1416,7 @@ public:
             }
         }
 
-        withRelevance = withRelevance && settings->GetIndexDescription().GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        withRelevance = withRelevance && settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
 
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()),
             snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
@@ -2050,7 +2047,7 @@ private:
         request->DatabaseName = Database;
         MainTableReader->AddResolvePartitioningRequest(request);
         IndexTableReader->AddResolvePartitioningRequest(request);
-        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             DictTableReader->AddResolvePartitioningRequest(request);
             if (DocsTableReader) {
                 DocsTableReader->AddResolvePartitioningRequest(request);
@@ -2343,7 +2340,7 @@ public:
         YQL_ENSURE(resultSet.size() >= 2, "Expected at least 2 tables for fulltext index");
         MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
         IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
-        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
             size_t count = 3 + (DocsTableReader ? 1 : 0) + (StatsTableReader ? 1 : 0);
             YQL_ENSURE(resultSet.size() == count, "Expected " << count << " tables for flat relevance index");
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);

@@ -753,8 +753,7 @@ public:
         if (BuildKind != EBuildKind::BuildFulltext) {
             return false;
         }
-        auto settings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription).GetSettings();
-        return settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        return IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {

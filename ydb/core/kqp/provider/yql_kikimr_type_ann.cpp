@@ -1188,8 +1188,6 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain: {
-                    // Set layout based on index type
-                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
@@ -1199,8 +1197,6 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    // Set layout based on index type
-                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));

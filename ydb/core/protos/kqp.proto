@@ -920,6 +920,8 @@ message TKqpFullTextSourceSettings {
     optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
     optional string Mode = 16;
+
+    optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
 };
 
 message TKqpSysViewSourceSettings {

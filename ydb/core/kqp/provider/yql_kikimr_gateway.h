@@ -325,11 +325,9 @@ struct TIndexDescription {
             case EType::GlobalSyncUnique:
             case EType::GlobalAsync:
             case EType::GlobalSyncVectorKMeansTree:
-                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::GlobalFulltextPlain:
-                return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
             case EType::GlobalFulltextRelevance:
-                return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
                 return {};

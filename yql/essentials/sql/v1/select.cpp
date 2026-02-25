@@ -787,10 +787,10 @@ bool IsSubqueryRef(const TSourcePtr& source) {
     return dynamic_cast<const TSubqueryRefNode*>(source.Get()) != nullptr;
 }
 
-class TYqlSubqueryRefNode final: public INode {
+class TYqlSubqueryRefNode final: public IRealSource {
 public:
     TYqlSubqueryRefNode(TNodePtr subquery, TString ref)
-        : INode(subquery->GetPos())
+        : IRealSource(subquery->GetPos())
         , Subquery_(std::move(subquery))
         , Ref_(std::move(ref))
     {
@@ -813,8 +813,22 @@ public:
         return Node_->Translate(ctx);
     }
 
+    TNodePtr Build(TContext& ctx) final {
+        Y_UNUSED(ctx);
+        return Node_;
+    }
+
+    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
+        Y_UNUSED(ctx, column);
+        return true;
+    }
+
     TPtr DoClone() const final {
         return new TYqlSubqueryRefNode(Subquery_, Ref_);
+    }
+
+    ISource* GetSource() final {
+        return this;
     }
 
 private:

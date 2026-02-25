@@ -43,6 +43,11 @@ struct TBlockMeta {
     {
         return IsFlushedToDDiskByPersistentBufferIndex[0];
     }
+
+    [[nodiscard]] bool ReadyToFlush() const
+    {
+        return !IsFlushedToDDisk();
+    }
 };
 
 } // namespace
@@ -72,7 +77,7 @@ public:
         const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta);
     void OnBlockFlushCompleted(ui64 blockIndex, ui64 persistBufferIndex,
                                ui64 lsn);
-    void FlushAllNeededAfterRestore();
+    void Iterate(std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> cb) const;
 };
 
 ui64 TDirectBlockGroup::TDirtyMap::GetLsnByPersistentBufferIndex(
@@ -143,9 +148,12 @@ void TDirectBlockGroup::TDirtyMap::OnBlockFlushCompleted(
     it->second.OnFlushCompleted(persistBufferIndex, lsn);
 }
 
-void TDirectBlockGroup::TDirtyMap::FlushAllNeededAfterRestore()
+void TDirectBlockGroup::TDirtyMap::Iterate(
+    std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> cb) const
 {
-
+    for (const auto& [blockIndex, blockMeta]: BlocksMeta) {
+        cb(blockIndex, blockMeta);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -384,20 +392,25 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     }
 
     if (requestHandler->IsCompleted()) {
-        RestoreFromPersistentBufferFinised(); // finish actor bootstrap
+        RestoreFromPersistentBufferFinised(requestHandler->Span.GetTraceId()); // finish actor bootstrap
     }
 }
 
-void TDirectBlockGroup::RestoreFromPersistentBufferFinised()
+void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
+    NWilson::TTraceId traceId)
 {
-    // function's body will be writen a bit later
-    LOG_DEBUG_S(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TDirectBlockGroup::RestoreFromPersistentBufferFinised"
-    );
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                "TDirectBlockGroup::RestoreFromPersistentBufferFinised");
 
     Initialized = true;
+
+    LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                "Starting to flush dirtyMap");
+    DirtyMap->Iterate([this, &traceId](ui64 blockIndex, const TBlockMeta& blockMeta) {
+        if (blockMeta.ReadyToFlush()) {
+            RequestBlockFlush(std::move(traceId), blockIndex);
+        }
+    });
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(
@@ -574,18 +587,24 @@ void TDirectBlockGroup::HandleWritePersistentBufferResult(
 void TDirectBlockGroup::RequestBlockFlush(
     const TWriteRequestHandler& requestHandler)
 {
+    RequestBlockFlush(requestHandler.Span.GetTraceId(),
+                      requestHandler.GetStartIndex());
+}
+
+void TDirectBlockGroup::RequestBlockFlush(NWilson::TTraceId parentTrace,
+                                          ui64 blockIndex)
+{
+    // TODO handle case with different lsn in block's persistent buffers
     for (size_t i = 0; i < 3; i++) {
         if (SyncRequestsByDDiskId[i] == nullptr) {
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,
                 i,   // persistentBufferIndex
-                requestHandler.Span.GetTraceId(),
-                TabletId);
+                std::move(parentTrace), TabletId);
         }
 
         auto count = SyncRequestsByDDiskId[i]->OnSyncRequested(
-            requestHandler.GetStartIndex(),
-            DirtyMap->GetLsnByPersistentBufferIndex(requestHandler.GetStartIndex(), i));
+            blockIndex, DirtyMap->GetLsnByPersistentBufferIndex(blockIndex, i));
 
         if (count >= SyncRequestsBatchSize) {
             ProcessSyncQueue(i);

@@ -142,7 +142,7 @@ void TPartitionActor::LoadDDisksIds(
     Y_UNUSED(ctx);
 
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "maks_ololo Trying to restore DDisks Ids");
+             "Trying to restore DDisks Ids");
 
     TFileInput input(ddiskConnectionsFilePath);
     TString serialized = input.ReadAll();
@@ -160,7 +160,7 @@ void TPartitionActor::LoadDDisksIds(
     }
 
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "maks_ololo Restored %d DDisks Ids", ddiskIds.size());
+             "Restored %d DDisks Ids", ddiskIds.size());
 }
 
 void TPartitionActor::StoreDDisksIds(
@@ -172,7 +172,7 @@ void TPartitionActor::StoreDDisksIds(
     Y_ASSERT(ddiskIds.size() == persistentBufferDDiskIds.size());
 
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-        "maks_ololo Trying to Store %d DDisks Ids", ddiskIds.size());
+        "Trying to Store %d DDisks Ids", ddiskIds.size());
 
     //::NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult_TResponse info;
     ::NYdb::NBS::PartitionDirect::NProto::TConnectionsInfo info;

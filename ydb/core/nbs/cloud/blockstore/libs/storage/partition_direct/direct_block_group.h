@@ -137,6 +137,7 @@ private:
             result);
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
+    void RequestBlockFlush(NWilson::TTraceId parentTrace, ui64 blockIndex);
 
     void ProcessSyncQueue(size_t ddiskId);
 
@@ -170,7 +171,7 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
-    void RestoreFromPersistentBufferFinised();
+    void RestoreFromPersistentBufferFinised(NWilson::TTraceId traceId);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

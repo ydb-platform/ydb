@@ -2,11 +2,13 @@
 
 #include "visitor.h"
 
-#include <ydb/library/aclib/aclib.h>
-
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
+
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr::NChangeExchange {
 
@@ -36,7 +38,7 @@ public:
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
-    virtual NACLib::TUserContext::TPtr GetUserCtx() const = 0;
+    virtual TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const = 0;
     virtual bool IsBroadcast() const = 0;
 
     virtual void Accept(IVisitor& visitor) const = 0;
@@ -56,11 +58,13 @@ class TChangeRecordBase: public IChangeRecord {
     friend class TChangeRecordBuilder;
 
 public:
+    virtual ~TChangeRecordBase();
+
     ui64 GetOrder() const override { return Order; }
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
-    NACLib::TUserContext::TPtr GetUserCtx() const override { return UserCtx; };
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const override;
     bool IsBroadcast() const override { return false; }
 
     void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
@@ -73,7 +77,7 @@ protected:
     TString Body;
     ESource Source = ESource::Unspecified;
     TString SourceId;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
 }; // TChangeRecordBase
 

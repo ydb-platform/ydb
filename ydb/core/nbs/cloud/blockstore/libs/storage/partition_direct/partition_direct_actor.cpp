@@ -199,11 +199,6 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 blockCount += p.GetBlockCount();
             }
 
-            // Fix me
-            diskId = "nbs-1";
-            blockSize = 4096;
-            blockCount = 32768;
-
             TString socketPath = "/tmp/" + diskId + ".sock";
             NVhost::TStorageOptions options{
                 .DiskId = diskId,

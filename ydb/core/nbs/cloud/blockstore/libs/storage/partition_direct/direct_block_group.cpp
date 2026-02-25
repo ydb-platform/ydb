@@ -410,8 +410,8 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
         requestHandler->GetStartIndex(),
         requestHandler->GetSize());
 
-    if (requestRange.Start >= BlocksMeta.size()) {
-        const auto partRange = TBlockRange64::WithLength(0, BlocksMeta.size());
+    if (requestRange.Start >= BlocksCount) {
+        const auto partRange = TBlockRange64::WithLength(0, BlocksCount);
 
         LOG_ERROR(
             *ActorSystem,
@@ -703,8 +703,8 @@ void TDirectBlockGroup::DoReadBlocksLocal(
         requestHandler->GetStartIndex(),
         requestHandler->GetSize());
 
-    if (requestRange.Start >= BlocksMeta.size()) {
-        const auto partRange = TBlockRange64::WithLength(0, BlocksMeta.size());
+    if (requestRange.Start >= BlocksCount) {
+        const auto partRange = TBlockRange64::WithLength(0, BlocksCount);
 
         LOG_ERROR(
             *ActorSystem,
@@ -751,7 +751,6 @@ void TDirectBlockGroup::DoReadBlocksLocal(
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             DirtyMap->GetLsnByPersistentBufferIndex(requestRange.Start, 0),
-
             NKikimr::NDDisk::TReadInstruction(true),
             requestHandler->GetData(),
             childSpan);

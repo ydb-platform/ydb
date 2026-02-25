@@ -178,9 +178,9 @@ struct TFutureTimeoutOptions
 //! A base class for both TFuture<T> and its specialization TFuture<void>.
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
- *  for it or retrieving it explicitly (#Get, #TryGet). Also it is possible
+ *  for it or retrieving it explicitly (#BlockingGet, #GetOrCrash, #TryGet). Also it is possible
  *  to move the value out of the future state
- *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #Get, #TryGet).
+ *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #BlockingGet, #GetOrCrash, #TryGet).
  */
 template <class T>
 class TFutureBase
@@ -200,11 +200,23 @@ public:
     //! Checks if the value is set.
     bool IsSet() const;
 
-    //! Gets the value.
+    //! The same as #BlockingGet.
     /*!
-     *  This call will block until the value is set.
+     *  \deprecated Use #BlockingGet instead.
      */
     const TErrorOr<T>& Get() const;
+
+    //! Gets the value, blocking until it's set.
+    /*!
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
+     */
+    const TErrorOr<T>& BlockingGet() const;
+
+    //! Gets the value if it's already set, crashes otherwise.
+    /*!
+     *  Use this call when you're certain the future is already set (e.g., after #IsSet check).
+     */
+    const TErrorOr<T>& GetOrCrash() const;
 
     //! Waits for the value to become set.
     /*!
@@ -407,11 +419,23 @@ class TUniqueFutureBase
 public:
     using TFutureBase<T>::TFutureBase;
 
-    //! Similar to #TFuture::Get but extracts the value by moving it out of the future state.
+    //! The same as #BlockingGet.
     /*!
-     *  This call will block until the value is set.
+     *  \deprecated Use #BlockingGet instead.
      */
     TErrorOr<T> Get() const;
+
+    //! Gets the value by moving it out of the future state, blocking until it's set.
+    /*!
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
+     */
+    TErrorOr<T> BlockingGet() const;
+
+    //! Gets the value by moving it out if it's already set, crashes otherwise.
+    /*!
+     *  Use this call when you're certain the future is already set (e.g., after #IsSet check).
+     */
+    TErrorOr<T> GetOrCrash() const;
 
     //! Similar to #TFuture::TryGet but extracts the value by moving it out of the future state;
     //! returns null if the value is not set yet.
@@ -526,11 +550,23 @@ public:
     template <class U>
     void TrySetFrom(const TFuture<U>& another) const;
 
-    //! Gets the value.
+    //! The same as #BlockingGet.
     /*!
-     *  This call will block until the value is set.
+     *  \deprecated Use #BlockingGet instead.
      */
     const TErrorOr<T>& Get() const;
+
+    //! Gets the value, blocking until it's set.
+    /*!
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
+     */
+    const TErrorOr<T>& BlockingGet() const;
+
+    //! Gets the value if it's already set, crashes otherwise.
+    /*!
+     *  Use this call when you're certain the promise is already set (e.g., after #IsSet check).
+     */
+    const TErrorOr<T>& GetOrCrash() const;
 
     //! Gets the value if set.
     /*!

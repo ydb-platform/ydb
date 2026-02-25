@@ -349,7 +349,7 @@ public:
                 files.AppendValue(MakeFileEntry(table.Name + ".json", *table.Sha256));
             }
 
-            TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/ false);
+            const TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/ false);
 
             auto manifestPath = SnapshotPath.Child("manifest.json");
             TFile manifestFile(manifestPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);

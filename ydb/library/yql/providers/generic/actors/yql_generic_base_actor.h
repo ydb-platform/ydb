@@ -6,6 +6,18 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+
+#define GENERIC_LOG_T_AS(ctx, s) LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPUTE, s)
+#define GENERIC_LOG_T(s) GENERIC_LOG_T_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
+#define GENERIC_LOG_D_AS(ctx, s) LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPUTE, s)
+#define GENERIC_LOG_D(s) GENERIC_LOG_D_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
+#define GENERIC_LOG_I_AS(ctx, s) LOG_INFO_S(ctx, NKikimrServices::KQP_COMPUTE, s)
+#define GENERIC_LOG_I(s) GENERIC_LOG_I_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
+#define GENERIC_LOG_W_AS(ctx, s) LOG_WARN_S(ctx, NKikimrServices::KQP_COMPUTE, s)
+#define GENERIC_LOG_W(s) GENERIC_LOG_W_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
+#define GENERIC_LOG_E_AS(ctx, s) LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPUTE, s)
+#define GENERIC_LOG_E(s) GENERIC_LOG_E_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
 
 namespace NYql::NDq {
 
@@ -92,6 +104,7 @@ namespace NYql::NDq {
         };
 
     protected: // TODO move common logic here
+        TString LogPrefix;
     };
 
 } // namespace NYql::NDq

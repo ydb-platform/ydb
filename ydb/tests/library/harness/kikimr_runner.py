@@ -331,8 +331,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__use_config_store = True
         self.update_command(self.__make_run_command())
 
-<<<<<<< HEAD
-=======
     def disable_config_dir(self, cleanup=True):
         self.__use_config_store = False
         self.update_command(self.__make_run_command())
@@ -352,7 +350,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__seed_nodes_file = seed_nodes_file
         self.update_command(self.__make_run_command())
 
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
             raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)

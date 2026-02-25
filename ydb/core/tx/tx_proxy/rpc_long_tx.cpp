@@ -27,7 +27,7 @@ ui64 GetMemoryInFlightLimit() {
 
     if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
         uint64_t oldValue = 0;
-        const uint64_t newValue = NKqp::TStagePredictor::GetUsableThreads() * 10_MB;
+        const uint64_t newValue = NKqp::TStagePredictor::GetMaxExecutorThreadLimit() * 10_MB;
         DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();

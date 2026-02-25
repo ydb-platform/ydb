@@ -24,6 +24,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/support/interceptor.h>
 
+// IWYU pragma: no_include "google/protobuf/descriptor.h"
 // IWYU pragma: no_include <google/protobuf/descriptor.h>
 
 using grpc::reflection::v1alpha::ErrorResponse;
@@ -117,7 +118,7 @@ Status ProtoServerReflection::GetFileByName(
   }
 
   const protobuf::FileDescriptor* file_desc =
-      descriptor_pool_->FindFileByName(TProtoStringType(file_name));
+      descriptor_pool_->FindFileByName(file_name);
   if (file_desc == nullptr) {
     return Status(StatusCode::NOT_FOUND, "File not found.");
   }
@@ -134,7 +135,7 @@ Status ProtoServerReflection::GetFileContainingSymbol(
   }
 
   const protobuf::FileDescriptor* file_desc =
-      descriptor_pool_->FindFileContainingSymbol(TProtoStringType(symbol));
+      descriptor_pool_->FindFileContainingSymbol(symbol);
   if (file_desc == nullptr) {
     return Status(StatusCode::NOT_FOUND, "Symbol not found.");
   }
@@ -175,7 +176,7 @@ Status ProtoServerReflection::GetAllExtensionNumbers(
   }
 
   const protobuf::Descriptor* desc =
-      descriptor_pool_->FindMessageTypeByName(TProtoStringType(type));
+      descriptor_pool_->FindMessageTypeByName(type);
   if (desc == nullptr) {
     return Status(StatusCode::NOT_FOUND, "Type not found.");
   }
@@ -199,7 +200,7 @@ void ProtoServerReflection::FillFileDescriptorResponse(
   seen_files->insert(file_desc->name());
 
   protobuf::FileDescriptorProto file_desc_proto;
-  TProtoStringType data;
+  TString data;
   file_desc->CopyTo(&file_desc_proto);
   file_desc_proto.SerializeToString(&data);
   response->mutable_file_descriptor_response()->add_file_descriptor_proto(data);

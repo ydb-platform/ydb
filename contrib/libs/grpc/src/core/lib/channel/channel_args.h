@@ -22,6 +22,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>  // IWYU pragma: keep
 #include <iosfwd>
@@ -34,7 +35,6 @@
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
-#include "y_absl/types/variant.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/grpc.h>
@@ -45,6 +45,7 @@
 #include "src/core/lib/gprpp/dual_ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/gprpp/ref_counted_string.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/surface/channel_stack_type.h"
 
@@ -282,7 +283,46 @@ class ChannelArgs {
     const grpc_arg_pointer_vtable* vtable_;
   };
 
-  using Value = y_absl::variant<int, TString, Pointer>;
+  class Value {
+   public:
+    explicit Value(int n) : rep_(reinterpret_cast<void*>(n), &int_vtable_) {}
+    explicit Value(TString s)
+        : rep_(RefCountedString::Make(s).release(), &string_vtable_) {}
+    explicit Value(Pointer p) : rep_(std::move(p)) {}
+
+    y_absl::optional<int> GetIfInt() const {
+      if (rep_.c_vtable() != &int_vtable_) return y_absl::nullopt;
+      return reinterpret_cast<intptr_t>(rep_.c_pointer());
+    }
+    RefCountedPtr<RefCountedString> GetIfString() const {
+      if (rep_.c_vtable() != &string_vtable_) return nullptr;
+      return static_cast<RefCountedString*>(rep_.c_pointer())->Ref();
+    }
+    const Pointer* GetIfPointer() const {
+      if (rep_.c_vtable() == &int_vtable_) return nullptr;
+      if (rep_.c_vtable() == &string_vtable_) return nullptr;
+      return &rep_;
+    }
+
+    TString ToString() const;
+
+    grpc_arg MakeCArg(const char* name) const;
+
+    bool operator<(const Value& rhs) const { return rep_ < rhs.rep_; }
+    bool operator==(const Value& rhs) const { return rep_ == rhs.rep_; }
+    bool operator!=(const Value& rhs) const { return !this->operator==(rhs); }
+    bool operator==(y_absl::string_view rhs) const {
+      auto str = GetIfString();
+      if (str == nullptr) return false;
+      return str->as_string_view() == rhs;
+    }
+
+   private:
+    static const grpc_arg_pointer_vtable int_vtable_;
+    static const grpc_arg_pointer_vtable string_vtable_;
+
+    Pointer rep_;
+  };
 
   struct ChannelArgsDeleter {
     void operator()(const grpc_channel_args* p) const;
@@ -307,6 +347,11 @@ class ChannelArgs {
   // Returns the union of this channel args with other.
   // If a key is present in both, the value from this is used.
   GRPC_MUST_USE_RESULT ChannelArgs UnionWith(ChannelArgs other) const;
+
+  // Only used in union_with_test.cc, reference version of UnionWith for
+  // differential fuzzing.
+  GRPC_MUST_USE_RESULT ChannelArgs
+  FuzzingReferenceUnionWith(ChannelArgs other) const;
 
   const Value* Get(y_absl::string_view name) const;
   GRPC_MUST_USE_RESULT ChannelArgs Set(y_absl::string_view name,
@@ -362,6 +407,9 @@ class ChannelArgs {
   }
   GRPC_MUST_USE_RESULT ChannelArgs Remove(y_absl::string_view name) const;
   bool Contains(y_absl::string_view name) const;
+
+  GRPC_MUST_USE_RESULT ChannelArgs
+  RemoveAllKeysWithPrefix(y_absl::string_view prefix) const;
 
   template <typename T>
   bool ContainsObject() const {
@@ -427,12 +475,12 @@ class ChannelArgs {
   TString ToString() const;
 
  private:
-  explicit ChannelArgs(AVL<TString, Value> args);
+  explicit ChannelArgs(AVL<RefCountedStringValue, Value> args);
 
   GRPC_MUST_USE_RESULT ChannelArgs Set(y_absl::string_view name,
                                        Value value) const;
 
-  AVL<TString, Value> args_;
+  AVL<RefCountedStringValue, Value> args_;
 };
 
 std::ostream& operator<<(std::ostream& out, const ChannelArgs& args);

@@ -1953,10 +1953,25 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
+        // Check if any result binding references this transaction
+        const auto txIndex = QueryState->CurrentTx;
+        bool expectsResult = false;
+        if (QueryState->PreparedQuery) {
+            const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                if (phyQuery.GetResultBindings(i).GetTxResultBinding().GetTxIndex() == txIndex) {
+                    expectsResult = true;
+                    break;
+                }
+            }
+        }
+
         auto executerActor = CreateKqpSchemeExecuter(
             tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
-            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
+            expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
+            KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

@@ -521,6 +521,10 @@ message TKqpOutputTransform {
     }
 }
 
+message TKqpControlPlaneSettings {
+    string Type = 1;
+}
+
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
     repeated string ProgramParameters = 2;
@@ -539,6 +543,7 @@ message TKqpPhyStage {
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
     repeated TKqpOutputTransform OutputTransforms = 17;
+    map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
 }
 
 message TKqpPhyResult {

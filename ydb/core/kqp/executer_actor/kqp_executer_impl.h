@@ -71,6 +71,7 @@ using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
+constexpr TDuration StreamingQueryUpdateCountersPeriod = TDuration::Seconds(10);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -111,6 +112,43 @@ struct TEvPrivate {
         explicit TEvReattachToShard(ui64 tabletId)
             : TabletId(tabletId) {}
     };
+};
+
+struct TStreamingQueryCounters {
+    TStreamingQueryCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& path)
+        : Path(path)
+    {
+        auto subGroup = subgroup->GetSubgroup("subsystem", "streaming_queries");
+        SubGroup = subGroup->GetSubgroup("path", Path);
+        CpuMs = SubGroup->GetCounter("streaming.query.cpu.usage.milliseconds");
+        MemoryUsageBytes = SubGroup->GetCounter("streaming.query.memory.usage.bytes");
+        UptimeSeconds = SubGroup->GetCounter("streaming.query.uptime.seconds");
+        TaskCount = SubGroup->GetCounter("streaming.query.tasks.count");
+        InputBytes = SubGroup->GetCounter("streaming.query.input.bytes");
+        OutputBytes = SubGroup->GetCounter("streaming.query.output.bytes");
+    }
+
+    ~TStreamingQueryCounters() {
+        SubGroup->RemoveSubgroup("path", Path); // todo
+    }
+
+    void Update(const TAggExecStat& stats) {
+        CpuMs->Set(stats.CpuTimeMs);
+        MemoryUsageBytes->Set(stats.MaxMemoryUsageBytes);
+        UptimeSeconds->Set(stats.DurationSeconds);
+        TaskCount->Set(stats.TasksCount);
+        InputBytes->Set(stats.InputBytes);
+        OutputBytes->Set(stats.OutputBytes);
+    }
+
+    const TString Path;
+    ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TaskCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBytes;
 };
 
 template <class TDerived, EExecType ExecType>
@@ -646,6 +684,22 @@ protected:
                 }
             default:
                 ; // ignore all other states.
+        }
+
+        
+        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        bool isStreamingQuery = AppData()->FeatureFlags.GetEnableStreamingQueries()
+            && AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()
+            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
+            && context && !context->StreamingQueryPath.empty();
+
+        auto now = TInstant::Now();
+        if (isStreamingQuery && LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
+            auto streamingCounters = TStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+            TAggExecStat stats;
+            Stats->ExportAggExecStats(&stats);
+            streamingCounters.Update(stats);
+            LastStreamingQueryUpdateCounters = now;
         }
 
         return ack;
@@ -1647,6 +1701,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;

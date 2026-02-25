@@ -1312,6 +1312,23 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
+void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
+    if (!metrics) {
+        return;
+    }
+    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
+    metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
+    
+    for (const auto& [stageId, stageStat] : StageStats) {
+        metrics->MaxMemoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
+        metrics->TasksCount += stageStat.Task2Index.size();
+        for (auto b : stageStat.InputBytes)
+            metrics->InputBytes += b;
+        for (auto b : stageStat.OutputBytes)
+            metrics->OutputBytes += b;
+    }
+}
+
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
     switch (StatsMode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:

@@ -99,10 +99,10 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
         Concurrency = pLevel.GetConcurrency();
     }
     if (pLevel.HasCompactionTaskMemoryLimit()) {
-        Concurrency = pLevel.GetCompactionTaskMemoryLimit();
+        CompactionTaskMemoryLimit = pLevel.GetCompactionTaskMemoryLimit();
     }
     if (pLevel.HasCompactionTaskPortionsCountLimit()) {
-        Concurrency = pLevel.GetCompactionTaskPortionsCountLimit();
+        CompactionTaskPortionsCountLimit = pLevel.GetCompactionTaskPortionsCountLimit();
     }
     return true;
 }

@@ -672,7 +672,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     for (const auto& column : in) {
-        NKikimrSchemeOp:: TColumnDescription* cd = out.AddColumns();
+        NKikimrSchemeOp::TColumnDescription* cd = out.AddColumns();
         cd->SetName(column.name());
         bool notOptional = !column.type().has_optional_type();
         if (!column.has_not_null()) {
@@ -738,6 +738,43 @@ NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterCol
     return out.MutableAlterSchema()->AddAddColumns();
 }
 
+template <class TColumnDesc>
+bool FillColumnCompression(
+    const Ydb::Table::ColumnMeta& from, TColumnDesc* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
+        auto toSerializer = to->MutableSerializer();
+
+        if (from.compression().algorithm()) {
+            toSerializer->SetClassName("ARROW_SERIALIZER");
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            switch (fromCompression.algorithm()) {
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    break;
+
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
+                    return false;
+            }
+        }
+
+        if (from.compression().has_compression_level()) {
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            arrowCompression->SetLevel(fromCompression.compression_level());
+        }
+    }
+    return true;
+}
+
 template <typename TColumnTable>
 bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error) {
@@ -761,6 +798,12 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
 
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
+        }
+
+        if (column.has_compression()) {
+            if (!FillColumnCompression(column, columnDesc, status, error)) {
+                return false;
+            }
         }
 
         if (!column.Getfamily().empty()) {
@@ -826,43 +869,6 @@ bool FillColumnFamily(
         status = Ydb::StatusIds::BAD_REQUEST;
         error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << from.name() << "'";
         return false;
-    }
-    return true;
-}
-
-
-bool FillColumnCompression(
-    const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
-    to->SetName(from.name());
-    if (from.has_compression()) {
-        const auto fromCompression = from.compression();
-        auto toSerializer = to->MutableSerializer();
-
-        if (from.compression().algorithm()) {
-            toSerializer->SetClassName("ARROW_SERIALIZER");
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            switch (fromCompression.algorithm()) {
-                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
-                    break;
-
-                default:
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
-                    return false;
-            }
-        }
-
-        if (from.compression().has_compression_level()) {
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            arrowCompression->SetLevel(fromCompression.compression_level());
-        }
     }
     return true;
 }

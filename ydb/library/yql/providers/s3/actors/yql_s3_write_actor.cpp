@@ -907,7 +907,8 @@ private:
         data.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
             SerializeValue(values, width);
 
-            if (const bool finishFile = FileSize > MaxFileSize; BatchSize > MaxBlockSize || finishFile) {
+            const bool finishFile = FileSize > MaxFileSize;
+            if (BatchSize > MaxBlockSize || finishFile) {
                 FlushWriter(finishFile || !Multipart);
             }
         });

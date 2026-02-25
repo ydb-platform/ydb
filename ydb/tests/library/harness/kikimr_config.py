@@ -198,6 +198,8 @@ class KikimrConfigGenerator(object):
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            enable_nbs=False,
+            nbs_database="/Root/NBS",
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -593,6 +595,21 @@ class KikimrConfigGenerator(object):
 
         if bridge_config is not None:
             self.yaml_config["bridge_config"] = bridge_config
+
+        if enable_nbs:
+            self.yaml_config["nbs_config"] = {
+                "enabled": True,
+                "nbs_storage_config": {
+                    "scheme_shard_dir": nbs_database,
+                    "folder_id": "testFolder",
+                    "ssd_system_channel_pool_kind": "hdd",
+                    "ssd_log_channel_pool_kind": "hdd",
+                    "ssd_index_channel_pool_kind": "hdd",
+                    "pipe_client_retry_count": 3,
+                    "pipe_client_min_retry_time": 1,
+                    "pipe_client_max_retry_time": 10,
+                }
+            }
 
         self.full_config = dict()
         if self.explicit_hosts_and_host_configs:

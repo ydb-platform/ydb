@@ -1129,7 +1129,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void UpdateStats(const TActorContext &ctx, bool schedule = true) {
+        void UpdateStats(const TActorContext &ctx) {
             UpdateWhiteboard(ctx);
 
             // Update internal queue counters that are dependant on external ticker

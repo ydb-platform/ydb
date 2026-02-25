@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
@@ -193,7 +194,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        auto arrowBatch = NArrow::ClaimMemoryOwnership(msg.GetArrowBatch());
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(arrowBatch, std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else if (!msg.GetRows().empty()) {
         ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else {

@@ -67,9 +67,9 @@ private:
 template <typename TSettings>
 IActor* CreateSchemeUploaderFallback(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
-    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, iv);
+    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, enableChecksums, iv);
     return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
 }
 

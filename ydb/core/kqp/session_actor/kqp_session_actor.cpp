@@ -276,7 +276,8 @@ public:
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
-            QueryState->UserToken
+            QueryState->UserToken,
+            QueryState->GetQuery()
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());

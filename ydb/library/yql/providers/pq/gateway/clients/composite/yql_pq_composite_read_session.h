@@ -13,11 +13,12 @@ struct TCompositeTopicReadSessionSettings {
     ui64 TaskId = 0;
     TString Cluster;
     ui64 AmountPartitionsCount = 0;
+    ui64 InputIndex = 0;
     NMonitoring::TDynamicCounterPtr Counters;
     NYdb::NTopic::TReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;
-    NActors::TActorId AggregatorActor; // DqInfoAggregationActor
+    NActors::TActorId AggregatorActor; // TDqPqInfoAggregationActor
 };
 
 class ICompositeTopicReadSessionControl {
@@ -27,6 +28,8 @@ public:
     virtual ~ICompositeTopicReadSessionControl() = default;
 
     virtual void AdvancePartitionTime(ui64 partitionId, TInstant lastEventTime) = 0;
+
+    virtual TString GetInternalState() = 0;
 };
 
 std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(

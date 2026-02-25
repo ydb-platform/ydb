@@ -4,6 +4,7 @@
 
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
@@ -526,6 +527,10 @@ private:
             } else {
                 NKikimr::NGRpcProxy::V1::IClustersCfgProvider* clustersCfgProvider = nullptr;
                 NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>(), &clustersCfgProvider).Execute();
+
+                auto grpcRequestProxy = NKikimr::NGRpcService::CreateGRpcRequestProxy(Settings_.AppConfig);
+                auto grpcRequestProxyId = GetRuntime()->Register(grpcRequestProxy, node, GetRuntime()->GetAppData(node).UserPoolId);
+                GetRuntime()->GetActorSystem(node)->RegisterLocalService(NKikimr::NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
 
                 if (Settings_.MonitoringEnabled) {
                     NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);

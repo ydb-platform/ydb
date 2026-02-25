@@ -7,6 +7,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
@@ -20,36 +21,6 @@
 
 namespace NKikimr {
 namespace NKqp {
-
-namespace {
-
-void TerminateHandler() {
-    Cerr << "======= terminate() call stack ========" << Endl;
-    FormatBackTrace(&Cerr);
-    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
-        Cerr << "======== exception call stack =========" << Endl;
-        backtrace.PrintTo(Cerr);
-    }
-    Cerr << "=======================================" << Endl;
-
-    if (std::current_exception()) {
-        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
-    } else {
-        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
-    }
-
-    abort();
-}
-
-void BackTraceSignalHandler(int signal) {
-    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << "===============================================" << Endl;
-
-    abort();
-}
-
-} // anonymous namespace
 
 using namespace NYdb::NTable;
 
@@ -108,21 +79,8 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     return funcRegistry.Release();
 }
 
-TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
-    if (!Freeze) {
-        LogPriorities.emplace(service, priority);
-    }
-
-    return *this;
-}
-
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
-    EnableYDBBacktraceFormat();
-
-    std::set_terminate(&TerminateHandler);
-    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
-        signal(sig, &BackTraceSignalHandler);
-    }
+    NTestUtils::SetupSignalHandlers();
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
@@ -629,48 +587,6 @@ void TKikimrRunner::CreateSampleTables() {
     driver.Stop(true);
 }
 
-static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
-    static const THashMap<TString, NActors::NLog::EPriority> levels = {
-        { "TRACE", NActors::NLog::PRI_TRACE },
-        { "DEBUG", NActors::NLog::PRI_DEBUG },
-        { "INFO", NActors::NLog::PRI_INFO },
-        { "NOTICE", NActors::NLog::PRI_NOTICE },
-        { "WARN", NActors::NLog::PRI_WARN },
-        { "ERROR", NActors::NLog::PRI_ERROR },
-        { "CRIT", NActors::NLog::PRI_CRIT },
-        { "ALERT", NActors::NLog::PRI_ALERT },
-        { "EMERG", NActors::NLog::PRI_EMERG },
-    };
-
-    TString l = level;
-    l.to_upper();
-    const auto levelIt = levels.find(l);
-    if (levelIt != levels.end()) {
-        return levelIt->second;
-    } else {
-        Cerr << "Failed to parse test log level [" << level << "]" << Endl;
-        return Nothing();
-    }
-}
-
-bool TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
-    if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-            return true;
-        }
-    }
-
-    if (const TString commonParam = GetTestParam("KQP_LOG")) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // You can enable logging for these services in test using test option:
     // `--test-param KQP_LOG=<level>`
@@ -678,21 +594,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-    for (i32 i = 0; i < descriptor->value_count(); ++i) {
-        const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
-        if (SetupLogLevelFromTestParam(service)) {
-            continue;
-        }
-
-        if (const auto& logSettings = settings.LogSettings) {
-            if (const auto it = logSettings->LogPriorities.find(service); it != logSettings->LogPriorities.end()) {
-                Server->GetRuntime()->SetLogPriority(service, it->second);
-            } else {
-                Server->GetRuntime()->SetLogPriority(service, settings.LogSettings->DefaultLogPriority);
-            }
-        }
-    }
+    NTestUtils::SetupLogLevel(*Server->GetRuntime(), settings.LogSettings, "KQP");
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

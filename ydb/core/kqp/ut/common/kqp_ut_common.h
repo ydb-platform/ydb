@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -38,14 +39,7 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
-
-struct TTestLogSettings {
-    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
-    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
-    bool Freeze = false;
-
-    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
-};
+using TTestLogSettings = NTestUtils::TTestLogSettings;
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
@@ -249,7 +243,6 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;

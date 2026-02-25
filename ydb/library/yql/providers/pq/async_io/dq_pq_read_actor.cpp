@@ -355,9 +355,10 @@ public:
                     .TaskId = TaskId,
                     .Cluster = TString(clusterState.Info.Name),
                     .AmountPartitionsCount = amountPartitions,
+                    .InputIndex = InputIndex,
                     .Counters = counters,
                     .BaseSettings = GetReadSessionSettings(clusterState),
-                    .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
+                    .IdleTimeout = NProtoInterop::CastFromProto(SourceParams.GetPartitionsBalancingIdleTimeout()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
                     .AggregatorActor = InfoAggregator,
                 });
@@ -1101,9 +1102,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         TActorId infoAggregator;
-        if (const auto it = args.TaskParams.find("dq_info_aggregator"); it != args.TaskParams.end()) {
+        if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
             NActorsProto::TActorId actorIdProto;
-            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse dq_info_aggregator");
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
             infoAggregator = ActorIdFromProto(actorIdProto);
         }
 

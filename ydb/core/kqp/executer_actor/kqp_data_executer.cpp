@@ -26,7 +26,6 @@
 #include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/compute/dq_info_aggregation_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
@@ -1935,14 +1934,6 @@ private:
         }
         scriptExternalEffect->Description.SecretNames = SecretNames;
 
-        if (HasExternalSources) {
-            NDq::TTxId txId = TxId;
-            if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
-                txId = GetUserRequestContext()->StreamingQueryPath;
-            }
-            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor(txId));
-        }
-
         if (!WaitRequired()) {
             return Execute();
         }
@@ -1983,11 +1974,16 @@ private:
         // TODO: move graph restoration outside of executer
         const bool graphRestored = RestoreTasksGraph();
 
+        NDq::TTxId dqTxId = TxId;
+        if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
+            dqTxId = GetUserRequestContext()->StreamingQueryPath;
+        }
+
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
-                const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -2017,6 +2013,10 @@ private:
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                     return;
+                }
+
+                for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
+                    YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = controlPlaneSettings.GetType(), .TxId = dqTxId}))).second);
                 }
             }
         }

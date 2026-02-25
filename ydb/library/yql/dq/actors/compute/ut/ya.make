@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/actors/testlib
     ydb/library/actors/wilson
     ydb/library/services
+    ydb/library/testlib/common
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute/ut/proto
     ydb/library/yql/dq/actors/input_transforms
@@ -36,7 +37,6 @@ PEERDIR(
     yql/essentials/minikql/computation
     yql/essentials/minikql/invoke_builtins
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )
 

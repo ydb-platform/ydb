@@ -60,9 +60,6 @@ struct TDqComputeEvents {
 
         // place all new events here
 
-        EvUpdateCounterValue,
-        EvOnAggregatedValueUpdated,
-
         EvEnd
     };
 

@@ -14,6 +14,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
@@ -468,8 +469,8 @@ namespace {
             }
         }
 
+        auto defaultExprPtr = defaultExpr.Ptr();
         if (!skipAnnotationValidation && !IsSameAnnotation(*defaultTypeUnwrapped, *type)) {
-            auto defaultExprPtr = defaultExpr.Ptr();
             auto status = TryConvertTo(defaultExprPtr, *columnType, ctx, typesCtx);
             if (status == IGraphTransformer::TStatus::Error) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), typeMismatchMessage()));
@@ -485,6 +486,16 @@ namespace {
                 onRepeat(std::move(evaluatedExpr));
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
             }
+        }
+
+        if (NDq::IsConstantExpr(defaultExprPtr) && !NDq::IsLiteralDataExpr(TExprBase(defaultExprPtr))) {
+            auto evaluatedExpr = ctx.Builder(defaultExprPtr->Pos())
+                .Callable("EvaluateExpr")
+                .Add(0, defaultExprPtr)
+                .Seal()
+                .Build();
+            onRepeat(std::move(evaluatedExpr));
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         }
 
         return std::nullopt;

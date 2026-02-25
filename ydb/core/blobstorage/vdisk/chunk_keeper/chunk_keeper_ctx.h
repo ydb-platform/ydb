@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-class TChunkKeeperCtx : public TThrRefBase {
+class TChunkKeeperCtx {
 public:
     const TIntrusivePtr<TVDiskLogContext> LogCtx;
     const TActorId SkeletonId;

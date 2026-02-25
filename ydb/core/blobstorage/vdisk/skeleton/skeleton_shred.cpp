@@ -71,7 +71,7 @@ namespace NKikimr {
             Send(ShredCtx->HugeKeeperId, new TEvListChunks(ChunksToShred));
             Send(ShredCtx->SyncLogId, new TEvListChunks(ChunksToShred));
             Send(ShredCtx->ChunkKeeperId, new TEvListChunks(ChunksToShred));
-            RepliesPending = 2;
+            RepliesPending = 3;
             SnapshotProcessed = false;
             DefragCompleted = false;
         }

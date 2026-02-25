@@ -1,7 +1,5 @@
 # {{ ydb-short-name }} CLI changelog
 
-<<<<<<< HEAD
-=======
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -82,7 +80,6 @@ Released on September 25, 2025. To update to version **2.26.0**, select the [Dow
 * Added the `--retries` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), allowing to set the number of retries for every upload data request.
 * **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), which specifies whether to replace the ACL for system objects.
 
->>>>>>> 96d583e45e1 (Add release notes for YDB CLI 2.29.0 (#33725))
 ## Version 2.25.0 {#2-25-0}
 
 Released on September 1, 2025. To update to version **2.25.0**, select the [Downloads](downloads/ydb-cli.md) section.

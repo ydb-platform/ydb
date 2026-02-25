@@ -658,7 +658,188 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             CompareYson(output, R"([])");
         }
     }
-  
+
+    Y_UNIT_TEST_TWIN(SecondaryAndReturningInteractive, WithIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Int64, c1 Int64, c2 Int64,
+                PRIMARY KEY (c0),
+                %s
+            );
+        )", WithIndex ? "INDEX idx0 GLOBAL SYNC ON (c2)," : "");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto it = session.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
+                        (0, 1, 2)
+                    RETURNING c0, c1, c2;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = FormatResultSetYson(it.GetResultSet(0));
+            CompareYson(output, R"([[[0];[1];[2]]])");
+
+            auto tx = it.GetTransaction();
+            UNIT_ASSERT(tx);
+            UNIT_ASSERT(tx->IsActive());
+
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1, c2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[1];[2]]])");
+        }
+    }
+
+    Y_UNIT_TEST(TpccPaymentReturning) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/warehouse` (
+                W_ID       Int32          NOT NULL,
+                W_YTD      Double,
+                W_TAX      Double,
+                W_NAME     Utf8,
+                W_STREET_1 Utf8,
+                W_STREET_2 Utf8,
+                W_CITY     Utf8,
+                W_STATE    Utf8,
+                W_ZIP      Utf8,
+
+                PRIMARY KEY (W_ID)
+            );
+
+            CREATE TABLE `/Root/district` (
+                D_W_ID      Int32            NOT NULL,
+                D_ID        Int32            NOT NULL,
+                D_YTD       Double,
+                D_TAX       Double,
+                D_NEXT_O_ID Int32,
+                D_NAME      Utf8,
+                D_STREET_1  Utf8,
+                D_STREET_2  Utf8,
+                D_CITY      Utf8,
+                D_STATE     Utf8,
+                D_ZIP       Utf8,
+
+                PRIMARY KEY (D_W_ID, D_ID)
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto it = session.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/warehouse` (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) VALUES
+                        (1, 1.1, 1.2, "name", "street1", "street2", "city", "state", "zip");
+                    INSERT INTO `/Root/district` (D_W_ID, D_ID, D_YTD, D_TAX, D_NEXT_O_ID, D_NAME, D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP) VALUES
+                        (1, 1, 1.1, 1.2, 1, "name", "street1", "street2", "city", "state", "zip");
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto params = TParamsBuilder()
+                .AddParam("$w_id").Int32(1).Build()
+                .AddParam("$payment").Double(100.1).Build()
+                .Build();
+
+            auto it = session.ExecuteQuery(
+                R"(
+                    DECLARE $w_id AS Int32;
+                    DECLARE $payment AS Double;
+
+                    UPDATE `/Root/warehouse`
+                    SET W_YTD = W_YTD + $payment
+                    WHERE W_ID = $w_id
+                    RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = FormatResultSetYson(it.GetResultSet(0));
+            CompareYson(output, R"([[["street1"];["street2"];["city"];["state"];["zip"];["name"]]])");
+
+            auto tx = it.GetTransaction();
+            UNIT_ASSERT(tx);
+            UNIT_ASSERT(tx->IsActive());
+
+            {
+                auto params = TParamsBuilder()
+                    .AddParam("$d_w_id").Int32(1).Build()
+                    .AddParam("$d_id").Int32(1).Build()
+                    .AddParam("$payment").Double(100.1).Build()
+                    .Build();
+
+                auto it = session.ExecuteQuery(
+                R"(
+                    DECLARE $d_w_id AS Int32;
+                    DECLARE $d_id AS Int32;
+                    DECLARE $payment AS Double;
+
+                    UPDATE `/Root/district`
+                    SET D_YTD = D_YTD + $payment
+                    WHERE D_W_ID = $d_w_id
+                    AND D_ID = $d_id
+                    RETURNING D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME;
+                )",
+                NYdb::NQuery::TTxControl::Tx(*tx), std::move(params)).ExtractValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString output = FormatResultSetYson(it.GetResultSet(0));
+                CompareYson(output, R"([[["street1"];["street2"];["city"];["state"];["zip"];["name"]]])");
+            }
+
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT W_ID, W_YTD FROM `/Root/warehouse`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1;[101.2]]])");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexInsertDuplicates, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);

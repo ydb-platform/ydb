@@ -103,9 +103,12 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--owner-idx", "{global_run_id}"
+                "--owner-idx", "{global_run_id}",
+                "--tsserver-port", "31313",
+                "--tsserver-host", "{node_host}"
             ],
-            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
+            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
+            'nodes_percentage': 1
         },
         'IncrementalBackup': {
             'args': [

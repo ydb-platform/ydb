@@ -2,7 +2,7 @@
 import pytest
 
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 from ydb.tests.library.stress.fixtures import StressFixture
 
 
@@ -19,7 +19,7 @@ class TestYdbWorkload(StressFixture):
         )
 
     def test(self):
-        client = YdbClient(self.endpoint, self.database, True)
+        client = InstrumentedYdbClient(self.endpoint, self.database, True)
         client.wait_connection()
         try:
             with WorkloadRunner(client, 'oltp_workload', 120) as runner:

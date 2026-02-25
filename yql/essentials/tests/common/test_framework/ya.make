@@ -21,6 +21,7 @@ PEERDIR(
     contrib/python/six
     contrib/python/urllib3
     library/python/cyson
+    library/python/port_manager
     yql/essentials/core/file_storage/proto
     yql/essentials/providers/common/proto
 )

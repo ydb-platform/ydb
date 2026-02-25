@@ -478,10 +478,9 @@ private:
             for (auto& [chunkIdx, chunk] : list) {
                 if (ev->Get()->ChunksOfInterest.contains(chunkIdx)) {
                     res->ChunksChunkKeeper.insert(chunkIdx);
-                }
-
-                if constexpr(std::is_same_v<std::decay_t<decltype(chunk)>, TChunkRecord>) {
-                    chunk.ShredRequested = true;
+                    if constexpr(std::is_same_v<std::decay_t<decltype(chunk)>, TChunkRecord>) {
+                        chunk.ShredRequested = true;
+                    }
                 }
             }
         };

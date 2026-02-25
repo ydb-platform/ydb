@@ -1143,7 +1143,6 @@ public:
             Impl.Shred.Phase = TImpl::TShredState::EPhase::None;
             Send(new IEventHandle(Impl.Shred.Requester, SelfId(),
                     new NPDisk::TEvShredPDiskResult(NKikimrProto::OK, Impl.Shred.Generation, ""), 0, Impl.Shred.Cookie));
-            Send(Impl.Shred.Requester,  new NPDisk::TEvShredPDiskResult(NKikimrProto::OK, Impl.Shred.Generation, ""));
         }
     }
 
@@ -1311,9 +1310,9 @@ public:
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);
         hFunc(TEvMoveDrive, Handle);
-        hFunc(NPDisk::TEvShredPDisk, Handle)
-        hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle)
-        hFunc(NPDisk::TEvShredVDiskResult, Handle)
+        hFunc(NPDisk::TEvShredPDisk, Handle);
+        hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
+        hFunc(NPDisk::TEvShredVDiskResult, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
 

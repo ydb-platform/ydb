@@ -87,6 +87,6 @@ RECURSE_FOR_TESTS(
     ut_read_only_pdisk
     ut_stop_pdisk
     ut_cluster_balancing
-    ut_move_pdisk'
+    ut_move_pdisk
     ut_vdisk_internals
 )

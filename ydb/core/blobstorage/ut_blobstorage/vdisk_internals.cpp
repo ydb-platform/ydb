@@ -283,7 +283,7 @@ Y_UNIT_TEST(Shred) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(1);
         ctx.Env->Runtime->SendToPipe(ctx.Env->TabletId, edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
         auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerShredResponse>(edge, false,
-                TAppData::TimeProvider->Now() + TDuration::Hours(3));
+                TAppData::TimeProvider->Now() + TDuration::Minutes(30));
         UNIT_ASSERT(res);
         if (res->Get()->Record.GetCompleted()) {
             break;

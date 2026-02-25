@@ -616,13 +616,14 @@ message TMonitoringConfig {
     optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
     optional string MonitoringPrivateKeyFile = 20;
-    optional string MonitoringCaFile = 23;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool HideHttpEndpoint = 19 [default = false];
     optional bool RequireCountersAuthentication = 21 [default = false];
     optional bool RequireHealthcheckAuthentication = 22 [default = false];
+    optional string MonitoringCaFile = 23;
+    repeated string CompressContentTypes = 24; // by default most text types are compressed
 }
 
 message TRestartsCountConfig {

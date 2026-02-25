@@ -34,4 +34,8 @@ message TStorageServiceConfig
 
     // Period (in milliseconds) for sampling traces.
     optional uint32 TraceSamplePeriod = 11;
+
+    // Sync requests will be sended when sync queue reaches
+    // this size for ddisk.
+    optional uint32 SyncRequestsBatchSize = 12;
 }

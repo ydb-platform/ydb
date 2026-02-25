@@ -349,6 +349,10 @@ namespace NKikimr::NDDisk {
 
         TEvBatchErasePersistentBuffer() = default;
 
+        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds) {
+            creds.Serialize(Record.MutableCredentials());
+        }
+
         TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64>>& erases) {
             creds.Serialize(Record.MutableCredentials());
             for (auto& [selector, lsn] : erases) {
@@ -356,6 +360,12 @@ namespace NKikimr::NDDisk {
                 selector.Serialize(erase->MutableSelector());
                 erase->SetLsn(lsn);
             }
+        }
+
+        void AddErase(const TBlockSelector& selector, ui64 lsn) {
+            auto *erase = Record.AddErases();
+            selector.Serialize(erase->MutableSelector());
+            erase->SetLsn(lsn);
         }
     };
 

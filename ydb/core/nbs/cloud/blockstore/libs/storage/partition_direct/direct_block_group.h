@@ -78,10 +78,11 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    ui32 SyncRequestsBatchSize;
 
     class TDirtyMap;
     std::unique_ptr<TDirtyMap> DirtyMap;
-    TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
+    TVector<std::shared_ptr<TSyncRequestHandler>> SyncRequestsByDDiskId;
 
     std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
@@ -93,7 +94,8 @@ public:
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
-        ui64 blocksCount);
+        ui64 blocksCount,
+        ui32 syncRequestsBatchSize);
 
     ~TDirectBlockGroup() override;
 
@@ -134,12 +136,13 @@ private:
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
 
-    void ProcessSyncQueue();
+    void ProcessSyncQueue(size_t ddiskId);
 
-    void RequestBlockErase(const TSyncRequestHandler& requestHandler);
+    void RequestBlockErase(std::shared_ptr<TSyncRequestHandler> requestHandler);
 
     void HandleErasePersistentBufferResult(
         std::shared_ptr<TEraseRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);
 
@@ -153,6 +156,7 @@ private:
 
     void HandleSyncWithPersistentBufferResult(
         std::shared_ptr<TSyncRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 

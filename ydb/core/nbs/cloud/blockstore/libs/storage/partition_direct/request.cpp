@@ -19,30 +19,13 @@ constexpr size_t BlockSize = 4096;
 ////////////////////////////////////////////////////////////////////////////////
 
 TBaseRequestHandler::TBaseRequestHandler(
-    NActors::TActorSystem* actorSystem,
-    TBlockRange64 range)
+    NActors::TActorSystem* actorSystem)
     : ActorSystem(actorSystem)
-    , Range(range)
 {}
 
 NActors::TActorSystem* TBaseRequestHandler::GetActorSystem() const
 {
     return ActorSystem;
-}
-
-ui64 TBaseRequestHandler::GetStartIndex() const
-{
-    return Range.Start;
-}
-
-ui64 TBaseRequestHandler::GetStartOffset() const
-{
-    return Range.Start * BlockSize;
-}
-
-ui64 TBaseRequestHandler::GetSize() const
-{
-    return Range.Size() * BlockSize;
 }
 
 void TBaseRequestHandler::ChildSpanEndOk(ui64 requestId)
@@ -63,12 +46,37 @@ void TBaseRequestHandler::ChildSpanEndError(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TIORequestsHandler::TIORequestsHandler(
+    NActors::TActorSystem* actorSystem,
+    TBlockRange64 range)
+    : TBaseRequestHandler(actorSystem)
+    , Range(range)
+{}
+
+
+ui64 TIORequestsHandler::GetStartIndex() const
+{
+    return Range.Start;
+}
+
+ui64 TIORequestsHandler::GetStartOffset() const
+{
+    return Range.Start * BlockSize;
+}
+
+ui64 TIORequestsHandler::GetSize() const
+{
+    return Range.Size() * BlockSize;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TWriteRequestHandler::TWriteRequestHandler(
     NActors::TActorSystem* actorSystem,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TBaseRequestHandler(actorSystem, request->Range)
+    : TIORequestsHandler(actorSystem, request->Range)
     , Request(std::move(request))
 {
     Future = NThreading::NewPromise<TWriteBlocksLocalResponse>();
@@ -165,28 +173,45 @@ void TWriteRequestHandler::SetResponse(NProto::TError error)
 
 TSyncRequestHandler::TSyncRequestHandler(
     NActors::TActorSystem* actorSystem,
-    ui64 startIndex,
     ui8 persistentBufferIndex,
-    ui64 lsn,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TBaseRequestHandler(actorSystem, TBlockRange64::WithLength(startIndex, 1))
+    : TBaseRequestHandler(actorSystem)
     , PersistentBufferIndex(persistentBufferIndex)
-    , Lsn(lsn)
 {
     Span = NWilson::TSpan(
         TWilsonNbs::NbsBasic,
         std::move(traceId),
-        "NbsPartition.PBFlush.SyncRequest",
+        "NbsPartition.Sync",
         NWilson::EFlags::NONE,
         GetActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
-    Span.Attribute("vChunkIndex", static_cast<i64>(0));
-    Span.Attribute("startIndex", static_cast<i64>(startIndex));
     Span.Attribute(
         "persistentBufferIndex",
         static_cast<i64>(persistentBufferIndex));
-    Span.Attribute("lsn", static_cast<i64>(lsn));
+}
+
+NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
+{
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.PBFlush.SyncRequest",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+
+    TStringBuilder lsnsStr;
+    for (ui64 lsn : GetLsns()) {
+        if (!lsnsStr.empty()) {
+            lsnsStr << ";";
+        }
+        lsnsStr << lsn;
+    }
+    childSpan.Attribute("Lsns", lsnsStr);
+
+    ChildSpanByRequestId[requestId] = std::move(childSpan);
+
+    return ChildSpanByRequestId[requestId];
 }
 
 bool TSyncRequestHandler::IsCompleted(ui64 requestId)
@@ -196,42 +221,82 @@ bool TSyncRequestHandler::IsCompleted(ui64 requestId)
     return true;
 }
 
-ui64 TSyncRequestHandler::GetLsn() const
-{
-    return Lsn;
-}
-
 ui8 TSyncRequestHandler::GetPersistentBufferIndex() const
 {
     return PersistentBufferIndex;
+}
+
+ui64 TSyncRequestHandler::OnSyncRequested(ui64 startIndex, ui64 lsn)
+{
+    SyncRequests.emplace_back(startIndex, lsn);
+    return SyncRequests.size();
+}
+
+const TVector<TSyncRequestHandler::TSyncRequest>& TSyncRequestHandler::GetSyncRequests() const
+{
+    return SyncRequests;
+}
+
+TVector<NKikimr::NDDisk::TBlockSelector> TSyncRequestHandler::GetBlockSelectors() const
+{
+    TVector<NKikimr::NDDisk::TBlockSelector> selectors;
+    for (const auto& request: SyncRequests) {
+        selectors.push_back(NKikimr::NDDisk::TBlockSelector(
+            0,   // vChunkIndex
+            request.StartIndex * BlockSize,
+            BlockSize));
+    }
+
+    return selectors;
+}
+
+TVector<ui64> TSyncRequestHandler::GetLsns() const
+{
+    TVector<ui64> lsns;
+    for (const auto& request: SyncRequests) {
+        lsns.push_back(request.Lsn);
+    }
+
+    return lsns;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TEraseRequestHandler::TEraseRequestHandler(
     NActors::TActorSystem* actorSystem,
-    ui64 startIndex,
-    ui8 persistentBufferIndex,
-    ui64 lsn,
-    NWilson::TTraceId traceId,
-    ui64 tabletId)
-    : TBaseRequestHandler(actorSystem, TBlockRange64::WithLength(startIndex, 1))
-    , PersistentBufferIndex(persistentBufferIndex)
-    , Lsn(lsn)
+    std::shared_ptr<TSyncRequestHandler> syncRequestHandler)
+    : TBaseRequestHandler(actorSystem)
+    , SyncRequestHandler(std::move(syncRequestHandler))
 {
     Span = NWilson::TSpan(
         TWilsonNbs::NbsBasic,
-        std::move(traceId),
+        std::move(SyncRequestHandler->Span.GetTraceId()),
         "NbsPartition.PBFlush.EraseRequest",
         NWilson::EFlags::NONE,
         GetActorSystem());
-    Span.Attribute("tablet_id", static_cast<i64>(tabletId));
-    Span.Attribute("vChunkIndex", static_cast<i64>(0));
-    Span.Attribute("startIndex", static_cast<i64>(startIndex));
-    Span.Attribute(
-        "persistentBufferIndex",
-        static_cast<i64>(persistentBufferIndex));
-    Span.Attribute("lsn", static_cast<i64>(lsn));
+}
+
+NWilson::TSpan& TEraseRequestHandler::GetChildSpan(ui64 requestId)
+{
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.PBFlush.EraseRequest",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+
+    TStringBuilder lsnsStr;
+    for (ui64 lsn : GetLsns()) {
+        if (!lsnsStr.empty()) {
+            lsnsStr << ";";
+        }
+        lsnsStr << lsn;
+    }
+    childSpan.Attribute("Lsns", lsnsStr);
+
+    ChildSpanByRequestId[requestId] = std::move(childSpan);
+
+    return ChildSpanByRequestId[requestId];
 }
 
 bool TEraseRequestHandler::IsCompleted(ui64 requestId)
@@ -241,14 +306,19 @@ bool TEraseRequestHandler::IsCompleted(ui64 requestId)
     return true;
 }
 
-ui64 TEraseRequestHandler::GetLsn() const
-{
-    return Lsn;
-}
-
 ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
 {
-    return PersistentBufferIndex;
+    return SyncRequestHandler->GetPersistentBufferIndex();
+}
+
+TVector<NKikimr::NDDisk::TBlockSelector> TEraseRequestHandler::GetBlockSelectors() const
+{
+    return SyncRequestHandler->GetBlockSelectors();
+}
+
+TVector<ui64> TEraseRequestHandler::GetLsns() const
+{
+    return SyncRequestHandler->GetLsns();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -258,7 +328,7 @@ TReadRequestHandler::TReadRequestHandler(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TBaseRequestHandler(actorSystem, request->Range)
+    : TIORequestsHandler(actorSystem, request->Range)
     , Request(std::move(request))
 {
     Y_UNUSED(traceId);
@@ -331,7 +401,7 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     TString name,
     ui64 tabletId,
     ui8 requiredAckCount)
-    : TBaseRequestHandler(actorSystem, {})
+    : TBaseRequestHandler(actorSystem)
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {

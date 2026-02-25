@@ -51,12 +51,14 @@ public:
         const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
         const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
         const ui32 storageMedia = request->GetStorageMedia();
+        const ui32 syncRequestsBatchSize = request->GetSyncRequestsBatchSize();
 
         NYdb::NBS::NProto::TStorageServiceConfig storageConfig;
         storageConfig.SetDDiskPoolName(storagePoolName);
         storageConfig.SetPersistentBufferDDiskPoolName(storagePoolName);
         // One trace per 1s should be sufficient for observability.
         storageConfig.SetTraceSamplePeriod(1000);
+        storageConfig.SetSyncRequestsBatchSize(syncRequestsBatchSize);
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);
@@ -103,7 +105,7 @@ private:
 
     void Handle(TEvSSProxy::TEvCreateVolumeResponse::TPtr& ev) {
         const auto& response = *ev->Get();
-        
+
         LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
             "Grpc service: received TEvCreateVolumeResponse from ss proxy: %s, status: %d, reason: %s",
             ev->Sender.ToString().data(),

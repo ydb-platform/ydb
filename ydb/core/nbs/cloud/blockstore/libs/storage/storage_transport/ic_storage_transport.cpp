@@ -75,8 +75,8 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
 TICStorageTransport::ErasePersistentBuffer(
     const NActors::TActorId serviceId,
     const TQueryCredentials credentials,
-    const TBlockSelector selector,
-    const ui64 lsn,
+    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+    TVector<ui64> lsns,
     NWilson::TSpan& span)
 {
     auto promise = NewPromise<
@@ -89,8 +89,8 @@ TICStorageTransport::ErasePersistentBuffer(
         new TEvICStorageTransportPrivate::TEvErasePersistentBuffer(
             serviceId,
             credentials,
-            selector,
-            lsn,
+            std::move(selectors),
+            std::move(lsns),
             span.GetTraceId(),
             std::move(promise)));
     span.Event("After_ActorSystem_Send");
@@ -160,8 +160,8 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
 TICStorageTransport::SyncWithPersistentBuffer(
     const NActors::TActorId serviceId,
     const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
-    const ui64 lsn,
+    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+    TVector<ui64> lsns,
     const std::tuple<ui32, ui32, ui32> ddiskId,
     const ui64 ddiskInstanceGuid,
     NWilson::TSpan& span)
@@ -176,8 +176,8 @@ TICStorageTransport::SyncWithPersistentBuffer(
         new TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer(
             serviceId,
             credentials,
-            selector,
-            lsn,
+            std::move(selectors),
+            std::move(lsns),
             ddiskId,
             ddiskInstanceGuid,
             span.GetTraceId(),
@@ -353,10 +353,10 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         "Sent TEvErasePersistentBuffer with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<TEvErasePersistentBuffer>(
-        it->second.Credentials,
-        it->second.Selector,
-        it->second.Lsn);
+    auto request = std::make_unique<TEvBatchErasePersistentBuffer>(it->second.Credentials);
+    for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
+        request->AddErase(it->second.Selectors[i], it->second.Lsns[i]);
+    }
 
     ctx.Send(
         MakeHolder<IEventHandle>(
@@ -556,7 +556,9 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         it->second.DDiskId,
         it->second.DDiskInstanceGuid);
 
-    request->AddSegment(it->second.Selector, it->second.Lsn);
+    for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
+        request->AddSegment(it->second.Selectors[i], it->second.Lsns[i]);
+    }
 
     ctx.Send(
         MakeHolder<IEventHandle>(

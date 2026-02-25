@@ -199,9 +199,9 @@ message TEvBatchErasePersistentBuffer {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
     }
-    
+
     TQueryCredentials Credentials = 1;
-    repeated TEvErasePersistentBuffer Erases = 2;
+    repeated TEraseInfo Erases = 2;
 }
 
 message TEvErasePersistentBufferResult {

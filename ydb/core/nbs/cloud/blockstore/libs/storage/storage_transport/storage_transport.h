@@ -38,8 +38,8 @@ public:
     ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
+        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+        TVector<ui64> lsns,
         NWilson::TSpan& span) = 0;
 
     virtual NThreading::TFuture<
@@ -66,8 +66,8 @@ public:
     SyncWithPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
+        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+        TVector<ui64> lsns,
         const std::tuple<ui32, ui32, ui32> ddiskId,
         const ui64 ddiskInstanceGuid,
         NWilson::TSpan& span) = 0;

@@ -77,7 +77,8 @@ TFastPathService::TFastPathService(
                 std::move(ddiskIds),
                 std::move(persistentBufferDDiskIds),
                 blockSize,
-                blocksCount);
+                blocksCount,
+                storageConfig.GetSyncRequestsBatchSize());
     }
 
     DirectBlockGroup->EstablishConnections(SpanTrace());

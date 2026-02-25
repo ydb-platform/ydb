@@ -175,7 +175,7 @@ runs:
 
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
+        # Save original HEAD before any git operations (e.g. graph_compare.sh checkout)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
 
@@ -328,7 +328,7 @@ runs:
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
         fi
 
         if [ true = ${{ inputs.run_tests }} ]; then

@@ -739,8 +739,9 @@ class WorkloadSecondaryIndex(WorkloadBase):
             queries.append(f"SELECT * FROM `{index_table_path}`;")
 
         # Execute all queries in one batch
-        combined_query = '\n'.join(queries)
-        result = self._execute_query_with_retry(combined_query, is_ddl=False)
+        result = []
+        for query in queries:
+            result.append(self._execute_query_with_retry(query, is_ddl=False)[0])
 
         # Process main table data
         main_data = self._process_main_table_data(result[0].rows, table_info.primary_key_size)

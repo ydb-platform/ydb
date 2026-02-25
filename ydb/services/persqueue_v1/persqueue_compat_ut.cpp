@@ -256,6 +256,24 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
+	{
+            grpc::ClientContext rcontext;
+
+            rcontext.AddMetadata("x-ydb-database", "/Root");
+
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("account/topic2");
+            req.set_consumer("user");
+            req.set_offset(0);
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
     }
 
     Y_UNIT_TEST(LongProducerAndLongMessageGroupId) {

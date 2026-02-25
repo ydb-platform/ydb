@@ -1902,6 +1902,7 @@ message TEvFilterKMeansResponse {
 enum EFulltextIndexType {
     FulltextPlain = 0;
     FulltextRelevance = 1;
+    Json = 2;
 }
 
 message TEvBuildFulltextIndexRequest {

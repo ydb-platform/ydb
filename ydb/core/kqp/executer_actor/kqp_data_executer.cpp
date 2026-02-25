@@ -188,6 +188,62 @@ public:
         return forceSnapshot;
     }
 
+    // TODO: simplified way to detect if we should use followers - should be refactored away.
+    bool GetSimplifiedUseFollowers() const {
+        size_t sourceScanPartitionsCount = 0;
+        bool unknownAffectedShardCount = false;
+
+        for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+            const bool isComputeTask = !stageInfo.Meta.IsSysView() && stageInfo.Meta.ShardOperations.empty()
+                || (stage.SinksSize() + stage.OutputTransformsSize() > 0 && (
+                    !(TasksGraph.GetMeta().AllowOlapDataQuery || TasksGraph.GetMeta().StreamResult)
+                    || !stageInfo.Meta.IsOlap()
+                    || !stageInfo.Meta.HasReads())
+                );
+
+            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                const auto& source = stage.GetSources(0).GetReadRangesSource();
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+                bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+
+                if (partitions.empty()) {
+                    continue;
+                }
+
+                if (isSequentialInFlight) {
+                    unknownAffectedShardCount = true;
+                } else {
+                    sourceScanPartitionsCount += partitions.size();
+                }
+            } else if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                unknownAffectedShardCount = true;
+            } else if (isComputeTask) {
+                for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
+                    const auto& input = stage.GetInputs(inputIndex);
+                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup ||
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve)
+                    {
+                        unknownAffectedShardCount = true;
+                    }
+                }
+            }
+        }
+
+        bool immediateTx = sourceScanPartitionsCount <= 1 && !unknownAffectedShardCount && !HasOlapTable;
+
+        return
+            Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
+            !GetSnapshot().IsValid() &&
+            ReadOnlyTx && (
+                immediateTx ||
+                HasPersistentChannels ||
+                HasOlapTable ||
+                (Database.empty() && !AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
+            );
+    }
+
     bool GetUseFollowers() const {
         return (
             // first, we must specify read stale flag.

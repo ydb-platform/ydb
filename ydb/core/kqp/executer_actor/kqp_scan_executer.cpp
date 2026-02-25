@@ -63,6 +63,10 @@ public:
         YQL_ENSURE(Request.Snapshot.IsValid());
     }
 
+    bool GetSimplifiedUseFollowers() const {
+        return false;
+    }
+
 public:
     STATEFN(WaitResolveState) {
         try {

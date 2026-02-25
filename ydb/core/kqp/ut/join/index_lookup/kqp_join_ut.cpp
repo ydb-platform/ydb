@@ -1299,6 +1299,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FROM `/Root/Join1_1` as left
             EXCLUSION JOIN `/Root/Join1_2` as right
             ON left.Fk21 = right.Key1
+            ORDER BY left.Key DESC
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

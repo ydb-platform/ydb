@@ -996,7 +996,7 @@ void TProducer::TMessagesWorker::SetClosedStatusToFlushPromises(std::optional<TC
     for (auto& inFlightMessage : InFlightMessages) {
         if (inFlightMessage.FlushPromise.Initialized()) {
             inFlightMessage.FlushPromise.TrySetValue(TFlushResult{
-                .Status = EFlushStatus::Closed,
+                .Status = EFlushStatus::ProducerClosed,
                 .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
                 .ClosedDescription = closedDescription,
             });
@@ -1713,7 +1713,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         Metrics.IncIncomingMessages();
         if (Closed.load()) {
             return TWriteResult{
-                .Status = EWriteStatus::Closed,
+                .Status = EWriteStatus::ProducerClosed,
             };
         }
 
@@ -1770,7 +1770,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     for (;;) {
         if (Closed.load()) {
             return TWriteResult{
-                .Status = EWriteStatus::Closed,
+                .Status = EWriteStatus::ProducerClosed,
             };
         }
 

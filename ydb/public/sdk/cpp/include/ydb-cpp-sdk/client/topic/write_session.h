@@ -17,9 +17,9 @@
 namespace NYdb::inline Dev::NTopic {
 
 //! Result of close operation.
-//! If close was successful, returns SUCCESS.
-//! If close was not successful because of timeout, returns TIMEOUT.
-//! If close was not successful because of error, returns ERROR.
+//! If close was successful, returns Success. This status means that all messages in buffer were persistently written to the server.
+//! If close was not successful because of timeout, returns Timeout.
+//! If close was not successful because of error, returns Error.
 enum class ECloseStatus {
     Success = 0,
     Timeout = 1,
@@ -227,18 +227,80 @@ private:
 
 public:
     TWriteMessage() = delete;
+
     TWriteMessage(std::string_view data)
         : Data(data)
     {}
 
+    TWriteMessage(const TWriteMessage& other)
+        : DataHolder(other.DataHolder)
+        , Data(other.DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(other.Codec)
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(other.SeqNo_)
+        , CreateTimestamp_(other.CreateTimestamp_)
+        , MessageMeta_(other.MessageMeta_)
+        , Key_(other.Key_)
+        , Partition_(other.Partition_)
+        , Tx_(other.Tx_)
+    {}
+
+    TWriteMessage(TWriteMessage&& other) noexcept
+        : DataHolder(std::move(other.DataHolder))
+        , Data(DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(std::move(other.Codec))
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(std::move(other.SeqNo_))
+        , CreateTimestamp_(std::move(other.CreateTimestamp_))
+        , MessageMeta_(std::move(other.MessageMeta_))
+        , Key_(std::move(other.Key_))
+        , Partition_(std::move(other.Partition_))
+        , Tx_(std::move(other.Tx_))
+    {}
+
+    TWriteMessage& operator=(const TWriteMessage& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = other.DataHolder;
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = other.Codec;
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = other.SeqNo_;
+        CreateTimestamp_ = other.CreateTimestamp_;
+        MessageMeta_ = other.MessageMeta_;
+        Key_ = other.Key_;
+        Partition_ = other.Partition_;
+        Tx_ = other.Tx_;
+
+        return *this;
+    }
+
+    TWriteMessage& operator=(TWriteMessage&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = std::move(other.DataHolder);
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = std::move(other.Codec);
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = std::move(other.SeqNo_);
+        CreateTimestamp_ = std::move(other.CreateTimestamp_);
+        MessageMeta_ = std::move(other.MessageMeta_);
+        Key_ = std::move(other.Key_);
+        Partition_ = std::move(other.Partition_);
+        Tx_ = std::move(other.Tx_);
+
+        return *this;
+    }
+
     template<SerializableToString T>
     TWriteMessage(const T& data)
-    {
-        DataHolder = SerializeToString(data);
-        if (DataHolder) {
-            Data = *DataHolder;
-        }
-    }
+        : DataHolder(SerializeToString(data))
+        , Data(*DataHolder)
+    {}
 
     //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
     //! Compression will not be performed in SDK for such messages.
@@ -285,51 +347,6 @@ public:
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
-};
-
-struct TProducerSettings : public TWriteSessionSettings {
-    using TSelf = TProducerSettings;
-
-    enum class EPartitionChooserStrategy {
-        Bound,
-        Hash,
-    };
-
-    TProducerSettings() = default;
-    TProducerSettings(const TProducerSettings&) = default;
-    TProducerSettings(TProducerSettings&&) = default;
-
-    TProducerSettings& operator=(const TProducerSettings&) = default;
-    TProducerSettings& operator=(TProducerSettings&&) = default;
-
-    //! Session lifetime.
-    FLUENT_SETTING_DEFAULT(TDuration, SubSessionIdleTimeout, TDuration::Seconds(30));
-
-    //! Partition chooser strategy.
-    FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Bound);
-
-    //! Hasher function.
-    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string_view key)>, PartitioningKeyHasher, DefaultPartitioningKeyHasher);
-
-    //! Default partitioning key hasher.
-    //! Uses MurmurHash.
-    static std::string DefaultPartitioningKeyHasher(const std::string_view key);
-
-    //! ProducerId prefix to use.
-    //! ProducerId is generated as ProducerIdPrefix + partition id.
-    FLUENT_SETTING(std::string, ProducerIdPrefix);
-
-    //! SessionID to use.
-    FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
-
-    //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
-    FLUENT_SETTING_DEFAULT(TDuration, MaxBlock, TDuration::Zero());
-
-    //! Key producer function.
-    FLUENT_SETTING_OPTIONAL(std::function<std::string(const TWriteMessage& message)>, KeyProducer);
-
-private:
-    using TWriteSessionSettings::ProducerId;
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

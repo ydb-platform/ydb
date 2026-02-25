@@ -4326,7 +4326,8 @@ R"(CREATE TABLE `test_show_create` (
         TString query = R"(
             SELECT FollowerId, TabletId
             FROM `/Root/.sys/hive_tablets`
-            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul;
+            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul
+            ORDER BY TabletId, FollowerId
         )";
 
         TString expected = R"([

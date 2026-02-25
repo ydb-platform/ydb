@@ -1003,12 +1003,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFilterWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListFilterWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             out->addIncoming(value, block);
             BranchInst::Create(done, block);
         }
@@ -1363,12 +1360,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFilterWithLimitWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), limit->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list, limit}, "value", block);
+            const auto value = EmitFunctionCall<&TListFilterWithLimitWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list, limit}, ctx, block);
             out->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

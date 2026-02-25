@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shard_key_ranges.h"
+#include <regex>
 
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -16,6 +17,7 @@
 
 namespace NKikimrKqp {
     class TKqpFullTextSourceSettings;
+    class TKqpSysViewSourceSettings;
 }
 
 namespace NKikimr::NKqp {
@@ -258,17 +260,45 @@ struct TGraphMeta {
         return QuerySpanId;  // Fall back to global QuerySpanId
     }
 
+    ui64 GetEffectiveQuerySpanId(ui64 spanId, const TString& tablePath) const {
+        if (spanId == 0 || tablePath.empty()) {
+            return spanId;
+        }
+        for (const auto& regex : IgnoredTliTableRegexes) {
+            if (std::regex_match(tablePath.begin(), tablePath.end(), regex)) {
+                return 0;
+            }
+        }
+        return spanId;
+    }
+
+    bool AddIgnoredTliTableRegex(const TString& pattern) {
+        try {
+            IgnoredTliTableRegexes.emplace_back(std::string(pattern));
+            return true;
+        } catch (const std::regex_error&) {
+            // Invalid regex pattern - silently ignore it
+            // The pattern will not be added to the list, so no tables will be filtered by it
+            return false;
+        }
+    }
+
     ui64 QuerySpanId = 0;
     THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
+    TVector<std::regex> IgnoredTliTableRegexes;  // Pre-compiled regexes for ignored tables
 };
 
 struct TTaskInputMeta {
     // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
     NKikimrKqp::TKqpFullTextSourceSettings* FullTextSourceSettings = nullptr;
+    NKikimrKqp::TKqpSysViewSourceSettings* SysViewSourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
+    // Fully-qualified table path for TLI filtering (vector resolve only;
+    // stream lookup reads path from its proto settings directly).
+    TString TablePath;
 };
 
 struct TTaskOutputMeta {
@@ -416,6 +446,7 @@ private:
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
+    void BuildSysViewTasksFromSource(TStageInfo& stageInfo);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);

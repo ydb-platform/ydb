@@ -475,10 +475,6 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTopOrSortBlocksState<Sort, HasCount>::Get>());
-        const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
-        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
-
         const auto heightPtr = new AllocaInst(indexType, 0U, "height_ptr", atTop);
         const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
 
@@ -517,10 +513,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTopOrSortBlocksFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType(), trunc->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs, trunc}, "", block);
+        EmitFunctionCall<&TTopOrSortBlocksFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, dirs, trunc}, ctx, block);
 
         BranchInst::Create(main, block);
 
@@ -575,19 +568,13 @@ public:
         }
         new StoreInst(array, values, block);
 
-        const auto processBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTopOrSortBlocksState<Sort, HasCount>::ProcessInput>());
-        const auto processBlockType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto processBlockPtr = CastInst::Create(Instruction::IntToPtr, processBlockFunc, PointerType::getUnqual(processBlockType), "process_inputs_func", block);
-        CallInst::Create(processBlockType, processBlockPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::ProcessInput>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(read, block);
 
         block = work;
 
-        const auto fillBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTopOrSortBlocksState<Sort, HasCount>::FillOutput>());
-        const auto fillBlockType = FunctionType::get(flagType, {statePtrType, ctx.GetFactory()->getType()}, false);
-        const auto fillBlockPtr = CastInst::Create(Instruction::IntToPtr, fillBlockFunc, PointerType::getUnqual(fillBlockType), "fill_output_func", block);
-        const auto hasData = CallInst::Create(fillBlockType, fillBlockPtr, {stateArg, ctx.GetFactory()}, "fill_output", block);
+        const auto hasData = EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::FillOutput>(flagType, {stateArg, ctx.GetFactory()}, ctx, block);
 
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
 
@@ -595,10 +582,7 @@ public:
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTopOrSortBlocksState<Sort, HasCount>::Slice>());
-        const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
-        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
-        const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
+        const auto slice = EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::Slice>(indexType, {stateArg}, ctx, block);
         new StoreInst(slice, heightPtr, block);
         new StoreInst(stateArg, stateOnStack, block);
 
@@ -610,10 +594,10 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(width);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [idx, valueType, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
                 const auto heightArg = new LoadInst(indexType, heightPtr, "height", block);
-                return CallInst::Create(getType, getPtr, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "get", block);
+                return EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::Get>(valueType, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, ctx, block);
             };
         }
         return {result, std::move(getters)};

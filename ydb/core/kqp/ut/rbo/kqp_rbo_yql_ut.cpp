@@ -867,7 +867,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
        RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
     }
 
-    void RunTPCHYqlBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
+    void PrintStatus(const std::vector<bool>& queries, std::vector<TString>&& errors) {
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const TString status = queries[i] ? "SUCCESS" : "FAIL";
+            Cout << "Q#" << i + 1 << " " << status << ";" << Endl;
+            if (!queries[i]) {
+                Cout << errors[i] << Endl;
+            }
+        }
+    }
+
+    enum EBenchType { TPCH = 0, TPCDS };
+    static constexpr std::array<const char*, 2> BenchmarkSchemePath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
+    static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
+    static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
+
+    void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
+                             const bool printStatus = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -878,28 +894,47 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
+        CreateTablesFromPath(session, BenchmarkSchemePath[type], columnStore);
 
-        if (!queries.size()) {
-            for (ui32 i = 1; i <= 22; ++i) {
-                queries.push_back(i);
+        std::vector<bool> queriesCurrentStatus;
+        std::vector<bool> queriesExpectedStatus;
+        std::vector<TString> errors;
+        for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
+            if (skipList.contains(qId)) {
+                queriesCurrentStatus.emplace_back(false);
+                queriesExpectedStatus.emplace_back(false);
+                errors.emplace_back("Skipped.");
+                continue;
             }
-        }
-
-        for (const auto qId : queries) {
-            TString q = GetFullPath("data/yql-tpch/q", ToString(qId) + ".yql");
+            queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExplainDataQuery(q).GetValueSync();
-            Y_ENSURE(result.IsSuccess());
+            queriesCurrentStatus.emplace_back(result.IsSuccess());
+            errors.emplace_back(result.GetIssues().ToString());
         }
+
+        if (printStatus) {
+            PrintStatus(queriesCurrentStatus, std::move(errors));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(queriesExpectedStatus, queriesCurrentStatus);
     }
 
     Y_UNIT_TEST(TPCH_YQL) {
-       //RunTPCHYqlBenchmark(/*columnstore*/ true, {}, /*new rbo*/ false);
-       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 17, 18, 19, 20, /*21,*/ 22}, /*new rbo*/ true);
+        // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore*/ true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 17, 18, 19, 20, /*21,*/ 22},
+                            {}, /*new rbo*/ true);
     }
 
-    void InsertIntoSchema0(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
+    Y_UNIT_TEST(TPCDS_YQL) {
+        // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {1,  2,  3,  7,  13, 19, 21, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+                                                                      50, 52, 55, 56, 59, 60, 61, 65, 66, 68, 71, 73, 81, 82, 84, 90, 91, 92, 96},
+                            {15, 31, 58, 64, 72, 85}, /*new rbo*/ true, /*printStatus=*/true);
+    }
+
+    void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;
         rows.BeginList();
         for (size_t i = 0; i < numRows; ++i) {

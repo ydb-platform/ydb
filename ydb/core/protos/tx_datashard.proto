@@ -634,6 +634,7 @@ message TEvProposeTransaction {
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
     optional bool MvccSnapshotRepeatable = 11 [default = true];
+    optional string UserSID = 12;
 }
 
 message TEvCancelTransactionProposal {
@@ -971,6 +972,7 @@ message TEvUploadRowsRequest {
     optional uint64 OverloadSubscribe = 7;
     optional bool UpsertIfExists = 8 [ default = false ];
     optional uint64 SchemaVersion = 9;
+    optional string UserSID = 10;
 }
 
 message TEvUploadRowsResponse {
@@ -1582,6 +1584,8 @@ message TEvSampleKRequest {
 
     optional uint64 SeqNoGeneration = 11;
     optional uint64 SeqNoRound = 12;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 13;
 }
 
 message TEvSampleKResponse {
@@ -2547,6 +2551,8 @@ message TInMemoryLockInfo {
     repeated NKikimrProto.TPathID ReadTables = 8;
     repeated NKikimrProto.TPathID WriteTables = 9;
     optional uint64 VictimQuerySpanId = 10;
+    optional uint64 BreakerQuerySpanId = 11;
+    optional uint32 BreakerNodeId = 12;
 }
 
 // In-memory ranges associated with the lock

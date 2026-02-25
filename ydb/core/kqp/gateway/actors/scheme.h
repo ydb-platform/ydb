@@ -61,6 +61,9 @@ public:
 
                 auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
                 request->Record.SetTxId(response.GetTxId());
+                if (response.HasSchemeShardOperationId()) {
+                    OperationId = response.GetSchemeShardOperationId();
+                }
                 NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
 
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request"
@@ -90,10 +93,17 @@ public:
                     if (!response.GetIssues().empty()) {
                         NYql::TIssues issues;
                         NYql::IssuesFromMessage(response.GetIssues(), issues);
-                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::SUCCESS, "", issues));
+                        auto result = NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::SUCCESS, "", issues);
+                        if (response.HasSchemeShardOperationId()) {
+                            result.OperationId = response.GetSchemeShardOperationId();
+                        }
+                        Promise.SetValue(std::move(result));
                     } else {
                         TResult result;
                         result.SetSuccess();
+                        if (response.HasSchemeShardOperationId()) {
+                            result.OperationId = response.GetSchemeShardOperationId();
+                        }
                         Promise.SetValue(std::move(result));
                     }
 
@@ -198,7 +208,9 @@ public:
 
         TResult result;
         result.SetSuccess();
-
+        if (!OperationId.empty()) {
+            result.OperationId = OperationId;
+        }
         Promise.SetValue(std::move(result));
         NTabletPipe::CloseClient(ctx, ShemePipeActorId);
         this->Die(ctx);
@@ -220,6 +232,7 @@ public:
 
 private:
     TActorId ShemePipeActorId;
+    TString OperationId;
     bool FailedOnAlreadyExists = false;
     bool SuccessOnNotExist = false;
 };

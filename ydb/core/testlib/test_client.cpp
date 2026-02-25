@@ -576,7 +576,6 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
-#undef MERGE_CFG_FROM_SETTINGS
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
@@ -1439,6 +1438,7 @@ namespace Tests {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
+                                                                  Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
@@ -2195,8 +2195,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) {
+    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetWorkingDir(parent);
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
@@ -2414,8 +2417,11 @@ namespace Tests {
         return event->Record;
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
@@ -2503,11 +2509,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
-        return CreateTable(parent, table, timeout);
+        return CreateTable(parent, table, timeout, userToken);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) {
@@ -2806,8 +2812,11 @@ namespace Tests {
         Y_ABORT_UNLESS(ev);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -2824,8 +2833,11 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);

@@ -753,31 +753,43 @@ private:
         op.Properties["Columns"] = JoinSeq(", ", readColumns);
         op.Properties["Name"] = "ReadFullTextIndex";
 
-        const auto& query = GetExprStr(sourceSettings.Query(), true);
-        op.Properties["Query"] = query;
+        std::vector<TString> subparts;
+        for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
+            TString expr = GetExprStr(query, true);
+            if (expr == "expr")
+                continue;
+            subparts.emplace_back(std::move(expr));
+        }
+
+        if (!subparts.empty()) {
+            op.Properties["Query"] = JoinSeq(" ", subparts);
+        }
 
         TVector<TString> searchTerms;
-        if (sourceSettings.Query().Maybe<TCoDataCtor>()) {
-            auto literal = TString(sourceSettings.Query().Cast<TCoDataCtor>().Literal());
-            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
-            auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
-            YQL_ENSURE(indexDesc);
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+        for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
+            if (query.Maybe<TCoDataCtor>()) {
+                auto literal = TString(query.Cast<TCoDataCtor>().Literal());
+                auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
+                auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
+                YQL_ENSURE(indexDesc);
+                YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
 
-            auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
-            for(const auto& column: readColumns) {
-                for(const auto& analyzer: desc.settings().columns()) {
-                    if (analyzer.column() == column) {
-                        for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
-                            searchTerms.push_back(term);
+                auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+                for(const auto& column: readColumns) {
+                    for(const auto& analyzer: desc.settings().columns()) {
+                        if (analyzer.column() == column) {
+                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                                searchTerms.push_back(term);
+                            }
                         }
                     }
                 }
             }
-
-            op.Properties["SearchTerms"] = JoinSeq(", ", searchTerms);
         }
+
+        if (!searchTerms.empty())
+            op.Properties["SearchTerms"] = JoinSeq(", ", searchTerms);
 
         TVector<TString> queryColumns;
         for(const auto& column: sourceSettings.QueryColumns()) {
@@ -1238,6 +1250,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
+            operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1787,6 +1801,18 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
 
         return AddOperator(planNode, name, std::move(op));
     }

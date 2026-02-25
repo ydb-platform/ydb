@@ -182,7 +182,7 @@ namespace {
                     }
                 }
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
@@ -304,7 +304,7 @@ namespace {
                 }
 
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));

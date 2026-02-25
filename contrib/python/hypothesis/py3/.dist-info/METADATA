@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: hypothesis
-Version: 6.151.4
+Version: 6.151.5
 Summary: The property-based testing library for Python
 Author-email: "David R. MacIver and Zac Hatfield-Dodds" <david@drmaciver.com>
 License-Expression: MPL-2.0

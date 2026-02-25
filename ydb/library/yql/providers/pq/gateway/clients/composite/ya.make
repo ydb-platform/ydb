@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/accessor
     ydb/library/actors/core
     ydb/library/services
+    ydb/library/signals
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/common
     ydb/library/yverify_stream

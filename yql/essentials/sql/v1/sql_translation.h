@@ -136,6 +136,10 @@ public:
         IsYqlSelectProduced_ = value;
     }
 
+    void SetPure(bool isPure) noexcept {
+        IsPure_ = isPure;
+    }
+
 protected:
     enum class EExpr {
         Regular,
@@ -325,6 +329,7 @@ private:
 protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
+    bool IsPure_ = false;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

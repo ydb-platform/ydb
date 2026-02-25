@@ -1,7 +1,7 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}c6d95c441a29a45782ff72d6cb82839b86fd0e4a{% endblock %}
-{% block current_date %}2025-02-16{% endblock %}
+{% block current_version %}9feac2cbd0d80927ce9a8b4c3e810d2b81802d55{% endblock %}
+{% block current_date %}2025-03-18{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/fixlic.py

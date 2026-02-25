@@ -13,6 +13,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_tvm_helpers.h>
 
 namespace NYql::NFmr {
 
@@ -31,8 +32,14 @@ enum class ETableDataServiceRequestHandler {
 
 class TReplier: public TRequestReplier {
 public:
-    TReplier(std::unordered_map<ETableDataServiceRequestHandler, THandler>& handlers)
+    TReplier(
+        std::unordered_map<ETableDataServiceRequestHandler, THandler>& handlers
+        , IFmrTvmClient::TPtr tvmClient
+        , const std::vector<TTvmId>& allowedSourceTvmIds
+    )
         : Handlers_(handlers)
+        , TvmClient_(tvmClient)
+        , AllowedSourceTvmIds_(allowedSourceTvmIds)
     {
     }
 
@@ -42,15 +49,27 @@ public:
         if (!handlerName) {
             params.Output << THttpResponse(HTTP_NOT_FOUND);
         } else {
-            YQL_ENSURE(Handlers_.contains(*handlerName));
-            auto callbackFunc = Handlers_[*handlerName];
-            params.Output << callbackFunc(params.Input);
+            try {
+                YQL_ENSURE(Handlers_.contains(*handlerName));
+                if (*handlerName != ETableDataServiceRequestHandler::Ping) {
+                    CheckTvmServiceTicket(params.Input.Headers(), TvmClient_, AllowedSourceTvmIds_);
+                }
+                auto callbackFunc = Handlers_[*handlerName];
+                params.Output << callbackFunc(params.Input);
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Error while processing url path " << httpRequest.Path << " is: " << CurrentExceptionMessage();
+                THttpResponse response = THttpResponse(HTTP_BAD_REQUEST);
+                response.SetContent(CurrentExceptionMessage());
+                params.Output << response;
+            }
         }
         return true;
     }
 
 private:
     std::unordered_map<ETableDataServiceRequestHandler, THandler> Handlers_;
+    IFmrTvmClient::TPtr TvmClient_;
+    const std::vector<TTvmId> AllowedSourceTvmIds_;
 
     TMaybe<ETableDataServiceRequestHandler> GetHandlerName(TParsedHttpFull httpRequest) {
         TStringBuf queryPath;
@@ -81,10 +100,16 @@ private:
 
 class TTableDataServiceServer: public THttpServer::ICallBack, public IRunnable {
 public:
-    TTableDataServiceServer(ILocalTableDataService::TPtr tableDataService, const TTableDataServiceServerSettings& settings)
-        : TableDataService_(tableDataService),
-        Host_(settings.Host),
-        Port_(settings.Port)
+    TTableDataServiceServer(
+        ILocalTableDataService::TPtr tableDataService,
+        const TTableDataServiceServerSettings& settings,
+        IFmrTvmClient::TPtr tvmClient = nullptr
+    )
+        : TableDataService_(tableDataService)
+        , Host_(settings.Host)
+        , Port_(settings.Port)
+        , AllowedSourceTvmIds_(settings.AllowedSourceTvmIds)
+        , TvmClient_(tvmClient)
     {
         THttpServer::TOptions opts;
         opts.AddBindAddress(Host_, Port_);
@@ -121,7 +146,7 @@ public:
     }
 
     TClientRequest* CreateClient() override {
-        return new TReplier(Handlers_);
+        return new TReplier(Handlers_, TvmClient_, AllowedSourceTvmIds_);
     }
 
 private:
@@ -130,6 +155,8 @@ private:
     ILocalTableDataService::TPtr TableDataService_;
     const TString Host_;
     const ui16 Port_;
+    const std::vector<TTvmId> AllowedSourceTvmIds_;
+    IFmrTvmClient::TPtr TvmClient_;
 
     struct TTableDataServiceKey {
         TString Group;
@@ -186,7 +213,7 @@ private:
         protoGroupDeletionRequest.ParseFromStringOrThrow(serializedProtoGroupDeletionRequest);
         auto deletionRequest = TableDataServiceGroupDeletionRequestFromProto(protoGroupDeletionRequest);
         TableDataService_->RegisterDeletion(deletionRequest).GetValueSync();
-        YQL_CLOG(TRACE, FastMapReduce) << "Deleting groups in table data service" << JoinRange(' ', deletionRequest.begin(), deletionRequest.end());        return THttpResponse(HTTP_OK);
+        YQL_CLOG(TRACE, FastMapReduce) << "Deleting groups in table data service " << JoinRange(' ', deletionRequest.begin(), deletionRequest.end());        return THttpResponse(HTTP_OK);
     }
 
     THttpResponse ClearTableDataServiceHander(THttpInput& input) {
@@ -203,8 +230,12 @@ private:
 
 } // namespace
 
-IFmrServer::TPtr MakeTableDataServiceServer(ILocalTableDataService::TPtr tableDataService, const TTableDataServiceServerSettings& settings) {
-    return MakeHolder<TTableDataServiceServer>(tableDataService, settings);
+IFmrServer::TPtr MakeTableDataServiceServer(
+    ILocalTableDataService::TPtr tableDataService,
+    const TTableDataServiceServerSettings& settings,
+    IFmrTvmClient::TPtr tvmClient
+) {
+    return MakeHolder<TTableDataServiceServer>(tableDataService, settings, tvmClient);
 }
 
 } // NYql::NFmr

@@ -280,16 +280,14 @@ class egg_info(InfoCommon, Command):
         """
         log.info("writing %s to %s", what, filename)
         data = data.encode("utf-8")
-        if not self.dry_run:
-            f = open(filename, 'wb')
-            f.write(data)
-            f.close()
+        f = open(filename, 'wb')
+        f.write(data)
+        f.close()
 
     def delete_file(self, filename) -> None:
         """Delete `filename` (if not a dry run) after announcing it"""
         log.info("deleting %s", filename)
-        if not self.dry_run:
-            os.unlink(filename)
+        os.unlink(filename)
 
     def run(self) -> None:
         # Pre-load to avoid iterating over entry-points while an empty .egg-info
@@ -650,19 +648,18 @@ def write_file(filename, contents) -> None:
 
 def write_pkg_info(cmd, basename, filename) -> None:
     log.info("writing %s", filename)
-    if not cmd.dry_run:
-        metadata = cmd.distribution.metadata
-        metadata.version, oldver = cmd.egg_version, metadata.version
-        metadata.name, oldname = cmd.egg_name, metadata.name
+    metadata = cmd.distribution.metadata
+    metadata.version, oldver = cmd.egg_version, metadata.version
+    metadata.name, oldname = cmd.egg_name, metadata.name
 
-        try:
-            metadata.write_pkg_info(cmd.egg_info)
-        finally:
-            metadata.name, metadata.version = oldname, oldver
+    try:
+        metadata.write_pkg_info(cmd.egg_info)
+    finally:
+        metadata.name, metadata.version = oldname, oldver
 
-        safe = getattr(cmd.distribution, 'zip_safe', None)
+    safe = getattr(cmd.distribution, 'zip_safe', None)
 
-        bdist_egg.write_safety_flag(cmd.egg_info, safe)
+    bdist_egg.write_safety_flag(cmd.egg_info, safe)
 
 
 def warn_depends_obsolete(cmd, basename, filename) -> None:

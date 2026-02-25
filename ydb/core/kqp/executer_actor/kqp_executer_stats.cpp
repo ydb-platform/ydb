@@ -31,6 +31,15 @@ void TMinStats::SetNonZero(ui32 index, ui64 value) {
     }
 }
 
+void TMinStats::Set(ui32 index, ui64 value) {
+    AFL_ENSURE(index < Values.size());
+    auto maybeMin = Values[index] == MinValue;
+    Values[index] = value;
+    if (maybeMin) {
+        MinValue = ExportMinStats(Values);
+    }
+}
+
 void TMaxStats::Resize(ui32 count) {
     Values.resize(count);
 }
@@ -508,8 +517,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs, index, durationUs);
     WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
-    CurrentWaitInputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitInputTimeUs());
-    CurrentWaitOutputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitOutputTimeUs());
+    CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
+    CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
 
     auto updateTimeMs = taskStats.GetUpdateTimeMs();
     UpdateTimeMs = std::max(UpdateTimeMs, updateTimeMs);
@@ -658,21 +667,19 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     return baseTimeMs;
 }
 
-bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
+bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty()) {
         return false;
     }
 
     for (auto stat : InputStages) {
         if (stat->IsFinished()) {
-            if (stat->MaxFinishTimeMs == 0) {
-                stat->MaxFinishTimeMs = ExportMaxStats(stat->FinishTimeMs);
-            }
-            if (stat->UpdateTimeMs < stat->MaxFinishTimeMs || stat->UpdateTimeMs - stat->MaxFinishTimeMs < deadline) {
+            auto nowMs = TInstant::Now().MilliSeconds();
+            if (nowMs < stat->UpdateTimeMs || (nowMs - stat->UpdateTimeMs) * 1000 < deadline) {
                 return false;
             }
         } else {
-            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline) {
+            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsDeadlocked(deadline)) {
                 return false;
             }
         }
@@ -867,6 +874,16 @@ void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& t
             BreakerQuerySpanIds.push_back(id);
         }
     }
+    if (txStats.DeferredBreakerQuerySpanIdsSize() > 0) {
+        for (size_t i = 0; i < static_cast<size_t>(txStats.DeferredBreakerQuerySpanIdsSize()); ++i) {
+            if (txStats.GetDeferredBreakerQuerySpanIds(i) != 0) {
+                DeferredBreakers.push_back({
+                    txStats.GetDeferredBreakerQuerySpanIds(i),
+                    i < static_cast<size_t>(txStats.DeferredBreakerNodeIdsSize()) ? txStats.GetDeferredBreakerNodeIds(i) : 0u
+                });
+            }
+        }
+    }
 }
 
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
@@ -911,6 +928,18 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
         for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
             if (id != 0) {
                 BreakerQuerySpanIds.push_back(id);
+            }
+        }
+        {
+            const auto& deferredIds = extraStats.GetLockStats().GetDeferredBreakerQuerySpanIds();
+            const auto& deferredNodeIds = extraStats.GetLockStats().GetDeferredBreakerNodeIds();
+            for (size_t i = 0; i < static_cast<size_t>(deferredIds.size()); ++i) {
+                if (deferredIds[i] != 0) {
+                    DeferredBreakers.push_back({
+                        deferredIds[i],
+                        i < static_cast<size_t>(deferredNodeIds.size()) ? deferredNodeIds[i] : 0u
+                    });
+                }
             }
         }
     }
@@ -1020,6 +1049,16 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
                 for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
                     if (id != 0) {
                         BreakerQuerySpanIds.push_back(id);
+                    }
+                }
+                const auto& deferredIds = extraStats.GetLockStats().GetDeferredBreakerQuerySpanIds();
+                const auto& deferredNodeIds = extraStats.GetLockStats().GetDeferredBreakerNodeIds();
+                for (size_t i = 0; i < static_cast<size_t>(deferredIds.size()); ++i) {
+                    if (deferredIds[i] != 0) {
+                        DeferredBreakers.push_back({
+                            deferredIds[i],
+                            i < static_cast<size_t>(deferredNodeIds.size()) ? deferredNodeIds[i] : 0u
+                        });
                     }
                 }
             }

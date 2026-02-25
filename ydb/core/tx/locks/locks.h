@@ -39,6 +39,8 @@ public:
         ui64 CreateTs;
         ui64 Flags;
         ui64 VictimQuerySpanId = 0;
+        ui64 BreakerQuerySpanId = 0;
+        ui32 BreakerNodeId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -291,6 +293,14 @@ struct TLockInfoBrokenPersistentListTag {};
 struct TLockInfoExpireListTag {};
 struct TLockInfoRangesListTag {};
 
+class TLockCallback : public TIntrusiveListItem<TLockCallback> {
+public:
+    virtual void Run() = 0;
+
+protected:
+    ~TLockCallback() = default;
+};
+
 /// Aggregates shard, point and range locks
 class TLockInfo
     : public TSimpleRefCount<TLockInfo>
@@ -339,6 +349,17 @@ public:
     ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
     bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
     const std::optional<TRowVersion>& GetBreakVersion() const { return BreakVersion; }
+
+    void SetBreakerInfo(ui64 querySpanId, ui32 nodeId) {
+        if (BreakerQuerySpanId_ == 0 && querySpanId != 0) {
+            BreakerQuerySpanId_ = querySpanId;
+            BreakerNodeId_ = nodeId;
+        }
+    }
+    ui64 GetBreakerQuerySpanId() const { return BreakerQuerySpanId_; }
+    ui32 GetBreakerNodeId() const { return BreakerNodeId_; }
+    void ConsumeBreakerInfo() { BreakerConsumed_ = true; }
+    bool IsBreakerConsumed() const { return BreakerConsumed_; }
 
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
@@ -427,6 +448,10 @@ public:
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
+    void AddOnRemovedCallback(TLockCallback& callback) {
+        OnRemovedCallbacks.PushBack(&callback);
+    }
+
 private:
     void MakeShardLock();
     bool AddShardLock(const TPathId& pathId);
@@ -462,6 +487,9 @@ private:
     bool InBrokenLocks = false;
 
     std::optional<TRowVersion> BreakVersion;
+    ui64 BreakerQuerySpanId_ = 0;
+    ui32 BreakerNodeId_ = 0;
+    bool BreakerConsumed_ = false;
 
     THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;  // Locks to break on commit
     absl::flat_hash_set<ui64> VolatileDependencies;
@@ -469,6 +497,8 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+
+    TIntrusiveList<TLockCallback> OnRemovedCallbacks;
 };
 
 struct TTableLocksReadListTag {};
@@ -497,7 +527,10 @@ public:
 
     TTableLocks(const TPathId& tableId)
         : TableId(tableId)
+        , RuntimeLocks(*this)
     {}
+
+    ~TTableLocks();
 
     template<class TTag>
     bool IsInList() const {
@@ -565,13 +598,140 @@ public:
         }
     }
 
+public:
+    class TRuntimeLockHolder;
+    using TRuntimeLockHolderList = TIntrusiveList<TRuntimeLockHolder>;
+
+private:
+    class TRuntimeLockKeyComparator {
+    public:
+        using is_transparent = void;
+
+        TRuntimeLockKeyComparator(const TTableLocks& self)
+            : Self(self)
+        {}
+
+        bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
+            return Self.CompareRuntimeLockKeys(a, b) < 0;
+        }
+
+    private:
+        const TTableLocks& Self;
+    };
+
+    int CompareRuntimeLockKeys(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
+        Y_ENSURE(a.size() <= KeyColumnTypes.size());
+        Y_ENSURE(b.size() <= KeyColumnTypes.size());
+        // Note: prefix is treated like a full range
+        // Note: we cannot really handle prefixes right now
+        return CompareTypedCellVectors(a.data(), b.data(), KeyColumnTypes.data(), std::min(a.size(), b.size()));
+    }
+
+private:
+    using TRuntimeLocks = std::map<TOwnedCellVec, TRuntimeLockHolderList, TRuntimeLockKeyComparator>;
+
+public:
+    class TRuntimeLockHolder
+        : private TIntrusiveListItem<TRuntimeLockHolder>
+    {
+        friend TTableLocks;
+        friend TIntrusiveList<TRuntimeLockHolder>;
+        friend TIntrusiveListItem<TRuntimeLockHolder>;
+
+    public:
+        TRuntimeLockHolder()
+            : Self(nullptr)
+        {}
+
+        ~TRuntimeLockHolder() {
+            Reset();
+        }
+
+        TRuntimeLockHolder(TRuntimeLockHolder&& rhs) noexcept
+            : Self(rhs.Self)
+            , Key(rhs.Key)
+            , ActivationCallbacks(std::move(rhs.ActivationCallbacks))
+        {
+            LinkBefore(&rhs);
+            rhs.Unlink();
+            rhs.Self = nullptr;
+        }
+
+        TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
+            if (this != &rhs) [[likely]] {
+                Reset();
+                Self = rhs.Self;
+                Key = rhs.Key;
+                ActivationCallbacks = std::move(rhs.ActivationCallbacks);
+                LinkBefore(&rhs);
+                rhs.Unlink();
+                rhs.Self = nullptr;
+            }
+            return *this;
+        }
+
+        bool IsValid() const {
+            return Self && !Empty();
+        }
+
+        bool IsOwner() const {
+            if (IsValid()) {
+                Y_ENSURE(!Key->second.Empty());
+                return Key->second.Front() == this;
+            }
+
+            return false;
+        }
+
+        void Reset() {
+            if (Self && !Empty()) {
+                Self->RemoveRuntimeLock(Key, this);
+            }
+            Self = nullptr;
+            while (!ActivationCallbacks.Empty()) {
+                ActivationCallbacks.PopFront();
+            }
+        }
+
+        void AddActivationCallback(TLockCallback& callback) {
+            ActivationCallbacks.PushBack(&callback);
+        }
+
+    private:
+        void Activate() {
+            while (!ActivationCallbacks.Empty()) {
+                auto* callback = ActivationCallbacks.PopFront();
+                callback->Run();
+            }
+        }
+
+    private:
+        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key)
+            : Self(self)
+            , Key(key)
+        {}
+
+    private:
+        TTableLocks* Self;
+        TRuntimeLocks::iterator Key;
+        TIntrusiveList<TLockCallback> ActivationCallbacks;
+    };
+
+    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key);
+
+private:
+    void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
+
 private:
     const TPathId TableId;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TRangeTreap<TLockInfo*> Ranges;
     THashSet<TLockInfo*> ShardLocks;
     THashSet<TLockInfo*> WriteLocks;
+    TRuntimeLocks RuntimeLocks;
 };
+
+using TRuntimeLockHolder = TTableLocks::TRuntimeLockHolder;
 
 /// Owns and manages locks
 class TLockLocker {
@@ -976,6 +1136,8 @@ public:
     bool HasCurrentWriteLock(const TTableId& tableId) const;
     bool HasCurrentWriteLocks() const;
     bool HasWriteLocks(const TTableId& tableId) const;
+
+    TRuntimeLockHolder AddRuntimeLock(const TTableId& tableId, TConstArrayRef<TCell> key);
 
     /**
      * Ensures current update has a valid lock pointer

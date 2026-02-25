@@ -130,8 +130,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                 // restoring data sector
                 TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
                     (sectorData + Format.SectorSize - sizeof(TDataSectorFooter));
-                // TODO: restore the correct Version value
-                sectorFooter->Version = PDISK_DATA_VERSION;
+                sectorFooter->SetVersionAndEncryption(sectorFooter->IsEncrypted());
                 sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize);
                 // Increment here because we don't want to count initialy not written parts
                 *Mon->DeviceErasureSectorRestorations += 1;

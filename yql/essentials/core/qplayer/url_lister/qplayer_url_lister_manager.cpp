@@ -16,9 +16,9 @@ TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
     SHA256_Update(&sha, str.data(), str.size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return TString((const char*)hash, sizeof(hash));
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
+    SHA256_Final(hash.data(), &sha);
+    return TString((const char*)hash.data(), sizeof(hash));
 }
 
 TString SerializeResult(const TVector<TUrlListEntry>& result) {

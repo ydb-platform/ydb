@@ -836,7 +836,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
@@ -847,7 +847,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),

@@ -290,10 +290,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCombineCoreFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TCombineCoreFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -308,10 +305,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(valueType, 3U, "result", over);
 
-        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::IsEmpty>());
-        const auto isEmptyFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
-        const auto isEmptyFuncPtr = CastInst::Create(Instruction::IntToPtr, isEmptyFunc, PointerType::getUnqual(isEmptyFuncType), "cast", block);
-        const auto empty = CallInst::Create(isEmptyFuncType, isEmptyFuncPtr, {stateArg}, "empty", block);
+        const auto empty = EmitFunctionCall<&TState::IsEmpty>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto full = BasicBlock::Create(context, "full", ctx.Func);
@@ -367,12 +361,7 @@ public:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = key;
-
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::At>());
-            const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);
-            const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
-            const auto place = CallInst::Create(atType, atPtr, {stateArg, keyParam}, "place", block);
+            const auto place = EmitFunctionCall<&TState::At>(ptrValueType, {stateArg, key}, ctx, block);
 
             const auto init = BasicBlock::Create(context, "init", ctx.Func);
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -396,11 +385,7 @@ public:
 
             block = done;
 
-            const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::PushStat>());
-            const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
-            const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
-            CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
+            EmitFunctionCall<&TState::PushStat>(Type::getVoidTy(context), {stateArg, ctx.GetStat()}, ctx, block);
 
             BranchInst::Create(full, block);
         }
@@ -410,10 +395,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Extract>());
-            const auto extractType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), onePtr->getType(), twoPtr->getType()}, false);
-            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto has = CallInst::Create(extractType, extractPtr, {stateArg, onePtr, twoPtr}, "has", block);
+            const auto has = EmitFunctionCall<&TState::Extract>(Type::getInt1Ty(context), {stateArg, onePtr, twoPtr}, ctx, block);
 
             BranchInst::Create(good, more, has, block);
 
@@ -795,10 +777,7 @@ private:
             block = skip;
         }
 
-        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::IsEmpty>());
-        const auto isEmptyFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
-        const auto isEmptyFuncPtr = CastInst::Create(Instruction::IntToPtr, isEmptyFunc, PointerType::getUnqual(isEmptyFuncType), "cast", block);
-        const auto empty = CallInst::Create(isEmptyFuncType, isEmptyFuncPtr, {stateArg}, "empty", block);
+        const auto empty = EmitFunctionCall<&TState::IsEmpty>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto full = BasicBlock::Create(context, "full", ctx.Func);
@@ -853,12 +832,7 @@ private:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = key;
-
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::At>());
-            const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);
-            const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
-            const auto place = CallInst::Create(atType, atPtr, {stateArg, keyParam}, "place", block);
+            const auto place = EmitFunctionCall<&TState::At>(ptrValueType, {stateArg, key}, ctx, block);
 
             const auto init = BasicBlock::Create(context, "init", ctx.Func);
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -882,11 +856,7 @@ private:
 
             block = done;
 
-            const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::PushStat>());
-            const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
-            const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
-            CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
+            EmitFunctionCall<&TState::PushStat>(Type::getVoidTy(context), {stateArg, ctx.GetStat()}, ctx, block);
 
             BranchInst::Create(full, block);
         }
@@ -896,10 +866,7 @@ private:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Extract>());
-            const auto extractType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), onePtr->getType(), twoPtr->getType()}, false);
-            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto has = CallInst::Create(extractType, extractPtr, {stateArg, onePtr, twoPtr}, "has", block);
+            const auto has = EmitFunctionCall<&TState::Extract>(Type::getInt1Ty(context), {stateArg, onePtr, twoPtr}, ctx, block);
 
             BranchInst::Create(good, more, has, block);
 

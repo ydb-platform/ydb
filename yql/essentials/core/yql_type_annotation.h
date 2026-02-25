@@ -17,6 +17,7 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/settings/translation_sql_flags.h>
 #include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -469,6 +470,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
+    TMaybe<NSQLTranslation::TSqlFlags> SqlFlags;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
     i64 TimeOrderRecoverAhead = 10'000'000; //microseconds

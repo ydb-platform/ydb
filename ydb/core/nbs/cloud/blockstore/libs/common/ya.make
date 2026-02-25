@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    block_range_map.cpp
     block_range.cpp
 )
 

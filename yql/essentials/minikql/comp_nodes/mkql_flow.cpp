@@ -195,13 +195,15 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            result = Flow->GetValue(CompCtx);
-            if (result.IsFinish()) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            fetchResult = Flow->GetValue(CompCtx);
+            if (fetchResult.IsFinish()) {
                 return NUdf::EFetchStatus::Finish;
             }
-            if (result.IsYield()) {
+            if (fetchResult.IsYield()) {
                 return NUdf::EFetchStatus::Yield;
             }
+            result = std::move(fetchResult);
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -223,7 +225,12 @@ public:
 
     protected:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
-            return FetchFunc(Ctx, result);
+            NUdf::TUnboxedValue fetchResult;
+            if (const auto status = FetchFunc(Ctx, fetchResult); NUdf::EFetchStatus::Ok != status) {
+                return status;
+            }
+            result = std::move(fetchResult);
+            return NUdf::EFetchStatus::Ok;
         }
 
         const TFetchPtr FetchFunc;
@@ -576,10 +583,7 @@ private:
 
         block = fail;
 
-        const auto throwFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromWideFlowWrapper::Throw>());
-        const auto throwFuncType = FunctionType::get(Type::getVoidTy(context), {indexType, indexType}, false);
-        const auto throwFuncPtr = CastInst::Create(Instruction::IntToPtr, throwFunc, PointerType::getUnqual(throwFuncType), "thrower", block);
-        CallInst::Create(throwFuncType, throwFuncPtr, {width, ConstantInt::get(width->getType(), Representations.size())}, "", block)->setTailCall();
+        EmitFunctionCall<&TFromWideFlowWrapper::Throw>(Type::getVoidTy(context), {width, ConstantInt::get(width->getType(), Representations.size())}, ctx, block);
         new UnreachableInst(context, block);
 
         return ctx.Func;

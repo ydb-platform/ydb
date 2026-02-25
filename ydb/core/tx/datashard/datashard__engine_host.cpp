@@ -354,7 +354,9 @@ public:
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
+        const TString& userSID) override 
+    {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
@@ -368,34 +370,43 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
-        UserDb.UpsertRow(tableId, key, ops);
+        UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount) override {
-        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+        const ui32 defaultFilledColumnCount, const TString& userSID) override 
+    {
+        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpsertRow(tableId, key, ops);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+        const TString& userSID) override 
+    {
+        UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.ReplaceRow(tableId, key, ops);
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+        const TString& userSID) override 
+    {
+        UserDb.ReplaceRow(tableId, key, ops, userSID);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.InsertRow(tableId, key, ops);
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    {
+        UserDb.InsertRow(tableId, key, ops, userSID);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpdateRow(tableId, key, ops);
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    {
+        UserDb.UpdateRow(tableId, key, ops, userSID);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing) override {
-        UserDb.IncrementRow(tableId, key, ops, insertMissing);
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, const TString& userSID) override
+    {
+        UserDb.IncrementRow(tableId, key, ops, insertMissing, userSID);
     }
     
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -406,12 +417,12 @@ public:
         TSmallVec<TRawTypeValue> key;
         ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
-        UserDb.EraseRow(tableId, key);
+        UserDb.EraseRow(tableId, key, userSID);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TString& userSID) override
     {
-        UserDb.EraseRow(tableId, key);
+        UserDb.EraseRow(tableId, key, userSID);
     }    
 
     // Returns whether row belong this shard.
@@ -500,7 +511,8 @@ private:
 
 //
 
-TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
+TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, 
+    const TString& userSID)
     : StepTxId(stepTxId)
     , KeyValidator(*self)
 {
@@ -508,7 +520,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
-        *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
+        *TAppData::RandomProvider, *TAppData::TimeProvider, userSID, EngineHost.Get(), self->AllocCounters);
 
     auto tabletId = self->TabletID();
     auto txId = stepTxId.TxId;
@@ -550,7 +562,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
 
     KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
     KqpExecCtx.ComputeCtx = ComputeCtx.Get();
-    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get());
+    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get(), userSID);
     KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
     KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();

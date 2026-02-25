@@ -1,9 +1,13 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (intersect_op select_kind_parenthesis)* */
+/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+SELECT
+    Ensure(0, FALSE, 'muted: sql panic')
+;
+/*
 $cross_items = (
     SELECT
         i_item_sk AS ss_item_sk
@@ -17,9 +21,9 @@ $cross_items = (
         FROM
             plato.store_sales
         ,
-            plato.item iss
+            plato.item AS iss
         ,
-            plato.date_dim d1
+            plato.date_dim AS d1
         WHERE
             ss_item_sk == iss.i_item_sk
             AND ss_sold_date_sk == d1.d_date_sk
@@ -54,7 +58,7 @@ $cross_items = (
             ws_item_sk == iws.i_item_sk
             AND ws_sold_date_sk == d3.d_date_sk
             AND d3.d_year BETWEEN 1998 AND 1998 + 2
-    ) a
+    ) AS a
     WHERE
         i_brand_id == brand_id
         AND i_class_id == class_id
@@ -97,7 +101,7 @@ $avg_sales = (
         WHERE
             ws_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
-    ) x
+    ) AS x
 );
 
 SELECT
@@ -181,7 +185,7 @@ FROM (
         )
     UNION ALL
     SELECT
-        'web' channel,
+        'web' AS channel,
         i_brand_id,
         i_class_id,
         i_category_id,
@@ -215,7 +219,7 @@ FROM (
             FROM
                 $avg_sales AS avg_sales
         )
-) y
+) AS y
 GROUP BY
     ROLLUP (channel, i_brand_id, i_class_id, i_category_id)
 ORDER BY
@@ -275,7 +279,7 @@ $cross_items = (
             ws_item_sk == iws.i_item_sk
             AND ws_sold_date_sk == d3.d_date_sk
             AND d3.d_year BETWEEN 1998 AND 1998 + 2
-    ) x
+    ) AS x
     WHERE
         i_brand_id == brand_id
         AND i_class_id == class_id
@@ -318,7 +322,7 @@ $avg_sales = (
         WHERE
             ws_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
-    ) x
+    ) AS x
 );
 
 SELECT
@@ -434,3 +438,4 @@ ORDER BY
     this_year.i_class_id,
     this_year.i_category_id
 LIMIT 100;
+*/

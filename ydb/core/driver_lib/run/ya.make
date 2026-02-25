@@ -192,6 +192,9 @@ PEERDIR(
 IF (OS_LINUX)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
+        ydb/core/nbs/cloud/blockstore/config
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
+        ydb/core/nbs/cloud/blockstore/libs/storage/volume
 
         ydb/services/nbs
     )

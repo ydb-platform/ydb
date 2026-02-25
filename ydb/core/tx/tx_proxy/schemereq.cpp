@@ -595,6 +595,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 result->Record.SetPathDropTxId(shardResult->GetPathDropTxId());
             }
 
+            if (shardResult->HasOperationId()) {
+                result->Record.SetSchemeShardOperationId(shardResult->GetOperationId());
+            }
+
             for (const auto& issue : shardResult->GetIssues()) {
                 auto newIssue = result->Record.AddIssues();
                 newIssue->CopyFrom(issue);

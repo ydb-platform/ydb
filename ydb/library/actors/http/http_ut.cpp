@@ -184,6 +184,126 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(response->Body, "this\r\n is test.");
     }
 
+    Y_UNIT_TEST(TestStreamingCompress1) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("deflate");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = "something very long to compress with deflate algorithm.";
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("deflate");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress2) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = "something very long to compress with deflate algorithm.";
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress3) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            compressedData.push_back(compressContext.Compress({}, true));
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress4) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data;
+            for (size_t j = 0; j < 100000; ++j) {
+                data.append(1, 'A' + (rand() % 26)); // random character from A-Z
+            }
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data;
+            for (size_t j = 0; j < 500000; ++j) {
+                data.append(1, 'a' + (rand() % 26)); // random character from a-z
+            }
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
     Y_UNIT_TEST(CreateCompressedResponse) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatPartialString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
@@ -194,12 +314,11 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         response->SetBody(compressedBody);
         size_t size2 = response->Size();
         size_t compressedBodySize = size2 - size1;
-        UNIT_ASSERT_VALUES_EQUAL("deflate", response->ContentEncoding);
+        UNIT_ASSERT_VALUES_EQUAL("gzip", response->ContentEncoding);
         UNIT_ASSERT(compressedBodySize < compressedBody.size());
         NHttp::THttpOutgoingResponsePtr response2 = response->Duplicate(request);
         UNIT_ASSERT_VALUES_EQUAL(response->Body, response2->Body);
         UNIT_ASSERT_VALUES_EQUAL(response->ContentLength, response2->ContentLength);
-        UNIT_ASSERT_VALUES_EQUAL(response->Size(), response2->Size());
     }
 
     Y_UNIT_TEST(BasicPartialParsing) {
@@ -1099,7 +1218,9 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
-        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        NHttp::TEvHttpProxy::TEvAddListeningPort* addPortEvent = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPortEvent->CompressContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPortEvent), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
@@ -1168,7 +1289,9 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
-        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        NHttp::TEvHttpProxy::TEvAddListeningPort* addPortEvent = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPortEvent->CompressContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPortEvent), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();

@@ -31,6 +31,7 @@
   - cuda/std/type_traits
   - cuda/std/__tuple_dir/structured_bindings.h
   - cuda/std/utility
+  - cuda/std/version
   - cudaEGL.h
   - cudaProfiler.h
   - cudaTypedefs.h

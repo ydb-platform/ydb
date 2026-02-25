@@ -290,14 +290,19 @@ void CompareType(const char* type) {
 } // namespace
 
 int main(int, char**) {
-    CompareType<bool, NUdf::EDataSlot::Bool>("bool");
-    CompareType<ui8, NUdf::EDataSlot::Uint8>("ui8");
-    CompareType<ui16, NUdf::EDataSlot::Uint16>("ui16");
-    CompareType<ui32, NUdf::EDataSlot::Uint32>("ui32");
-    CompareType<ui64, NUdf::EDataSlot::Uint64>("ui64");
-    CompareType<float, NUdf::EDataSlot::Float>("float");
-    CompareType<double, NUdf::EDataSlot::Double>("double");
-    CompareType<char*, NUdf::EDataSlot::String>("string");
+    try {
+        CompareType<bool, NUdf::EDataSlot::Bool>("bool");
+        CompareType<ui8, NUdf::EDataSlot::Uint8>("ui8");
+        CompareType<ui16, NUdf::EDataSlot::Uint16>("ui16");
+        CompareType<ui32, NUdf::EDataSlot::Uint32>("ui32");
+        CompareType<ui64, NUdf::EDataSlot::Uint64>("ui64");
+        CompareType<float, NUdf::EDataSlot::Float>("float");
+        CompareType<double, NUdf::EDataSlot::Double>("double");
+        CompareType<char*, NUdf::EDataSlot::String>("string");
 
-    return 0;
+        return 0;
+    } catch (...) {
+        Cerr << "Error: " << CurrentExceptionMessage() << Endl;
+        return 1;
+    }
 }

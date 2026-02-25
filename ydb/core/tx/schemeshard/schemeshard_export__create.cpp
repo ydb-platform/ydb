@@ -12,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
@@ -26,10 +27,6 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     const ui32 itemIdx = pendingItems.front();
     pendingItems.pop_front();
     return itemIdx;
-}
-
-bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
 }
 
 bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
@@ -64,7 +61,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
-
+using namespace NBackup::NFieldsWrappers;
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
 template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
@@ -176,7 +173,27 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         TExportInfo::TPtr exportInfo = nullptr;
 
-        auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+        auto processExportSettings = [&]<typename TSettings>(const NKikimrExport::TCreateExportRequest& createExportRequest, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+            TSettings settings;
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                settings = createExportRequest.GetExportToS3Settings();
+                if (!settings.scheme()) {
+                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
+                }
+            } else if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                settings = createExportRequest.GetExportToYtSettings();
+            } else {
+                settings = createExportRequest.GetExportToFsSettings();
+            }
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                    return Reply(
+                        std::move(response),
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Index materialization is not enabled"
+                    );
+                }
+            }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
             if constexpr (HasIncludeIndexData<TSettings>) {
                 exportInfo->IncludeIndexData = settings.include_index_data();
@@ -198,27 +215,14 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            if (processExportSettings(request.GetRequest().GetExportToYtSettings(), TExportInfo::EKind::YT, false)) {
+            if (processExportSettings.operator()<Ydb::Export::ExportToYtSettings>(request.GetRequest(), TExportInfo::EKind::YT, false)) {
                 return true;
             }
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToS3Settings:
-            {
-                auto settings = request.GetRequest().GetExportToS3Settings();
-                if (!settings.scheme()) {
-                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
-                }
-                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::PRECONDITION_FAILED,
-                        "Index materialization is not enabled"
-                    );
-                }
-                if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
-                    return true;
-                }
+            if (processExportSettings.operator()<Ydb::Export::ExportToS3Settings>(request.GetRequest(), TExportInfo::EKind::S3, true)) {
+                return true;
             }
             break;
 
@@ -226,7 +230,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
                 return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
             }
-            if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
+            if (processExportSettings.operator()<Ydb::Export::ExportToFsSettings>(request.GetRequest(), TExportInfo::EKind::FS, true)) {
                 return true;
             }
             break;
@@ -466,6 +470,37 @@ private:
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
     }
 
+    template <typename Func>
+    auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
+        switch (exportInfo.Kind) {
+        case TExportInfo::EKind::S3:
+            return func.template operator()<Ydb::Export::ExportToS3Settings>();
+        case TExportInfo::EKind::FS:
+            return func.template operator()<Ydb::Export::ExportToFsSettings>();
+        default:
+            Y_ABORT("Unknown export kind");
+        }
+    }
+
+    bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
+        return DispatchByExportKind([&]<typename TSettings>() {
+            return FillExportMetadata<TSettings>(exportInfo, issues);
+        }, exportInfo);
+    }
+
+    void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        DispatchByExportKind([&]<typename TSettings>() {
+            return UploadScheme<TSettings>(exportInfo, itemIdx, ctx);
+        }, exportInfo);
+    }
+
+    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
+        return DispatchByExportKind([&]<typename TSettings>() {
+            return UploadExportMetadata<TSettings>(exportInfo, ctx);
+        }, exportInfo);
+    }
+
+    template <typename TSettings>
     void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
@@ -479,7 +514,7 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         if (IsPathTypeSchemeObject(item)) {
-            Ydb::Export::ExportToS3Settings exportSettings;
+            TSettings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
@@ -502,19 +537,22 @@ private:
         }
     }
 
+    template <typename TSettings>
     bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
-        if (exportInfo.Kind != TExportInfo::EKind::S3) {
-            return true;
-        }
-
-        Ydb::Export::ExportToS3Settings exportSettings;
+        TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
-        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+        const TString& destination = GetCommonDestination(exportSettings);
+        if (destination.empty()) { // No place to save backup metadata
             return true;
         }
 
-        TString commonDestinationPrefix = NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
+        TString commonDestinationPrefix;
+
+        // For FS, the concatenation of the base_path and the item path occurs in the DataShard
+        if constexpr (!std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+            commonDestinationPrefix = NBackup::NormalizeExportPrefix(destination);
+        }
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
@@ -530,7 +568,7 @@ private:
         const TString sourcePathRoot = exportSettings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(exportSettings.source_path());
 
         for (ui32 itemIndex = 1; itemIndex <= static_cast<ui32>(exportSettings.items_size()); ++itemIndex) {
-            Ydb::Export::ExportToS3Settings::Item& exportItem = *exportSettings.mutable_items(itemIndex - 1);
+            auto& exportItem = *exportSettings.mutable_items(itemIndex - 1);
             NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *exportInfo.ExportMetadata.AddSchemaMapping();
 
             // remove source path prefix
@@ -542,8 +580,8 @@ private:
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;
-            if (!exportItem.destination_prefix().empty()) {
-                TString& itemPrefix = *exportItem.mutable_destination_prefix();
+            if (!GetItemDestination(exportItem).empty()) {
+                TString& itemPrefix = MutableItemDestination(exportItem);
                 destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
                 std::stringstream itemPrefix;
@@ -556,7 +594,11 @@ private:
                 destinationPrefix = itemPrefix.str();
             }
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
-            exportItem.set_destination_prefix(TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix);
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                MutableItemDestination(exportItem) = destinationPrefix;
+            } else {
+                MutableItemDestination(exportItem) = TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix;
+            }
 
             if (iv) {
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
@@ -569,15 +611,12 @@ private:
         return true;
     }
 
+    template <typename TSettings>
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
-        if (exportInfo.Kind != TExportInfo::EKind::S3) {
-            return false;
-        }
-
-        Ydb::Export::ExportToS3Settings exportSettings;
+        TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
-        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+        if (GetCommonDestination(exportSettings).empty()) { // No place to save backup metadata
             return false;
         }
 
@@ -931,8 +970,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
-                    // Column Tables must be skiped here
-                    if (!IsPathTypeTransferrable(item) || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable || item.State != EState::Dropping) {
+                    if (!IsPathTypeTransferrable(item) || item.State != EState::Dropping) {
                         continue;
                     }
 
@@ -1280,8 +1318,7 @@ private:
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                // TODO (hcpp): support auto dropping after full support for read-only copying for columnar tables. https://github.com/ydb-platform/ydb/issues/26498
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     EndExport(exportInfo, EState::Done, db);
                 } else {
                     PrepareAutoDropping(Self, *exportInfo, db);
@@ -1346,26 +1383,16 @@ private:
             exportInfo->State = EState::CopyTables;
             AllocateTxId(*exportInfo);
         } else {
-            // None of the items is a column table.
-            TDeque<ui32> columnTables;
+            // None of the items is a table.
             for (ui32 i : xrange(exportInfo->Items.size())) {
-                auto& item = exportInfo->Items[i];
-                item.State = EState::Transferring;
+                exportInfo->Items[i].State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, i);
 
-                // TODO (hcpp): remove after implementing copying of column tables
-                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                    columnTables.emplace_back(i);
-                } else {
-                    UploadScheme(*exportInfo, i, ctx);
-                }
+                UploadScheme(*exportInfo, i, ctx);
             }
 
             exportInfo->State = EState::Transferring;
-            exportInfo->PendingItems = std::move(columnTables);
-            for (ui32 itemIdx : exportInfo->PendingItems) {
-                AllocateTxId(*exportInfo, itemIdx);
-            }
+            exportInfo->PendingItems.clear();
         }
 
         Self->PersistExportState(db, *exportInfo);
@@ -1438,26 +1465,16 @@ private:
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(*exportInfo);
             } else {
-                // None of the items is a column table.
-                TDeque<ui32> columnTables;
+                // None of the items is a table.
                 for (ui32 i : xrange(exportInfo->Items.size())) {
-                    auto& item = exportInfo->Items[i];
-                    item.State = EState::Transferring;
+                    exportInfo->Items[i].State = EState::Transferring;
                     Self->PersistExportItemState(db, *exportInfo, i);
 
-                    // TODO (hcpp): remove after implementing copying of column tables
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                        columnTables.emplace_back(i);
-                    } else {
-                        UploadScheme(*exportInfo, i, ctx);
-                    }
+                    UploadScheme(*exportInfo, i, ctx);
                 }
 
                 exportInfo->State = EState::Transferring;
-                exportInfo->PendingItems = std::move(columnTables);
-                for (ui32 itemIdx : exportInfo->PendingItems) {
-                    AllocateTxId(*exportInfo, itemIdx);
-                }
+                exportInfo->PendingItems.clear();
             }
             break;
         }
@@ -1509,7 +1526,7 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
                     Self->EraseEncryptionKey(db, *exportInfo);

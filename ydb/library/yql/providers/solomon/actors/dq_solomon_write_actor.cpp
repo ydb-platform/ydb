@@ -70,7 +70,12 @@ auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolic
         }
 
         return ERetryErrorClass::ShortRetry;
-    });
+    },
+    TDuration::MilliSeconds(10),
+    TDuration::MilliSeconds(200),
+    TDuration::Seconds(10),
+    std::numeric_limits<size_t>::max(),
+    TDuration::Seconds(60));
 
 struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
@@ -95,11 +100,13 @@ public:
         ui64 outputIndex,
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
+        ui64 taskId,
         TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-        i64 freeSpace)
+        i64 freeSpace,
+        bool enableStreamingQueriesCounters)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -107,7 +114,7 @@ public:
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
-        , Metrics(counters)
+        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
         , FreeSpace(freeSpace)
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
@@ -183,22 +190,33 @@ public:
 
 private:
     struct TDqSolomonWriteActorMetrics {
-        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters) {
-            auto subgroup = counters->GetSubgroup("subsystem", "dq_solomon_write_actor");
+        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters, const TTxId& txId, ui64 taskId, bool enableStreamingQueriesCounters)
+        : TxId(std::visit([](auto arg) { return ToString(arg); }, txId)) {
+
+            auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
+
+            if (enableStreamingQueriesCounters) {
+                subgroup = subgroup->GetSubgroup("tx_id", TxId);
+                subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
+            }
+
             SendingBufferSize = subgroup->GetCounter("SendingBufferSize");
             WindowMinSendingBufferSize = subgroup->GetCounter("WindowMinSendingBufferSize");
             InflightRequests = subgroup->GetCounter("InflightRequests");
             WindowMinInflightRequests = subgroup->GetCounter("WindowMinInflightRequests");
             SentMetrics = subgroup->GetCounter("SentMetrics", true);
-            СonfirmedMetrics = subgroup->GetCounter("СonfirmedMetrics", true);
+            ConfirmedMetrics = subgroup->GetCounter("ConfirmedMetrics", true);
+            Errors = subgroup->GetCounter("Errors", true);
         }
 
+        TString TxId;
         ::NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr InflightRequests;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinInflightRequests;
         ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
-        ::NMonitoring::TDynamicCounters::TCounterPtr СonfirmedMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ConfirmedMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
 
     public:
         void ReportSendingBufferSize(size_t size) {
@@ -251,7 +269,7 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
-
+            Metrics.Errors->Inc();
             Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
             return;
         }
@@ -415,7 +433,7 @@ private:
         }
 
         const ui64 writtenMetricsCount = std::stoul(res[0]);
-        *Metrics.СonfirmedMetrics += writtenMetricsCount;
+        *Metrics.ConfirmedMetrics += writtenMetricsCount;
         if (writtenMetricsCount != ptr->second.MetricsCount) {
             // TODO: YQ-340
             // TIssues issues { TIssue(TStringBuilder() << ToString(ptr->second.MetricsCount - writtenMetricsCount) << " metrics were not written: " << res[1]) };
@@ -481,11 +499,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     ui64 outputIndex,
     TCollectStatsLevel statsLevel,
     const TTxId& txId,
+    ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    i64 freeSpace)
+    i64 freeSpace,
+    bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -501,31 +521,40 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         outputIndex,
         statsLevel,
         txId,
+        taskId,
         std::move(params),
         callbacks,
         counters,
         credentialsProvider,
-        freeSpace);
+        freeSpace,
+        enableStreamingQueriesCounters);
     return {actor, actor};
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
     factory.RegisterSink<NSo::NProto::TDqSolomonShard>("SolomonSink",
-        [credentialsFactory](
+        [credentialsFactory, counters, enableStreamingQueriesCounters](
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto txId = args.TxId;
+            auto taskParamsIt = args.TaskParams.find("query_path");
+            if (taskParamsIt != args.TaskParams.end()) {
+                txId = taskParamsIt->second;
+            }
 
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
+                args.TaskId,
                 args.SecureParams,
                 args.Callback,
                 counters,
-                credentialsFactory);
+                credentialsFactory,
+                DqSolomonDefaultFreeSpace,
+                enableStreamingQueriesCounters);
         });
 }
 

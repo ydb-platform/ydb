@@ -756,6 +756,8 @@ struct TColumnSchema {
         SetNotNullConstraint,
         SetFamily,
         SetCompression,
+        SetDefault,
+        DropDefault,
     };
 
     TPosition Pos;
@@ -1253,7 +1255,9 @@ struct TIndexDescription {
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
         GlobalFulltextPlain,
-        GlobalFulltextRelevance
+        GlobalFulltextRelevance,
+        LocalBloomFilter,
+        LocalBloomNgramFilter,
     };
 
     struct TIndexSetting {

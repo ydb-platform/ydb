@@ -52,6 +52,8 @@ message TKqpLockStats {
     uint64 BrokenAsBreaker = 1;
     uint64 BrokenAsVictim = 2;
     repeated uint64 BreakerQuerySpanIds = 4;  // QuerySpanIds of all queries that broke locks (one per shard/table)
+    repeated uint64 DeferredBreakerQuerySpanIds = 5;  // QuerySpanIds of breakers found via deferred lock validation
+    repeated uint32 DeferredBreakerNodeIds = 6;  // Node IDs matching DeferredBreakerQuerySpanIds
 }
 
 // extra for NYql.NDqProto.TDqTaskStats

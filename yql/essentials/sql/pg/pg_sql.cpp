@@ -539,6 +539,7 @@ public:
             case T_VariableSetStmt: {
                 // YQL-16284
                 const char* node_name = CAST_NODE(VariableSetStmt, node)->name;
+                // NOLINTNEXTLINE(modernize-avoid-c-arrays)
                 const char* skip_statements[] = {
                     "extra_float_digits",                  // jdbc
                     "application_name",                    // jdbc

@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NKqp {
     
-std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 

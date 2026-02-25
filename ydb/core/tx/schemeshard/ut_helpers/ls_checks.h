@@ -110,6 +110,7 @@ namespace NLs {
 
 
     void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -196,6 +197,7 @@ namespace NLs {
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
+    TCheckFunc StreamUserSIDs(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);

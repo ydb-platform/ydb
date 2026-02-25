@@ -55,6 +55,8 @@ constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
 constexpr bool DEFAULT_USE_KEY_BOUND_API = true;
 
+constexpr bool DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION = false;
+
 constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 
 constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
@@ -118,7 +120,7 @@ constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
 constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
-constexpr bool DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE = false;
+constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapReduceMode::Disable;
 
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 

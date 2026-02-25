@@ -1799,6 +1799,597 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     //     auto result = runtime.WaitFuture(setNotNullFuture);
     //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     // }
+
+    Y_UNIT_TEST(AlterTableSetDefaultLiteral) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDefaultTest` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDefaultTest` ALTER COLUMN Value SET DEFAULT "hello"u;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/SetDefaultTest` (Key) VALUES (1);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultTest` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];["hello"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDefaultInt) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDefaultIntTest` (
+                    Key Int32,
+                    Value Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDefaultIntTest` ALTER COLUMN Value SET DEFAULT 42;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/SetDefaultIntTest` (Key) VALUES (1);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultIntTest` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];[42]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DropDefaultTest` (
+                    Key Int32,
+                    Value String DEFAULT "original"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/DropDefaultTest` (Key) VALUES (1);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultTest` ALTER COLUMN Value DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/DropDefaultTest` (Key) VALUES (2);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Key, Value FROM `/Root/DropDefaultTest` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];["original"]];
+                [[2];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDefaultNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDefaultNullTest` (
+                    Key Int32,
+                    Value String DEFAULT "original"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/SetDefaultNullTest` (Key) VALUES (1);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDefaultNullTest` ALTER COLUMN Value SET DEFAULT NULL;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/SetDefaultNullTest` (Key) VALUES (2);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultNullTest` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];["original"]];
+                [[2];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDefaultNonExistentColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDefaultNonExistent` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDefaultNonExistent` ALTER COLUMN NonExistent SET DEFAULT "val"u;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "does not exist");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultNoExistingDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DropDefaultNoDefault` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultNoDefault` ALTER COLUMN Value DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "has no default to drop");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultOnSequenceColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DropDefaultSerial` (
+                    Key Serial,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultSerial` ALTER COLUMN Key DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot drop default for a serial/sequence column");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultOnNotNullColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DropDefaultNotNull` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultNotNull` ADD COLUMN Extra Int32 NOT NULL DEFAULT 0;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultNotNull` ALTER COLUMN Extra DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot drop default for a NOT NULL column");
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateTableAfterSetDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
+            .SetEnableShowCreate(true)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/ShowCreateSetDefault` (
+                    Key Int32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/ShowCreateSetDefault`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "Key", yson);
+            UNIT_ASSERT(!yson.Contains("DEFAULT"));
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/ShowCreateSetDefault` ALTER COLUMN Value SET DEFAULT "hello"u;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/ShowCreateSetDefault`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "DEFAULT", yson);
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDropDefaultMultipleColumns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/MultiColDefault` (
+                    Key Int32,
+                    ColA Utf8 DEFAULT "old_a"u,
+                    ColB Int32,
+                    ColC Utf8 DEFAULT "old_c"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/MultiColDefault` (Key) VALUES (1);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/MultiColDefault`
+                    ALTER COLUMN ColA SET DEFAULT "new_a"u,
+                    ALTER COLUMN ColB SET DEFAULT 99,
+                    ALTER COLUMN ColC DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/MultiColDefault` (Key) VALUES (2);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Key, ColA, ColB, ColC FROM `/Root/MultiColDefault` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1];["old_a"];#;["old_c"]];
+                [[2];["new_a"];[99];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateTableAfterDropDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
+            .SetEnableShowCreate(true)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/ShowCreateDropDefault` (
+                    Key Int32,
+                    Value Utf8 DEFAULT "initial"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/ShowCreateDropDefault`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "DEFAULT", yson);
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/ShowCreateDropDefault` ALTER COLUMN Value DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/ShowCreateDropDefault`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "Key", yson);
+            UNIT_ASSERT(!yson.Contains("DEFAULT"));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDefaultOnColumnTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/OlapSetDefault` (
+                    Key Uint32 NOT NULL,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/OlapSetDefault` ALTER COLUMN Value SET DEFAULT 42;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultOnColumnTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/OlapDropDefault` (
+                    Key Uint32 NOT NULL,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/OlapDropDefault` ALTER COLUMN Value DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

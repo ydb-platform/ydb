@@ -942,6 +942,10 @@ message TColumnTableDescription {
     optional bool Temporary = 14;
     
     optional bool IsRestore = 15;
+    
+    optional string CopyFromTable = 16;
+    
+    optional bool IsBackup = 17;
 }
 
 message TAlterColumnTable {
@@ -1064,6 +1068,7 @@ message TCdcStreamDescription {
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
+    optional bool UserSIDs = 13;
 }
 
 message TCreateCdcStream {

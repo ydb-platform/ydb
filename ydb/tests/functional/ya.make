@@ -31,6 +31,7 @@ RECURSE(
     security
     serializable
     serverless
+    split_merge
     sqs
     statistics
     suite_tests

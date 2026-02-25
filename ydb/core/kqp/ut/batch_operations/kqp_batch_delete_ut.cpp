@@ -866,7 +866,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         {
             auto result = session.ExecuteQuery(R"(
                 CREATE TABLE fulltext_plain_idx (
-                    k Int32 NOT NULL,
+                    k Uint64 NOT NULL,
                     v1 String,
                     v2 String,
                     v3 String,
@@ -878,7 +878,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
                 );
 
                 CREATE TABLE fulltext_relevance_idx (
-                    k Int32 NOT NULL,
+                    k Uint64 NOT NULL,
                     v1 String,
                     v2 String,
                     v3 String,

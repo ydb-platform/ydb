@@ -13,6 +13,7 @@ message TReplyStatus {
         INCORRECT_REQUEST = 6;
         MISSING_RECORD = 7;
         OUTDATED = 8;
+        OVERLOADED = 9;
     }
 }
 
@@ -198,9 +199,9 @@ message TEvBatchErasePersistentBuffer {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
     }
-    
+
     TQueryCredentials Credentials = 1;
-    repeated TEvErasePersistentBuffer Erases = 2;
+    repeated TEraseInfo Erases = 2;
 }
 
 message TEvErasePersistentBufferResult {

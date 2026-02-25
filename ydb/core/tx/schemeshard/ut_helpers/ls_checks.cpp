@@ -452,6 +452,10 @@ void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
 }
 
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
+}
+
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }
@@ -1016,6 +1020,12 @@ TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
 TCheckFunc StreamVirtualTimestamps(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetVirtualTimestamps(), value);
+    };
+}
+
+TCheckFunc StreamUserSIDs(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetUserSIDs(), value);
     };
 }
 

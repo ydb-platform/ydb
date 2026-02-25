@@ -15,7 +15,7 @@ static constexpr ui32 UUID_LEN = 16;
 TString UuidBytesToString(const TString& in);
 void UuidBytesToString(const TString& in, IOutputStream& out);
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out);
-void UuidToString(ui16 dw[8], IOutputStream& out);
+void UuidToString(ui16 dw[8], IOutputStream& out); // NOLINT(modernize-avoid-c-arrays)
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out);
 
 inline bool GetDigit(char c, ui32& digit) {
@@ -97,8 +97,8 @@ bool ParseUuidToArray(const T& buf, ui16* dw, bool shortForm) {
 
 inline void UuidHalfsToBytes(char* dst, size_t dstSize, ui64 hi, ui64 low) {
     union {
-        char Bytes[UUID_LEN];
-        ui64 Half[2];
+        char Bytes[UUID_LEN]; // NOLINT(modernize-avoid-c-arrays)
+        ui64 Half[2];         // NOLINT(modernize-avoid-c-arrays)
     } buf;
     Y_ABORT_UNLESS(UUID_LEN == dstSize);
     buf.Half[0] = low;
@@ -108,8 +108,8 @@ inline void UuidHalfsToBytes(char* dst, size_t dstSize, ui64 hi, ui64 low) {
 
 inline void UuidBytesToHalfs(const char* str, size_t sz, ui64& high, ui64& low) {
     union {
-        char Bytes[UUID_LEN];
-        ui64 Half[2];
+        char Bytes[UUID_LEN]; // NOLINT(modernize-avoid-c-arrays)
+        ui64 Half[2];         // NOLINT(modernize-avoid-c-arrays)
     } buf;
     Y_ABORT_UNLESS(UUID_LEN == sz);
     memcpy(buf.Bytes, str, sizeof(buf));

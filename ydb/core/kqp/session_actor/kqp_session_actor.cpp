@@ -262,7 +262,8 @@ public:
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
             const TActorId& kqpTempTablesAgentActor,
-            std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+            std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+            const TString& userSID)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -280,6 +281,7 @@ public:
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
         , ChannelService(channelService)
+        , UserSID(userSID)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -369,7 +371,8 @@ public:
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
-            QueryState->UserToken
+            QueryState->UserToken,
+            QueryState->GetQuery()
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());
@@ -1950,10 +1953,25 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
+        // Check if any result binding references this transaction
+        const auto txIndex = QueryState->CurrentTx;
+        bool expectsResult = false;
+        if (QueryState->PreparedQuery) {
+            const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                if (phyQuery.GetResultBindings(i).GetTxResultBinding().GetTxIndex() == txIndex) {
+                    expectsResult = true;
+                    break;
+                }
+            }
+        }
+
         auto executerActor = CreateKqpSchemeExecuter(
             tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
-            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
+            expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
+            KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -2030,8 +2048,15 @@ public:
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = std::move(alloc),
+                .Alloc = std::move(alloc)
             };
+
+            if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
+                settings.UserSID = QueryState->UserToken->GetUserSID();
+            } else {
+                settings.UserSID = UserSID;
+            }
+
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
         } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
@@ -2047,7 +2072,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2099,7 +2124,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService);
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig);
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),
@@ -2284,7 +2309,7 @@ public:
     }
 
     // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
-    void EmitBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2328,7 +2353,7 @@ public:
     }
 
     // Emit TLI breaker logs for deferred lock scenarios (lock broken between snapshot and re-read).
-    void EmitDeferredBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitDeferredBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->DeferredBreakers.empty() || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2477,8 +2502,8 @@ public:
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
-        EmitBreakerTliLogs(ev);
-        EmitDeferredBreakerTliLogs(ev);
+        EmitBreakerLogs(ev);
+        EmitDeferredBreakerLogs(ev);
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
@@ -2505,7 +2530,6 @@ public:
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
-                        YQL_ENSURE(!issues.Empty());
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                         // Use TxManager's broken locks count as fallback when executer stats don't
                         // carry LocksBrokenAsVictim (e.g. lock invalidation detected via AddLock
@@ -3893,6 +3917,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    const TString UserSID;
 };
 
 } // namespace
@@ -3907,13 +3932,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    const TString& userSID)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, kqpTempTablesAgentActor, channelService);
+                                queryServiceConfig, kqpTempTablesAgentActor, channelService, userSID);
 }
 
 }

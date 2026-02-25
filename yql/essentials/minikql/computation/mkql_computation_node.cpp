@@ -58,6 +58,8 @@ std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKerne
 }
 
 TDatumProvider MakeDatumProvider(const arrow::Datum& datum) {
+    // TODO(YQL-20095): Explore real problem to fix this.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     return [datum]() {
         return datum;
     };
@@ -87,6 +89,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const TComputationMutables& mutables,
                                          arrow::MemoryPool& arrowMemoryPool,
                                          TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)

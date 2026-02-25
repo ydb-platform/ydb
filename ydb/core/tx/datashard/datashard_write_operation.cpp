@@ -229,6 +229,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
+    UserSID = ev.Record.GetUserSID();
 
     return {NKikimrTxDataShard::TError::OK, {}};
 }

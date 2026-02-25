@@ -586,32 +586,32 @@ Y_UNIT_TEST(TestVariantType) {
     UNIT_ASSERT_EXCEPTION(TVariantType::Create(emptyTupleType, env), yexception);
 
     // one element tuple
-    TType* elements[2] = {
+    std::array<TType*, 2> elements = {
         TDataType::Create(NUdf::TDataType<i32>::Id, env),
         emptyStructType};
 
-    auto tuple1type = TTupleType::Create(1, elements, env);
+    auto tuple1type = TTupleType::Create(1, elements.data(), env);
     auto var1tuple = TVariantType::Create(tuple1type, env);
     UNIT_ASSERT_VALUES_EQUAL(var1tuple->GetAlternativesCount(), 1);
     UNIT_ASSERT(var1tuple->GetUnderlyingType() == tuple1type);
     // two elements tuple
-    auto tuple2type = TTupleType::Create(2, elements, env);
+    auto tuple2type = TTupleType::Create(2, elements.data(), env);
     auto var2tuple = TVariantType::Create(tuple2type, env);
     UNIT_ASSERT_VALUES_EQUAL(var2tuple->GetAlternativesCount(), 2);
     UNIT_ASSERT(var2tuple->GetUnderlyingType() == tuple2type);
 
     // one element struct
-    TStructMember members[2] = {
-        {"A", TDataType::Create(NUdf::TDataType<i32>::Id, env)},
-        {"B", emptyStructType}};
+    std::array<TStructMember, 2> members = {
+        TStructMember{"A", TDataType::Create(NUdf::TDataType<i32>::Id, env)},
+        TStructMember{"B", emptyStructType}};
 
-    auto struct1type = TStructType::Create(1, members, env);
+    auto struct1type = TStructType::Create(1, members.data(), env);
     auto var1struct = TVariantType::Create(struct1type, env);
     UNIT_ASSERT_VALUES_EQUAL(var1struct->GetAlternativesCount(), 1);
     UNIT_ASSERT(var1struct->GetUnderlyingType() == struct1type);
 
     // two elements struct
-    auto struct2type = TStructType::Create(2, members, env);
+    auto struct2type = TStructType::Create(2, members.data(), env);
     auto var2struct = TVariantType::Create(struct2type, env);
     UNIT_ASSERT_VALUES_EQUAL(var2struct->GetAlternativesCount(), 2);
     UNIT_ASSERT(var2struct->GetUnderlyingType() == struct2type);
@@ -624,11 +624,11 @@ Y_UNIT_TEST(TestVariantLiteral) {
 
     // one element tuple
     auto dt = TDataType::Create(NUdf::TDataType<i32>::Id, env);
-    TType* elements[2] = {
+    std::array<TType*, 2> elements = {
         dt,
         emptyStructType};
 
-    auto tuple1type = TTupleType::Create(1, elements, env);
+    auto tuple1type = TTupleType::Create(1, elements.data(), env);
     auto var1tuple = TVariantType::Create(tuple1type, env);
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(TRuntimeNode(env.GetEmptyTupleLazy(), true), 0, var1tuple, env), yexception);
     auto i32value = TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((i32)42), dt, env), true);
@@ -638,7 +638,7 @@ Y_UNIT_TEST(TestVariantLiteral) {
     UNIT_ASSERT(varValue->GetItem() == i32value);
 
     // two elements tuple
-    auto tuple2type = TTupleType::Create(2, elements, env);
+    auto tuple2type = TTupleType::Create(2, elements.data(), env);
     auto var2tuple = TVariantType::Create(tuple2type, env);
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(TRuntimeNode(env.GetEmptyTupleLazy(), true), 0, var2tuple, env), yexception);
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(i32value, 23, var2tuple, env), yexception);
@@ -651,11 +651,11 @@ Y_UNIT_TEST(TestVariantLiteral) {
     UNIT_ASSERT(varValue->GetItem() == TRuntimeNode(env.GetEmptyStructLazy(), true));
 
     // one element struct
-    TStructMember members[2] = {
-        {"A", TDataType::Create(NUdf::TDataType<i32>::Id, env)},
-        {"B", emptyStructType}};
+    std::array<TStructMember, 2> members = {
+        TStructMember{"A", TDataType::Create(NUdf::TDataType<i32>::Id, env)},
+        TStructMember{"B", emptyStructType}};
 
-    auto struct1type = TStructType::Create(1, members, env);
+    auto struct1type = TStructType::Create(1, members.data(), env);
     auto var1struct = TVariantType::Create(struct1type, env);
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(TRuntimeNode(env.GetEmptyTupleLazy(), true), 0, var1struct, env), yexception);
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(i32value, 23, var1struct, env), yexception);
@@ -664,7 +664,7 @@ Y_UNIT_TEST(TestVariantLiteral) {
     UNIT_ASSERT(varValue->GetItem() == i32value);
 
     // two elements struct
-    auto struct2type = TStructType::Create(2, members, env);
+    auto struct2type = TStructType::Create(2, members.data(), env);
     auto var2struct = TVariantType::Create(struct2type, env);
 
     UNIT_ASSERT_EXCEPTION(TVariantLiteral::Create(TRuntimeNode(env.GetEmptyTupleLazy(), true), 0, var2struct, env), yexception);

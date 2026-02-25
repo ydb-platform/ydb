@@ -13,7 +13,7 @@
 #include <util/system/compiler.h>
 
 #include <cmath>
-#include <ctype.h>
+#include <cctype>
 
 namespace NYql::NDom {
 

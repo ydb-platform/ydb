@@ -407,8 +407,7 @@ namespace {
             return std::nullopt;
         }
 
-        const bool isPgNull = IsPgNullExprNode(defaultExpr);
-        if (defaultType->HasNull() || isPgNull) {
+        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -422,7 +421,7 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (defaultExpr.Maybe<TCoNull>().IsValid() || isPgNull) {
+            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                         << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)

@@ -75,22 +75,36 @@ class Workload:
             ]
             + subcmds
         )
-    def write_to_topic(self, duration):
-        logging.info(f"Writing to topic for {duration} seconds. SQS endpoint: {self.sqs_endpoint}")
+    def write_to_topic(self):
+        logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
         subcmds = [
             'write',
-            '-s', str(duration),
+            '-s', str(self.duration),
             '--workers', '50',
-            '--queue-endpoint',  self.sqs_endpoint,
-            '--queue-url', '/v1/' + str(len(self.database)) + '/' + self.database + '/' + str(len(self.topic_name)) + '/' + self.topic_name + '/15/shared_consumer',
+            '--sqs-endpoint',  self.sqs_endpoint,
+            '--topic', self.topic_name,
+            '--consumer', 'shared_consumer',
             '--percentile', '99',
             '--message-groups-amount', '0',
             '--max-unique-messages', '0',
         ]
-        self.cmd_run(self.get_command(subcmds=subcmds))
+        return self.cmd_run(self.get_command(subcmds=subcmds))
 
     def read_from_topic(self):
-        pass
+        logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
+        subcmds = [
+            'read',
+            '-s', str(self.duration),
+            '--workers', '500',
+            '--sqs-endpoint',  self.sqs_endpoint,
+            '--topic', self.topic_name,
+            '--consumer', 'shared_consumer',
+            '--percentile', '99',
+            '--handle-message-time', '2',
+            '--visibility-timeout', '5',
+            '--keep-error-every', '0'
+        ]
+        return self.cmd_run(self.get_command(subcmds=subcmds))
 
     def loop(self):
         self.create_topic()
@@ -98,7 +112,8 @@ class Workload:
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             logging.info("Starting workload")
             runners = [
-                executor.submit(self.write_to_topic, duration=self.duration),
+                executor.submit(self.write_to_topic),
+                executor.submit(self.read_from_topic),
             ]
 
             logging.info("Waiting for workload task")

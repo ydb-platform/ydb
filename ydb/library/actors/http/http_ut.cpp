@@ -305,11 +305,14 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(CreateCompressedResponse) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        std::vector<TString> compressContentTypes = {"text/plain"};
+        std::shared_ptr<NHttp::TPrivateEndpointInfo> endpoint(std::make_shared<NHttp::TPrivateEndpointInfo>(compressContentTypes));
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(endpoint, {});
         EatPartialString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
+        response->Set("Content-Type", "text/plain");
         TString compressedBody = "something very long to compress with deflate algorithm. something very long to compress with deflate algorithm.";
-        response->EnableCompression();
+        UNIT_ASSERT(response->EnableCompression());
         size_t size1 = response->Size();
         response->SetBody(compressedBody);
         size_t size2 = response->Size();
@@ -317,8 +320,10 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL("gzip", response->ContentEncoding);
         UNIT_ASSERT(compressedBodySize < compressedBody.size());
         NHttp::THttpOutgoingResponsePtr response2 = response->Duplicate(request);
+        UNIT_ASSERT_VALUES_EQUAL(response->Headers, response2->Headers);
         UNIT_ASSERT_VALUES_EQUAL(response->Body, response2->Body);
         UNIT_ASSERT_VALUES_EQUAL(response->ContentLength, response2->ContentLength);
+        UNIT_ASSERT_VALUES_EQUAL(response->Size(), response2->Size());
     }
 
     Y_UNIT_TEST(BasicPartialParsing) {

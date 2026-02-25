@@ -628,16 +628,21 @@ THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPt
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
     response->InitResponse(Protocol, Version, Status, Message);
-    if (Body) {
-        if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
-            if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
+        if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+    if (Body) {
+        headers.Erase("Content-Length"); // we will need new length after compression
         response->Set(headers);
+        if (compress) {
+            response->EnableCompression();
+        }
         response->SetBody(Body);
     } else {
         response->Set(headers);

@@ -14,6 +14,8 @@
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 
+#include <ydb/core/mind/bscontroller/types.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +40,7 @@ private:
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
+    bool DdiskBlockGroupAllocated = false;
 
 
 public:
@@ -81,6 +84,23 @@ private:
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
+    void Start(
+        const NActors::TActorContext& ctx,
+        TVector<NKikimr::NBsController::TDDiskId> ddiskIds,
+        TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds);
+
+    bool DDiskBlockGroupAllocated();
+
+    void LoadDDisksIds(
+        const NActors::TActorContext& ctx,
+        TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
+        TVector<NKikimr::NBsController::TDDiskId>& persistentBufferDDiskIds);
+
+    void StoreDDisksIds(
+        const NActors::TActorContext& ctx,
+        const TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
+        const TVector<NKikimr::NBsController::TDDiskId>&
+            persistentBufferDDiskIds);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -53,11 +53,12 @@ class TDirectBlockGroup::TDirtyMap
 {
 private:
     // TODO позже удалить данные при flush'е
-    TVector<TBlockMeta> BlocksMeta;
+    TMap<ui64, TBlockMeta> BlocksMeta;
+    const size_t NumberOfPersistentBuffers;
 
 public:
-    TDirtyMap(ui64 blocksCount, size_t numberOfPersistentBuffers)
-        : BlocksMeta(blocksCount, TBlockMeta(numberOfPersistentBuffers))
+    explicit TDirtyMap(size_t numberOfPersistentBuffers)
+        : NumberOfPersistentBuffers(numberOfPersistentBuffers)
     {}
 
     ui64 GetLsnByPersistentBufferIndex(ui64 blockIndex,
@@ -71,42 +72,80 @@ public:
         const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta);
     void OnBlockFlushCompleted(ui64 blockIndex, ui64 persistBufferIndex,
                                ui64 lsn);
+    void FlushAllNeededAfterRestore();
 };
 
 ui64 TDirectBlockGroup::TDirtyMap::GetLsnByPersistentBufferIndex(
     ui64 blockIndex, ui64 persistBufferIndex)
 {
-    return BlocksMeta[blockIndex].LsnByPersistentBufferIndex[persistBufferIndex];
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        return 0;
+    }
+    return it->second.LsnByPersistentBufferIndex[persistBufferIndex];
 }
 
 void TDirectBlockGroup::TDirtyMap::TryUpdateLsnByPersistentBufferIndex(
     ui64 blockIndex, ui64 persistBufferIndex, ui64 lsn)
 {
-    auto &curLsn = BlocksMeta[blockIndex].LsnByPersistentBufferIndex[persistBufferIndex];
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        Y_ASSERT(p.second);
+        it = p.first;
+    }
+
+    auto &curLsn = it->second.LsnByPersistentBufferIndex[persistBufferIndex];
     curLsn = std::max(curLsn, lsn);
 }
 
 bool TDirectBlockGroup::TDirtyMap::IsBlockWritten(ui64 blockIndex) const
 {
-    return BlocksMeta[blockIndex].IsWritten();
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        return false;
+    }
+
+    return it->second.IsWritten();
 }
 
 bool TDirectBlockGroup::TDirtyMap::IsBlockFlushedToDDisk(ui64 blockIndex) const
 {
-    return BlocksMeta[blockIndex].IsFlushedToDDisk();
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        return false;
+    }
+    return it->second.IsFlushedToDDisk();
 }
 
 void TDirectBlockGroup::TDirtyMap::OnBlockWriteCompleted(
     ui64 blockIndex,
     const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
 {
-    BlocksMeta[blockIndex].OnWriteCompleted(writeMeta);
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        Y_ASSERT(p.second);
+        it = p.first;
+    }
+    it->second.OnWriteCompleted(writeMeta);
 }
 
 void TDirectBlockGroup::TDirtyMap::OnBlockFlushCompleted(
     ui64 blockIndex, ui64 persistBufferIndex, ui64 lsn)
 {
-    BlocksMeta[blockIndex].OnFlushCompleted(persistBufferIndex, lsn);
+    auto it = BlocksMeta.find(blockIndex);
+    if (it == BlocksMeta.end()) {
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        Y_ASSERT(p.second);
+        it = p.first;
+    }
+    it->second.OnFlushCompleted(persistBufferIndex, lsn);
+}
+
+void TDirectBlockGroup::TDirtyMap::FlushAllNeededAfterRestore()
+{
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -136,7 +175,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     Y_UNUSED(BlocksCount);
     Y_UNUSED(StorageRequestId);
 
-    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap(BlocksCount, persistentBufferDDiskIds.size()));
+    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap(persistentBufferDDiskIds.size()));
 
     auto addDDiskConnections = [&](TVector<NBsController::TDDiskId> ddisksIds,
                                    TVector<TDDiskConnection>& ddiskConnections,
@@ -354,6 +393,8 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised()
         NKikimrServices::NBS_PARTITION,
         "TDirectBlockGroup::RestoreFromPersistentBufferFinised"
     );
+
+    Initialized = true;
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(
@@ -381,6 +422,12 @@ TDirectBlockGroup::WriteBlocksLocal(
         std::move(request),
         std::move(traceId),
         TabletId);
+
+    if (!Initialized) {
+        requestHandler->SetResponse(
+            MakeError(E_REJECTED, "Connections are not established"));
+        return requestHandler->GetFuture();
+    }
 
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(), requestHandler]()
@@ -657,6 +704,12 @@ TDirectBlockGroup::ReadBlocksLocal(
         std::move(request),
         std::move(traceId),
         TabletId);
+
+    if (!Initialized) {
+        requestHandler->SetResponse(
+            MakeError(E_REJECTED, "Connections are not established"));
+        return requestHandler->GetFuture();
+    }
 
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(), requestHandler]()

@@ -78,6 +78,7 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    bool Initialized = false;
 
     class TDirtyMap;
     std::unique_ptr<TDirtyMap> DirtyMap;

@@ -1,6 +1,6 @@
--- Daily bug counts per (date_window, owner_team). One row per day per team.
+-- Daily bug counts per (date_window, owner_team, area). One row per day per team per area.
 -- Bug = issue with max_branch != '-' (assigned to a release branch). Uses test_results/analytics/github_issues_timeline.
--- Owner_team from area_to_owner_mapping at read time (same logic as github_issues_timeline_with_owner_from_mapping: prefix match by area).
+-- Owner_team from area_to_owner_mapping at read time (same logic as ля: prefix match by area).
 -- SLA counts: low >= 30d, med/high/noprio >= 7d (out of SLA).
 --
 $sla_low_days = 30;
@@ -26,6 +26,7 @@ $owner_mapping = (
 $bugs = (
     SELECT
         t.date AS date,
+        t.area AS area,
         t.project_item_id AS project_item_id,
         t.created_date AS created_date,
         t.priority AS priority,
@@ -48,19 +49,46 @@ $with_days = (
     FROM $bugs AS b
 );
 
--- One row per (date_window, owner_team): daily snapshot.
+-- Aggregated counts per (date, owner_team, area). Will be left-joined to grid so missing combinations become 0.
+$agg = (
+    SELECT
+        date AS date_window,
+        Cast(owner_team AS Utf8) AS owner_team,
+        Cast(area AS Utf8) AS area,
+        COUNT(*) AS total,
+        COUNT(CASE WHEN priority LIKE '%low%' THEN 1 ELSE NULL END) AS total_low,
+        COUNT(CASE WHEN priority NOT LIKE '%low%' OR priority IS NULL THEN 1 ELSE NULL END) AS total_not_low,
+        COUNT(CASE WHEN priority LIKE '%med%' THEN 1 ELSE NULL END) AS total_med,
+        COUNT(CASE WHEN priority LIKE '%high%' THEN 1 ELSE NULL END) AS total_high,
+        COUNT(CASE WHEN priority IS NULL OR (priority NOT LIKE '%low%' AND priority NOT LIKE '%med%' AND priority NOT LIKE '%high%') THEN 1 ELSE NULL END) AS total_noprio,
+        COUNT(CASE WHEN (priority LIKE '%low%') AND days_open >= $sla_low_days THEN 1 ELSE NULL END) AS low_out_of_sla,
+        COUNT(CASE WHEN (priority LIKE '%med%') AND days_open >= $sla_med_days THEN 1 ELSE NULL END) AS med_out_of_sla,
+        COUNT(CASE WHEN (priority LIKE '%high%') AND days_open >= $sla_high_days THEN 1 ELSE NULL END) AS high_out_of_sla,
+        COUNT(CASE WHEN (priority IS NULL OR (priority NOT LIKE '%low%' AND priority NOT LIKE '%med%' AND priority NOT LIKE '%high%')) AND days_open >= $sla_noprio_days THEN 1 ELSE NULL END) AS noprio_out_of_sla
+    FROM $with_days
+    GROUP BY date, owner_team, area
+);
+
+-- Full grid: every (date, owner_team, area) that appears in the period. Missing combinations get 0. Always include today.
+$dates = (SELECT DISTINCT date AS date FROM $with_days UNION SELECT CurrentUtcDate() AS date);
+$owner_area = (SELECT DISTINCT Cast(owner_team AS Utf8) AS owner_team, Cast(area AS Utf8) AS area FROM $with_days);
+$grid = (SELECT d.date AS date_window, o.owner_team AS owner_team, o.area AS area FROM $dates AS d CROSS JOIN $owner_area AS o);
+
+-- One row per (date_window, owner_team, area): daily snapshot. Missing (day, owner, area) → 0.
 -- total_* = count by priority (all bugs); *_out_of_sla = count exceeding SLA (low 30d, med/high/noprio 7d).
 SELECT
-    date AS date_window,
-    Cast(owner_team AS Utf8) AS owner_team,
-    COALESCE(COUNT(*), 0) AS total,
-    COALESCE(COUNT(CASE WHEN priority LIKE '%low%' THEN 1 ELSE NULL END), 0) AS total_low,
-    COALESCE(COUNT(CASE WHEN priority LIKE '%med%' THEN 1 ELSE NULL END), 0) AS total_med,
-    COALESCE(COUNT(CASE WHEN priority LIKE '%high%' THEN 1 ELSE NULL END), 0) AS total_high,
-    COALESCE(COUNT(CASE WHEN priority IS NULL OR (priority NOT LIKE '%low%' AND priority NOT LIKE '%med%' AND priority NOT LIKE '%high%') THEN 1 ELSE NULL END), 0) AS total_noprio,
-    COALESCE(COUNT(CASE WHEN (priority LIKE '%low%') AND days_open >= $sla_low_days THEN 1 ELSE NULL END), 0) AS low_out_of_sla,
-    COALESCE(COUNT(CASE WHEN (priority LIKE '%med%') AND days_open >= $sla_med_days THEN 1 ELSE NULL END), 0) AS med_out_of_sla,
-    COALESCE(COUNT(CASE WHEN (priority LIKE '%high%') AND days_open >= $sla_high_days THEN 1 ELSE NULL END), 0) AS high_out_of_sla,
-    COALESCE(COUNT(CASE WHEN (priority IS NULL OR (priority NOT LIKE '%low%' AND priority NOT LIKE '%med%' AND priority NOT LIKE '%high%')) AND days_open >= $sla_noprio_days THEN 1 ELSE NULL END), 0) AS noprio_out_of_sla
-FROM $with_days
-GROUP BY date, owner_team;
+    g.date_window AS date_window,
+    g.owner_team AS owner_team,
+    g.area AS area,
+    COALESCE(a.total, 0) AS total,
+    COALESCE(a.total_low, 0) AS total_low,
+    COALESCE(a.total_not_low, 0) AS total_not_low,
+    COALESCE(a.total_med, 0) AS total_med,
+    COALESCE(a.total_high, 0) AS total_high,
+    COALESCE(a.total_noprio, 0) AS total_noprio,
+    COALESCE(a.low_out_of_sla, 0) AS low_out_of_sla,
+    COALESCE(a.med_out_of_sla, 0) AS med_out_of_sla,
+    COALESCE(a.high_out_of_sla, 0) AS high_out_of_sla,
+    COALESCE(a.noprio_out_of_sla, 0) AS noprio_out_of_sla
+FROM $grid AS g
+LEFT JOIN $agg AS a ON g.date_window = a.date_window AND g.owner_team = a.owner_team AND g.area = a.area;

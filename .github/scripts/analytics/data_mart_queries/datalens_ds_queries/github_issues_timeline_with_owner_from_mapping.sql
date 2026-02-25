@@ -69,4 +69,4 @@ LEFT JOIN (
         WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')
     )
     WHERE rn = 1
-) AS o ON t.area = o.area;
+) AS o ON t.area = o.area

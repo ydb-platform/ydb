@@ -322,7 +322,6 @@ void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
         });
 }
 
-// TODO заблокировать IO до полного восстановления (где-то раньше)
 void TDirectBlockGroup::DoRestoreFromPersistentBuffer(
     std::shared_ptr<TOverallAckRequestHandler> requestHandler
 )
@@ -406,13 +405,16 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
 
     Initialized = true;
 
-    LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
-                "Starting to flush dirtyMap");
-    DirtyMap->Iterate([this, &traceId](ui64 blockIndex, const TBlockMeta& blockMeta) {
-        if (blockMeta.ReadyToFlush()) {
-            RequestBlockFlush(std::move(traceId), blockIndex);
-        }
-    });
+    // TODO remove this redundant `if` after tests
+    if (false) {
+        LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                    "Starting to flush dirtyMap");
+        DirtyMap->Iterate([this, &traceId](ui64 blockIndex, const TBlockMeta& blockMeta) {
+            if (blockMeta.ReadyToFlush()) {
+                RequestBlockFlush(std::move(traceId), blockIndex);
+            }
+        });
+    }
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(

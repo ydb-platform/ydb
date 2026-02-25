@@ -126,9 +126,11 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
     if (!NewPortionIds.erase(accessor.GetPortionInfo().GetPortionId())) {
         return;
     }
+
     if (NewPortionIds.empty()) {
         NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
     }
+
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
@@ -138,11 +140,16 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
-                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                auto field = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId);
+                if (field) {
+                    max = indexMeta->GetMaxScalarVerified(data, (*field)->type());
+                }
             }
         }
+
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }
+
     AddPortionImpl(portion, context.GetNow());
 }
 

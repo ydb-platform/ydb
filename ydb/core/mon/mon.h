@@ -53,6 +53,18 @@ public:
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
+        std::vector<TString> CompressContentTypes = {
+            "text/plain",
+            "text/html",
+            "text/css",
+            "text/event-stream",
+            "text/javascript",
+            "application/javascript",
+            "application/json",
+            "application/yaml",
+            "multipart/form-data",
+            "multipart/x-mixed-replace",
+        };
         bool RequireCountersAuthentication = false;
         bool RequireHealthcheckAuthentication = false;
     };

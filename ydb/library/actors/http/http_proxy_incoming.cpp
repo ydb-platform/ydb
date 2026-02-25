@@ -313,7 +313,11 @@ protected:
             }
         }
         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << GetChunkDebugText(event->Get()->DataChunk) << ")");
-        ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n" << event->Get()->DataChunk->AsString());
+        if (CurrentResponse.Response->CompressContext) {
+            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n(compressed data)");
+        } else {
+            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n" << event->Get()->DataChunk->AsString());
+        }
         if (event->Get()->DataChunk->IsEndOfData()) {
             CancelSubscriber = nullptr;
         }

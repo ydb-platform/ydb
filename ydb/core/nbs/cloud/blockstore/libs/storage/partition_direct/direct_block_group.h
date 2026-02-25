@@ -78,6 +78,7 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    const ui8 TEMP_NumberOfCommitedPB;
 
     bool Initialized = false;
     ui32 SyncRequestsBatchSize;

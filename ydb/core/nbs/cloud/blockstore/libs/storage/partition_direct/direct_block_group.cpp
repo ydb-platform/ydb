@@ -172,11 +172,13 @@ TDirectBlockGroup::TDirectBlockGroup(
     , Generation(generation)
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
+    , TEMP_NumberOfCommitedPB(ddisksIds.size() > 1 ? 3 : ddisksIds.size())
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , SyncRequestsByDDiskId(ddisksIds.size(), nullptr)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
+    Y_ASSERT(ddisksIds.size() == 1 || ddisksIds.size() >= 3);
     Executor = TExecutor::Create("DirectBlockGroup");
     Executor->Start();
 
@@ -491,10 +493,10 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
     TVector<TEvWritePersistentBufferResultFuture> futures;
     TVector<ui64> storageRequestIds;
-    futures.reserve(3);
-    storageRequestIds.reserve(3);
+    futures.reserve(TEMP_NumberOfCommitedPB);
+    storageRequestIds.reserve(TEMP_NumberOfCommitedPB);
 
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
         execSpan.Event("PB request start");
         const ui64 storageRequestId = ++StorageRequestId;
         const auto& ddiskConnection = PersistentBufferConnections[i];
@@ -522,7 +524,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
     execSpan.EndOk();
 
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
         const auto& resultOrError =
             Executor->ResultOrError(std::move(futures[i]));
 
@@ -595,7 +597,7 @@ void TDirectBlockGroup::RequestBlockFlush(NWilson::TTraceId parentTrace,
                                           ui64 blockIndex)
 {
     // TODO handle case with different lsn in block's persistent buffers
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
         if (SyncRequestsByDDiskId[i] == nullptr) {
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,

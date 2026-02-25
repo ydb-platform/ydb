@@ -356,7 +356,7 @@ public:
             manifestFile.Write(manifestStr.data(), manifestStr.size());
             manifestFile.Flush();
 
-            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
+            const auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
             TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
 
             auto checksumPath = SnapshotPath.Child("manifest.json.sha256");

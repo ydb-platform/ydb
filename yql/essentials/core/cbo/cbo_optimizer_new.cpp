@@ -257,7 +257,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             }
         }
 
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = std::cbrt(rightStats.Selectivity);
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;
@@ -274,7 +274,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             }
         }
 
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = std::cbrt(leftStats.Selectivity);
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;

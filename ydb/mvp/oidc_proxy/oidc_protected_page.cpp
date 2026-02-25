@@ -21,7 +21,7 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
     Send(Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), NActors::IEventHandle::FlagTrackDelivery);
-    if (!ProtectedPage.CheckRequestedHost(Settings)) {
+    if (!ProtectedPage.IsHttpSchemeAllowed() || !ProtectedPage.IsRequestedHostAllowed(Settings.AllowedProxyHosts)) {
         return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage));
     }
     NHttp::THeaders headers(Request->Headers);

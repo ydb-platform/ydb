@@ -1,0 +1,55 @@
+generic:
+  access_service_type: "nebius_v1"
+
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    # Path to file with tokens for proxy authorization to session service and token exchange endpoint.
+    token_file: ydb/mvp/oidc_proxy/examples/token_file.pb.txt
+
+    tokens:
+      oauth2_exchange:
+        # Token name. Must match oidc.session_service_token_name below.
+        - name: "federated-creds-jwt"
+          # IAM token exchange endpoint (gRPC).
+          token_endpoint: "grpcs://tokens.net:443"
+          # OAuth2 grant type for token exchange.
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange"
+          # Requested token type for exchange response.
+          requested_token_type: "urn:ietf:params:oauth:token-type:access_token"
+          # Subject of exchange request (service account identifier).
+          subject_credentials:
+            type: FIXED
+            token_type: "urn:nebius:params:oauth:token-type:subject_identifier"
+            token: "service-account-id"
+          # Actor of exchange request (JWT from mounted file).
+          actor_credentials:
+            type: FIXED
+            token_type: "urn:ietf:params:oauth:token-type:jwt"
+            token_file: "/var/run/secrets/tokens/jwt"
+
+oidc:
+  # OIDC client identifier.
+  client_id: "oidc-proxy-ex"
+  # Name of secret for signing. It must match one of SecretInfo names.
+  secret_name: "secret-name"
+  # Only for `yandex_v2` access service type, grpc endpoint.
+  session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.net:8655"
+  # Name of token from oauth2_exchange used for service authorization.
+  # Must match with auth.tokens.oauth2_exchange[].name above.
+  session_service_token_name: "federated-creds-jwt"
+  # Authorization server base URL.
+  authorization_server_address: "https://auth-preprod.cloud.ru"
+  # Hosts that proxy is allowed to forward user requests to.
+  allowed_proxy_hosts:
+    - "*.host.net"
+    - "*.host-team.ru"

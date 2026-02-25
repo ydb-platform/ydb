@@ -2,25 +2,27 @@
 #include "oidc_client.h"
 #include "openid_connect.h"
 
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <ydb/library/actors/protos/services_common.pb.h>
-#include <ydb/library/actors/core/process_stats.h>
-#include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/library/actors/http/http_cache.h>
-#include <ydb/library/actors/http/http_static.h>
-
-#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/cache_policy.h>
 #include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/mvp/core/mvp_swagger.h>
 #include <ydb/mvp/core/http_check.h>
 #include <ydb/mvp/core/http_sensors.h>
-#include <ydb/mvp/core/cache_policy.h>
+#include <ydb/mvp/core/mvp_swagger.h>
+#include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/utils.h>
+
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/process_stats.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/http/http_cache.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_static.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <yaml-cpp/yaml.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/yexception.h>
@@ -195,40 +197,53 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
-    auto oidc = config["oidc"];
-    if (!oidc) {
-        ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
-    }
-    OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
-    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
-    OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
-    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
-    OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
-    OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
-    OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
-    OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
-    OpenIdConnectSettings.ImpersonateUrlPath = oidc["impersonate_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH);
-    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = oidc["whoami_extended_info_endpoint"].as<std::string>("");
+void TMVP::TryGetOidcOptionsFromConfig(const NMvp::NOidcProxy::TOidcProxyConfig& config) {
+    OpenIdConnectSettings.SecretName = config.GetSecretName();
+    OpenIdConnectSettings.ClientId = config.HasClientId() ? config.GetClientId() : OpenIdConnectSettings.DEFAULT_CLIENT_ID;
+    OpenIdConnectSettings.SessionServiceEndpoint = config.GetSessionServiceEndpoint();
+    OpenIdConnectSettings.SessionServiceTokenName = config.GetSessionServiceTokenName();
+    OpenIdConnectSettings.AuthorizationServerAddress = config.GetAuthorizationServerAddress();
+    OpenIdConnectSettings.AuthUrlPath = config.HasAuthUrlPath() ? config.GetAuthUrlPath() : OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH;
+    OpenIdConnectSettings.TokenUrlPath = config.HasTokenUrlPath() ? config.GetTokenUrlPath() : OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH;
+    OpenIdConnectSettings.ExchangeUrlPath = config.HasExchangeUrlPath() ? config.GetExchangeUrlPath() : OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH;
+    OpenIdConnectSettings.ImpersonateUrlPath = config.HasImpersonateUrlPath() ? config.GetImpersonateUrlPath() : OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH;
+    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = config.GetWhoamiExtendedInfoEndpoint();
+
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
-    for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
+    OpenIdConnectSettings.AllowedProxyHosts.clear();
+    for (const auto& host : config.GetAllowedProxyHosts()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
-        OpenIdConnectSettings.AllowedProxyHosts.push_back(TString(host));
+        OpenIdConnectSettings.AllowedProxyHosts.push_back(host);
     }
     Cout << "Finished processing allowed_proxy_hosts." << Endl;
 }
 
-THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
-    if (StartupOptions.Config) {
-        try {
-            TryGetOidcOptionsFromConfig(StartupOptions.Config);
-        } catch (const YAML::Exception& e) {
-            std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-            std::exit(EXIT_FAILURE);
-        }
+void TMVP::TryGetOidcOptionsFromConfig() {
+    if (StartupOptions.GetYamlConfigPath().empty()) {
+        return;
     }
+    try {
+        YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+        NMvp::NOidcProxy::TOidcProxyAppConfig appConfig;
+        MergeYamlNodeToProto(config, appConfig);
+        if (!appConfig.HasOidc()) {
+            ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
+        }
+        TryGetOidcOptionsFromConfig(appConfig.GetOidc());
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
+    TryGetOidcOptionsFromConfig();
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                            << "SessionServiceTokenName must be specified in oidc config.";
+    }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 
     if (StartupOptions.Mlock) {
@@ -241,10 +256,23 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     TokensConfig = StartupOptions.Tokens;
 
-    for (auto secret : TokensConfig.GetSecretInfo()) {
+    bool clientSecretFound = false;
+    for (const auto& secret : TokensConfig.GetSecretInfo()) {
         if (OpenIdConnectSettings.SecretName == secret.GetName()) {
+            clientSecretFound = true;
+            if (secret.GetSecret().empty()) {
+                ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                                    << "oidc.secret_name '" << OpenIdConnectSettings.SecretName
+                                    << "' has empty value in auth token config secret_info.";
+            }
             OpenIdConnectSettings.ClientSecret = secret.GetSecret();
+            break;
         }
+    }
+    if (!OpenIdConnectSettings.SecretName.empty() && !clientSecretFound) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                            << "oidc.secret_name '" << OpenIdConnectSettings.SecretName
+                            << "' was not found in auth token config secret_info.";
     }
 
     NActors::TLoggerActor* loggerActor = new NActors::TLoggerActor(

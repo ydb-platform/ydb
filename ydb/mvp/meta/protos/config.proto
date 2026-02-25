@@ -1,0 +1,18 @@
+syntax = "proto2";
+
+package NMvp.NMeta;
+
+import "ydb/mvp/core/protos/mvp.proto";
+
+message TMetaConfig {
+    optional string MetaApiEndpoint = 1;
+    optional string MetaDatabase = 2;
+    optional bool MetaCache = 3 [default = false];
+    optional string MetaDatabaseTokenName = 4;
+    optional bool DbUserTokenAccess = 5 [default = false];
+}
+
+message TMetaAppConfig {
+    optional NMvp.TGenericConfig Generic = 1;
+    optional TMetaConfig Meta = 2;
+}

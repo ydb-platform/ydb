@@ -574,15 +574,15 @@ Delete all records with `id` greater than 10:
 
 ```bash
 {{ ydb-cli }} -p quickstart sql \
-  -s 'SELECT t.id FROM test_delete_1 AS t WHERE t.id > 10' \
-  --format json-unicode | \
-{{ ydb-cli }} -p quickstart sql \
   -s 'DECLARE $lines AS List<Struct<id:UInt64>>;
       DELETE FROM test_delete_1 WHERE id IN (SELECT tl.id FROM AS_TABLE($lines) AS tl)' \
   --input-framing newline-delimited \
   --input-param-name lines \
   --input-batch adaptive \
-  --input-batch-max-rows 10000
+  --input-batch-max-rows 10000 \
+  --input-file <(ydb -p quickstart sql \
+    -s 'SELECT t.id FROM test_delete_1 AS t WHERE t.id < 10' \
+    --format json-unicode)
 ```
 
 #### Processing messages read from a topic {#example-adaptive-pipeline-from-topic}

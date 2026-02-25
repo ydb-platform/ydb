@@ -1,6 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <algorithm>
@@ -482,6 +484,21 @@ namespace {
         if (logEnabled) {
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
         }
+    }
+
+    void UpdateTliConfigForKqpProxy(TKikimrRunner& kikimr, const TVector<TString>& ignoredTableRegexes) {
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* tliConfig = request->Record.MutableConfig()->MutableTliConfig();
+        for (const auto& regex : ignoredTableRegexes) {
+            tliConfig->AddIgnoredTableRegexes(regex);
+        }
+
+        runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, request.Release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "KQP proxy should acknowledge runtime TliConfig update");
     }
 
     TString NumberedTablePath(int index) {
@@ -1500,10 +1517,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
-        settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/.*/Table1");
         TTliTestContext ctx(std::move(settings));
 
         ctx.CreateAndSeedTables(3);
+        UpdateTliConfigForKqpProxy(ctx.Kikimr, {"/Root/.*/Table1"});
+
+        // TliConfig runtime updates are applied to newly created sessions.
+        auto breakerSession = ctx.Client.GetSession().GetValueSync().GetSession();
+        auto victimSession = ctx.Client.GetSession().GetValueSync().GetSession();
 
         // Victim: JOIN of 3 tables — Table1 is ignored, Table2 and Table3 are not
         const TString victimQueryText = R"(
@@ -1519,12 +1540,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdate2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"Breaker2\" WHERE Key = 1u";
         const TString breakerUpdate3 = "UPDATE `/Root/Tenant1/Table3` SET Value = \"Breaker3\" WHERE Key = 1u";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(victimSession, victimQueryText);
+        ExecuteInTx(victimSession, victimTx, victimCommitText);
 
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate2);
-        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdate3);
+        auto breakerTx = BeginTx(breakerSession, breakerUpdate1);
+        ExecuteInTx(breakerSession, *breakerTx, breakerUpdate2);
+        ExecuteAndCommitTx(breakerSession, *breakerTx, breakerUpdate3);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);

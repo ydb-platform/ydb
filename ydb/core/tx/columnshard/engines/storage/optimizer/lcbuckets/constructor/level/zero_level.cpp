@@ -65,10 +65,10 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         CompactionTaskMemoryLimit = jsonValue.GetUInteger();
     }
     
-    if (json.Has("compaction_task_portion_count_limit")) {
-        const auto& jsonValue = json["compaction_task_portion_count_limit"];
+    if (json.Has("compaction_task_portions_count_limit")) {
+        const auto& jsonValue = json["compaction_task_portions_count_limit"];
         if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
-            return TConclusionStatus::Fail("incorrect compaction_task_portion_count_limit value (have to be positive unsigned int)");
+            return TConclusionStatus::Fail("incorrect compaction_task_portions_count_limit value (have to be positive unsigned int)");
         }
         CompactionTaskPortionsCountLimit = jsonValue.GetUInteger();
     }

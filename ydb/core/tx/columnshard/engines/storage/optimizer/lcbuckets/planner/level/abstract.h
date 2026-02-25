@@ -142,8 +142,8 @@ private:
     std::vector<TPortionsChain> Chains;
     std::optional<NArrow::TSimpleRow> StopSeparation;
     std::optional<ui64> ExpectedPortionSize;
-    const ui64 MemoryUsageLimit;
-    const ui64 PortionCountLimit;
+    ui64 MemoryUsageLimit = ((ui64)512) << 20;
+    const ui64 PortionsCountLimit = 10000;
 
 public:
     ui64 GetTargetCompactionLevel() const {
@@ -273,15 +273,15 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < MemoryUsageLimit && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < PortionCountLimit &&
-               Portions.size() < PortionCountLimit;
+        return MemoryUsage < MemoryUsageLimit && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < PortionsCountLimit &&
+               Portions.size() < PortionsCountLimit;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit, std::optional<ui64> compactionTaskPortionsCountLimit, const std::optional<ui64> expectedPortionSize = std::nullopt)
+    TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit = std::nullopt, std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
         : TargetCompactionLevel(targetCompactionLevel)
         , ExpectedPortionSize(expectedPortionSize)
         , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(((ui64)512) << 20))
-        , PortionCountLimit(compactionTaskPortionsCountLimit.value_or(10000)) {
+        , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(10000)) {
     }
 };
 

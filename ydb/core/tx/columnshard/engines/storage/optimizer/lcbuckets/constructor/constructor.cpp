@@ -81,13 +81,13 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                     1, nullptr, counters->GetLevelCounters(1),
                     std::make_shared<TNoOverloadChecker>(),
                     TDuration::Max(), 8 << 20, 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
                     TDuration::Max(), 4 << 20, 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
                 ));
                 break;
 
@@ -96,19 +96,19 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                     2, nullptr, counters->GetLevelCounters(2),
                     std::make_shared<TNoOverloadChecker>(),
                     TDuration::Max(), 8 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     1, levels.back(), counters->GetLevelCounters(1),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
                     TDuration::Max(), 4 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
                 ));
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
                     TDuration::Seconds(180), 2 * (1ull << 20), 1,
-                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt,
+                    selectors, defaultSelectorName, 1, std::nullopt, std::nullopt
                 ));
                 break;
         }

@@ -15,7 +15,7 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() co
             if (--tasksLeft <= 0) {
                 break;
             }
-            result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+            result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
         }
     }
     

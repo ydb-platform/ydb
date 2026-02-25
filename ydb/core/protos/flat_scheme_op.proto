@@ -554,7 +554,7 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsSizeLimit = 5;
         optional uint64 Concurrency = 6;
         optional uint64 CompactionTaskMemoryLimit = 7;
-        optional uint64 CompactionTaskPortionCountLimit = 8;
+        optional uint64 CompactionTaskPortionsCountLimit = 8;
     }
 
     message TOneLayer {

@@ -55,9 +55,5 @@ RECURSE(
     s3_backups
     olap
     streaming
-<<<<<<< HEAD
-=======
-    result_set_format
     distconf
->>>>>>> f4fde732448 (Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes (#34780))
 )

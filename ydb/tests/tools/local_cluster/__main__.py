@@ -82,10 +82,10 @@ class LocalCluster:
             raise RuntimeError("binary_path must be set before calling start()")
 
         logger.info("Using ydbd binary: %s", self.binary_path)
-        
+
         # Use port allocator with offset to allow multiple instances
         port_allocator = DefaultFirstNodePortAllocator(base_offset=self.port_offset)
-        
+
         nbs_database = "/Root/NBS"
         configurator = kikimr_config.KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
@@ -121,7 +121,7 @@ class LocalCluster:
                 "Node %d: GRPC=%s, MON=%s, IC=%s, Endpoint=%s",
                 node_id, node.grpc_port, node.mon_port, node.ic_port, node.endpoint
             )
-        
+
         if len(self.cluster.slots) > 0:
             logger.info("Total dynamic nodes: %d", len(self.cluster.slots))
             for node_id, node in sorted(self.cluster.slots.items()):
@@ -169,17 +169,17 @@ class LocalCluster:
         logger.info("Database created, waiting for it to be fully ready...")
         # Give the database a moment to propagate through the cluster
         time.sleep(3)
-        
+
         # Verify database exists before starting slots
         try:
             status = self.cluster.get_database_status(nbs_database)
             logger.info("Database status: %s", status)
         except Exception as e:
             logger.warning("Could not get database status: %s", e)
-        
+
         logger.info("Registering and starting NBS dynamic slots...")
         slots = self.cluster.register_and_start_slots(nbs_database, count=1)
-        
+
         logger.info("Waiting for NBS tenant to be up...")
         try:
             self.cluster.wait_tenant_up(nbs_database)

@@ -210,11 +210,14 @@ public:
 
     [[nodiscard]] bool IsCompleted() const;
     bool IsCompleted(ui64 requestId) override;
-    void RegisterCompetedRequest() {
+
+    void RegisterCompetedRequest()
+    {
         ++AckCount;
     }
 
-    [[nodiscard]] ui8 GetRequiredAckCount() const {
+    [[nodiscard]] ui8 GetRequiredAckCount() const
+    {
         return RequiredAckCount;
     }
 

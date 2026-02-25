@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -54,9 +55,8 @@ private:
         NKikimr::NBsController::TDDiskId DDiskId;
         NKikimr::NDDisk::TQueryCredentials Credentials;
 
-        TDDiskConnection(
-            const NKikimr::NBsController::TDDiskId& ddiskId,
-            const NKikimr::NDDisk::TQueryCredentials& credentials)
+        TDDiskConnection(const NKikimr::NBsController::TDDiskId& ddiskId,
+                         const NKikimr::NDDisk::TQueryCredentials& credentials)
             : DDiskId(ddiskId)
             , Credentials(credentials)
         {}
@@ -64,9 +64,7 @@ private:
         [[nodiscard]] NActors::TActorId GetServiceId() const
         {
             return NKikimr::MakeBlobStorageDDiskId(
-                DDiskId.NodeId,
-                DDiskId.PDiskId,
-                DDiskId.DDiskSlotId);
+                DDiskId.NodeId, DDiskId.PDiskId, DDiskId.DDiskSlotId);
         }
     };
 
@@ -135,7 +133,8 @@ private:
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
-    void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestHandler> requestHandler);
+    void DoWriteBlocksLocal(
+        std::shared_ptr<TWriteRequestHandler> requestHandler);
 
     void HandleWritePersistentBufferResult(
         std::shared_ptr<TWriteRequestHandler> requestHandler,
@@ -160,10 +159,8 @@ private:
     void DoReadBlocksLocal(std::shared_ptr<TReadRequestHandler> requestHandler);
 
     template <typename TEvent>
-    void HandleReadResult(
-        std::shared_ptr<TReadRequestHandler> requestHandler,
-        ui64 storageRequestId,
-        const TEvent& result);
+    void HandleReadResult(std::shared_ptr<TReadRequestHandler> requestHandler,
+                          ui64 storageRequestId, const TEvent& result);
 
     void HandleSyncWithPersistentBufferResult(
         std::shared_ptr<TSyncRequestHandler> requestHandler,

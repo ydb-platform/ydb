@@ -10,11 +10,9 @@ using namespace NKikimr;
 using namespace NYdb::NBS;
 
 TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
-    ui64 tabletId,
-    ui32 generation,
+    ui64 tabletId, ui32 generation,
     TVector<NBsController::TDDiskId> ddisksIds,
-    TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
-    ui32 blockSize,
+    TVector<NBsController::TDDiskId> persistentBufferDDiskIds, ui32 blockSize,
     ui64 blocksCount)
     : BlockSize(blockSize)
 {
@@ -27,9 +25,8 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
     ui64 deviceSize = blocksCount * blockSize;
 
     // Create an in-memory sector map
-    SectorMap = MakeIntrusive<NPDisk::TSectorMap>(
-        deviceSize,
-        NPDisk::NSectorMap::DM_NONE);
+    SectorMap = MakeIntrusive<NPDisk::TSectorMap>(deviceSize,
+                                                  NPDisk::NSectorMap::DM_NONE);
 }
 
 void TInMemoryDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId,
@@ -38,7 +35,6 @@ void TInMemoryDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId,
     Y_UNUSED(traceId);
     Y_UNUSED(vChunkIndex);
 }
-
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TInMemoryDirectBlockGroup::WriteBlocksLocal(
@@ -118,8 +114,7 @@ NThreading::TFuture<TReadBlocksLocalResponse>
 TInMemoryDirectBlockGroup::ReadBlocksLocal(
     ui32 vChunkIndex,
     TCallContextPtr callContext,
-    std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    std::shared_ptr<TReadBlocksLocalRequest> request, NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(callContext);

@@ -50,7 +50,7 @@
 
 {% if feature_join %}
 
-* [JOIN](join.md)
+* [JOIN](select/join.md)
 
 {% endif %}
 

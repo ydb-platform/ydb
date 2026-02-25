@@ -179,13 +179,11 @@ class TConstructionContext: TNonCopyable {
 public:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
-    const NOlap::TSnapshot LastCommittedTx;
 
-    TConstructionContext(
-        const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
+    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters)
         : SchemaVersions(schemaVersions)
         , Counters(counters)
-        , LastCommittedTx(lastCommittedTx) {
+    {
     }
 
     std::shared_ptr<TFilteredSnapshotSchema> BuildResultFiltered(

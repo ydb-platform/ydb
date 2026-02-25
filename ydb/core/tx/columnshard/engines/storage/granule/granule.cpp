@@ -320,6 +320,7 @@ void TGranuleMeta::CommitPortionOnExecute(
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
     it->second->SetCommitSnapshot(snapshot);
+    AFL_VERIFY(Portions.contains(it->second->GetPortionId()));
     TDbWrapper wrapper(txc.DB, nullptr);
     it->second->CommitToDatabase(wrapper);
 }

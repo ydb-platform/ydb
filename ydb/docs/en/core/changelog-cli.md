@@ -1,7 +1,5 @@
 # {{ ydb-short-name }} CLI changelog
 
-<<<<<<< HEAD
-=======
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -54,7 +52,6 @@ Released on December 19, 2025. To update to version **2.28.0**, select the [Down
 * Fixed a bug where the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) could crash with a `mutex lock failure (Invalid argument)` error due to an internal race condition.
 * Fixed restoration of views containing named expressions and views that access secondary indexes in the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md).
 
->>>>>>> 96d583e45e1 (Add release notes for YDB CLI 2.29.0 (#33725))
 ## Version 2.27.0 {#2-27-0}
 
 Released on October 30, 2025. To update to version **2.27.0**, select the [Downloads](downloads/ydb-cli.md) section.

@@ -143,6 +143,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
         hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
         hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
+        hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
 
@@ -382,6 +383,8 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMon = new TDsProxyNodeMon(AppData()->Counters, true);
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
+
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
@@ -1213,6 +1216,11 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
         PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
         ExpectedSaveConfigCookie++;
     }
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    DsProxyPerPoolCounters->UpdateAll();
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats());
 }
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {

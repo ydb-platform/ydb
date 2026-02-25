@@ -802,10 +802,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterTable:
-        case NKikimrSchemeOp::ESchemeOpDropIndex:
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
-        case NKikimrSchemeOp::ESchemeOpDropCdcStream:
         case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
@@ -823,7 +821,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
-        case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
         case NKikimrSchemeOp::ESchemeOpAlterSecret:
@@ -879,10 +876,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpRmDir:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema | NACLib::EAccessRights::CreateDirectory;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpDropFileStore:
         case NKikimrSchemeOp::ESchemeOpDropKesus:
-        case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpDropColumnStore:
@@ -903,7 +906,25 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema | NACLib::EAccessRights::CreateTable;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpDropIndex:
+        case NKikimrSchemeOp::ESchemeOpDropCdcStream:
+        case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema | NACLib::EAccessRights::AlterSchema;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema | NACLib::EAccessRights::CreateQueue;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -1062,7 +1083,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto toResolve = TPathToResolve(pbModifyScheme);
                 toResolve.Path = SplitPath(descr.GetSrcPath());
-                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::RemoveSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::CreateTable | NACLib::EAccessRights::RemoveSchema;
                 ResolveForACL.push_back(toResolve);
             }
             {
@@ -1113,7 +1134,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto toResolve = TPathToResolve(pbModifyScheme);
                 toResolve.Path = SplitPath(descr.GetSrcPath());
-                toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema | NACLib::EAccessRights::CreateTable;
                 ResolveForACL.push_back(toResolve);
             }
             {

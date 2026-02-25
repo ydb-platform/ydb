@@ -23,18 +23,19 @@ ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.des
 ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
 ALTER_TABLE_CREATE_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ALTER_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
-ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
-DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.create_table', 'ydb.granular.describe_schema']
+ALTER_TABLE_RENAME_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.create_table', 'ydb.granular.describe_schema', 'ydb.granular.select_row']
 ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 READ_TOPIC_GRANTS = []
-ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
-DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
+DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.create_queue']
 
 CREATE_SECRET_GRANTS = ['ydb.granular.create_table']
 ALTER_SECRET_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
-DROP_SECRET_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
+DROP_SECRET_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.create_table', 'ydb.granular.describe_schema']
 
 
 def run_query(config, query):
@@ -198,6 +199,46 @@ def test_granular_grants_for_tables(ydb_cluster):
         DROP_TABLE_GRANTS,
         "you do not have access permissions",
     )
+
+    ydb_cluster.remove_database(DATABASE)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_granular_grants_for_rename_table(ydb_cluster):
+    ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
+    database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
+    ydb_cluster.wait_tenant_up(DATABASE)
+
+    tenant_admin_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+    )
+
+    table_src = 'dir1/src'
+    create_table_query = f"CREATE TABLE `{table_src}` (a Uint64, PRIMARY KEY (a));"
+    run_with_assert(tenant_admin_config, create_table_query)
+
+    table_in_another_dir = 'dir2/random-name'
+    create_table_query = f"CREATE TABLE `{table_in_another_dir}` (a Uint64, PRIMARY KEY (a));"
+    run_with_assert(tenant_admin_config, create_table_query)
+
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
+
+    # ALTER TABLE ... RENAME
+    # The move table operation requires grants not only on the source table, but also on the destination table
+    table_dst = 'dir2/dst'
+    provide_grants(tenant_admin_config, 'user1', 'dir2', CREATE_TABLE_GRANTS)
+    rename_table_query = f"ALTER TABLE `{table_src}` RENAME TO `{table_dst}`;"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        rename_table_query,
+        table_src,
+        ALTER_TABLE_RENAME_GRANTS,
+        "you do not have access permissions",
+    )
+    revoke_all_grants(tenant_admin_config, 'user1', 'dir2')
 
     ydb_cluster.remove_database(DATABASE)
     ydb_cluster.unregister_and_stop_slots(database_nodes)

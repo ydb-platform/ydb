@@ -889,3 +889,14 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
         }
     }
 }
+
+void TestBasicCheckIntegrity(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId) {
+    std::vector<TBlobInfo> blobs;
+    TBSState state;
+    state[tabletId];
+
+    blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 1));
+
+    VerifiedPut(*tenv.Env, 1, groupId, blobs[0], state);
+    VerifiedCheckIntegrity(*tenv.Env, 1, groupId, blobs[0], state);
+}

@@ -181,9 +181,12 @@ namespace NKikimr {
                 pendingBlobs.clear();
             };
             for (TBlobOnDisk *blob : blobs) {
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    EnqueueCheckIntegrity(blob->Id, false);
+                }
                 const TDiskPart& part = blob->Part;
                 const ui32 end = part.Offset + part.Size;
-                Y_ABORT_UNLESS(part.ChunkIdx == chunkIdx);
+                Y_VERIFY_S(part.ChunkIdx == chunkIdx, LogPrefix);
                 if (interval == TDiskPart()) {
                     interval = blob->Part;
                 } else if (end - interval.Offset <= ScrubCtx->PDiskCtx->Dsk->ReadBlockSize) {

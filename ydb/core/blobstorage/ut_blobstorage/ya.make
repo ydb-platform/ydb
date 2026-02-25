@@ -41,7 +41,6 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
-    ut_helpers.cpp
 )
 
 PEERDIR(
@@ -62,6 +61,7 @@ RECURSE_FOR_TESTS(
     ut_blob_depot
     ut_blob_depot_fat
     ut_comp_defrag
+    ut_check_integrity
     ut_donor
     ut_huge
     ut_group_reconfiguration

@@ -1,8 +1,9 @@
-#include <memory>
+#include <atomic>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -26,35 +27,37 @@ namespace {
         TString UserSID;
     };
 
-    void GrantPermissions(TKikimrRunner& kikimr, const TString& path, const TVector<TString>& userSids) {
-        auto driver = kikimr.RunCall([&] {
+    void GrantPermissions(TKikimrRunner& kikimr, const TString& path, const TVector<TString>& userSids, bool isThreadLocked) {
+        auto getDriver = [&] {
             TDriverConfig driverConfig;
             driverConfig
                 .SetEndpoint(kikimr.GetEndpoint())
                 .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             return NYdb::TDriver(driverConfig);
-        });
-        
+        };
+        auto driver = isThreadLocked ? kikimr.RunCall(getDriver) : getDriver();
+
         auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
-        
+
         for (const auto& userSid : userSids) {
-            auto result = kikimr.RunCall([&] {
+            auto doModify = [&] {
                 NYdb::NScheme::TPermissions permissions(userSid + "@builtin",
                     {"ydb.generic.read", "ydb.generic.write"}
                 );
                 return schemeClient.ModifyPermissions(path,
                     NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
                 ).ExtractValueSync();
-            });
+            };
+            auto result = isThreadLocked ? kikimr.RunCall(doModify) : doModify();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed to grant permissions for user " << userSid << ": " << result.GetIssues().ToString());
         }
     }
 
-    TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid, 
-                                           const TString& query) {
-        return kikimr.RunCall([&] {
+    TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid,
+                                           const TString& query, bool isThreadLocked) {
+        auto impl = [&] {
             TDriverConfig driverConfig;
             driverConfig
                 .SetEndpoint(kikimr.GetEndpoint())
@@ -67,18 +70,19 @@ namespace {
             auto sessionResult = db.CreateSession().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed to create session for user " << userSid << ": " << sessionResult.GetIssues().ToString());
-            
+
             auto session = sessionResult.GetSession();
             TExecDataQuerySettings settings;
             settings.KeepInQueryCache(true);
-            
+
             return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-        });
+        };
+        return isThreadLocked ? kikimr.RunCall(impl) : impl();
     }
 
     TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid,
-                                           const TString& query, const TParams& params) {
-        return kikimr.RunCall([&] {
+                                           const TString& query, const TParams& params, bool isThreadLocked) {
+        auto impl = [&] {
             TDriverConfig driverConfig;
             driverConfig
                 .SetEndpoint(kikimr.GetEndpoint())
@@ -97,37 +101,37 @@ namespace {
             settings.KeepInQueryCache(true);
 
             return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
-        });
+        };
+        return isThreadLocked ? kikimr.RunCall(impl) : impl();
     }
 
-    void FillCache(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
+    void FillCache(TKikimrRunner& kikimr, const TVector<TString>& userSids, bool isThreadLocked) {
         ui32 key = 0;
         for (const auto& userSid : userSids) {
-            // Query without parameters
             TString queryNoParams = TStringBuilder()
                 << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << key << ";";
 
-            auto result = ExecuteQueryWithCache(kikimr, userSid, queryNoParams);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, 
+            auto result = ExecuteQueryWithCache(kikimr, userSid, queryNoParams, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed for user " << userSid << ": " << result.GetIssues().ToString());
 
             // Query with single parameter
             TString queryWithParam = "DECLARE $key AS Uint32; SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
-            
+
             auto params = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key)
                     .Build()
                 .Build();
-            
-            auto resultWithParam = ExecuteQueryWithCache(kikimr, userSid, queryWithParam, params);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultWithParam.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultWithParam = ExecuteQueryWithCache(kikimr, userSid, queryWithParam, params, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultWithParam.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed parameterized query for user " << userSid << ": " << resultWithParam.GetIssues().ToString());
 
             // Query with multiple parameters
             TString queryMultiParams = "DECLARE $key AS Uint32; DECLARE $value AS String; "
                 "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key OR Value = $value;";
-            
+
             auto paramsMulti = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key)
@@ -136,15 +140,15 @@ namespace {
                     .String("Value" + ToString(key))
                     .Build()
                 .Build();
-            
-            auto resultMultiParams = ExecuteQueryWithCache(kikimr, userSid, queryMultiParams, paramsMulti);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultMultiParams.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultMultiParams = ExecuteQueryWithCache(kikimr, userSid, queryMultiParams, paramsMulti, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultMultiParams.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed multi-param query for user " << userSid << ": " << resultMultiParams.GetIssues().ToString());
 
             // UPSERT query
             TString queryUpsert = "DECLARE $key AS Uint32; DECLARE $value AS String; "
                 "UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES ($key, $value);";
-            
+
             auto paramsUpsert = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key + 1000)
@@ -153,15 +157,15 @@ namespace {
                     .String("UpsertValue" + ToString(key))
                     .Build()
                 .Build();
-            
-            auto resultUpsert = ExecuteQueryWithCache(kikimr, userSid, queryUpsert, paramsUpsert);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultUpsert.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultUpsert = ExecuteQueryWithCache(kikimr, userSid, queryUpsert, paramsUpsert, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultUpsert.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed UPSERT query for user " << userSid << ": " << resultUpsert.GetIssues().ToString());
 
             // UPDATE query
             TString queryUpdate = "DECLARE $key AS Uint32; DECLARE $newValue AS String; "
                 "UPDATE `/Root/KeyValue` SET Value = $newValue WHERE Key = $key;";
-            
+
             auto paramsUpdate = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key)
@@ -170,28 +174,28 @@ namespace {
                     .String("Updated" + ToString(key))
                     .Build()
                 .Build();
-            
-            auto resultUpdate = ExecuteQueryWithCache(kikimr, userSid, queryUpdate, paramsUpdate);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultUpdate.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultUpdate = ExecuteQueryWithCache(kikimr, userSid, queryUpdate, paramsUpdate, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultUpdate.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed UPDATE query for user " << userSid << ": " << resultUpdate.GetIssues().ToString());
 
             // Query with Optional parameter
             TString queryOptional = "DECLARE $key AS Uint32?; "
                 "SELECT Key, Value FROM `/Root/KeyValue` WHERE $key IS NULL OR Key = $key;";
-            
+
             auto paramsOptional = TParamsBuilder()
                 .AddParam("$key")
                     .OptionalUint32(key)
                     .Build()
                 .Build();
-            
-            auto resultOptional = ExecuteQueryWithCache(kikimr, userSid, queryOptional, paramsOptional);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultOptional.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultOptional = ExecuteQueryWithCache(kikimr, userSid, queryOptional, paramsOptional, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultOptional.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed Optional query for user " << userSid << ": " << resultOptional.GetIssues().ToString());
 
             TString queryDiffTypes = "DECLARE $uint64Param AS Uint64; DECLARE $boolParam AS Bool; "
                 "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key < $uint64Param AND $boolParam;";
-            
+
             auto paramsDiffTypes = TParamsBuilder()
                 .AddParam("$uint64Param")
                     .Uint64(key + 100)
@@ -200,47 +204,46 @@ namespace {
                     .Bool(true)
                     .Build()
                 .Build();
-            
-            auto resultDiffTypes = ExecuteQueryWithCache(kikimr, userSid, queryDiffTypes, paramsDiffTypes);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultDiffTypes.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultDiffTypes = ExecuteQueryWithCache(kikimr, userSid, queryDiffTypes, paramsDiffTypes, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultDiffTypes.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed different types query for user " << userSid << ": " << resultDiffTypes.GetIssues().ToString());
 
             key++;
         }
     }
 
-    void FillCacheWithImplicitParams(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
+    void FillCacheWithImplicitParams(TKikimrRunner& kikimr, const TVector<TString>& userSids, bool isThreadLocked) {
         ui32 key = 0;
         for (const auto& userSid : userSids) {
-            // Implicitly parameterized query - no DECLARE in text
             TString queryImplicit = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
-            
+
             auto paramsImplicit = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key)
                     .Build()
                 .Build();
-            
-            auto resultImplicit = ExecuteQueryWithCache(kikimr, userSid, queryImplicit, paramsImplicit);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicit.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultImplicit = ExecuteQueryWithCache(kikimr, userSid, queryImplicit, paramsImplicit, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicit.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed implicit parameterized query for user " << userSid << ": " << resultImplicit.GetIssues().ToString());
 
             // Another implicitly parameterized query with different parameter type
             TString queryImplicitInt32 = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
-            
+
             auto paramsImplicitInt32 = TParamsBuilder()
                 .AddParam("$key")
                     .Int32(static_cast<i32>(key))
                     .Build()
                 .Build();
-            
-            auto resultImplicitInt32 = ExecuteQueryWithCache(kikimr, userSid, queryImplicitInt32, paramsImplicitInt32);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitInt32.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultImplicitInt32 = ExecuteQueryWithCache(kikimr, userSid, queryImplicitInt32, paramsImplicitInt32, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitInt32.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed implicit Int32 parameterized query for user " << userSid << ": " << resultImplicitInt32.GetIssues().ToString());
 
             // Implicitly parameterized query with multiple parameters
             TString queryImplicitMulti = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key OR Value = $value;";
-            
+
             auto paramsImplicitMulti = TParamsBuilder()
                 .AddParam("$key")
                     .Uint32(key)
@@ -249,25 +252,29 @@ namespace {
                     .String("Value" + ToString(key))
                     .Build()
                 .Build();
-            
-            auto resultImplicitMulti = ExecuteQueryWithCache(kikimr, userSid, queryImplicitMulti, paramsImplicitMulti);
-            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitMulti.GetStatus(), NYdb::EStatus::SUCCESS, 
+
+            auto resultImplicitMulti = ExecuteQueryWithCache(kikimr, userSid, queryImplicitMulti, paramsImplicitMulti, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitMulti.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Failed implicit multi-param query for user " << userSid << ": " << resultImplicitMulti.GetIssues().ToString());
 
             key++;
         }
     }
 
-    TVector<TCompileCacheEntry> GetCompileCacheEntries(TKikimrRunner& kikimr) {
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+    TVector<TCompileCacheEntry> GetCompileCacheEntries(TKikimrRunner& kikimr, bool isThreadLocked) {
+        auto getDb = [&] { return kikimr.GetTableClient(); };
+        auto db = isThreadLocked ? kikimr.RunCall(getDb) : getDb();
 
-        auto result = kikimr.RunCall([&] {
+        auto getSession = [&] { return db.CreateSession().GetValueSync().GetSession(); };
+        auto session = isThreadLocked ? kikimr.RunCall(getSession) : getSession();
+
+        auto doQuery = [&] {
             return session.ExecuteDataQuery(
                 "SELECT QueryId, Query, UserSID FROM `/Root/.sys/compile_cache_queries` ORDER BY AccessCount DESC",
                 TTxControl::BeginTx().CommitTx()
             ).ExtractValueSync();
-        });
+        };
+        auto result = isThreadLocked ? kikimr.RunCall(doQuery) : doQuery();
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
 
@@ -326,13 +333,86 @@ namespace {
         }
     }
 
-    void VerifyQueriesServedFromCache(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
+    struct TWarmupTestParams {
+        ui32 NodeCount = 3;
+        TVector<TString> UserSids;
+        bool UseRealThreads = true;
+        bool FillCache = true;
+        bool FillImplicitParams = true;
+        bool WaitBootstrap = false;
+    };
+
+    struct TWarmupTestEnv {
+        TKikimrRunner& Kikimr;
+        TTestActorRuntime& Runtime;
+        bool IsThreadLocked;
+        ui32 NodeId = 0;
+        ui32 NodeCount = 3;
+        TVector<TString> UserSids;
+        size_t ExpectedUniqueCount = 0;
+    };
+
+    TKikimrSettings MakeWarmupTestSettings(const TWarmupTestParams& params) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableCompileCacheView(true);
+        auto settings = TKikimrSettings()
+            .SetUseRealThreads(params.UseRealThreads)
+            .SetNodeCount(params.NodeCount)
+            .SetWithSampleTables(true)
+            .SetFeatureFlags(featureFlags);
+        return settings;
+    }
+
+    TWarmupTestEnv PrepareWarmupTest(TKikimrRunner& kikimr, const TWarmupTestParams& params) {
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const bool isThreadLocked = !params.UseRealThreads;
+
+        GrantPermissions(kikimr, "/Root/KeyValue", params.UserSids, isThreadLocked);
+        if (params.FillCache) {
+            FillCache(kikimr, params.UserSids, isThreadLocked);
+        }
+        if (params.FillImplicitParams) {
+            FillCacheWithImplicitParams(kikimr, params.UserSids, isThreadLocked);
+        }
+
+        size_t expectedUniqueCount = 0;
+        if (params.FillCache || params.FillImplicitParams) {
+            auto cacheEntries = GetCompileCacheEntries(kikimr, isThreadLocked);
+            UNIT_ASSERT_C(!cacheEntries.empty() || params.NodeCount == 1,
+                "Compile cache should have entries after executing queries");
+            THashSet<std::pair<TString, TString>> uniqueQueryUserPairs;
+            for (const auto& entry : cacheEntries) {
+                uniqueQueryUserPairs.insert({entry.Query, entry.UserSID});
+            }
+            expectedUniqueCount = uniqueQueryUserPairs.size();
+        }
+
+        return TWarmupTestEnv{kikimr, runtime, isThreadLocked, 0, params.NodeCount, params.UserSids, expectedUniqueCount};
+    }
+
+    TEvKqpWarmupComplete::TPtr RunWarmup(TWarmupTestEnv& env, const TKqpWarmupConfig& config,
+            TDuration timeout, bool waitBootstrap = false) {
+        auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
+        auto* warmupActor = CreateKqpWarmupActor(config, "/Root", "", {warmupEdge});
+        auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
+
+        if (waitBootstrap) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+            env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
+        }
+
+        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(env.NodeCount)), env.NodeId);
+        return env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, timeout);
+    }
+
+    void VerifyQueriesServedFromCache(TKikimrRunner& kikimr, const TVector<TString>& userSids, bool isThreadLocked) {
         ui32 key = 0;
         for (const auto& userSid : userSids) {
             TString query = TStringBuilder()
                 << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << key++ << ";";
 
-            auto result = kikimr.RunCall([&] {
+            auto doQuery = [&] {
                 TDriverConfig driverConfig;
                 driverConfig
                     .SetEndpoint(kikimr.GetEndpoint())
@@ -343,15 +423,16 @@ namespace {
                 auto db = NYdb::NTable::TTableClient(driver);
 
                 auto session = db.CreateSession().GetValueSync().GetSession();
-                
+
                 TExecDataQuerySettings settings;
                 settings.KeepInQueryCache(true);
                 settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-                
+
                 return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            });
-            
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, 
+            };
+            auto result = isThreadLocked ? kikimr.RunCall(doQuery) : doQuery();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Query failed for user " << userSid << ": " << result.GetIssues().ToString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
@@ -365,67 +446,158 @@ namespace {
     Y_UNIT_TEST_SUITE(KqpWarmup) {
 
         Y_UNIT_TEST(WarmupActorBasic) {
-            ui32 nodeCount = 3;
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1", "user2", "user3", "user4"};
 
-            NKikimrConfig::TFeatureFlags featureFlags;
-            featureFlags.SetEnableCompileCacheView(true);
-
-            TKikimrSettings settings = TKikimrSettings()
-                                        .SetUseRealThreads(false)
-                                        .SetNodeCount(nodeCount)
-                                        .SetWithSampleTables(true)
-                                        .SetFeatureFlags(featureFlags);
-
-            TKikimrRunner kikimr(settings);
-            auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-            TVector<TString> userSids = {"user0", "user1", "user2", "user3", "user4"};
-            GrantPermissions(kikimr, "/Root/KeyValue", userSids);
-            FillCache(kikimr, userSids);
-            FillCacheWithImplicitParams(kikimr, userSids);
-
-            auto cacheEntries = GetCompileCacheEntries(kikimr);
-            UNIT_ASSERT_C(!cacheEntries.empty(),
-                "Compile cache should have entries after executing queries");
-            
-            THashSet<std::pair<TString, TString>> uniqueQueryUserPairs;
-            for (const auto& entry : cacheEntries) {
-                uniqueQueryUserPairs.insert({entry.Query, entry.UserSID});
-            }
-            size_t expectedUniqueCount = uniqueQueryUserPairs.size();
-            
-            Cerr << "=== Cache entries before warmup: " << cacheEntries.size() 
-                 << ", unique (Query, UserSID) pairs: " << expectedUniqueCount << Endl;
-            for (size_t i = 0; i < std::min((size_t)5, cacheEntries.size()); ++i) {
-                Cerr << "QueryId: " << cacheEntries[i].QueryId
-                    << ", UserSID: " << cacheEntries[i].UserSID
-                    << ", Query size: " << cacheEntries[i].Query.size() << Endl;
-            }
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
             TKqpWarmupConfig warmupActorConfig;
-
-            ui32 const nodeId = 0;
-            auto warmupEdge = runtime.AllocateEdgeActor(nodeId);
-            auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
-            auto warmupActorId = runtime.Register(warmupActor, nodeId);
-
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
-            runtime.DispatchEvents(opts, TDuration::Seconds(1));
-
-            runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(nodeCount)), nodeId);
-
-            auto warmupComplete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, warmupActorConfig.HardDeadline);
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
 
             UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should complete successfully: " << warmupComplete->Get()->Message);
-            
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, expectedUniqueCount,
+
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, env.ExpectedUniqueCount,
                 "Should load deduplicated entries. Loaded: " << warmupComplete->Get()->EntriesLoaded
-                << ", expected unique: " << expectedUniqueCount);
-            VerifyLocalCacheContainsUsers(runtime, nodeId, "/Root", userSids);
-            VerifyQueriesServedFromCache(kikimr, userSids);
+                << ", expected unique: " << env.ExpectedUniqueCount);
+            VerifyLocalCacheContainsUsers(env.Runtime, env.NodeId, "/Root", env.UserSids);
+            VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+        }
+
+        Y_UNIT_TEST(WarmupSoftDeadlineStopsNewQueriesButCompletesPending) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1", "user2"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(15);
+            warmupActorConfig.MaxConcurrentCompilations = 2;
+            warmupActorConfig.MaxQueriesToLoad = 50;
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor should complete before hard deadline");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should complete successfully: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "At least some queries should be compiled. Loaded: " << warmupComplete->Get()->EntriesLoaded);
+        }
+
+        Y_UNIT_TEST(WarmupRespectsHardDeadline) {
+            TWarmupTestParams params;
+            for (ui32 i = 0; i < 20; ++i) {
+                params.UserSids.push_back("user" + ToString(i));
+            }
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::MilliSeconds(10);
+            warmupActorConfig.HardDeadline = TDuration::MilliSeconds(10);
+            warmupActorConfig.MaxConcurrentCompilations = 8;
+            warmupActorConfig.MaxQueriesToLoad = 500;
+            warmupActorConfig.MaxCompilationDurationMs = 60000;
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete before hard deadline expires");
+            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
+                "Warmup should fail due to hard deadline: " << warmupComplete->Get()->Message);
+        }
+
+        Y_UNIT_TEST(WarmupEmptyCache) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed with empty cache: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
+                "No entries should be loaded from empty cache");
+        }
+
+        Y_UNIT_TEST(WarmupSingleNodeSkips) {
+            TWarmupTestParams params;
+            params.NodeCount = 1;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed (skip): " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("single node"),
+                "Message should indicate single node skip: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
+                "No entries loaded when skipping for single node");
+        }
+
+        Y_UNIT_TEST(WarmupUnavailableSysview) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            std::atomic<ui32> sysviewRequestCount{0};
+            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
+                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
+                    if (sysviewRequestCount++ == 0) {
+                        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                        response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                        NYql::TIssue issue("Compile cache is not available");
+                        NYql::TIssues issues;
+                        issues.AddIssue(std::move(issue));
+                        NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+                        env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    }
+                });
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
+                "Warmup should fail when sysview is unavailable: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
+                "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
+                "At least one sysview request should have been intercepted");
         }
     }
 

@@ -40,6 +40,7 @@ struct TEvPrivate {
         TString UserSID;
         ui64 CompilationDurationMs = 0;
         TString Metadata;
+        TString SessionId;  // SessionId for cancellation
     };
 
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
@@ -237,7 +238,7 @@ void FillYdbParametersFromMetadata(
 
                 Ydb::TypedValue typedValue;
                 typedValue.mutable_type()->CopyFrom(typeProto);
-                
+
                 params[paramName] = std::move(typedValue);
             } catch (...) {
                 continue;
@@ -284,11 +285,11 @@ public:
 
     void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-        const auto softDeadline = Config.Deadline;
+        const auto softDeadline = Config.SoftDeadline;
         const auto hardDeadline = std::max(Config.HardDeadline, softDeadline);
         MaxConcurrentCompilations = std::max<ui32>(1u, Config.MaxConcurrentCompilations);
 
-        LOG_I("Warmup actor started, database: " << Database 
+        LOG_I("Warmup actor started, database: " << Database
               << ", softDeadline: " << softDeadline
               << ", hardDeadline: " << hardDeadline
               << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
@@ -397,11 +398,11 @@ private:
         LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
               << ", nodeIds count: " << NodeIds.size()
               << ", maxNodesToQuery: " << Config.MaxNodesToRequest
-              << ", scheduling soft deadline: " << Config.Deadline);
+              << ", scheduling soft deadline: " << Config.SoftDeadline);
         // Cancel bootstrap soft deadline (discovery wait) and schedule compilation soft deadline
         SoftDeadlineCookieHolder.Detach();
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
-        Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
+        Schedule(Config.SoftDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
         StartFetch();
     }
 
@@ -411,7 +412,9 @@ private:
             maxNodesToQuery = NodeIds.size(); // 0 means query all nodes
         }
         LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
-        const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
+        const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
+            ? Config.MaxCompilationDurationMs
+            : Config.SoftDeadline.MilliSeconds() / 2;
         Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds, maxNodesToQuery));
         Register(new TFetchTruncatedCountActor(Database, NodeIds, maxNodesToQuery));
         Become(&TThis::StateFetching);
@@ -419,7 +422,7 @@ private:
 
     void HandleFetchResult(TEvPrivate::TEvFetchCacheResult::TPtr& ev) {
         auto* result = ev->Get();
-        
+
         if (!result->Success) {
             LOG_W("Fetch failed, skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
@@ -443,19 +446,18 @@ private:
 
     void HandleQueryResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         PendingCompilations--;
-        
+
         const auto& record = ev->Get()->Record;
         bool success = (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS);
-        
+
         ui64 cookie = ev->Cookie;
-        auto it = PendingQueriesByCookie.find(cookie);
-        
-        if (it != PendingQueriesByCookie.end()) {
-            const auto& query = it->second;
+
+        if (auto it = PendingQueriesByCookie.find(cookie); it != PendingQueriesByCookie.end()) {
+            auto& query = it->second;
             if (success) {
                 LOG_I("Query compiled successfully, user: " << query.UserSID
                       << ", has_metadata: " << !query.Metadata.empty()
-                      << ", query: " << query.QueryText.substr(0, 200) 
+                      << ", query: " << query.QueryText.substr(0, 200)
                       << (query.QueryText.size() > 200 ? "..." : ""));
             } else {
                 TString errorMsg;
@@ -477,10 +479,10 @@ private:
             }
             PendingQueriesByCookie.erase(it);
         } else {
-            LOG_W("Received response for unknown cookie: " << cookie 
+            LOG_W("Received response for unknown cookie: " << cookie
                   << ", success: " << success);
         }
-        
+
         if (success) {
             EntriesLoaded++;
             if (Counters) {
@@ -507,7 +509,7 @@ private:
             auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, TVector<NACLib::TSID>{});
             record.SetUserToken(userToken->SerializeAsString());
         }
-        
+
         auto& request = *record.MutableRequest();
         request.SetDatabase(database);
         request.SetQuery(queryText);
@@ -517,11 +519,11 @@ private:
         request.SetTimeoutMs(timeout.MilliSeconds());
         request.SetIsInternalCall(true);
         request.SetIsWarmupCompilation(true);
-        
+
         if (!metadata.empty()) {
             FillYdbParametersFromMetadata(metadata, *request.MutableYdbParameters());
         }
-        
+
         return queryEv;
     }
 
@@ -529,13 +531,17 @@ private:
         LOG_T("Sending PREPARE request for user: " << query.UserSID
               << ", query length: " << query.QueryText.size()
               << ", has_metadata: " << !query.Metadata.empty());
-        
+
         ui64 cookie = NextCookie++;
-        PendingQueriesByCookie[cookie] = query;
-        
-        Send(MakeKqpProxyID(SelfId().NodeId()), 
-             CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.Deadline, query.Metadata).release(),
-             0, cookie);
+        auto& pendingQuery = PendingQueriesByCookie[cookie];
+        pendingQuery = query;
+
+        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.SoftDeadline, query.Metadata);
+        if (not request->GetSessionId().empty()) {
+            pendingQuery.SessionId = request->GetSessionId();
+        } // otherwise SessionId will be created by KqpProxy and returned in response
+
+        Send(MakeKqpProxyID(SelfId().NodeId()), request.release(), 0, cookie);
     }
 
     void StartCompilations() {
@@ -548,7 +554,7 @@ private:
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
-            LOG_I("All compilations finished, loaded: " << EntriesLoaded 
+            LOG_I("All compilations finished, loaded: " << EntriesLoaded
                   << ", failed: " << EntriesFailed);
             TString msg = TStringBuilder() << "Compiled " << EntriesLoaded << " queries"
                 << (SoftDeadlineReached ? " (soft deadline)" : "");
@@ -557,10 +563,36 @@ private:
     }
 
     void HandleHardDeadline() {
-        LOG_I("Hard deadline reached (waited too long for discovery), compiled: " << EntriesLoaded
+        ui32 pendingCount = PendingCompilations;
+        ui32 cancelledCount = 0;
+
+        // stop all pending compilations
+        if (pendingCount > 0) {
+            LOG_I("Hard deadline reached, cancelling " << pendingCount << " pending compilation requests");
+            for (auto& [cookie, query] : PendingQueriesByCookie) {
+                if (!query.SessionId.empty()) {
+                    auto cancelEv = MakeHolder<TEvKqp::TEvCancelQueryRequest>();
+                    cancelEv->Record.MutableRequest()->SetSessionId(query.SessionId);
+                    Send(MakeKqpProxyID(SelfId().NodeId()), cancelEv.Release());
+                    cancelledCount++;
+                }
+            }
+
+            PendingQueriesByCookie.clear();
+            PendingCompilations = 0;
+        }
+
+        LOG_I("Hard deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
-              << ", pending: " << PendingCompilations);
-        Complete(false, "Hard deadline exceeded (discovery not ready in time)");
+              << ", cancelled: " << cancelledCount);
+
+        TString message;
+        if (cancelledCount > 0) {
+            message = TStringBuilder() << "Hard deadline exceeded, cancelled " << cancelledCount << " pending compilations";
+        } else {
+            message = "Hard deadline exceeded";
+        }
+        Complete(false, message);
     }
 
     void HandleSoftDeadline() {

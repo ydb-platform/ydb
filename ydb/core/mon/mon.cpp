@@ -1,6 +1,6 @@
 #include "mon.h"
 #include "mon_impl.h"
-#include "events_internal.h"
+#include "mon_events.h"
 #include "counters_adapter_impl.h"
 
 #include <ydb/core/base/appdata.h>
@@ -32,11 +32,11 @@
 #include <util/system/hostname.h>
 
 namespace NActors {
+using NMonitoring::TEvMon;
 
 namespace {
 
 using namespace NKikimr;
-using namespace NMonitoring::NPrivate;
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {

@@ -8,7 +8,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
+#include <yt/yt/core/ytree/precise_time.h>
 #include <yt/yt/core/ytree/serialize.h>
+#include <yt/yt/core/ytree/size.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
@@ -477,6 +479,31 @@ TEST(TSerializationTest, TError)
     TestSerializationDeserialization(TError("some error"));
     TestSerializationDeserialization(TErrorOr<ui64>(TError("some error")));
 }
+
+TEST(TSerializationTest, TSize)
+{
+    TestSerializationDeserialization(TSize(123));
+    TestSerializationDeserialization(TSize::FromString("123M"));
+    TestSerializationDeserialization(TSize::FromString("123Pi"));
+}
+
+TEST(TSerializationTest, TPreciseInstant)
+{
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Now()));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Hours(10)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Seconds(10)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::MilliSeconds(25)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::MicroSeconds(50)));
+}
+
+TEST(TSerializationTest, TPreciseDuration)
+{
+    TestSerializationDeserialization(TPreciseDuration(TDuration::Hours(10)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::Seconds(10)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::MilliSeconds(25)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::MicroSeconds(50)));
+}
+
 
 TEST(TYTreeSerializationTest, Protobuf)
 {

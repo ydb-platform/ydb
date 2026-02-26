@@ -302,10 +302,6 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::Handle(TEvReadPersistentBufferResult::TPtr ev) {
-        InternalSyncReadResult(ev);
-    }
-
     void TDDiskActor::Handle(TEvReadResult::TPtr ev) {
         InternalSyncReadResult(ev);
     }

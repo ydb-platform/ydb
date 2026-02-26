@@ -10,66 +10,6 @@
 
 namespace NKikimr::NDDisk {
 
-#if defined(__linux__)
-
-    struct TDDiskIoOp : TDDiskActor::TDirectIoOpBase {
-        TActorId Sender;                    // original requester
-        ui64 Cookie = 0;                    // original event cookie
-        TActorId InterconnectSession;
-        NWilson::TSpan Span;
-        TCounters& Counters;
-
-        TDDiskIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
-            : TDDiskActor::TDirectIoOpBase(inFlightCount)
-            , Counters(counters)
-        {}
-
-        virtual void Drop() override {
-            Span.End();
-        }
-        
-        virtual void Reply() override {
-            std::unique_ptr<IEventBase> reply;
-            if (Result >= 0) {
-                if (IsRead) {
-                    TRope data(std::move(AlignedDataHolder));
-                    reply = std::make_unique<TEvReadResult>(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, std::move(data));
-                } else {
-                    reply = std::make_unique<TEvWriteResult>(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                }
-            } else {
-                auto status = UringErrorToStatus(Result, IsRead);
-                TString reason = TStringBuilder()
-                    << (IsRead ? "read" : "write")
-                    << " failed: " << strerror(-Result)
-                    << " (errno " << (-Result) << ")";
-                if (IsRead) {
-                    reply = std::make_unique<TEvReadResult>(status, reason);
-                } else {
-                    reply = std::make_unique<TEvWriteResult>(status, reason);
-                }
-            }
-
-            auto h = std::make_unique<IEventHandle>(Sender, DDiskId, reply.release(),
-                0, Cookie, nullptr, Span.GetTraceId());
-            if (InterconnectSession) {
-                h->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
-            }
-            Span.End();
-            actorSystem->Send(h.release());
-
-            const bool ok = Result >= 0;
-            if (IsRead) {
-                Counters.Interface.Read.Reply(ok, ok ? Size : 0);
-            } else {
-                Counters.Interface.Write.Reply(ok, ok ? Size : 0);
-            }
-        }
-    };
-#endif
-
     void TDDiskActor::SendInternalWrite(
             TChunkRef& chunkRef,
             const TBlockSelector &selector,
@@ -294,18 +234,7 @@ namespace NKikimr::NDDisk {
         if (instr.PayloadId) {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
-
-        // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
-        // TODO: should we check page size? And for large writes and huge pages should properly align?
-        auto iter = data.Begin();
-        if (iter.ContiguousSize() == data.size() &&
-                reinterpret_cast<uintptr_t>(iter.ContiguousData()) % BlockSize == 0) {
-            op->AlignedDataHolder = iter.GetChunk(); // zero-copy: ref-count bump
-        } else {
-            op->AlignedDataHolder = TRcBuf::UninitializedPageAligned(data.size());
-            data.Begin().ExtractPlainDataAndAdvance(op->AlignedDataHolder.GetDataMut(), data.size());
-        }
-
+        op->SetData(data);
         op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
@@ -383,25 +312,7 @@ namespace NKikimr::NDDisk {
             UringRouter->Flush();
         } else {
             InFlightCount.fetch_sub(1, std::memory_order_relaxed);
-
-            std::unique_ptr<IEventBase> reply;
-            if (op->IsRead) {
-                reply = std::make_unique<TEvReadResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full (short I/O retry)");
-            } else {
-                reply = std::make_unique<TEvWriteResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full (short I/O retry)");
-            }
-            auto h = std::make_unique<IEventHandle>(op->Sender, SelfId(), reply.release(),
-                0, op->Cookie, nullptr, op->Span.GetTraceId());
-            if (op->InterconnectSession) {
-                h->Rewrite(TEvInterconnect::EvForward, op->InterconnectSession);
-            }
-            op->Span.End();
-            TActivationContext::Send(h.release());
-
-            auto& ctr = op->IsRead ? Counters.Interface.Read : Counters.Interface.Write;
-            ctr.Reply(false);
+            op->Reply(TActivationContext::ActorSystem(), true);
         }
     }
 

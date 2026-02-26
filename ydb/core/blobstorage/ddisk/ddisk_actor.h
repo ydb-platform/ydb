@@ -77,6 +77,11 @@ namespace NKikimr::NDDisk {
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
         std::atomic<ui32> InFlightCount{0};
         static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
+
+        struct TDirectIoOpBase;
+        struct TSingleDirectIoOp;
+        struct TPersistentBufferPartIoOp;
+        struct TDDiskIoOp;
 #endif
 
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
@@ -135,11 +140,6 @@ namespace NKikimr::NDDisk {
 
         TCounters Counters;
 
-    public:
-#if defined(__linux__)
-        struct TDirectIoOp;
-#endif
-
     private:
         struct TEvPrivate {
             enum {
@@ -147,6 +147,8 @@ namespace NKikimr::NDDisk {
                 EvHandleEventForChunk,
                 EvHandlePersistentBufferEventForChunk,
                 EvShortIO,
+                EvWritePersistentBufferPart,
+                EvReadPersistentBufferPart,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -167,10 +169,42 @@ namespace NKikimr::NDDisk {
                 {}
             };
 
+            struct TEvReadPersistentBufferPart : TEventLocal<TEvReadPersistentBufferPart, EvReadPersistentBufferPart> {
+                ui64 InflightCookie;
+                ui64 PartCookie;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+                TString ErrorMessage;
+                TRcBuf Data;
+
+                TEvReadPersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, TRcBuf&& data)
+                    : InflightCookie(inflightCookie)
+                    , PartCookie(partCookie)
+                    , Status(status)
+                    , ErrorMessage(errorMessage)
+                    , Data(std::move(data))
+                {}
+            };
+
+            struct TEvWritePersistentBufferPart : TEventLocal<TEvWritePersistentBufferPart, EvWritePersistentBufferPart> {
+                ui64 InflightCookie;
+                ui64 PartCookie;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+                TString ErrorMessage;
+
+                TEvWritePersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage)
+                    : InflightCookie(inflightCookie)
+                    , PartCookie(partCookie)
+                    , Status(status)
+                    , ErrorMessage(errorMessage)
+                {}
+            };
+
 #if defined(__linux__)
             struct TEvShortIO : TEventLocal<TEvShortIO, EvShortIO> {
-                std::unique_ptr<TDirectIoOp> Op;
-                explicit TEvShortIO(std::unique_ptr<TDirectIoOp> op);
+                std::unique_ptr<TDirectIoOpBase> Op;
+                explicit TEvShortIO(std::unique_ptr<TDirectIoOpBase> op);
                 ~TEvShortIO();
             };
 #endif
@@ -425,7 +459,6 @@ namespace NKikimr::NDDisk {
 
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
         void Handle(TEvSyncWithDDisk::TPtr ev);
-        void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
 
         struct TSyncWithPersistentBufferPolicy;
@@ -494,18 +527,6 @@ namespace NKikimr::NDDisk {
         };
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
-        struct TPersistentBufferToDiskWriteInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId Session;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            std::set<ui64> WriteCookies;
-            std::vector<TPersistentBufferSectorInfo> Sectors;
-            TRope Data;
-            NWilson::TSpan Span;
-        };
-        std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
 
         struct TPersistentBufferDiskOperationInFlight {
             TActorId Sender;
@@ -513,6 +534,13 @@ namespace NKikimr::NDDisk {
             TActorId Session;
             NWilson::TSpan Span;
             std::set<ui64> OperationCookies;
+
+            ui64 TabletId;
+            ui64 VChunkIdx;
+            ui64 Lsn;
+            ui32 OffsetInBytes;
+            std::vector<TPersistentBufferSectorInfo> Sectors;
+            TRope Data;
         };
 
         std::map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
@@ -545,6 +573,9 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+
+        void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
+        void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
 
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
     };

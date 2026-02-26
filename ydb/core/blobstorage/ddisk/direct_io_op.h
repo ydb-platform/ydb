@@ -24,13 +24,11 @@ namespace NKikimr::NDDisk {
 
         // shared with DDisk actor
         std::atomic<ui32>& InFlightCount;
+        TCounters& Counters;
 
-        TDirectIoOpBase(std::atomic<ui32>& inFlightCount)
-            : InFlightCount(inFlightCount)
-        {
-            OnComplete = &TDirectIoOpBase::OnDirectIoComplete;
-            OnDrop = &TDirectIoOpBase::OnDirectIoDrop;
-        }
+        TDirectIoOpBase(std::atomic<ui32>& inFlightCount, TCounters& counters);
+
+        virtual ~TDirectIoOpBase() = default;
 
         // a poor error mapping
         static NKikimrBlobStorage::NDDisk::TReplyStatus::E UringErrorToStatus(i32 result, bool isRead) {
@@ -69,7 +67,7 @@ namespace NKikimr::NDDisk {
                     op->Counters.DirectIO.ShortWrites->Inc();
                 }
                 auto ddiskId = op->DDiskId;
-                auto ev = std::make_unique<TEvPrivate::TEvShortIO>(std::move(guard));
+                auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
                 actorSystem->Send(new IEventHandle(ddiskId, {}, ev.release()));
                 return;
             }
@@ -78,20 +76,49 @@ namespace NKikimr::NDDisk {
                 op->Result = -EIO;
             }
 
-            op->Reply();
+            op->Reply(actorSystem, false);
             op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
-
         }
 
         static void OnDirectIoDrop(NPDisk::TUringOperation* baseOp) noexcept {
             auto* op = static_cast<TDirectIoOpBase*>(baseOp);
             std::unique_ptr<TDirectIoOpBase> guard(op);
-            op->Drop();
             op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
         }
 
-        virtual void Drop() = 0;
-        virtual void Reply() = 0;
+        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) = 0;
+
+        void SetData(TRope& data);
+    };
+
+    struct TDDiskActor::TSingleDirectIoOp : TDDiskActor::TDirectIoOpBase {
+        TActorId Sender;                    // original requester
+        ui64 Cookie = 0;                    // original event cookie
+        TActorId InterconnectSession;
+
+        TSingleDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
+            : TDirectIoOpBase(inFlightCount, counters)
+        {}
+    };
+
+    struct TDDiskActor::TDDiskIoOp : TDDiskActor::TSingleDirectIoOp {
+        NWilson::TSpan Span;
+
+        TDDiskIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
+            : TSingleDirectIoOp(inFlightCount, counters)
+        {}
+
+        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;
+    };
+
+    struct TDDiskActor::TPersistentBufferPartIoOp : TDDiskActor::TSingleDirectIoOp {
+        ui64 PartCookie;
+
+        TPersistentBufferPartIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
+            : TSingleDirectIoOp(inFlightCount, counters)
+        {}
+
+        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;
     };
 
 #endif

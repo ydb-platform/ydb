@@ -106,7 +106,7 @@ namespace NKikimr {
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::Error;
             LOG_CRIT(ctx, BS_LOCALRECOVERY,
                     VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                        "LocalRecovery FINISHED: %s reason# %s status# %s;"
+                        "LocalRecovery FINISHED: %s reason# %s status# %s; "
                         "VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR",
                         LocRecCtx->RecovInfo->ToString().data(), reason.data(),
                         NKikimrProto::EReplyStatus_Name(status).data()));
@@ -786,6 +786,13 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));
         }
 
+        void Handle(const TEvents::TEvActorDied::TPtr& ev) {
+            ActiveActors.Erase(ev->Sender);
+            ActiveActors.KillAndClear(TActivationContext::AsActorContext());
+            SignalErrorAndDie(TActivationContext::AsActorContext(), NKikimrProto::ERROR,
+                    "Auxiliary actor terminated unexpectedly");
+        }
+
 
         STRICT_STFUNC(StateInitialize,
             HFunc(NPDisk::TEvYardInitResult, Handle)
@@ -796,6 +803,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateLoadDatabase,
             HFunc(THullIndexLoaded, Handle)
+            hFunc(TEvents::TEvActorDied, Handle)
             CFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison)
             HFunc(NMon::TEvHttpInfo, Handle)
         )

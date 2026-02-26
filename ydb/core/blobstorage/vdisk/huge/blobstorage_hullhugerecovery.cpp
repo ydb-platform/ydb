@@ -118,6 +118,7 @@ namespace NKikimr {
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
             , EnableTinyDisks(enableTinyDisks)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
             Heap->FinishRecovery();

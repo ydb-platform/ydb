@@ -297,6 +297,8 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvSubscribeLock, Handle);
                 hFunc(TEvLongTxService::TEvLockStatus, Handle);
                 hFunc(TEvLongTxService::TEvUnsubscribeLock, Handle);
+                hFunc(TEvLongTxService::TEvWaitingLockAdd, Handle);
+                hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -321,6 +323,8 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
+        void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
+        void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,

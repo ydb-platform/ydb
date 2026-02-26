@@ -102,14 +102,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         return std::move(index);
     }
 
-    void CreateMainTable(Tests::TServer::TPtr server, TActorId sender) {
+    void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, const char *textType = "String") {
         TShardedTableOptions options;
         options.EnableOutOfOrder(true);
         options.Shards(1);
         options.AllowSystemColumnNames(false);
         options.Columns({
             {"key", "Uint32", true, true},
-            {"text", "String", false, false},
+            {"text", textType, false, false},
             {"data", "String", false, false},
         });
         CreateShardedTable(server, sender, "/Root", "table-main", options);
@@ -231,6 +231,28 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
             request.ClearIndexName();
             request.AddDataColumns("some");
         }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown data column: some } ]");
+    }
+
+    Y_UNIT_TEST(BadRequestJson) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateMainTable(server, sender, "JsonDocument");
+        CreateIndexTable(server, sender, false);
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::Json);
+            request.MutableSettings()->clear_columns();
+        }, "{ <main>: Error: JSON columns should be set }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
+        }, "{ <main>: Error: Indexing binary JSON requires JSON index type }");
     }
 
     Y_UNIT_TEST(Build) {

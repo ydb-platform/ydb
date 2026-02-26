@@ -158,6 +158,27 @@ struct TBlockRange
         return {start, end};
     }
 
+    // Split the range into pieces, the boundaries of which are multiples
+    // of the stripe size.
+    [[nodiscard]] TVector<TBlockRange> Split(TBlockIndex stripeSize) const
+    {
+        if (stripeSize == 0) {
+            return {*this};
+        }
+
+        const ui64 firstStripe = Start / stripeSize;
+        const ui64 lastStripe = End / stripeSize;
+
+        TVector<TBlockRange> result;
+        result.reserve(lastStripe - firstStripe + 1);
+        for (TBlockIndex stripe = firstStripe; stripe <= lastStripe; ++stripe) {
+            const auto stripeRange =
+                TBlockRange::WithLength(stripe * stripeSize, stripeSize);
+            result.push_back(Intersect(stripeRange));
+        }
+        return result;
+    }
+
     friend bool operator==(const TBlockRange& lhs, const TBlockRange& rhs)
     {
         return lhs.Start == rhs.Start && lhs.End == rhs.End;

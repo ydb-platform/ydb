@@ -1276,6 +1276,7 @@ class TDataShard
     bool CheckLockRowsReject(TLockRowsRequestState& state);
     void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
     void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
+    void HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx);
@@ -3096,6 +3097,7 @@ private:
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     THashMap<TLockRowsRequestId, TLockRowsRequestState> LockRowsRequests;
+    THashMap<ui64, TLockRowsRequestState*> LockRowsWaitRequests;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
@@ -3304,6 +3306,7 @@ protected:
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             hFunc(NEvents::TDataEvents::TEvLockRows, HandleLockRowsRequest);
             hFunc(NEvents::TDataEvents::TEvLockRowsCancel, HandleLockRowsCancel);
+            hFunc(TEvLongTxService::TEvWaitingLockDeadlock, HandleLockRowsDeadlock);
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             hFunc(TEvDataShard::TEvListOperationsRequest, Handle);
             hFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);

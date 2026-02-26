@@ -35,6 +35,7 @@ namespace NLongTxService {
             EvUnsubscribeLock,
             EvWaitingLockAdd,
             EvWaitingLockRemove,
+            EvWaitingLockDeadlock,
             EvEnd,
         };
 
@@ -269,25 +270,36 @@ namespace NLongTxService {
         struct TEvWaitingLockAdd
             : TEventLocal<TEvWaitingLockAdd, EvWaitingLockAdd>
         {
-            TEvWaitingLockAdd(ui64 requestId, ui64 lockId, ui32 lockNodeId, ui64 otherLockId, ui32 otherLockNodeId)
+            struct TLockInfo {
+                ui64 LockId;
+                ui32 LockNodeId;
+            };
+
+            TEvWaitingLockAdd(ui64 requestId, TLockInfo lock, TLockInfo otherLock)
                 : RequestId(requestId)
-                , LockId(lockId)
-                , OtherLockId(otherLockId)
-                , LockNodeId(lockNodeId)
-                , OtherLockNodeId(otherLockNodeId)
+                , Lock(lock)
+                , OtherLock(otherLock)
             {}
 
             ui64 RequestId;
-            ui64 LockId;
-            ui64 OtherLockId;
-            ui32 LockNodeId;
-            ui32 OtherLockNodeId;
+            TLockInfo Lock;
+            TLockInfo OtherLock;
         };
 
         struct TEvWaitingLockRemove
             : TEventLocal<TEvWaitingLockRemove, EvWaitingLockRemove>
         {
             TEvWaitingLockRemove(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            ui64 RequestId;
+        };
+
+        struct TEvWaitingLockDeadlock
+            : TEventLocal<TEvWaitingLockDeadlock, EvWaitingLockDeadlock>
+        {
+            TEvWaitingLockDeadlock(ui64 requestId)
                 : RequestId(requestId)
             {}
 

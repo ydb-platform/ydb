@@ -113,19 +113,20 @@ private:
 
 class TDataShard::TLockRowsNotifyWaitGuard {
 public:
-    TLockRowsNotifyWaitGuard(TDataShard& self, TLockInfo::TPtr lock, TLockInfo::TPtr otherLock)
+    TLockRowsNotifyWaitGuard(TDataShard& self, TLockRowsRequestState& state, TLockInfo::TPtr lock, TLockInfo::TPtr otherLock)
         : Self(self)
         , Lock(std::move(lock))
         , OtherLock(std::move(otherLock))
         , RequestId(Self.NextTieBreakerIndex++)
     {
         if (Lock->GetLockId() != OtherLock->GetLockId()) {
+            Self.LockRowsWaitRequests[RequestId] = &state;
             Self.Send(
                 MakeLongTxServiceID(Self.SelfId().NodeId()),
                 new TEvLongTxService::TEvWaitingLockAdd(
                     RequestId,
-                    Lock->GetLockId(), Lock->GetLockNodeId(),
-                    OtherLock->GetLockId(), OtherLock->GetLockNodeId()));
+                    { Lock->GetLockId(), Lock->GetLockNodeId() },
+                    { OtherLock->GetLockId(), OtherLock->GetLockNodeId() }));
             Sent = true;
         }
     }
@@ -136,6 +137,10 @@ public:
                 MakeLongTxServiceID(Self.SelfId().NodeId()),
                 new TEvLongTxService::TEvWaitingLockRemove(RequestId));
         }
+        // Note: we may fail to send the request with an exception, after
+        // inserting request into LockRowsWaitRequests. Make sure the request
+        // is removed when we exit the scope.
+        Self.LockRowsWaitRequests.erase(RequestId);
     }
 
 private:
@@ -688,7 +693,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         if (runtimeLock.IsValid()) {
             while (!runtimeLock.IsOwner()) {
                 // Notify long tx service about waiting for the predecessor
-                TLockRowsNotifyWaitGuard waitGuard(*this, lock, runtimeLock.Predecessor().GetLock());
+                TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, runtimeLock.Predecessor().GetLock());
                 // Wait until lock predecessor changes
                 co_await runtimeLock.OnChangedEvent.Wait([&]{
                     // TODO: we need to somehow notify the service about new waiting graph edges,
@@ -703,7 +708,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 auto currentOwner = SysLocksTable().GetRawLock(*waitForLock);
                 if (currentOwner) {
                     // Notify long tx service abour waiting for the predecessor
-                    TLockRowsNotifyWaitGuard waitGuard(*this, lock, currentOwner);
+                    TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, currentOwner);
                     // Wake up when current row owner is removed entirely
                     // TODO: we probably want to wait until it is broken in the future
                     co_await currentOwner->OnRemovedEvent.Wait([&]{
@@ -730,8 +735,26 @@ void TDataShard::HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::T
     auto it = LockRowsRequests.find(requestId);
     if (it != LockRowsRequests.end()) {
         it->second.Scope.Cancel();
-        // Note: awaiter queue size changes when Cancel is called
+            // Note: awaiter queue size may change when Cancel is called
         UpdateProposeQueueSize();
+    }
+}
+
+void TDataShard::HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev) {
+    auto* msg = ev->Get();
+
+    auto it = LockRowsWaitRequests.find(msg->RequestId);
+    if (it != LockRowsWaitRequests.end()) {
+        TLockRowsRequestState& state = *it->second;
+        if (!state.Result) {
+            state.Result = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
+                TabletID(), state.RequestId.RequestId,
+                NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK,
+                TStringBuilder() << "Deadlock with another transaction detected at shard " << TabletID());
+            state.Scope.Cancel();
+            // Note: awaiter queue size may change when Cancel is called
+            UpdateProposeQueueSize();
+        }
     }
 }
 

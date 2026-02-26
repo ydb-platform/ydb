@@ -1591,6 +1591,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
     if (ev->Cookie != session.Generation) {
         return;
     }
+    SRC_LOG_D("Received TEvNoSession, erase session to " << ev->Sender.ToString());
+    ReadActorByEventQueueId.erase(session.EventQueueId);
+    Sessions.erase(sessionIt);
     ReInit("Received TEvNoSession");
     ScheduleProcessState();
 }

@@ -244,6 +244,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
         ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
                             << "SessionServiceTokenName must be specified in oidc config.";
     }
+    if (OpenIdConnectSettings.SecretName.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
+                            << "SecretName must be specified in oidc config.";
+    }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 
     if (StartupOptions.Mlock) {
@@ -269,7 +273,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
             break;
         }
     }
-    if (!OpenIdConnectSettings.SecretName.empty() && !clientSecretFound) {
+    if (!clientSecretFound) {
         ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
                             << "oidc.secret_name '" << OpenIdConnectSettings.SecretName
                             << "' was not found in auth token config secret_info.";

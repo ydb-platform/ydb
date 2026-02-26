@@ -2416,6 +2416,156 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
+TIndexDescription CreateGlobalIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns = {},
+    const TGlobalIndexSettings& indexTableSettings = {}
+) {
+    return TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription CreateGlobalAsyncIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns = {},
+    const TGlobalIndexSettings& indexTableSettings = {}
+) {
+    return TIndexDescription(name, EIndexType::GlobalAsync, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription CreateGlobalUniqueIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns = {},
+    const TGlobalIndexSettings& indexTableSettings = {}
+) {
+    return TIndexDescription(name, EIndexType::GlobalUnique, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription TIndexDescription::CreateVectorIndex(
+    const std::string& name,
+    const std::string& vectorColumn,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalVectorKMeansTree, {vectorColumn}, dataColumns,
+        {levelTableSettings, postingTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings,
+    const TGlobalIndexSettings& prefixTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns,
+        {levelTableSettings, postingTableSettings, prefixTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreateFulltextPlainIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TFulltextIndexSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& indexTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalFulltextPlain, indexColumns, dataColumns,
+        {indexTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreateFulltextRelevanceIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TFulltextIndexSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& postingTableSettings,
+    const TGlobalIndexSettings& dictTableSettings,
+    const TGlobalIndexSettings& docsTableSettings,
+    const TGlobalIndexSettings& statsTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalFulltextRelevance, indexColumns, dataColumns,
+        {dictTableSettings, docsTableSettings, statsTableSettings, postingTableSettings}, specializedIndexSettings
+    );
+}
+
+TGlobalIndexSettings TIndexDescription::GetIndexTableSettings() const {
+    if (IndexType_ == EIndexType::GlobalVectorKMeansTree ||
+        IndexType_ == EIndexType::GlobalFulltextRelevance ||
+        !GlobalIndexSettings_.size()) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(0);
+}
+
+TGlobalIndexSettings TIndexDescription::GetLevelTableSettings() const {
+    if (IndexType_ != EIndexType::GlobalVectorKMeansTree ||
+        GlobalIndexSettings_.size() < TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition);
+}
+
+TGlobalIndexSettings TIndexDescription::GetPrefixTableSettings() const {
+    if (IndexType_ != EIndexType::GlobalVectorKMeansTree ||
+        IndexColumns_.size() <= 1 ||
+        GlobalIndexSettings_.size() < TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition);
+}
+
+TGlobalIndexSettings TIndexDescription::GetDictTableSettings() const {
+    if (IndexType_ != EIndexType::GlobalFulltextRelevance ||
+        GlobalIndexSettings_.size() < TGlobalIndexSettings::FulltextRelevanceDictTablePosition) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceDictTablePosition);
+}
+
+TGlobalIndexSettings TIndexDescription::GetDocsTableSettings() const {
+    if (IndexType_ != EIndexType::GlobalFulltextRelevance ||
+        GlobalIndexSettings_.size() < TGlobalIndexSettings::FulltextRelevanceDocsTablePosition) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceDocsTablePosition);
+}
+
+TGlobalIndexSettings TIndexDescription::GetStatsTableSettings() const {
+    if (IndexType_ != EIndexType::GlobalFulltextRelevance ||
+        GlobalIndexSettings_.size() < TGlobalIndexSettings::FulltextRelevanceStatsTablePosition) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceStatsTablePosition);
+}
+
+TGlobalIndexSettings TIndexDescription::GetPostingTableSettings() const {
+    size_t pos;
+    if (IndexType_ == EIndexType::GlobalVectorKMeansTree) {
+        pos = TGlobalIndexSettings::VectorKMeansTreePostingTablePosition;
+    } else if (IndexType_ == EIndexType::GlobalFulltextRelevance) {
+        pos = TGlobalIndexSettings::FulltextRelevancePostingTablePosition;
+    } else {
+        return TGlobalIndexSettings{};
+    }
+    if (GlobalIndexSettings_.size() < pos) {
+        return TGlobalIndexSettings{};
+    }
+    return GlobalIndexSettings_.at(pos);
+}
+
 std::optional<TReadReplicasSettings> TReadReplicasSettings::FromProto(const Ydb::Table::ReadReplicasSettings& proto) {
     switch (proto.settings_case()) {
     case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:

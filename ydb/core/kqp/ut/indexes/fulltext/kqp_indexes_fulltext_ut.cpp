@@ -563,21 +563,14 @@ Y_UNIT_TEST(AddIndexWithRelevanceSettings) {
                 }
             }
         )", &wordSettings));
-        Ydb::Table::GlobalIndexSettings emptySettings;
-        TVector<NYdb::NTable::TGlobalIndexSettings> partitionSettings;
-        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings));
-        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(emptySettings));
-        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(emptySettings));
-        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings));
 
         auto addIndex = TAlterTableSettings()
-            .AppendAddIndexes(NYdb::NTable::TIndexDescription(
-                "fulltext_idx",
-                EIndexType::GlobalFulltextRelevance,
-                {"Text"},
+            .AppendAddIndexes(NYdb::NTable::TIndexDescription::CreateFulltextRelevanceIndex(
+                "fulltext_idx", {"Text"},
+                NYdb::NTable::TFulltextIndexSettings::FromProto(fulltextSettings),
                 {},
-                partitionSettings,
-                NYdb::NTable::TFulltextIndexSettings::FromProto(fulltextSettings)
+                NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings),
+                NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings)
             ));
         auto result = session.AlterTable("/Root/Texts", addIndex).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

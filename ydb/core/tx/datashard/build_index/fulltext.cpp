@@ -124,7 +124,11 @@ public:
 
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            {
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::STRING);
+                uploadTypes->emplace_back(TokenColumn, type);
+            } else {
                 Ydb::Type type;
                 NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
@@ -506,6 +510,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         // 3. Validating fulltext index settings
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+            if (!request.GetSettings().columns_size()) {
+                badRequest(TStringBuilder() << "JSON columns should be set");
+            }
         } else {
             TString error;
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {

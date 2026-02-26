@@ -81,7 +81,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    bool withFreq);
+    const NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
@@ -89,7 +89,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    bool withFreq);
+    const NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -250,6 +250,24 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                         error = TStringBuilder() << "Fulltext column '" << column.column() << "' expected type 'String' or 'Utf8' but got " << NScheme::TypeName(typeInfo);
                         return false;
                     }
+                }
+            }
+
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+            // We have already checked this in IsCompatibleIndex
+            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+
+            for (const auto& column : indexKeys.KeyColumns) {
+                auto typeInfo = baseColumnTypes.at(column);
+                if (typeInfo.GetTypeId() != NScheme::NTypeIds::String &&
+                    typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
+                    typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder() << "JSON column '" << column <<
+                        "' must have type 'String', 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);
+                    return false;
                 }
             }
 

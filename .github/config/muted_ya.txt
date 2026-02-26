@@ -38,7 +38,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable
-ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndexValidationFailsBetweenShards
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many

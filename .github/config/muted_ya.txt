@@ -116,6 +116,7 @@ ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
+ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDir.test_config_stored_in_config_store
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]

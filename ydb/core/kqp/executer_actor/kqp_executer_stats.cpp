@@ -1327,10 +1327,12 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     for (const auto& [stageId, stageStat] : StageStats) {
         memoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
         tasksCount += stageStat.Task2Index.size();
-        for (auto b : stageStat.IngressBytes)
+        for (auto b : stageStat.IngressBytes) {
             inputBytes += b;
-        for (auto b : stageStat.EgressBytes)
+        }
+        for (auto b : stageStat.EgressBytes) {
             outputBytes += b;
+        }
     }
     metrics->MemoryUsageBytes = memoryUsageBytes;
     metrics->TasksCount = tasksCount;

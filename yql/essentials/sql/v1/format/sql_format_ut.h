@@ -2039,39 +2039,113 @@ Y_UNIT_TEST(DropStreamingQuery) {
 }
 
 Y_UNIT_TEST(NamedNodeNewLine) {
-    TString input = TrimIndent(R"sql(
-        DEFINE SUBQUERY $x() AS
-            $a = SELECT 1;
-            $b = SELECT $a;
-            SELECT $b;
-        END DEFINE;
-    )sql");
-
-    TString expected = TrimIndent(R"sql(
-        DEFINE SUBQUERY $x() AS
-            $a = (
-                SELECT
-                    1
-            );
-
-            $b = (
-                SELECT
-                    $a
-            );
-
-            SELECT
-                $b
-            ;
-        END DEFINE;
-
-    )sql");
-
     TCases cases = {
-        {input, expected},
+        {
+            TrimIndent(R"sql(
+                DEFINE SUBQUERY $x() AS
+                    $a = SELECT 1;
+                    $b = SELECT $a;
+                    SELECT $b;
+                END DEFINE;
+            )sql"),
+            TrimIndent(R"sql(
+                DEFINE SUBQUERY $x() AS
+                    $a = (
+                        SELECT
+                            1
+                    );
+
+                    $b = (
+                        SELECT
+                            $a
+                    );
+
+                    SELECT
+                        $b
+                    ;
+                END DEFINE;
+
+            )sql"),
+        },
     };
 
     TSetup setup;
     setup.Run(cases);
+}
+
+Y_UNIT_TEST(NamedNodeCommentAndBraces) {
+    TSetup().Run(TCases{
+        {
+            TrimIndent(R"sql(
+                $x = -- a
+                    SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                $x = -- a
+                (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=-- a
+                (SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = -- a
+                (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x = /*a*/ (
+                    SELECT
+                        1
+                );
+            )sql"),
+            TrimIndent(R"sql(
+                $x = /*a*/ (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=/*a
+                */(SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = /*a
+                */ (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=(-- a
+                SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = ( -- a
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+    });
 }
 
 Y_UNIT_TEST(InlineSubquery) {
@@ -2120,4 +2194,5 @@ Y_UNIT_TEST(InlineSubquery) {
     TSetup setup;
     setup.Run(cases);
 }
+
 // NOLINTEND(misc-definitions-in-headers)

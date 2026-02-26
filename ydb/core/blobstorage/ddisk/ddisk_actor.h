@@ -462,6 +462,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
         void Handle(TEvSyncWithDDisk::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
+        void Handle(TEvReadPersistentBufferResult::TPtr ev);
 
         struct TSyncWithPersistentBufferPolicy;
         struct TSyncWithDDiskPolicy;

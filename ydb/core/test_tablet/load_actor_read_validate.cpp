@@ -764,6 +764,7 @@ namespace NKikimr::NTestShard {
         }
 
         if (ok) {
+            ReadCounters.RecordOk();
             const TMonotonic now = TActivationContext::Monotonic();
             ReadLatency.Add(TActivationContext::Monotonic(), now - timestamp);
             ReadSpeed.Add(TActivationContext::Now(), sizeRead);

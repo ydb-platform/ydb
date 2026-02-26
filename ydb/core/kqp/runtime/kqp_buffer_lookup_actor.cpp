@@ -114,11 +114,12 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                default:
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                        TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
+                hFunc(TEvPrivate::TEvRetryRead, Handle);
+            default:
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             RuntimeError(
@@ -432,7 +433,6 @@ public:
 
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
-                YQL_ENSURE(Settings.TxManager->BrokenLocks());
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));

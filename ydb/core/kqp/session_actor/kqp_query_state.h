@@ -499,7 +499,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
+            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable && tx->ResultsSize() == 0) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData, GetQuerySpanId());
                 YQL_ENSURE(success);

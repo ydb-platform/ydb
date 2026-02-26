@@ -134,16 +134,17 @@ protected:
                 }
             }
         }
+        const auto& firstReport = !PendingResults.empty() ? PendingResults[0].Report : nullptr;
         Printer->SetTestType(CurrentTestType);
-        if (!PendingResults.empty() && PendingResults[0].Report) {
-            Printer->SetInFlight(PendingResults[0].Report->InFlight);
+        if (firstReport) {
+            Printer->SetInFlight(firstReport->InFlight);
         }
         Printer->AddResult("Device", TString("SUM"));
         Printer->AddResult("Name", Cfg.Name);
-        Printer->AddResult("Duration, sec", PendingResults[0].Report ? PendingResults[0].Report->Duration.Seconds() : 0);
-        Printer->AddResult("Load", PendingResults[0].Report ? PendingResults[0].Report->LoadTypeName() : TString("-"));
-        Printer->AddResult("Size", PendingResults[0].Report ? ToString(HumanReadableSize(PendingResults[0].Report->Size, SF_BYTES)) : TString("-"));
-        Printer->AddResult("InFlight", PendingResults[0].Report ? PendingResults[0].Report->InFlight : 0u);
+        Printer->AddResult("Duration, sec", firstReport ? firstReport->Duration.Seconds() : 0);
+        Printer->AddResult("Load", firstReport ? firstReport->LoadTypeName() : TString("-"));
+        Printer->AddResult("Size", firstReport ? ToString(HumanReadableSize(firstReport->Size, SF_BYTES)) : TString("-"));
+        Printer->AddResult("InFlight", firstReport ? firstReport->InFlight : 0u);
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", totalSpeed));
         Printer->AddResult("IOPS", Sprintf("%.0f", totalIops));
         Printer->AddSpeedAndIops(TSpeedAndIops(totalSpeed, totalIops));
@@ -194,7 +195,7 @@ protected:
             if (PendingResults[0].Report) {
                 FillPrinterWithReport(PendingResults[0].Report, 0);
             } else {
-                Cerr << "Test error - no report on test finish, reason# " << PendingResults[0].ErrorReason;
+                Cerr << "Test error - no report on test finish, reason# " << PendingResults[0].ErrorReason << Endl;
             }
             DDiskDoneEvent.Signal();
             DDiskResultsPrintedEvent.Wait();
@@ -204,7 +205,7 @@ protected:
                 if (PendingResults[d].Report) {
                     FillPrinterWithReport(PendingResults[d].Report, d);
                 } else {
-                    Cerr << "Test error on device " << d << " - no report, reason# " << PendingResults[d].ErrorReason;
+                    Cerr << "Test error on device " << d << " - no report, reason# " << PendingResults[d].ErrorReason << Endl;
                 }
                 DDiskDoneEvent.Signal();
                 DDiskResultsPrintedEvent.Wait();

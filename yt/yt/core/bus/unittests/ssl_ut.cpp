@@ -103,15 +103,15 @@ TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -129,15 +129,15 @@ TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -155,15 +155,15 @@ TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -181,15 +181,15 @@ TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -205,15 +205,15 @@ TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -236,7 +236,7 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -257,7 +257,7 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -273,15 +273,15 @@ TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -297,15 +297,15 @@ TEST_F(TSslTest, OptionalAndDisabledEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -330,7 +330,7 @@ TEST_F(TSslTest, CAVerificationModeFailure)
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -351,18 +351,18 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         Cerr << sendFuture.Get().GetMessage() << Endl;
-        EXPECT_TRUE(sendFuture.Get().IsOK());
+        EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
     }
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -384,15 +384,15 @@ TEST_F(TSslTest, FullVerificationModeByHostName)
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     // This test should pass since key pair is issued for CN=localhost.
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_TRUE(sendFuture.Get().IsOK());
+    EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -416,15 +416,15 @@ TEST_F(TSslTest, FullVerificationModeByIpAddress)
 
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
         // This test should pass since (127.0.0.1 | [::1]) is in SAN.
-        EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+        EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
         EXPECT_TRUE(bus->IsEncrypted());
 
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        EXPECT_TRUE(sendFuture.Get().IsOK());
+        EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
         server->Stop()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
     }
 }
@@ -451,7 +451,7 @@ TEST_F(TSslTest, FullVerificationByAlternativeHostName)
             auto bus = client->CreateBus(New<TEmptyBusHandler>());
             // This test should fail since (127.0.0.1 | [::1]) != localhost.
             EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-                bus->GetReadyFuture().Get().ThrowOnError(),
+                bus->GetReadyFuture().BlockingGet().ThrowOnError(),
                 NYT::TErrorException,
                 "Failed to establish TLS/SSL session");
         }
@@ -462,15 +462,15 @@ TEST_F(TSslTest, FullVerificationByAlternativeHostName)
 
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
         // This test should pass since key pair is issued for CN=localhost.
-        EXPECT_NO_THROW(bus->GetReadyFuture().Get().ThrowOnError());
+        EXPECT_NO_THROW(bus->GetReadyFuture().BlockingGet().ThrowOnError());
         EXPECT_TRUE(bus->IsEncrypted());
 
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        EXPECT_NO_THROW(sendFuture.Get().ThrowOnError());
+        EXPECT_NO_THROW(sendFuture.BlockingGet().ThrowOnError());
 
         server->Stop()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
     }
 }
@@ -495,15 +495,15 @@ TEST_F(TSslTest, MutualVerificationSuccess)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    bus->GetReadyFuture().Get().ThrowOnError();
+    bus->GetReadyFuture().BlockingGet().ThrowOnError();
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    sendFuture.Get().ThrowOnError();
+    sendFuture.BlockingGet().ThrowOnError();
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -552,7 +552,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithoutClientCertificate)
     }
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -605,7 +605,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
     }
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -626,18 +626,18 @@ TEST_F(TSslTest, ServerCipherList)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         Cerr << sendFuture.Get().GetMessage() << Endl;
-        EXPECT_TRUE(sendFuture.Get().IsOK());
+        EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
     }
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -675,11 +675,11 @@ TEST_F(TSslTest, DifferentCipherLists)
         clientConfig->SslConfigurationCommands.push_back(maxProtocolTLS1_2);
         auto client = CreateBusClient(clientConfig);
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
-        EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+        EXPECT_FALSE(bus->GetReadyFuture().BlockingGet().IsOK());
     }
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -703,15 +703,15 @@ TEST_F(TSslTest, FullVerificationWithEllipticCurve)
 
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
         // This test should pass since (localhost | 127.0.0.1 | [::1]) is in SAN.
-        EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+        EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
         EXPECT_TRUE(bus->IsEncrypted());
 
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        EXPECT_TRUE(sendFuture.Get().IsOK());
+        EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
 
         server->Stop()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
     }
 }
@@ -730,11 +730,11 @@ TEST_F(TSslTest, ServerStop)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     auto message = CreateMessage(1);
@@ -761,7 +761,7 @@ TEST_F(TSslTest, BlackHole)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->GetReadyFuture().BlockingGet().IsOK());
     EXPECT_TRUE(bus->IsEncrypted());
 
     // Block all traffic from server.
@@ -777,7 +777,7 @@ TEST_F(TSslTest, BlackHole)
         "Socket read stalled");
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 

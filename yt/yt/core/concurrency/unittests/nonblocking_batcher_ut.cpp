@@ -33,19 +33,19 @@ TEST(TNonblockingBatcherTest, Simple)
     batcher->Enqueue(3);
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2, 3}));
     batcher->Enqueue(10);
     batcher->Enqueue(11);
     ASSERT_FALSE(e2.IsSet());
     batcher->Enqueue(12);
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({10, 11, 12}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({10, 11, 12}));
     batcher->Enqueue(0);
     batcher->Enqueue(1);
     batcher->Enqueue(2);
     auto e3 = batcher->DequeueBatch();
     ASSERT_TRUE(e3.IsSet());
-    ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>({0, 1, 2}));
+    ASSERT_EQ(e3.BlockingGet().ValueOrThrow(), std::vector<int>({0, 1, 2}));
 }
 
 TEST(TNonblockingBatcherTest, Duration)
@@ -64,12 +64,12 @@ TEST(TNonblockingBatcherTest, Duration)
     Sleep(overTimeout);
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>{1});
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>{1});
     batcher->Enqueue(2);
     ASSERT_FALSE(e2.IsSet());
     batcher->Enqueue(3);
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({2, 3}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({2, 3}));
 }
 
 TEST(TNonblockingBatcherTest, Dequeue)
@@ -82,37 +82,37 @@ TEST(TNonblockingBatcherTest, Dequeue)
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({1, 2}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2}));
     }
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 4}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({3, 4}));
     }
     {
         auto e = batcher->DequeueBatch();
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({5}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({5}));
     }
     EnqueueAll(batcher, {6, 7, 8});
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({6, 7}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({6, 7}));
     }
     {
         auto e = batcher->DequeueBatch();
         ASSERT_FALSE(e.IsSet());
         EnqueueAll(batcher, {9, 10, 11});
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({8, 9}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({8, 9}));
     }
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({10, 11}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({10, 11}));
     }
 }
 
@@ -129,15 +129,15 @@ TEST(TNonblockingBatcherTest, Drop)
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     batcher->Drop();
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2}));
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>());
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>());
     batcher->Enqueue(10);
     auto e3 = batcher->DequeueBatch();
     ASSERT_FALSE(e3.IsSet());
     batcher->Drop();
     ASSERT_TRUE(e3.IsSet());
-    ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>());
+    ASSERT_EQ(e3.BlockingGet().ValueOrThrow(), std::vector<int>());
 }
 
 TEST(TNonblockingBatcherTest, EnqueueTimeout)
@@ -153,7 +153,7 @@ TEST(TNonblockingBatcherTest, EnqueueTimeout)
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({1}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({1}));
     }
 }
 
@@ -196,11 +196,11 @@ TEST(TNonblockingBatcherTest, SumLimiter)
     ASSERT_FALSE(e5.IsSet());
     batcher->Enqueue(9);
     ASSERT_TRUE(e5.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3, 4}));
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({5, 6}));
-    ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>({7, 8}));
-    ASSERT_EQ(e4.Get().ValueOrThrow(), std::vector<int>({9, 10}));
-    ASSERT_EQ(e5.Get().ValueOrThrow(), std::vector<int>({1, 9}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2, 3, 4}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({5, 6}));
+    ASSERT_EQ(e3.BlockingGet().ValueOrThrow(), std::vector<int>({7, 8}));
+    ASSERT_EQ(e4.BlockingGet().ValueOrThrow(), std::vector<int>({9, 10}));
+    ASSERT_EQ(e5.BlockingGet().ValueOrThrow(), std::vector<int>({1, 9}));
 }
 
 TEST(TNonblockingBatcherTest, CompositeLimiterLimiter)
@@ -221,11 +221,11 @@ TEST(TNonblockingBatcherTest, CompositeLimiterLimiter)
     ASSERT_FALSE(e5.IsSet());
     batcher->Enqueue(9);
     ASSERT_TRUE(e5.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({4, 5, 6}));
-    ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>({7, 8}));
-    ASSERT_EQ(e4.Get().ValueOrThrow(), std::vector<int>({9, 10}));
-    ASSERT_EQ(e5.Get().ValueOrThrow(), std::vector<int>({1, 9}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2, 3}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({4, 5, 6}));
+    ASSERT_EQ(e3.BlockingGet().ValueOrThrow(), std::vector<int>({7, 8}));
+    ASSERT_EQ(e4.BlockingGet().ValueOrThrow(), std::vector<int>({9, 10}));
+    ASSERT_EQ(e5.BlockingGet().ValueOrThrow(), std::vector<int>({1, 9}));
 }
 
 TEST(TNonblockingBatcherTest, UpdateLimiter)
@@ -239,7 +239,7 @@ TEST(TNonblockingBatcherTest, UpdateLimiter)
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2, 3}));
     }
     batcher->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{4}));
     {
@@ -248,21 +248,21 @@ TEST(TNonblockingBatcherTest, UpdateLimiter)
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 2}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({3, 2}));
     }
     EnqueueAll(batcher, {3, 2});
     {
         // new batch with new limiter
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 2}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({3, 2}));
     }
     batcher->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{100}));
     EnqueueAll(batcher, {5, 6, 7});
     {
         auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
-        ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({5, 6, 7}));
+        ASSERT_EQ(e.BlockingGet().ValueOrThrow(), std::vector<int>({5, 6, 7}));
     }
 }
 
@@ -291,8 +291,8 @@ TEST(TNonblockingBatcherTest, NoEmptyBatches)
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1}));
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({2}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({2}));
 }
 
 TEST(TNonblockingBatcherTest, AllowEmptyBatches)
@@ -309,8 +309,8 @@ TEST(TNonblockingBatcherTest, AllowEmptyBatches)
     ASSERT_TRUE(e1.IsSet());
     Sleep(overTimeout);
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({}));
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({}));
 }
 
 TEST(TNonblockingBatcherTest, IncompleteBatchAfterDeque)
@@ -324,12 +324,12 @@ TEST(TNonblockingBatcherTest, IncompleteBatchAfterDeque)
     batcher->Enqueue(3);
     auto e1 = batcher->DequeueBatch();
     ASSERT_TRUE(e1.IsSet());
-    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2}));
+    ASSERT_EQ(e1.BlockingGet().ValueOrThrow(), std::vector<int>({1, 2}));
     Sleep(overTimeout);
     batcher->Enqueue(4);
     auto e2 = batcher->DequeueBatch();
     ASSERT_TRUE(e2.IsSet());
-    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({3, 4}));
+    ASSERT_EQ(e2.BlockingGet().ValueOrThrow(), std::vector<int>({3, 4}));
 }
 
 TEST(TNonblockingBatcherTest, Drain)
@@ -350,7 +350,7 @@ TEST(TNonblockingBatcherTest, Drain)
     auto batch = batcher->DequeueBatch();
     auto drainedBatches = batcher->Drain();
 
-    ASSERT_FALSE(batch.Get().IsOK());
+    ASSERT_FALSE(batch.BlockingGet().IsOK());
     ASSERT_EQ(std::ssize(drainedBatches), 1);
     ASSERT_EQ(drainedBatches[0], std::vector({0}));
 }

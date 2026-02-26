@@ -91,24 +91,24 @@ TEST_F(TTlsTest, SimplePingPong)
     auto asyncFirstSide = dialer->Dial(listener->GetAddress(), context);
     auto asyncSecondSide = listener->Accept();
 
-    auto firstSide = asyncFirstSide.Get().ValueOrThrow();
-    auto secondSide = asyncSecondSide.Get().ValueOrThrow();
+    auto firstSide = asyncFirstSide.BlockingGet().ValueOrThrow();
+    auto secondSide = asyncSecondSide.BlockingGet().ValueOrThrow();
 
     auto buffer = TSharedRef::FromString(TString("ping"));
     auto outputBuffer = TSharedMutableRef::Allocate(4);
 
     auto result = firstSide->Write(buffer).Get();
-    ASSERT_EQ(secondSide->Read(outputBuffer).Get().ValueOrThrow(), 4u);
+    ASSERT_EQ(secondSide->Read(outputBuffer).BlockingGet().ValueOrThrow(), 4u);
     result.ThrowOnError();
     ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
 
-    secondSide->Write(buffer).Get().ThrowOnError();
-    ASSERT_EQ(firstSide->Read(outputBuffer).Get().ValueOrThrow(), 4u);
+    secondSide->Write(buffer).BlockingGet().ThrowOnError();
+    ASSERT_EQ(firstSide->Read(outputBuffer).BlockingGet().ValueOrThrow(), 4u);
     ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
 
     WaitFor(firstSide->Close())
         .ThrowOnError();
-    ASSERT_EQ(secondSide->Read(outputBuffer).Get().ValueOrThrow(), 0u);
+    ASSERT_EQ(secondSide->Read(outputBuffer).BlockingGet().ValueOrThrow(), 0u);
 }
 
 TEST(TTlsTestWithoutFixtureTest, LoadCertificateChain)

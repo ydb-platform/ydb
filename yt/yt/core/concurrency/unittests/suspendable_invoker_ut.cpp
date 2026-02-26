@@ -99,7 +99,7 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
     })
         .AsyncVia(suspendableInvoker)
         .Run()
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 
     EXPECT_TRUE(flagValue);
@@ -139,7 +139,7 @@ TEST_F(TSuspendableInvokerTest, ResumeBeforeFullSuspend)
 
     EXPECT_FALSE(firstFuture.IsSet());
     suspendableInvoker->Resume();
-    EXPECT_FALSE(firstFuture.Get().IsOK());
+    EXPECT_FALSE(firstFuture.BlockingGet().IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, SuspendAndImmediatelyResume)
@@ -168,7 +168,7 @@ TEST_F(TSuspendableInvokerTest, AllowSuspendOnContextSwitch)
 
     auto suspendFuture = suspendableInvoker->Suspend();
     EXPECT_FALSE(suspendFuture.IsSet());
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(suspendFuture.BlockingGet().IsOK());
 
     suspendableInvoker->Resume();
     promise.Set();
@@ -226,7 +226,7 @@ TEST_F(TSuspendableInvokerTest, SuspendResumeOnFinishedRace)
         }
     }
     auto future = suspendableInvoker->Suspend();
-    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(future.BlockingGet().IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, ResumeInApply)
@@ -242,7 +242,7 @@ TEST_F(TSuspendableInvokerTest, ResumeInApply)
     auto suspendFuture = suspendableInvoker->Suspend()
         .Apply(BIND([=] { suspendableInvoker->Resume(); }));
 
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(suspendFuture.BlockingGet().IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, SuspendInApplyWhenSuspensionFailed)
@@ -270,7 +270,7 @@ TEST_F(TSuspendableInvokerTest, SuspendInApplyWhenSuspensionFailed)
     suspendableInvoker->Resume();
     EXPECT_TRUE(flag);
 
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(suspendFuture.BlockingGet().IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)

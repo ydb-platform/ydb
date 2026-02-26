@@ -152,7 +152,7 @@ TEST(TFederatedClientTest, Basic)
     // Error from `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        ASSERT_ANY_THROW(result.Get().ValueOrThrow());
+        ASSERT_ANY_THROW(result.BlockingGet().ValueOrThrow());
     }
 
     // From `sas`.
@@ -328,7 +328,7 @@ TEST(TFederatedClientTest, Transactions)
     // Error from `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        ASSERT_ANY_THROW(result.Get().ValueOrThrow());
+        ASSERT_ANY_THROW(result.BlockingGet().ValueOrThrow());
     }
 
     auto mockTransactionSas = New<TStrictMockTransaction>();

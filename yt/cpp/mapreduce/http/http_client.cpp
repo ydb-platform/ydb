@@ -355,7 +355,7 @@ public:
     IHttpResponsePtr Finish() override
     {
         WrappedStream_.Flush();
-        auto response = ActiveRequest_->Finish().Get().ValueOrThrow();
+        auto response = ActiveRequest_->Finish().BlockingGet().ValueOrThrow();
         return std::make_unique<TCoreHttpResponse>(std::move(Context_), std::move(response));
     }
 
@@ -499,8 +499,8 @@ public:
 
             auto activeRequest = StartRequestImpl(header.GetMethod(), url, headers);
 
-            activeRequest->GetRequestStream()->Write(TSharedRef::FromString(parametersStr)).Get().ThrowOnError();
-            response = activeRequest->Finish().Get().ValueOrThrow();
+            activeRequest->GetRequestStream()->Write(TSharedRef::FromString(parametersStr)).BlockingGet().ThrowOnError();
+            response = activeRequest->Finish().BlockingGet().ValueOrThrow();
         } else {
             auto bodyRef = TSharedRef::FromString(TString(body ? *body : ""));
             bool includeParameters = true;
@@ -559,11 +559,11 @@ private:
     NHttp::IResponsePtr RequestImpl(const TString& method, const TString& url, const NHttp::THeadersPtr& headers, const TSharedRef& body)
     {
         if (method == "GET") {
-            return Client_->Get(url, headers).Get().ValueOrThrow();
+            return Client_->Get(url, headers).BlockingGet().ValueOrThrow();
         } else if (method == "POST") {
-            return Client_->Post(url, body, headers).Get().ValueOrThrow();
+            return Client_->Post(url, body, headers).BlockingGet().ValueOrThrow();
         } else if (method == "PUT") {
-            return Client_->Put(url, body, headers).Get().ValueOrThrow();
+            return Client_->Put(url, body, headers).BlockingGet().ValueOrThrow();
         } else {
             YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
                 method,
@@ -574,9 +574,9 @@ private:
     NHttp::IActiveRequestPtr StartRequestImpl(const TString& method, const TString& url, const NHttp::THeadersPtr& headers)
     {
         if (method == "POST") {
-            return Client_->StartPost(url, headers).Get().ValueOrThrow();
+            return Client_->StartPost(url, headers).BlockingGet().ValueOrThrow();
         } else if (method == "PUT") {
-            return Client_->StartPut(url, headers).Get().ValueOrThrow();
+            return Client_->StartPut(url, headers).BlockingGet().ValueOrThrow();
         } else {
             YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
                 method,

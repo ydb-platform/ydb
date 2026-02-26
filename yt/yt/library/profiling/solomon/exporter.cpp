@@ -561,7 +561,7 @@ void TSolomonExporter::DoHandleShard(
             auto cacheGuard = Guard(CacheLock_);
 
             auto cacheHitIt = ResponseCache_.find(*cacheKey);
-            if (cacheHitIt != ResponseCache_.end() && !(cacheHitIt->second.IsSet() && !cacheHitIt->second.Get().IsOK())) {
+            if (cacheHitIt != ResponseCache_.end() && !(cacheHitIt->second.IsSet() && !cacheHitIt->second.BlockingGet().IsOK())) {
                 YT_LOG_DEBUG("Replying from cache");
 
                 ResponseCacheHit_.Increment();

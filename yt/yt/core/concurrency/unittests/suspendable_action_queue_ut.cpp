@@ -85,7 +85,7 @@ TEST_F(TSuspendableActionQueueTest, Simple)
     BIND([&x] { ++x; })
         .AsyncVia(Invoker_)
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     EXPECT_EQ(x, 1);
@@ -106,7 +106,7 @@ TEST_F(TSuspendableActionQueueTest, SuspendResume)
     EnsureRunning();
 
     Queue_->Suspend(/*immediate*/ true)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     i64 x1 = x.load();
@@ -124,18 +124,18 @@ TEST_F(TSuspendableActionQueueTest, SuspendResume)
     i64 x3 = x.load();
     EXPECT_GT(x3, x2);
 
-    looper.Stop().Get().ThrowOnError();
+    looper.Stop().BlockingGet().ThrowOnError();
 }
 
 TEST_F(TSuspendableActionQueueTest, SuspendEmptyQueue)
 {
     Queue_->Suspend(/*immedidate*/ true)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
     Queue_->Resume();
 
     Queue_->Suspend(/*immedidate*/ false)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
     Queue_->Resume();
 
@@ -143,7 +143,7 @@ TEST_F(TSuspendableActionQueueTest, SuspendEmptyQueue)
     BIND([&x] {++x; })
         .AsyncVia(Invoker_)
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     EXPECT_EQ(x, 1);
@@ -168,9 +168,9 @@ TEST_F(TSuspendableActionQueueTest, NotImmediateSuspend)
 
     EXPECT_FALSE(future.IsSet());
 
-    looper.Stop().Get().ThrowOnError();
+    looper.Stop().BlockingGet().ThrowOnError();
 
-    future.Get().ThrowOnError();
+    future.BlockingGet().ThrowOnError();
 
     EXPECT_GE(progress.load(), current_progress);
 
@@ -197,14 +197,14 @@ TEST_F(TSuspendableActionQueueTest, PromoteSuspendToImmediate)
     EXPECT_GE(progress.load(), current_progress);
 
     Queue_->Suspend(/*immediately*/ true)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     EXPECT_TRUE(suspendFuture.IsSet());
 
     auto stopFuture = looper.Stop();
     Queue_->Resume();
-    stopFuture.Get().ThrowOnError();
+    stopFuture.BlockingGet().ThrowOnError();
 }
 
 TEST_F(TSuspendableActionQueueTest, StressTest1)
@@ -229,7 +229,7 @@ TEST_F(TSuspendableActionQueueTest, StressTest1)
         RandomSleep();
 
         Queue_->Suspend(/*immedidate*/ true)
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
 
         i64 currentX = x;
@@ -271,7 +271,7 @@ TEST_F(TSuspendableActionQueueTest, StressTest2)
         RandomSleep();
 
         Queue_->Suspend(/*immedidate*/ true)
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
 
         i64 currentX = x;

@@ -15,7 +15,7 @@ namespace {
 template <class T>
 void ExpectSuccessfullySetFuture(const TFuture<T>& future)
 {
-    YT_VERIFY(future.WithTimeout(TDuration::Seconds(15)).Get().IsOK());
+    YT_VERIFY(future.WithTimeout(TDuration::Seconds(15)).BlockingGet().IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -482,14 +482,14 @@ TEST_P(TParametrizedViablePeerRegistryTest, PeersAvailablePromise)
 
     viablePeerRegistry->SetError(TError("error"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().BlockingGet().IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("f"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().BlockingGet().IsOK());
 
     viablePeerRegistry->SetError(TError("another error"));
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().BlockingGet().IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("f"));
     EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().IsSet());

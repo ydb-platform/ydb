@@ -73,11 +73,11 @@ TEST(TFederatedConnectionTest, CreateClient)
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
     EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
     auto client = connection->CreateClient(clientOptions);
-    auto nodes = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes = client->GetNode("//test/node").BlockingGet().ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes);
 
     Sleep(TDuration::Seconds(2));
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = client->GetNode("//test/node").BlockingGet().ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 
@@ -141,12 +141,12 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
 
     Sleep(TDuration::Seconds(2));
 
-    auto nodes1 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes1 = client->GetNode("//test/node").BlockingGet().ValueOrThrow();
     EXPECT_EQ(nodesYsonVla, nodes1);
 
     Sleep(TDuration::Seconds(6));
 
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = client->GetNode("//test/node").BlockingGet().ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 

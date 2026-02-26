@@ -92,7 +92,7 @@ TEST(TAsyncBarrierTest, Clear)
 
     barrier.Clear(TError("oops"));
     EXPECT_TRUE(future.IsSet());
-    EXPECT_FALSE(future.Get().IsOK());
+    EXPECT_FALSE(future.BlockingGet().IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -43,7 +43,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor1)
         for (int i = 0; i < 10; ++i) {
             TDelayedExecutor::WaitForDuration(SleepQuantum);
         }
-    }).AsyncVia(invoker).Run().Get().ThrowOnError();
+    }).AsyncVia(invoker).Run().BlockingGet().ThrowOnError();
 }
 
 TEST_F(TBoundedConcurrencyInvokerTest, WaitFor2)
@@ -63,7 +63,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor2)
             .ThrowOnError();
     });
 
-    a2.AsyncVia(invoker).Run().Get().ThrowOnError();
+    a2.AsyncVia(invoker).Run().BlockingGet().ThrowOnError();
 }
 
 TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
@@ -272,7 +272,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, ReconfigureBeforeFirstInvocation)
     })
         .AsyncVia(invoker)
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     EXPECT_TRUE(promise.IsSet());

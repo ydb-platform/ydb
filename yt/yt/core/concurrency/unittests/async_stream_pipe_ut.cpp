@@ -24,10 +24,10 @@ TEST(TAsyncStreamPipeTest, Simple)
 
         auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "FOO");
         EXPECT_TRUE(writeResult.IsSet());
-        EXPECT_TRUE(writeResult.Get().IsOK());
+        EXPECT_TRUE(writeResult.BlockingGet().IsOK());
     }
 
     {
@@ -36,10 +36,10 @@ TEST(TAsyncStreamPipeTest, Simple)
 
         const auto readResult = pipe->Read();
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "BAR_BAZ");
         EXPECT_TRUE(writeResult.IsSet());
-        EXPECT_TRUE(writeResult.Get().IsOK());
+        EXPECT_TRUE(writeResult.BlockingGet().IsOK());
 
     }
 
@@ -51,7 +51,7 @@ TEST(TAsyncStreamPipeTest, Simple)
         EXPECT_TRUE(closed.IsSet());
 
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "");
     }
 }
@@ -68,43 +68,43 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
 
         auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "FOO");
 
         EXPECT_TRUE(writeResult.IsSet());
-        EXPECT_TRUE(writeResult.Get().IsOK());
+        EXPECT_TRUE(writeResult.BlockingGet().IsOK());
     }
 
     {
         auto writeResult = pipe->Write(TSharedRef::FromString("BAR"));
         EXPECT_TRUE(writeResult.IsSet());
-        EXPECT_TRUE(writeResult.Get().IsOK());
+        EXPECT_TRUE(writeResult.BlockingGet().IsOK());
 
         const auto readResult = pipe->Read();
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "BAR");
     }
 
     {
         auto writeResult1 = pipe->Write(TSharedRef::FromString("BAZ_1"));
         EXPECT_TRUE(writeResult1.IsSet());
-        EXPECT_TRUE(writeResult1.Get().IsOK());
+        EXPECT_TRUE(writeResult1.BlockingGet().IsOK());
 
         auto writeResult2 = pipe->Write(TSharedRef::FromString("BAZ_2"));
         EXPECT_FALSE(writeResult2.IsSet());
 
         const auto readResult1 = pipe->Read();
         EXPECT_TRUE(readResult1.IsSet());
-        EXPECT_TRUE(readResult1.Get().IsOK());
+        EXPECT_TRUE(readResult1.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult1.Get().Value()), "BAZ_1");
 
         EXPECT_TRUE(writeResult2.IsSet());
-        EXPECT_TRUE(writeResult2.Get().IsOK());
+        EXPECT_TRUE(writeResult2.BlockingGet().IsOK());
 
         const auto readResult2 = pipe->Read();
         EXPECT_TRUE(readResult2.IsSet());
-        EXPECT_TRUE(readResult2.Get().IsOK());
+        EXPECT_TRUE(readResult2.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult2.Get().Value()), "BAZ_2");
     }
 
@@ -117,18 +117,18 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
 
         auto writeResult1 = pipe->Write(TSharedRef::FromString("ABC_1"));
         EXPECT_TRUE(writeResult1.IsSet());
-        EXPECT_TRUE(writeResult1.Get().IsOK());
+        EXPECT_TRUE(writeResult1.BlockingGet().IsOK());
 
         auto writeResult2 = pipe->Write(TSharedRef::FromString("ABC_2"));
         EXPECT_TRUE(writeResult2.IsSet());
-        EXPECT_TRUE(writeResult2.Get().IsOK());
+        EXPECT_TRUE(writeResult2.BlockingGet().IsOK());
 
         EXPECT_TRUE(readResult1.IsSet());
-        EXPECT_TRUE(readResult1.Get().IsOK());
+        EXPECT_TRUE(readResult1.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult1.Get().Value()), "ABC_1");
 
         EXPECT_TRUE(readResult2.IsSet());
-        EXPECT_TRUE(readResult2.Get().IsOK());
+        EXPECT_TRUE(readResult2.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult2.Get().Value()), "ABC_2");
     }
 
@@ -140,7 +140,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         EXPECT_TRUE(closed.IsSet());
 
         EXPECT_TRUE(readResult.IsSet());
-        EXPECT_TRUE(readResult.Get().IsOK());
+        EXPECT_TRUE(readResult.BlockingGet().IsOK());
         EXPECT_EQ(GetString(readResult.Get().Value()), "");
     }
 }
@@ -154,10 +154,10 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitRead)
 
     auto writeResult1 = pipe->Write(TSharedRef::FromString("FOO"));
     EXPECT_TRUE(writeResult1.IsSet());
-    EXPECT_TRUE(writeResult1.Get().IsOK());
+    EXPECT_TRUE(writeResult1.BlockingGet().IsOK());
 
     EXPECT_TRUE(readResult1.IsSet());
-    EXPECT_TRUE(readResult1.Get().IsOK());
+    EXPECT_TRUE(readResult1.BlockingGet().IsOK());
     EXPECT_EQ(GetString(readResult1.Get().Value()), "FOO");
 
     const auto readResult2 = pipe->Read();
@@ -166,8 +166,8 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitRead)
     pipe->Abort(TError("fail"));
 
     EXPECT_TRUE(readResult2.IsSet());
-    EXPECT_FALSE(readResult2.Get().IsOK());
-    EXPECT_THROW_WITH_SUBSTRING(readResult2.Get().ThrowOnError(), "was drained");
+    EXPECT_FALSE(readResult2.BlockingGet().IsOK());
+    EXPECT_THROW_WITH_SUBSTRING(readResult2.BlockingGet().ThrowOnError(), "was drained");
 }
 
 TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
@@ -179,15 +179,15 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
 
     auto writeResult1 = pipe->Write(TSharedRef::FromString("FOO"));
     EXPECT_TRUE(writeResult1.IsSet());
-    EXPECT_TRUE(writeResult1.Get().IsOK());
+    EXPECT_TRUE(writeResult1.BlockingGet().IsOK());
 
     EXPECT_TRUE(readResult1.IsSet());
-    EXPECT_TRUE(readResult1.Get().IsOK());
+    EXPECT_TRUE(readResult1.BlockingGet().IsOK());
     EXPECT_EQ(GetString(readResult1.Get().Value()), "FOO");
 
     const auto writeResult2 = pipe->Write(TSharedRef::FromString("BAR"));
     EXPECT_TRUE(writeResult2.IsSet());
-    EXPECT_TRUE(writeResult2.Get().IsOK());
+    EXPECT_TRUE(writeResult2.BlockingGet().IsOK());
 
     const auto writeResult3 = pipe->Write(TSharedRef::FromString("BAZ"));
     EXPECT_FALSE(writeResult3.IsSet());
@@ -195,18 +195,18 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
     pipe->Abort(TError("fail"));
 
     EXPECT_TRUE(writeResult3.IsSet());
-    EXPECT_FALSE(writeResult3.Get().IsOK());
-    EXPECT_THROW_WITH_SUBSTRING(writeResult3.Get().ThrowOnError(), "was drained");
+    EXPECT_FALSE(writeResult3.BlockingGet().IsOK());
+    EXPECT_THROW_WITH_SUBSTRING(writeResult3.BlockingGet().ThrowOnError(), "was drained");
 
     const auto writeResult4 = pipe->Write(TSharedRef::FromString("ABC"));
     EXPECT_TRUE(writeResult4.IsSet());
-    EXPECT_FALSE(writeResult4.Get().IsOK());
-    EXPECT_THROW_WITH_SUBSTRING(writeResult4.Get().ThrowOnError(), "fail");
+    EXPECT_FALSE(writeResult4.BlockingGet().IsOK());
+    EXPECT_THROW_WITH_SUBSTRING(writeResult4.BlockingGet().ThrowOnError(), "fail");
 
     const auto readResult2 = pipe->Read();
     EXPECT_TRUE(readResult2.IsSet());
-    EXPECT_FALSE(readResult2.Get().IsOK());
-    EXPECT_THROW_WITH_SUBSTRING(readResult2.Get().ThrowOnError(), "fail");
+    EXPECT_FALSE(readResult2.BlockingGet().IsOK());
+    EXPECT_THROW_WITH_SUBSTRING(readResult2.BlockingGet().ThrowOnError(), "fail");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -28,7 +28,7 @@ void SyncYPathMultisetAttributes(
         req->set_value(ToProto(request.second));
     }
     ExecuteVerb(service, multisetAttributesRequest)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 

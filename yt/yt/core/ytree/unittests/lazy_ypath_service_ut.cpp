@@ -18,7 +18,7 @@ std::vector<std::string> YPathList(
     std::optional<i64> limit = {})
 {
     return AsyncYPathList(service, path, limit)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 }
 
@@ -27,7 +27,7 @@ bool YPathExists(
     const TYPath& path)
 {
     return AsyncYPathExists(service, path)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 }
 
@@ -37,7 +37,7 @@ TYsonString YPathGet(
     const TAttributeFilter& attributeFilter = {})
 {
     return ConvertToYsonString(AsyncYPathGet(service, path, attributeFilter)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow(), EYsonFormat::Text);
 }
 

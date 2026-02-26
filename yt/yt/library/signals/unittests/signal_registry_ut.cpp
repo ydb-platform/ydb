@@ -24,7 +24,7 @@ TEST(TSignalRegistryTest, PushCallbackJustWorks)
 
     raise(SIGRTMIN + 1);
 
-    EXPECT_TRUE(future.WithTimeout(TDuration::Seconds(5)).Get().IsOK());
+    EXPECT_TRUE(future.WithTimeout(TDuration::Seconds(5)).BlockingGet().IsOK());
 }
 
 #endif // _win_

@@ -440,7 +440,7 @@ namespace NDnsResolver {
 
                         // Handle WaitSock activation and run callbacks
                         if (i == 0) {
-                            if (entry.revents & (POLLRDNORM | POLLIN)) {
+                            if (entry.revents & (POLLRDNORM | POLLIN | POLLERR | POLLHUP)) {
                                 RunCallbacks();
                                 if (Stopped) {
                                     break;
@@ -456,6 +456,12 @@ namespace NDnsResolver {
                         // Previous invocation of aress_process_fd might have removed some sockets
                         if (Y_UNLIKELY(!AresSockStates.contains(entry.fd))) {
                             continue;
+                        }
+                        if ((entry.events & POLLIN) && (entry.revents & (POLLHUP | POLLERR))) {
+                            entry.revents |= POLLIN;
+                        }
+                        if ((entry.events & POLLOUT) && (entry.revents & (POLLHUP | POLLERR))) {
+                            entry.revents |= POLLOUT;
                         }
                         ares_process_fd(
                                 AresChannel,

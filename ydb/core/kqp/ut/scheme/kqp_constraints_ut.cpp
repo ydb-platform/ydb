@@ -2796,6 +2796,50 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(AlterTableDefaultUndeterministicExpression) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/UndeterministicExpressionTest` (
+                    Key Int32,
+                    Value Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/UndeterministicExpressionTest` ALTER COLUMN Value SET DEFAULT CurrentUtcTimestamp();
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column: \"Value\". Default value type mismatch, expected: Int32, actual: Timestamp");
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/UndeterministicExpressionTest` ADD COLUMN Value2 Timestamp NOT NULL DEFAULT CurrentUtcTimestamp();
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: CurrentUtcTimestamp");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

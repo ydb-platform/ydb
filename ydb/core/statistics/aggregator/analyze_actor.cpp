@@ -150,6 +150,11 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
         tag2Column[col.second.Id] = col.second;
+
+        if (col.second.KeyOrder >= 0) {
+            KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
+            KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+        }
     }
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
@@ -189,8 +194,46 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
-    Become(&TThis::StateQuery);
+    // Resolve table shards
+    TVector<TCell> minusInf(KeyColumnTypes.size());
+    TVector<TCell> plusInf;
+    TTableRange range(minusInf, true, plusInf, true, false);
+    auto keyDesc = MakeHolder<TKeyDesc>(
+        PathId, range, TKeyDesc::ERowOperation::Unknown,TVector<NScheme::TTypeInfo>{}, TVector<TKeyDesc::TColumnOp>{});
+
+    auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+    resolveRequest->DatabaseName = DatabaseName;
+    resolveRequest->ResultSet.emplace_back(std::move(keyDesc));
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolveRequest.release()));
+
+    Become(&TThis::StateResolve);
+}
+
+void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+    const auto& request = *ev->Get()->Request;
+    Y_ABORT_UNLESS(request.ResultSet.size() == 1);
+    const NSchemeCache::TSchemeCacheRequest::TEntry& entry = request.ResultSet.front();
+
+    if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+        SA_LOG_W("Resolve request failed with " << entry.Status
+            << ", operationId: " << OperationId.Quote()
+            << ", PathId: " << PathId
+            << ", DatabaseName: " << DatabaseName);
+
+        FinishWithFailure(
+            entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist
+            ? TEvStatistics::TEvAnalyzeActorResult::EStatus::TableNotFound
+            : TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(TStringBuilder() << "Resolve request failed with " << entry.Status));
+        return;
+    }
+
+    for (const auto& part : entry.KeyDescription->GetPartitions()) {
+        ShardIds.push_back(part.ShardId);
+    }
+
     DispatchScanActor();
+    Become(&TThis::StateScan);
 }
 
 void TAnalyzeActor::DispatchScanActor() {

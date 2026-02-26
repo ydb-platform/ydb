@@ -24,6 +24,10 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
+    // StateResolve
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+
     // StateQuery
 
     struct TColumnDesc {
@@ -52,6 +56,9 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     TString TableName;
     TVector<TColumnDesc> Columns;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
+
+    TVector<ui64> ShardIds;
 
     std::queue<TEvalTask> PendingTasks;
 
@@ -122,7 +129,14 @@ public:
         }
     }
 
-    STFUNC(StateQuery) {
+    STFUNC(StateResolve) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            hFunc(TEvents::TEvPoison, Handle);
+        }
+    }
+
+    STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAnalyzeScanResult, Handle);
             hFunc(TEvents::TEvPoison, Handle);

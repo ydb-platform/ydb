@@ -283,7 +283,7 @@ public:
     TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit = std::nullopt, std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
         : TargetCompactionLevel(targetCompactionLevel)
         , ExpectedPortionSize(expectedPortionSize)
-        , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit)
+        , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit))
         , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(DefaultPortionsCountLimit)) {
     }
 };

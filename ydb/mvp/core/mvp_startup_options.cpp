@@ -184,25 +184,23 @@ TString TMvpStartupOptions::AddSchemeToUserToken(const TString& token, const TSt
 }
 
 void TMvpStartupOptions::LoadTokens() {
-    Tokens.SetAccessServiceType(AccessServiceType);
-
-    if (YdbTokenFile.empty()) {
-        return;
-    }
-
-    if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
-        MigrateJwtInfoToOAuth2Exchange();
-        ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
-        ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
-        if (Tokens.HasStaffApiUserTokenInfo()) {
-            UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
-        } else if (Tokens.HasStaffApiUserToken()) {
-            UserToken = Tokens.GetStaffApiUserToken();
+    if (!YdbTokenFile.empty()) {
+        if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
+            MigrateJwtInfoToOAuth2Exchange();
+            ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
+            ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
+            if (Tokens.HasStaffApiUserTokenInfo()) {
+                UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
+            } else if (Tokens.HasStaffApiUserToken()) {
+                UserToken = Tokens.GetStaffApiUserToken();
+            }
+            UserToken = AddSchemeToUserToken(UserToken, "OAuth");
+        } else {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
         }
-        UserToken = AddSchemeToUserToken(UserToken, "OAuth");
-    } else {
-        ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
     }
+
+    Tokens.SetAccessServiceType(AccessServiceType);
 }
 
 void TMvpStartupOptions::OverrideTokensConfig() {

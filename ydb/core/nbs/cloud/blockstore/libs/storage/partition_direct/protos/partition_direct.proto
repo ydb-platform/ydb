@@ -1,6 +1,8 @@
 syntax = "proto3";
 
 import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/blockstore_config.proto";
+import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
 
 option cc_enable_arenas = true;
 
@@ -13,5 +15,7 @@ message TConnectionsInfo {
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
     }
     repeated TConnectionInfo Connections = 1;
-    string DDiskPoolName = 2;
+    NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 2;
+    NKikimrBlockStore.TVolumeConfig VolumeConfig = 3;
+
 }

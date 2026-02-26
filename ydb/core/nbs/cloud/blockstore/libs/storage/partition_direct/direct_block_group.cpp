@@ -256,6 +256,8 @@ void TDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
 void TDirectBlockGroup::DoEstablishPersistentBufferConnection(
     size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler)
 {
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                    "DoEstablishPersistentBufferConnection: " << i);
     auto future =
         StorageTransport->Connect(PersistentBufferConnections[i].GetServiceId(),
                                   PersistentBufferConnections[i].Credentials);
@@ -285,6 +287,8 @@ void TDirectBlockGroup::HandlePersistentBufferConnected(
     const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
     std::shared_ptr<TOverallAckRequestHandler> requestHandler)
 {
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                    "HandlePersistentBufferConnected: " << index);
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         PersistentBufferConnections[index].Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
@@ -295,16 +299,18 @@ void TDirectBlockGroup::HandlePersistentBufferConnected(
     }
 
     if (requestHandler->IsCompleted()) {
-        LOG_DEBUG_S(
+        LOG_INFO_S(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TDirectBlockGroup::HandlePersistentBufferConnected finished");
+            "Connecting to persistent buffers has been finished");
         RestoreFromPersistentBuffer(requestHandler->Span.GetTraceId());
     }
 }
 
 void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
 {
+    LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+               "Restoring from persistent buffer started");
     auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
         ActorSystem,
         std::move(traceId),
@@ -400,8 +406,8 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
 void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
     NWilson::TTraceId traceId)
 {
-    LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
-                "TDirectBlockGroup::RestoreFromPersistentBufferFinised");
+    LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                "Restoring from persistent buffer finished");
 
     Initialized = true;
 
@@ -411,6 +417,8 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
                     "Starting to flush dirtyMap");
         DirtyMap->Iterate([this, &traceId](ui64 blockIndex, const TBlockMeta& blockMeta) {
             if (blockMeta.ReadyToFlush()) {
+                LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                    "Trying to flush block " << blockIndex);
                 RequestBlockFlush(std::move(traceId), blockIndex);
             }
         });

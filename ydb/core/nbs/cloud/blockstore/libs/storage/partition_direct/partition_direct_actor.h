@@ -91,12 +91,12 @@ private:
 
     bool DDiskBlockGroupAllocated();
 
-    void LoadDDisksIds(
+    void LoadTabletInfo(
         const NActors::TActorContext& ctx,
         TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
         TVector<NKikimr::NBsController::TDDiskId>& persistentBufferDDiskIds);
 
-    void StoreDDisksIds(
+    void StoreTabletInfo(
         const NActors::TActorContext& ctx,
         const TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
         const TVector<NKikimr::NBsController::TDDiskId>&

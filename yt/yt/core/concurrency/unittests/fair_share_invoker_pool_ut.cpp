@@ -166,7 +166,7 @@ protected:
         for (int i = 0; i < std::ssize(Queues_); ++i) {
             if (Queues_[i]) {
                 auto invoker = Queues_[i]->GetInvoker();
-                BIND([] { }).AsyncVia(invoker).Run().Get().ThrowOnError();
+                BIND([] { }).AsyncVia(invoker).Run().BlockingGet().ThrowOnError();
             }
         }
 
@@ -205,7 +205,7 @@ protected:
             }
         }
 
-        AllSucceeded(futures).Get().ThrowOnError();
+        AllSucceeded(futures).BlockingGet().ThrowOnError();
 
         auto invocationOrder = GetInvocationOrder();
 
@@ -262,7 +262,7 @@ protected:
             Spin(Quantum * (switchToCount + 1));
         }).AsyncVia(invokerPool->GetInvoker(0));
 
-        callback.Run().Get().ThrowOnError();
+        callback.Run().BlockingGet().ThrowOnError();
 
         for (int i = 0; i <= switchToCount; ++i) {
             ExpectTotalCpuTime(i, Quantum * (i + 1));
@@ -283,7 +283,7 @@ protected:
             }
         }).AsyncVia(invokerPool->GetInvoker(0));
 
-        callback.Run().Get().ThrowOnError();
+        callback.Run().BlockingGet().ThrowOnError();
 
         ExpectTotalCpuTime(0, Quantum * (waitForCount + 1));
         ExpectTotalCpuTime(1, TDuration::Zero());
@@ -345,7 +345,7 @@ TEST_F(TFairShareInvokerPoolTest, SwitchTo121)
         Spin(Quantum);
     }).AsyncVia(invokerPool->GetInvoker(0));
 
-    callback.Run().Get().ThrowOnError();
+    callback.Run().BlockingGet().ThrowOnError();
 
     ExpectTotalCpuTime(0, Quantum * 2);
     ExpectTotalCpuTime(1, Quantum * 3);
@@ -385,7 +385,7 @@ TEST_F(TFairShareInvokerPoolTest, SwitchTo111AndSwitchTo222)
             Spin(Quantum);
         }).AsyncVia(invokerPool->GetInvoker(1)).Run());
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    AllSucceeded(futures).BlockingGet().ThrowOnError();
 
     ExpectTotalCpuTime(0, Quantum * 3);
     ExpectTotalCpuTime(1, Quantum * 3);
@@ -436,7 +436,7 @@ TEST_F(TFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitchesIsNotSu
     // But CPU accounting is not supported for running callbacks, therefore we expect Fairness test to pass.
     DoTestFairness(invokerPool, 2);
 
-    future.Get().ThrowOnError();
+    future.BlockingGet().ThrowOnError();
 }
 
 TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateEmptyPool)

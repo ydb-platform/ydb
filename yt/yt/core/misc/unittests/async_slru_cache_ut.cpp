@@ -309,7 +309,7 @@ TEST(TAsyncSlruCacheTest, Resurrection)
         EXPECT_EQ(cache->Find(i), nullptr);
         // But lookup can find and restore it (and make some other values expired)
         // because the value is alive in 'values' vector.
-        EXPECT_EQ(cache->Lookup(i).Get().ValueOrThrow(), values[i]);
+        EXPECT_EQ(cache->Lookup(i).BlockingGet().ValueOrThrow(), values[i]);
     }
 }
 
@@ -332,7 +332,7 @@ TEST(TAsyncSlruCacheTest, LookupBetweenBeginAndEndInsert)
     cookie.EndInsert(value);
 
     EXPECT_TRUE(future.IsSet());
-    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(future.BlockingGet().IsOK());
     EXPECT_EQ(value, future.Get().Value());
 }
 
@@ -487,7 +487,7 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
     for (int iter = 0; iter < 5; ++iter) {
         for (int i = 0; i < valueCount; ++i) {
             auto value = cache->Lookup(i)
-                .Get()
+                .BlockingGet()
                 .ValueOrThrow();
             EXPECT_EQ(value->Value, i);
             EXPECT_EQ(cache->GetItemCount(), 2);
@@ -497,7 +497,7 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
             auto cookie = cache->BeginInsert(i);
             EXPECT_TRUE(!cookie.IsActive());
             auto value = cookie.GetValue()
-                .Get()
+                .BlockingGet()
                 .ValueOrThrow();
             EXPECT_EQ(value->Value, i);
             EXPECT_EQ(cache->GetItemCount(), 2);
@@ -583,7 +583,7 @@ TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)
 
     {
         auto value = cache->Lookup(0)
-            .Get()
+            .BlockingGet()
             .ValueOrThrow();
         EXPECT_EQ(cache->GetItemCount(), 0);
         EXPECT_EQ(value->Value, 42);
@@ -999,7 +999,7 @@ TEST(TAsyncSlruGhostCacheTest, Disable)
 
         auto value2 = cache->Lookup(2);
         ASSERT_TRUE(value2.IsSet());
-        ASSERT_TRUE(value2.Get().IsOK());
+        ASSERT_TRUE(value2.BlockingGet().IsOK());
         ASSERT_EQ(value2.Get().Value()->Value, 57);
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -1151,7 +1151,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 }
 
                 if (valueFuture.IsSet()) {
-                    ASSERT_TRUE(valueFuture.Get().IsOK());
+                    ASSERT_TRUE(valueFuture.BlockingGet().IsOK());
                     const auto& value = valueFuture.Get().Value();
                     ASSERT_EQ(lastInsertedValues[key].Lock(), value);
                 } else {
@@ -1182,7 +1182,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     auto valueFuture = cookie.GetValue();
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
-                        ASSERT_TRUE(valueFuture.Get().IsOK());
+                        ASSERT_TRUE(valueFuture.BlockingGet().IsOK());
                         const auto& value = valueFuture.Get().Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {

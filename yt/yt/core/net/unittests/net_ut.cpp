@@ -67,7 +67,7 @@ TEST_F(TNetTest, TransferFourBytes)
     a->Write(TSharedRef::FromString("ping")).Get();
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).Get().ValueOrThrow());
+    ASSERT_EQ(4u, b->Read(buffer).BlockingGet().ValueOrThrow());
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
 }
 
@@ -81,10 +81,10 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
         TSharedRef::FromString("i"),
         TSharedRef::FromString("n"),
         TSharedRef::FromString("g")
-    }, TSharedRefArray::TMoveParts{})).Get().ThrowOnError();
+    }, TSharedRefArray::TMoveParts{})).BlockingGet().ThrowOnError();
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).Get().ValueOrThrow());
+    ASSERT_EQ(4u, b->Read(buffer).BlockingGet().ValueOrThrow());
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
 }
 
@@ -125,8 +125,8 @@ TEST_F(TNetTest, BigTransfer)
         .AsyncVia(Poller_->GetInvoker())
         .Run();
 
-    sender.Get().ThrowOnError();
-    receiver.Get().ThrowOnError();
+    sender.BlockingGet().ThrowOnError();
+    receiver.BlockingGet().ThrowOnError();
 }
 
 TEST_F(TNetTest, BidirectionalTransfer)
@@ -177,7 +177,7 @@ TEST_F(TNetTest, BidirectionalTransfer)
         startReceiver(b)
     };
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    AllSucceeded(futures).BlockingGet().ThrowOnError();
 }
 
 class TContinueReadInCaseOfWriteErrorsTest
@@ -195,20 +195,20 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     // If server closes the connection without reading the entire request,
     // it causes an error 'Connection reset by peer' on client's side right after reading response.
     if (!gracefulConnectionClose) {
-        b->Write(data).Get().ThrowOnError();
+        b->Write(data).BlockingGet().ThrowOnError();
     }
-    a->Write(data).Get().ThrowOnError();
-    a->Close().Get().ThrowOnError();
+    a->Write(data).BlockingGet().ThrowOnError();
+    a->Close().BlockingGet().ThrowOnError();
 
     {
         auto data = TSharedRef::FromString(TString(16 * 1024, 'a'));
         #ifndef _win_
-            EXPECT_THROW(b->Write(data).Get().ThrowOnError(), TErrorException);
+            EXPECT_THROW(b->Write(data).BlockingGet().ThrowOnError(), TErrorException);
         #endif
     }
 
     auto buffer = TSharedMutableRef::Allocate(32 * 1024);
-    auto read = b->Read(buffer).Get().ValueOrThrow();
+    auto read = b->Read(buffer).BlockingGet().ValueOrThrow();
 
     EXPECT_EQ(data.size(), read);
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ffff"));
@@ -257,7 +257,7 @@ TEST_F(TNetTest, StressConcurrentClose)
         YT_UNUSED_FUTURE(runReceiver(b));
 
         Sleep(TDuration::MilliSeconds(10));
-        a->Close().Get().ThrowOnError();
+        a->Close().BlockingGet().ThrowOnError();
     }
 }
 
@@ -284,7 +284,7 @@ TEST_F(TNetTest, Bind)
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -293,11 +293,11 @@ TEST_F(TNetTest, DialError)
     BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(4000);
         auto dialer = CreateDialer();
-        EXPECT_THROW(dialer->Dial(address).Get().ValueOrThrow(), TErrorException);
+        EXPECT_THROW(dialer->Dial(address).BlockingGet().ValueOrThrow(), TErrorException);
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -316,7 +316,7 @@ TEST_F(TNetTest, DialSuccess)
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -337,7 +337,7 @@ TEST_F(TNetTest, ManyDials)
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -352,7 +352,7 @@ TEST_F(TNetTest, AbandonDial)
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -366,7 +366,7 @@ TEST_F(TNetTest, AbandonAccept)
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 

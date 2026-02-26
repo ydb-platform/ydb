@@ -33,7 +33,7 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 {
     StoredRows_.clear();
 
-    if (!ReadyEvent_.IsSet() || !ReadyEvent_.Get().IsOK()) {
+    if (!ReadyEvent_.IsSet() || !ReadyEvent_.BlockingGet().IsOK()) {
         return CreateEmptyUnversionedRowBatch();
     }
 
@@ -47,7 +47,7 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 
     while (RowsFuture_ &&
         RowsFuture_.IsSet() &&
-        RowsFuture_.Get().IsOK() &&
+        RowsFuture_.BlockingGet().IsOK() &&
         !Finished_ &&
         std::ssize(rows) < options.MaxRowsPerRead &&
         dataWeight < options.MaxDataWeightPerRead)

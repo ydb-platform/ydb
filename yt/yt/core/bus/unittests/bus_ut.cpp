@@ -172,7 +172,7 @@ public:
         handler->WaitUntilDone();
 
         server->Stop()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
     }
 };
@@ -207,7 +207,7 @@ TEST_F(TBusTest, OK)
         .Get();
     EXPECT_TRUE(result.IsOK());
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -234,7 +234,7 @@ TEST_F(TBusTest, Terminate)
     EXPECT_EQ(result.Get().GetCode(), error.GetCode());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -293,7 +293,7 @@ TEST_F(TBusTest, BlackHole)
     auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
 
     bus->Send(message, options)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     bus->SetTosLevel(BlackHoleTosLevel);
@@ -302,7 +302,7 @@ TEST_F(TBusTest, BlackHole)
     EXPECT_FALSE(result.IsOK());
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -336,7 +336,7 @@ TEST_F(TBusTest, SendCancel)
     handler->Count = 0;
 
     server->Stop()
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 

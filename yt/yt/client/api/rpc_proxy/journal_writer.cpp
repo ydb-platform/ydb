@@ -68,7 +68,7 @@ private:
         if (!OpenResult_ || !OpenResult_.IsSet()) {
             THROW_ERROR_EXCEPTION("Cannot write into an unopened journal writer");
         }
-        OpenResult_.Get().ThrowOnError();
+        OpenResult_.BlockingGet().ThrowOnError();
     }
 
     void ValidateNotClosed()

@@ -135,7 +135,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
         .Run();
 
     AllSucceeded(std::vector<TFuture<void>>{asyncA, asyncC})
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     std::vector<TString> expectedEvents{
@@ -190,7 +190,7 @@ TEST(TInvokerWaitTimeTest, SerializedInvoker)
         .AsyncVia(serializedInvoker).Run();
 
     AllSucceeded(std::vector<TFuture<void>>{async1, async2, async3})
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     registry->ProcessRegistrations();
@@ -226,7 +226,7 @@ TEST(TInvokerWaitTimeTest, PrioritizedInvoker)
         .AsyncVia(invoker).Run();
 
     AllSucceeded(std::vector<TFuture<void>>{async})
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 
     registry->ProcessRegistrations();

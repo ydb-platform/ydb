@@ -40,7 +40,7 @@ TEST(TAsyncOutputStreamTest, Simple)
     auto readResult1 = ReadAlreadySetValue(pipe);
     ASSERT_EQ(GetString(readResult1), "foo");
     ASSERT_TRUE(writeResult.IsSet());
-    ASSERT_TRUE(writeResult.Get().IsOK());
+    ASSERT_TRUE(writeResult.BlockingGet().IsOK());
 
     auto closeResult = asyncWriter->Close();
     ASSERT_TRUE(writeResult.IsSet());

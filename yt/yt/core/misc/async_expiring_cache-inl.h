@@ -394,7 +394,7 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
 
     if (auto it = map.find(key); it != map.end() && it->second->Promise.IsSet()) {
         const auto& entry = it->second;
-        if (!entry->Promise.Get().IsOK()) {
+        if (!entry->Promise.BlockingGet().IsOK()) {
             return;
         }
 
@@ -810,7 +810,7 @@ void TAsyncExpiringCache<TKey, TValue>::RefreshAllItems()
             auto [guard, map] = LockAndGetReadableShard(shardIndex);
             for (const auto& [key, entry] : map) {
                 if (entry->Promise.IsSet()) {
-                    if (now < entry->AccessDeadline.load() && entry->Future.Get().IsOK()) {
+                    if (now < entry->AccessDeadline.load() && entry->Future.BlockingGet().IsOK()) {
                         keys.push_back(key);
                         TEntryPtr strongE = entry;
                         entries.push_back(MakeWeak(strongE));

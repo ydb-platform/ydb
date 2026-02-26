@@ -371,7 +371,7 @@ private:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        if (resetStoredError && PeersAvailablePromise_.IsSet() && !PeersAvailablePromise_.Get().IsOK()) {
+        if (resetStoredError && PeersAvailablePromise_.IsSet() && !PeersAvailablePromise_.BlockingGet().IsOK()) {
             InitPeersAvailablePromise();
         }
 

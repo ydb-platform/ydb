@@ -147,7 +147,7 @@ void DoTestCancelWriter(TAsyncReaderWriterLock& lock)
 
     secondGuardFuture
         .WithTimeout(TDuration::Seconds(1))
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -250,7 +250,7 @@ TEST_F(TAsyncReaderWriterLockTest, CancelStressTest)
         invoker->Invoke(BIND(task, seed + i, barrier.Insert()));
     }
 
-    barrier.GetBarrierFuture().Get().ThrowOnError();
+    barrier.GetBarrierFuture().BlockingGet().ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

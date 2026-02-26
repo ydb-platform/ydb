@@ -353,7 +353,7 @@ TEST(THedgingClientTest, MultiThread)
     }
 
     for (const auto& future : futures) {
-        EXPECT_NO_THROW(future.Get().ThrowOnError());
+        EXPECT_NO_THROW(future.BlockingGet().ThrowOnError());
     }
 }
 

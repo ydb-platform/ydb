@@ -476,7 +476,7 @@ TEST_F(TSchedulerTest, WaitForInSerializedInvoker1)
         for (int i = 0; i < 10; ++i) {
             TDelayedExecutor::WaitForDuration(SleepQuantum);
         }
-    }).AsyncVia(invoker).Run().Get().ThrowOnError();
+    }).AsyncVia(invoker).Run().BlockingGet().ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
@@ -499,7 +499,7 @@ TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
         }
     }).AsyncVia(invoker).Run());
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    AllSucceeded(futures).BlockingGet().ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, PropagateFiberCancelationToFuture)
@@ -545,7 +545,7 @@ TEST_F(TSchedulerTest, FiberUnwindOrder)
     p1.Set();
     Sleep(SleepQuantum);
     EXPECT_TRUE(f2.IsSet());
-    EXPECT_FALSE(f2.Get().IsOK());
+    EXPECT_FALSE(f2.BlockingGet().IsOK());
 }
 
 TEST_F(TSchedulerTest, TestWaitUntilSet)
@@ -560,7 +560,7 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
 
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
-    EXPECT_TRUE(f1.Get().IsOK());
+    EXPECT_TRUE(f1.BlockingGet().IsOK());
 }
 
 TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
@@ -575,7 +575,7 @@ TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
     EXPECT_FALSE(asyncResult1.IsSet());
     EXPECT_FALSE(asyncResult2.IsSet());
     asyncResult2.Cancel(TError("Error"));
-    EXPECT_TRUE(asyncResult1.Get().IsOK());
+    EXPECT_TRUE(asyncResult1.BlockingGet().IsOK());
     Sleep(SleepQuantum);
     EXPECT_TRUE(asyncResult2.IsSet());
     EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult2.Get().GetCode());
@@ -611,7 +611,7 @@ TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
     asyncResult.Get();
 
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(asyncResult.BlockingGet().IsOK());
 }
 
 TEST_F(TSchedulerTest, JustYield1)
@@ -646,7 +646,7 @@ TEST_F(TSchedulerTest, JustYield2)
 
     EXPECT_TRUE(errorOrValue.IsOK());
     EXPECT_FALSE(errorOrValue.Value());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(asyncResult.BlockingGet().IsOK());
 }
 
 TEST_F(TSchedulerTest, CancelInAdjacentCallback)
@@ -707,7 +707,7 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     })
     .AsyncVia(serializedInvoker)
     .Run()
-    .Get()
+    .BlockingGet()
     .ValueOrThrow();
 
     EXPECT_TRUE(result);
@@ -942,7 +942,7 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             .Run());
 
         ASSERT_NO_THROW(testResultFuture
-            .Get()
+            .BlockingGet()
             .ThrowOnError());
     }
 }

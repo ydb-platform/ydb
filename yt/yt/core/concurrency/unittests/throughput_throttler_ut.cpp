@@ -29,7 +29,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoLimit)
 
     NProfiling::TWallTimer timer;
     for (int i = 0; i < 1000; ++i) {
-        throttler->Throttle(1).Get().ThrowOnError();
+        throttler->Throttle(1).BlockingGet().ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
@@ -54,12 +54,12 @@ TEST(TReconfigurableThroughputThrottlerTest, Limit)
         TThroughputThrottlerConfig::Create(1));
 
     NProfiling::TWallTimer timer;
-    throttler->Throttle(1).Get().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 50u);
 
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
     EXPECT_GE(duration, 1000u);
@@ -74,7 +74,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoOverflow)
     auto* testableThrottler = static_cast<ITestableReconfigurableThroughputThrottler*>(throttler.Get());
 
     NProfiling::TWallTimer timer;
-    testableThrottler->Throttle(1).Get().ThrowOnError();
+    testableThrottler->Throttle(1).BlockingGet().ThrowOnError();
     testableThrottler->SetLastUpdated(TInstant::Now() - TDuration::Days(1));
 
     std::vector<TFuture<void>> futures;
@@ -110,11 +110,11 @@ TEST(TReconfigurableThroughputThrottlerTest, ScheduleUpdate)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(3).Get().ThrowOnError();
+    throttler->Throttle(3).BlockingGet().ThrowOnError();
 
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
     EXPECT_GE(duration, 3000u);
@@ -128,9 +128,9 @@ TEST(TReconfigurableThroughputThrottlerTest, Update)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(1).Get().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
     Sleep(TDuration::Seconds(1));
-    throttler->Throttle(1).Get().ThrowOnError();
+    throttler->Throttle(1).BlockingGet().ThrowOnError();
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 2000u);
 }
@@ -142,7 +142,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Cancel)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(5).Get().ThrowOnError();
+    throttler->Throttle(5).BlockingGet().ThrowOnError();
     auto future = throttler->Throttle(1);
     future.Cancel(TError("Error"));
     auto result = future.Get();
@@ -167,7 +167,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureSchedulesUpdatesProperly
     throttler->Reconfigure(TThroughputThrottlerConfig::Create(100));
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        future.BlockingGet().ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
@@ -188,7 +188,7 @@ TEST(TReconfigurableThroughputThrottlerTest, SetLimit)
     throttler->SetLimit(100);
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        future.BlockingGet().ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
@@ -210,7 +210,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureMustRescheduleUpdate)
 
     EXPECT_FALSE(scheduled2.IsSet()); // must remain waiting in the queue after Reconfigure
 
-    scheduled2.Get().ThrowOnError();
+    scheduled2.BlockingGet().ThrowOnError();
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 3000u); // Reconfigure must have rescheduled the update
 }
 
@@ -219,7 +219,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Overdraft)
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100));
 
-    throttler->Throttle(150).Get().ThrowOnError();
+    throttler->Throttle(150).BlockingGet().ThrowOnError();
 
     EXPECT_TRUE(throttler->IsOverdraft());
     Sleep(TDuration::Seconds(2));
@@ -234,7 +234,7 @@ TEST(TReconfigurableThroughputThrottlerTest, OverdraftSignificantly)
     const auto N = 3;
     NProfiling::TWallTimer timer;
     for (int i = 0; i < N; ++i) {
-        throttler->Throttle(300).Get().ThrowOnError();
+        throttler->Throttle(300).BlockingGet().ThrowOnError();
     }
 
     auto expectedElapsed = (300 * (N - 1) - 100) * 1000 / 100;
@@ -263,7 +263,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Stress)
     for (int i = 0; i < N; i++) {
         threads.emplace_back([&] {
             for (int j = 0; j < M; ++j) {
-                throttler->Throttle(1).Get().ThrowOnError();
+                throttler->Throttle(1).BlockingGet().ThrowOnError();
             }
         });
     }
@@ -285,7 +285,7 @@ TEST(TReconfigurableThroughputThrottlerTest, FractionalLimit)
     NProfiling::TWallTimer timer;
     const auto N = 3;
     for (int i = 0; i < N; ++i) {
-        throttler->Throttle(1).Get().ThrowOnError();
+        throttler->Throttle(1).BlockingGet().ThrowOnError();
     }
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
@@ -308,7 +308,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
     }
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        future.BlockingGet().ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
@@ -337,7 +337,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimitDoesNotLetAnythingThrough)
     NProfiling::TWallTimer timer;
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        future.BlockingGet().ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
@@ -443,7 +443,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, OneRequest)
         .Times(1)
         .WillRepeatedly(Return(OKFuture));
 
-    EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+    EXPECT_TRUE(Throttler_->Throttle(1).BlockingGet().IsOK());
 }
 
 TEST_F(TPrefetchingThrottlerExponentialGrowthTest, ManyRequests)
@@ -453,7 +453,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, ManyRequests)
         .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 1'000; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(Throttler_->Throttle(1).BlockingGet().IsOK());
     }
 }
 
@@ -464,13 +464,13 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, SpikeAmount)
         .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 3; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(Throttler_->Throttle(1).BlockingGet().IsOK());
     }
 
-    EXPECT_TRUE(Throttler_->Throttle(10'000'000).Get().IsOK());
+    EXPECT_TRUE(Throttler_->Throttle(10'000'000).BlockingGet().IsOK());
 
     for (int i = 3; i < 1'000; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(Throttler_->Throttle(1).BlockingGet().IsOK());
     }
 }
 
@@ -508,7 +508,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
 
     auto failedRequest = Throttler_->Throttle(10);
     requests[0].Set(TError(NYT::EErrorCode::Generic, "Test error"));
-    EXPECT_FALSE(failedRequest.Get().IsOK());
+    EXPECT_FALSE(failedRequest.BlockingGet().IsOK());
 
     YT_UNUSED_FUTURE(Throttler_->Throttle(1));
 }
@@ -519,7 +519,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)
         .Times(1)
         .WillRepeatedly(Return(OKFuture));
 
-    EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+    EXPECT_TRUE(Throttler_->Throttle(1).BlockingGet().IsOK());
     EXPECT_TRUE(Throttler_->IsOverdraft());
 
     Throttler_->Release(1);
@@ -691,7 +691,7 @@ TEST_P(TPrefetchingStressTest, Stress)
             if (parameters.ErrorProbability > 0.0) {
                 reply.Get();
             } else {
-                EXPECT_TRUE(reply.Get().IsOK());
+                EXPECT_TRUE(reply.BlockingGet().IsOK());
             }
         }
     }

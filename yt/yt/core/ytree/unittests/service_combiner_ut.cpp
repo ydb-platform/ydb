@@ -18,7 +18,7 @@ std::vector<std::string> YPathListSorted(
     std::optional<i64> limit = {})
 {
     auto keys = AsyncYPathList(service, path, limit)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
     std::ranges::sort(keys);
     return keys;
@@ -29,7 +29,7 @@ bool YPathExists(
     const TYPath& path)
 {
     return AsyncYPathExists(service, path)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 }
 
@@ -39,7 +39,7 @@ TYsonString YPathGet(
     const TAttributeFilter& attributeFilter = {})
 {
     return AsyncYPathGet(service, path, attributeFilter)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 }
 
@@ -50,7 +50,7 @@ void YPathSet(
     bool recursive = false)
 {
     AsyncYPathSet(service, path, value, recursive)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 
@@ -61,7 +61,7 @@ void YPathRemove(
     bool force = false)
 {
     AsyncYPathRemove(service, path, recursive, force)
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
 }
 

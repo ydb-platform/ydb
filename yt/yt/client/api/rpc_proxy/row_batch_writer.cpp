@@ -25,7 +25,7 @@ TRowBatchWriter::TRowBatchWriter(IAsyncZeroCopyOutputStreamPtr underlying)
 bool TRowBatchWriter::Write(TRange<TUnversionedRow> rows)
 {
     YT_VERIFY(!Closed_);
-    YT_VERIFY(ReadyEvent_.IsSet() && ReadyEvent_.Get().IsOK());
+    YT_VERIFY(ReadyEvent_.IsSet() && ReadyEvent_.BlockingGet().IsOK());
 
     auto batch = CreateBatchFromUnversionedRows(TSharedRange<TUnversionedRow>(rows, nullptr));
 
@@ -34,7 +34,7 @@ bool TRowBatchWriter::Write(TRange<TUnversionedRow> rows)
     ReadyEvent_ = NewPromise<void>();
     ReadyEvent_.TrySetFrom(Underlying_->Write(std::move(block)));
 
-    return ReadyEvent_.IsSet() && ReadyEvent_.Get().IsOK();
+    return ReadyEvent_.IsSet() && ReadyEvent_.BlockingGet().IsOK();
 }
 
 TFuture<void> TRowBatchWriter::GetReadyEvent()

@@ -6,7 +6,11 @@
 
 #include <yt/yt/core/misc/random.h>
 
+#include <yt/yt/library/numeric/algorithm_helpers.h>
+
 #include <library/cpp/yt/compact_containers/compact_set.h>
+
+#include <util/random/shuffle.h>
 
 namespace NYT::NRpc {
 
@@ -19,6 +23,9 @@ using namespace NThreading;
 class TViablePeerRegistry
     : public IViablePeerRegistry
 {
+    template <class T>
+    using TPeerPriorityMap = TCompactFlatMap<EPeerPriority, T, TEnumTraits<EPeerPriority>::GetDomainSize()>;
+
 public:
     TViablePeerRegistry(
         TViablePeerRegistryConfigPtr config,
@@ -152,6 +159,11 @@ public:
     {
         auto guard = ReaderGuard(SpinLock_);
 
+        int activePeerCount = ActivePeerToPriority_.Size();
+        if (activePeerCount == 0) {
+            return nullptr;
+        }
+
         const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
         auto hash = balancingExt.has_balancing_hint()
             ? balancingExt.balancing_hint()
@@ -160,18 +172,9 @@ public:
         int stickyGroupSize = balancingExt.sticky_group_size();
         auto randomIndex = randomNumber % stickyGroupSize;
 
-        if (ActivePeerToPriority_.Size() == 0) {
-            return nullptr;
-        }
-
         int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, stickyGroupSize);
-
-        auto smallestPriorityEntryIt = PriorityToActivePeers_.begin();
-        int smallestPriorityActivePeerCount = smallestPriorityEntryIt->second.Size();
-        bool usePriority = smallestPriorityActivePeerCount >= minPeersToPickFrom;
-        const auto& hashToActiveChannel = usePriority
-            ? GetOrCrash(PriorityToHashToActiveChannel_, smallestPriorityEntryIt->first)
-            : HashToActiveChannel_;
+        const auto& priorityWithPeers = GetRandomPriorityByMinPeersGroupSize(minPeersToPickFrom);
+        const auto& hashToActiveChannel = GetOrCrash(PriorityToHashToActiveChannel_, priorityWithPeers.first);
 
         auto channelIt = hashToActiveChannel.lower_bound(std::pair(hash, std::string()));
         auto rebaseIt = [&] {
@@ -182,7 +185,7 @@ public:
 
         TCompactSet<std::string, 16> seenAddresses;
 
-        auto currentRandomIndex = usePriority ? randomIndex : (randomIndex % ActivePeerToPriority_.Size());
+        auto currentRandomIndex = randomIndex % priorityWithPeers.second.Size();
         while (true) {
             rebaseIt();
             const auto& address = channelIt->first.second;
@@ -211,27 +214,66 @@ public:
     {
         YT_ASSERT_READER_SPINLOCK_AFFINITY(SpinLock_);
 
-        YT_VERIFY(0 < peerCount && peerCount <= ActivePeerToPriority_.Size());
+        int activePeerCount = ActivePeerToPriority_.Size();
+        YT_VERIFY(0 < peerCount && peerCount <= activePeerCount);
 
         int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, peerCount);
 
         std::vector<std::pair<std::string, IChannelPtr>> peers;
+        peers.reserve(peerCount);
 
         const auto& smallestPriorityPool = PriorityToActivePeers_.begin()->second;
 
         if (minPeersToPickFrom <= smallestPriorityPool.Size()) {
+            // Common case.
             for (const auto& index : GetRandomIndexes(smallestPriorityPool.Size(), peerCount)) {
                 peers.push_back(smallestPriorityPool[index]);
             }
-        } else {
-            for (const auto& index : GetRandomIndexes(ActivePeerToPriority_.Size(), peerCount)) {
-                const auto& [address, priority] = ActivePeerToPriority_[index];
-                peers.emplace_back(
-                    address,
-                    GetOrCrash(PriorityToActivePeers_, priority).Get(address));
+
+            return peers;
+        }
+
+        // Create random sample of priorities of peerCount size,
+        // with probability of priority is peerGroupSize / minPeersToPickFrom.
+        std::vector<EPeerPriority> peerPriorities;
+        peerPriorities.reserve(minPeersToPickFrom);
+        for (const auto& [priority, peers]: PriorityToActivePeers_) {
+            if (peers.Size() < minPeersToPickFrom) {
+                peerPriorities.insert(peerPriorities.end(), peers.Size(), priority);
+                minPeersToPickFrom -= peers.Size();
+            } else {
+                peerPriorities.insert(peerPriorities.end(), minPeersToPickFrom, priority);
+                break;
             }
         }
 
+        PartialShuffle(peerPriorities.begin(), peerPriorities.begin() + peerCount, peerPriorities.end());
+        peerPriorities.resize(peerCount);
+
+        TPeerPriorityMap<int> peerPriorityCounts;
+        for (auto peerPriority : peerPriorities) {
+            ++peerPriorityCounts[peerPriority];
+        }
+
+        if (peerPriorityCounts.size() == 1) {
+            // Fast path: all peers have the same priority.
+            const auto& priorityPeers = PriorityToActivePeers_.find(peerPriorityCounts.begin()->first)->second;
+            for (const auto& index : GetRandomIndexes(priorityPeers.Size(), peerCount)) {
+                peers.push_back(priorityPeers[index]);
+            }
+
+            return peers;
+        }
+
+        // Slow path.
+        for (const auto& [priority, count] : peerPriorityCounts) {
+            const auto& priorityPeers = PriorityToActivePeers_.find(priority)->second;
+            for (const auto& index : GetRandomIndexes(priorityPeers.Size(), count)) {
+                peers.push_back(priorityPeers[index]);
+            }
+        }
+
+        Shuffle(peers.begin(), peers.end());
         return peers;
     }
 
@@ -320,13 +362,14 @@ public:
     }
 
 private:
+    using TPriorityToPeers = std::map<EPeerPriority, TIndexedHashMap<std::string, IChannelPtr>>::value_type;
+
     const TViablePeerRegistryConfigPtr Config_;
     const TCallback<IChannelPtr(const std::string& address)> CreateChannel_;
     const IPeerPriorityProviderPtr PeerPriorityProvider_;
     const NLogging::TLogger Logger;
 
     const size_t ClientStickinessRandomNumber_ = RandomNumber<size_t>();
-
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
@@ -335,7 +378,7 @@ private:
     TIndexedHashMap<std::string, EPeerPriority> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
     std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
-    THashMap<EPeerPriority, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
+    TPeerPriorityMap<std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
 
     THashMap<std::string, EPeerPriority> BacklogPeerToPriority_;
     std::map<EPeerPriority, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;
@@ -578,6 +621,24 @@ private:
         BacklogPeerToPriority_.erase(backlogPeerIt);
 
         return true;
+    }
+
+    const TPriorityToPeers& GetRandomPriorityByMinPeersGroupSize(
+        int minPeersToPickFrom) const
+    {
+        YT_ASSERT_READER_SPINLOCK_AFFINITY(SpinLock_);
+
+        int activePeerCount = ActivePeerToPriority_.Size();
+        auto priorityEntryIt = PriorityToActivePeers_.begin();
+        if (priorityEntryIt->second.Size() < minPeersToPickFrom && PriorityToActivePeers_.size() > 1) {
+            int randomPeerPrioritySelectionIndex = RandomNumber<size_t>(std::min(minPeersToPickFrom, activePeerCount));
+            while (randomPeerPrioritySelectionIndex >= priorityEntryIt->second.Size()) {
+                randomPeerPrioritySelectionIndex -= priorityEntryIt->second.Size();
+                ++priorityEntryIt;
+            }
+        }
+
+        return *priorityEntryIt;
     }
 };
 

@@ -53,6 +53,15 @@ void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
     MergeRepeatedByName(dst, src, [](TMessage*) {});
 }
 
+void EnsureAccessServiceTypeMatch(const std::optional<NMvp::EAccessServiceType>& left,
+                                  const std::optional<NMvp::EAccessServiceType>& right,
+                                  TStringBuf message)
+{
+    if (left && right && *left != *right) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << message;
+    }
+}
+
 } // namespace
 
 TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
@@ -120,12 +129,6 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
 void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic) {
     if (generic.HasAccessServiceType()) {
         AccessServiceTypeFromConfig = generic.GetAccessServiceType();
-        if (generic.HasAuth() && generic.GetAuth().HasTokens() && generic.GetAuth().GetTokens().HasAccessServiceType()
-            && *AccessServiceTypeFromConfig != generic.GetAuth().GetTokens().GetAccessServiceType())
-        {
-            ythrow yexception() << CONFIG_ERROR_PREFIX
-                                << "auth.tokens.access_service_type must match access_service_type";
-        }
     }
 
     if (generic.HasLogging()
@@ -146,8 +149,17 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
         }
 
         if (auth.HasTokens()) {
-            ValidateTokensFromConfig(auth.GetTokens());
-            TokensFromConfig = auth.GetTokens();
+            const auto& tokensFromConfig = auth.GetTokens();
+            if (tokensFromConfig.HasAccessServiceType()) {
+                EnsureAccessServiceTypeMatch(
+                    AccessServiceTypeFromConfig,
+                    std::make_optional(tokensFromConfig.GetAccessServiceType()),
+                    "auth.tokens.access_service_type must match access_service_type");
+                AccessServiceTypeFromConfig = tokensFromConfig.GetAccessServiceType();
+            }
+
+            ValidateTokensFromConfig(tokensFromConfig);
+            TokensFromConfig = tokensFromConfig;
         }
     }
 
@@ -212,20 +224,12 @@ void TMvpStartupOptions::LoadTokensFromTokenFile() {
 }
 
 void TMvpStartupOptions::MergeAccessServiceType() {
-    if (AccessServiceTypeFromConfig && AccessServiceTypeFromTokenFile
-        && *AccessServiceTypeFromConfig != *AccessServiceTypeFromTokenFile)
-    {
-        ythrow yexception() << CONFIG_ERROR_PREFIX
-                            << "token file access_service_type must match access_service_type";
-    }
+    EnsureAccessServiceTypeMatch(AccessServiceTypeFromConfig,
+                                 AccessServiceTypeFromTokenFile,
+                                 "token file access_service_type must match access_service_type");
 
-    if (AccessServiceTypeFromConfig) {
-        AccessServiceType = *AccessServiceTypeFromConfig;
-    } else if (AccessServiceTypeFromTokenFile) {
-        AccessServiceType = *AccessServiceTypeFromTokenFile;
-    } else {
-        AccessServiceType = NMvp::yandex_v2;
-    }
+    AccessServiceType = AccessServiceTypeFromConfig.value_or(
+        AccessServiceTypeFromTokenFile.value_or(NMvp::yandex_v2));
 
     Tokens.SetAccessServiceType(AccessServiceType);
 }
@@ -242,12 +246,6 @@ void TMvpStartupOptions::OverrideTokensFromConfig() {
     }
     if (override.HasStaffApiUserTokenInfo()) {
         Tokens.MutableStaffApiUserTokenInfo()->MergeFrom(override.GetStaffApiUserTokenInfo());
-    }
-    if (override.HasAccessServiceType()) {
-        if (override.GetAccessServiceType() != *AccessServiceTypeFromTokenFile) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX
-                                << "auth.tokens.access_service_type must match access_service_type";
-        }
     }
 
     MergeRepeatedByName(Tokens.MutableJwtInfo(), override.GetJwtInfo());

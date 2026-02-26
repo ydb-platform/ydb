@@ -54,6 +54,31 @@ generic:
         UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "token file access_service_type must match access_service_type");
     }
 
+    Y_UNIT_TEST(TokenFileAndAuthTokensAccessServiceTypeMismatchThrows) {
+        TTempFileHandle tmpToken = MakeTestFile(R"pb(
+AccessServiceType: yandex_v2
+JwtInfo {
+  Name: "legacy-jwt"
+  Endpoint: "grpcs://token.endpoint:443"
+  AccountId: "service-account-id"
+  KeyId: "key-id"
+  PrivateKey: "private-key"
+}
+)pb", "mvp_legacy_jwt_auth_tokens_access_service_type_mismatch", ".pb.txt");
+
+        TString yaml = TStringBuilder() << R"(
+generic:
+  auth:
+    token_file: )" << tmpToken.Name() << R"(
+    tokens:
+      access_service_type: "nebius_v1"
+)";
+        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_auth_tokens_access_service_type_mismatch", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "token file access_service_type must match access_service_type");
+    }
+
     Y_UNIT_TEST(TokenFileWithoutAccessServiceTypeUsesGenericValue) {
         TTempFileHandle tmpToken = MakeTestFile(R"pb(
 JwtInfo {

@@ -42,13 +42,13 @@ tracing:
   verbosity: 15
 
 validation:
-  server: "localhost:__TSSERVER_PORT__"
+  server: "__TSSERVER_HOST__:__TSSERVER_PORT__"
   after_bytes: 5000000000
 """
 
 
 class YdbTestShardWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_port=35000):
+    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_port=35000, tsserver_host='localhost'):
         self.tsserver_process = None
         self.tempdir = None
         super().__init__(None, '', 'testshard', None)
@@ -60,6 +60,7 @@ class YdbTestShardWorkload(WorkloadBase):
         self.custom_config_path = config_path
         self.channels = channels
         self.tsserver_port = tsserver_port
+        self.tsserver_host = tsserver_host
         self._unpack_resource('ydb_cli')
         self._unpack_resource('tsserver')
         self._prepare_config()
@@ -100,7 +101,9 @@ class YdbTestShardWorkload(WorkloadBase):
             os.makedirs(self.working_dir, exist_ok=True)
 
         self.config_path = os.path.join(self.working_dir, "default_config.yaml")
-        config_content = DEFAULT_CONFIG.replace("__TSSERVER_PORT__", str(self.tsserver_port))
+        config_content = DEFAULT_CONFIG \
+            .replace("__TSSERVER_PORT__", str(self.tsserver_port)) \
+            .replace("__TSSERVER_HOST__", str(self.tsserver_host))
         with open(self.config_path, "w") as f:
             f.write(config_content)
         logger.info(f"Created default config: {self.config_path} with tsserver port: {self.tsserver_port}")

@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from ydb.tests.stress.result_set_format.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 
 
 if __name__ == "__main__":
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.basicConfig(level=args.log_level)
-    client = YdbClient(args.endpoint, args.database, True, sessions=3000)
+    client = InstrumentedYdbClient(args.endpoint, args.database, True, sessions=3000)
     client.wait_connection()
     try:
         with WorkloadRunner(client, args.path, args.duration, args.format) as runner:

@@ -367,7 +367,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -383,7 +382,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -836,7 +834,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
@@ -847,7 +845,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),

@@ -122,9 +122,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
-                    YQL_ENSURE(fulltextDesc);
-                    const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                    const bool withRelevance = index.Type == TIndexDescription::EType::GlobalFulltextRelevance;
                     if (withRelevance) {
                         while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
                             implTable = implTable->Next;

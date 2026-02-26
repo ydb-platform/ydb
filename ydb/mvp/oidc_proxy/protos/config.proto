@@ -1,0 +1,24 @@
+syntax = "proto2";
+
+package NMvp.NOidcProxy;
+
+import "ydb/mvp/core/protos/mvp.proto";
+
+message TOidcProxyConfig {
+    optional string SecretName = 1;
+    optional string ClientId = 2;
+    optional string SessionServiceEndpoint = 3;
+    optional string SessionServiceTokenName = 4;
+    optional string AuthorizationServerAddress = 5;
+    optional string AuthUrlPath = 6;
+    optional string TokenUrlPath = 7;
+    optional string ExchangeUrlPath = 8;
+    optional string ImpersonateUrlPath = 9;
+    optional string WhoamiExtendedInfoEndpoint = 10;
+    repeated string AllowedProxyHosts = 11;
+}
+
+message TOidcProxyAppConfig {
+    optional NMvp.TGenericConfig Generic = 1;
+    optional TOidcProxyConfig Oidc = 2;
+}

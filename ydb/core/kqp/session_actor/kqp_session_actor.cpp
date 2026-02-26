@@ -371,7 +371,8 @@ public:
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
-            QueryState->UserToken
+            QueryState->UserToken,
+            QueryState->GetQuery()
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());
@@ -1952,10 +1953,25 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
+        // Check if any result binding references this transaction
+        const auto txIndex = QueryState->CurrentTx;
+        bool expectsResult = false;
+        if (QueryState->PreparedQuery) {
+            const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                if (phyQuery.GetResultBindings(i).GetTxResultBinding().GetTxIndex() == txIndex) {
+                    expectsResult = true;
+                    break;
+                }
+            }
+        }
+
         auto executerActor = CreateKqpSchemeExecuter(
             tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
-            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
+            expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
+            KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -2056,7 +2072,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2108,7 +2124,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService);
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig);
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),

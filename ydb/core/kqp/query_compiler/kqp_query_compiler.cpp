@@ -1376,6 +1376,11 @@ private:
             auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
             YQL_ENSURE(desc, "unexpected index description type");
             fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+            YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || index->Type == TIndexDescription::EType::GlobalFulltextPlain);
+            fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
+                : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                 columnProto->SetName(columnMeta->Name);

@@ -23,6 +23,12 @@ namespace NKikimr::NWrappers::NExternalStorage {
 #define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 
+#define FS_LOG_T_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_T(stream); } } while (false)
+#define FS_LOG_I_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_I(stream); } } while (false)
+#define FS_LOG_D_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_D(stream); } } while (false)
+#define FS_LOG_W_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_W(stream); } } while (false)
+#define FS_LOG_E_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_E(stream); } } while (false)
+
 namespace {
 
 class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
@@ -57,6 +63,15 @@ private:
     template<typename TEvResponse>
     static constexpr bool HasKeyConstructor() {
         return RequiresKey<TEvResponse>::value;
+    }
+
+    static void FsyncParentDir(const TFsPath& fsPath) {
+        TFile dirFd(fsPath.Parent().GetPath(), RdOnly | Seq);
+        dirFd.Flush();
+    }
+
+    static void FsyncParentDir(const TString& filePath) {
+        FsyncParentDir(TFsPath(filePath));
     }
 
     template<typename TEvResponse>
@@ -140,7 +155,7 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_D("TFsOperationActor: cleaning up"
+        FS_LOG_D_SAFE("TFsOperationActor: cleaning up"
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
@@ -148,11 +163,11 @@ private:
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
+                FS_LOG_T_SAFE("TFsOperationActor: closed and deleted incomplete file"
                     << ": uploadId# " << uploadId
                     << ", file# " << filePath);
             } catch (const std::exception& ex) {
-                FS_LOG_W("Failed to cleanup MPU session"
+                FS_LOG_W_SAFE("Failed to cleanup MPU session"
                     << ": uploadId# " << uploadId
                     << ", error# " << ex.what());
             }
@@ -202,11 +217,11 @@ public:
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
-            file.Flock(LOCK_EX | LOCK_NB);
-            file.Write(body.data(), body.size());
-            file.Flush();
-            file.Close();
+            TMultipartUploadSession session(key);
+            session.File.Write(body.data(), body.size());
+            session.File.Flush();
+            FsyncParentDir(fsPath);
+            session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
@@ -503,6 +518,7 @@ public:
             session.File.Flush();
 
             NFs::Rename(incompleteKey, key);
+            FsyncParentDir(key);
             session.File.Close();
 
             FS_LOG_I("CompleteMultipartUpload"
@@ -545,8 +561,12 @@ public:
                 auto& session = it->second;
                 const TString filePath = session.Key;
 
-                NFs::Remove(filePath);
-                session.File.Close();
+                bool removed = NFs::Remove(filePath);
+                if (!removed) {
+                    FS_LOG_W("AbortMultipartUpload: failed to delete incomplete file"
+                        << ": uploadId# " << uploadId
+                        << ", file# " << filePath);
+                }
                 ActiveUploads.erase(it);
 
                 FS_LOG_I("AbortMultipartUpload"

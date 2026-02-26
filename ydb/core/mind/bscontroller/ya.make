@@ -18,6 +18,7 @@ SRCS(
     config.cpp
     config_fit_groups.cpp
     config_fit_pdisks.cpp
+    config_v2_enable.cpp
     config.h
     console_interaction.h
     console_interaction.cpp

@@ -3433,6 +3433,12 @@ public:
         });
     }
 
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetIndexPopulationMode() const {
+        return Visit([](const auto& settings) {
+            return settings.index_population_mode();
+        });
+    }
+
     bool CompileExcludeRegexps(TString& errorDescription);
 
     bool IsExcludedFromImport(const TString& path) const;
@@ -3908,6 +3914,8 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     float CalcProgress() const;
 };
 // } // NForcedCompaction
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 
 }
 

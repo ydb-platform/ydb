@@ -167,6 +167,9 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }

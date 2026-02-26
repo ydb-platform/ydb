@@ -4,6 +4,7 @@
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
@@ -427,7 +428,12 @@ public:
     {
     }
 
-    TString Process(const NProtoBuf::Message& msg, bool& addLineBefore, bool& addLineAfter, TMaybe<ui32>& stmtCoreAltCase) {
+    TString Process(
+        const NProtoBuf::Message& msg,
+        bool& addLineBefore,
+        bool& addLineAfter,
+        TMaybe<ui32>& stmtCoreAltCase)
+    {
         Scopes_.push_back(EScope::Default);
         MarkedTokens_.reserve(ParsedTokens_.size());
         MarkTokens(msg);
@@ -3308,6 +3314,13 @@ TStaticData::TStaticData()
 }
 
 class TSqlFormatter: public NSQLFormat::ISqlFormatter {
+private:
+    struct TTokens {
+        TParsedTokenList All;
+        TParsedTokenList Comments;
+        TParsedTokenList Parsed;
+    };
+
 public:
     TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
                   const NSQLTranslationV1::TParsers& parsers,
@@ -3340,34 +3353,57 @@ public:
         }
 
         auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
+
         TVector<TString> statements;
         if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, false)) {
             return false;
         }
+
+        const auto lex = [&](const TString& query, TTokens& tokens) -> bool {
+            YQL_ENSURE(tokens.All.empty());
+            YQL_ENSURE(tokens.Comments.empty());
+            YQL_ENSURE(tokens.Parsed.empty());
+
+            auto onNext = [&](NSQLTranslation::TParsedToken&& token) {
+                if (token.Name == "COMMENT") {
+                    tokens.Comments.emplace_back(token);
+                } else if (token.Name != "WS" && token.Name != "EOF") {
+                    tokens.Parsed.emplace_back(token);
+                }
+
+                tokens.All.emplace_back(std::move(token));
+            };
+
+            return lexer->Tokenize(
+                query,
+                parsedSettings.File,
+                onNext,
+                issues,
+                NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+        };
 
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
         for (const TString& stmt : statements) {
             bool hasNewlinesBefore = LeadingNLsCount(stmt) > 1;
+
             TString currentQuery = StripStringLeft(stmt);
             if (AllOf(currentQuery, [](char x) { return x == ';'; })) {
                 continue;
             }
 
-            TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
-            auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
-                stmtTokens.push_back(token);
-                if (token.Name == "COMMENT") {
-                    comments.emplace_back(std::move(token));
-                } else if (token.Name != "WS" && token.Name != "EOF") {
-                    parsedTokens.emplace_back(std::move(token));
-                }
-            };
-
-            if (!lexer->Tokenize(currentQuery, parsedSettings.File, onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            TTokens currentTokens;
+            if (!lex(currentQuery, currentTokens)) {
                 return false;
+            }
+
+            if (!currentTokens.Parsed.empty() &&
+                currentTokens.Parsed.back().Name != "SEMICOLON")
+            {
+                currentQuery += "\n;";
+                currentTokens = {};
+                YQL_ENSURE(lex(currentQuery, currentTokens));
             }
 
             NYql::TIssues parserIssues;
@@ -3381,12 +3417,20 @@ public:
                 continue;
             }
 
-            TPrettyVisitor visitor(parsedTokens, comments, parsedSettings.AnsiLexer);
+            const bool hasCommentBefore =
+                !currentTokens.Comments.empty() &&
+                !currentTokens.Parsed.empty() &&
+                currentTokens.Comments.front().Line < currentTokens.Parsed.front().Line;
+
+            TPrettyVisitor visitor(currentTokens.Parsed, currentTokens.Comments, parsedSettings.AnsiLexer);
             bool addLineBefore = false;
             bool addLineAfter = false;
             TMaybe<ui32> stmtCoreAltCase;
-            bool hasCommentBefore = !comments.empty() && !parsedTokens.empty() && comments.front().Line < parsedTokens.front().Line;
-            auto currentFormattedQuery = visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
+            auto currentFormattedQuery = visitor.Process(
+                *message,
+                addLineBefore,
+                addLineAfter,
+                stmtCoreAltCase);
 
             TParsedTokenList stmtFormattedTokens;
             auto onNextFormattedToken = [&](NSQLTranslation::TParsedToken&& token) {
@@ -3397,7 +3441,7 @@ public:
                 return false;
             }
 
-            if (!Validate(stmtTokens, stmtFormattedTokens)) {
+            if (!Validate(currentTokens.All, stmtFormattedTokens)) {
                 issues.AddIssue(NYql::TIssue({}, TStringBuilder() << "Validation failed: " << currentQuery.Quote() << " != " << currentFormattedQuery.Quote()));
                 return false;
             }
@@ -3410,12 +3454,14 @@ public:
             prevStmtCoreAltCase = stmtCoreAltCase;
 
             finalFormattedQuery << currentFormattedQuery;
-            if (parsedTokens.back().Name != "SEMICOLON") {
-                finalFormattedQuery << ";\n";
-            }
         }
 
         formattedQuery = finalFormattedQuery;
+
+        if (!formattedQuery.EndsWith('\n')) {
+            formattedQuery.append('\n');
+        }
+
         return true;
     }
 

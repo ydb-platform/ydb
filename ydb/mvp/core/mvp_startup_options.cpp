@@ -120,6 +120,12 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
 void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic) {
     if (generic.HasAccessServiceType()) {
         AccessServiceTypeFromConfig = generic.GetAccessServiceType();
+        if (generic.HasAuth() && generic.GetAuth().HasTokens() && generic.GetAuth().GetTokens().HasAccessServiceType()
+            && *AccessServiceTypeFromConfig != generic.GetAuth().GetTokens().GetAccessServiceType())
+        {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "auth.tokens.access_service_type must match access_service_type";
+        }
     }
 
     if (generic.HasLogging()
@@ -140,8 +146,8 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
         }
 
         if (auth.HasTokens()) {
-            ValidateTokensOverrideConfig(auth.GetTokens());
-            TokensOverrideConfig = auth.GetTokens();
+            ValidateTokensFromConfig(auth.GetTokens());
+            TokensFromConfig = auth.GetTokens();
         }
     }
 
@@ -225,11 +231,11 @@ void TMvpStartupOptions::MergeAccessServiceType() {
 }
 
 void TMvpStartupOptions::OverrideTokensFromConfig() {
-    if (!TokensOverrideConfig.has_value()) {
+    if (!TokensFromConfig.has_value()) {
         return;
     }
 
-    const auto& override = *TokensOverrideConfig;
+    const auto& override = *TokensFromConfig;
 
     if (override.HasStaffApiUserToken()) {
         Tokens.SetStaffApiUserToken(override.GetStaffApiUserToken());
@@ -238,7 +244,7 @@ void TMvpStartupOptions::OverrideTokensFromConfig() {
         Tokens.MutableStaffApiUserTokenInfo()->MergeFrom(override.GetStaffApiUserTokenInfo());
     }
     if (override.HasAccessServiceType()) {
-        if (override.GetAccessServiceType() != AccessServiceType) {
+        if (override.GetAccessServiceType() != *AccessServiceTypeFromTokenFile) {
             ythrow yexception() << CONFIG_ERROR_PREFIX
                                 << "auth.tokens.access_service_type must match access_service_type";
         }
@@ -250,9 +256,6 @@ void TMvpStartupOptions::OverrideTokensFromConfig() {
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
-    MigrateJwtInfoToOAuth2Exchange();
-    ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
-    Tokens.SetAccessServiceType(AccessServiceType);
 }
 
 void TMvpStartupOptions::LoadCertificates() {

@@ -27,7 +27,7 @@ private:
     std::optional<NMvp::EAccessServiceType> AccessServiceTypeFromTokenFile;
 
 public:
-    std::optional<NMvp::TTokensConfig> TokensOverrideConfig;
+    std::optional<NMvp::TTokensConfig> TokensFromConfig;
 
     bool LogToStderr = false;
     bool Mlock = false;
@@ -52,7 +52,7 @@ private:
     TString AddSchemeToUserToken(const TString& token, const TString& scheme);
     void MergeAccessServiceType();
     void MigrateJwtInfoToOAuth2Exchange();
-    void ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride);
+    void ValidateTokensFromConfig(const NMvp::TTokensConfig& tokensOverride);
     void ValidateOAuth2ExchangeTokenEndpointScheme(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
                                                    const TString& configSource);
     void ValidateOAuth2ExchangeTokenNames(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,

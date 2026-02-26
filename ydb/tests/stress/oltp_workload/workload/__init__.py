@@ -8,6 +8,7 @@ from ydb.tests.stress.oltp_workload.workload.type.vector_index import WorkloadVe
 from ydb.tests.stress.oltp_workload.workload.type.insert_delete_all_types import WorkloadInsertDeleteAllTypes
 from ydb.tests.stress.oltp_workload.workload.type.select_partition import WorkloadSelectPartition
 from ydb.tests.stress.oltp_workload.workload.type.secondary_index import WorkloadSecondaryIndex
+from ydb.tests.stress.oltp_workload.workload.type.tli import WorkloadTli
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -32,19 +33,25 @@ class WorkloadRunner:
         deleted = self.client.remove_recursively(self.tables_prefix)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
-    def run(self):
+    def run(self, enabled_workloads=None, disabled_workloads=None):
         stop = threading.Event()
         workloads = [
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
             WorkloadFulltextIndex(self.client, self.name, stop),
             WorkloadVectorIndex(self.client, self.name, stop),
             WorkloadSelectPartition(self.client, self.name, stop),
-            WorkloadSecondaryIndex(self.client, self.name, stop)
+            WorkloadSecondaryIndex(self.client, self.name, stop),
+            WorkloadTli(self.client, self.name, stop)
         ]
+
+        if enabled_workloads is not None:
+            workloads = [w for w in workloads if w.name in enabled_workloads]
+        if disabled_workloads is not None:
+            workloads = [w for w in workloads if w.name not in disabled_workloads]
 
         for w in workloads:
             w.start()
-        started_at = started_at = time.time()
+        started_at = time.time()
         while time.time() - started_at < self.duration:
             print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
             for w in workloads:

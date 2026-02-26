@@ -70,7 +70,8 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx) {
         }
     }
 
-    if (DDiskBlockGroupAllocated()) {
+    if (HaveStoredTabletInfo()) {
+        DdiskBlockGroupAllocated = true;
         LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
                 "DDisks connection info has been found");
         TVector<NBsController::TDDiskId> ddiskIds;
@@ -145,7 +146,7 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev) {
     StateInitImpl(ev, SelfId());
 }
 
-bool TPartitionActor::DDiskBlockGroupAllocated()
+bool TPartitionActor::HaveStoredTabletInfo()
 {
     return NFs::Exists(GetDDiskConnectionsFilePath(TabletID()));
 }
@@ -297,7 +298,6 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    DdiskBlockGroupAllocated = true;
     const auto* msg = ev->Get();
 
     LOG_INFO(
@@ -320,6 +320,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 node.GetPersistentBufferDDiskId());
         }
 
+        DdiskBlockGroupAllocated = true;
         StoreTabletInfo(ctx, ddiskIds, persistentBufferDDiskIds);
         Start(ctx, ddiskIds, persistentBufferDDiskIds);
     } else {

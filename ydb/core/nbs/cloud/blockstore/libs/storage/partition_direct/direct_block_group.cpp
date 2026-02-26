@@ -172,7 +172,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , Generation(generation)
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
-    , TEMP_NumberOfCommitedPB(ddisksIds.size() > 1 ? 3 : ddisksIds.size())
+    , TEMP_NumberOfCommitedPB(3)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , SyncRequestsByDDiskId(ddisksIds.size(), nullptr)
     , StorageTransport(
@@ -419,7 +419,7 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
             if (blockMeta.ReadyToFlush()) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Trying to flush block " << blockIndex);
-                RequestBlockFlush(std::move(traceId), blockIndex);
+                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex);
             }
         });
     }
@@ -612,7 +612,7 @@ void TDirectBlockGroup::RequestBlockFlush(NWilson::TTraceId parentTrace,
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,
                 i,   // persistentBufferIndex
-                std::move(parentTrace), TabletId);
+                NWilson::TTraceId(parentTrace), TabletId);
         }
 
         auto count = SyncRequestsByDDiskId[i]->OnSyncRequested(

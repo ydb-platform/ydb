@@ -89,7 +89,7 @@ private:
         TVector<NKikimr::NBsController::TDDiskId> ddiskIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds);
 
-    bool DDiskBlockGroupAllocated();
+    bool HaveStoredTabletInfo();
 
     void LoadTabletInfo(
         const NActors::TActorContext& ctx,

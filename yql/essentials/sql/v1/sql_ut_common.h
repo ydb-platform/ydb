@@ -3421,6 +3421,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     USER_SIDS = TRUE,
+                    TRACE_IDS = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
                     SCHEMA_CHANGES = FALSE,
@@ -3441,6 +3442,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("user_sids"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("trace_ids"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
@@ -6769,6 +6771,18 @@ Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
+}
+
+Y_UNIT_TEST(InvalidChangefeedTraceIDs) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE TABLE tableName (
+            Key Uint32, PRIMARY KEY (Key),
+            CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", TRACE_IDS = "foo")
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:88: Error: Literal of Bool type is expected for TRACE_IDS\n");
 }
 
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {

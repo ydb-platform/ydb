@@ -693,6 +693,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
             kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
             break;
     }
+    kqpConfig.EnableDqSourceStreamLookupJoin = serviceConfig.GetEnableDqSourceStreamLookupJoin();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

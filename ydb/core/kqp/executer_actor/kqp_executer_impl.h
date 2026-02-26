@@ -21,6 +21,7 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -112,43 +113,6 @@ struct TEvPrivate {
         explicit TEvReattachToShard(ui64 tabletId)
             : TabletId(tabletId) {}
     };
-};
-
-struct TStreamingQueryCounters {
-    TStreamingQueryCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& path)
-        : Path(path)
-    {
-        auto subGroup = subgroup->GetSubgroup("subsystem", "streaming_queries");
-        SubGroup = subGroup->GetSubgroup("path", Path);
-        CpuMs = SubGroup->GetCounter("streaming.query.cpu.usage.milliseconds");
-        MemoryUsageBytes = SubGroup->GetCounter("streaming.query.memory.usage.bytes");
-        UptimeSeconds = SubGroup->GetCounter("streaming.query.uptime.seconds");
-        TaskCount = SubGroup->GetCounter("streaming.query.tasks.count");
-        InputBytes = SubGroup->GetCounter("streaming.query.input.bytes");
-        OutputBytes = SubGroup->GetCounter("streaming.query.output.bytes");
-    }
-
-    ~TStreamingQueryCounters() {
-        SubGroup->RemoveSubgroup("path", Path); // todo
-    }
-
-    void Update(const TAggExecStat& stats) {
-        CpuMs->Set(stats.CpuTimeMs);
-        MemoryUsageBytes->Set(stats.MaxMemoryUsageBytes);
-        UptimeSeconds->Set(stats.DurationSeconds);
-        TaskCount->Set(stats.TasksCount);
-        InputBytes->Set(stats.InputBytes);
-        OutputBytes->Set(stats.OutputBytes);
-    }
-
-    const TString Path;
-    ::NMonitoring::TDynamicCounterPtr SubGroup;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CpuMs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageBytes;
-    ::NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TaskCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr InputBytes;
-    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBytes;
 };
 
 template <class TDerived, EExecType ExecType>
@@ -686,22 +650,7 @@ protected:
                 ; // ignore all other states.
         }
 
-        
-        const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool isStreamingQuery = AppData()->FeatureFlags.GetEnableStreamingQueries()
-            && AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()
-            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
-            && context && !context->StreamingQueryPath.empty();
-
-        auto now = TInstant::Now();
-        if (isStreamingQuery && LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
-            auto streamingCounters = TStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
-            TAggExecStat stats;
-            Stats->ExportAggExecStats(&stats);
-            streamingCounters.Update(stats);
-            LastStreamingQueryUpdateCounters = now;
-        }
-
+        ProcessStreamingQueryCounters();
         return ack;
     }
 
@@ -1687,6 +1636,23 @@ protected:
         return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
+    void ProcessStreamingQueryCounters() {
+        const auto& context = TasksGraph.GetMeta().UserRequestContext;
+        if (!CheckpointCoordinatorId || context->StreamingQueryPath.empty()) {
+            return;
+        }
+        if (!StreamingQueryCounters) {
+            StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+        }
+        auto now = TInstant::Now();
+        if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
+            TAggExecStat stats;
+            Stats->ExportAggExecStats(&stats);
+            StreamingQueryCounters->Update(stats);
+            LastStreamingQueryUpdateCounters = now;
+        }
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -1765,6 +1731,7 @@ protected:
     THashSet<ui32> SentResultIndexes;
 
     TActorId CheckpointCoordinatorId;
+    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
 protected:
     TKqpTasksGraph TasksGraph;

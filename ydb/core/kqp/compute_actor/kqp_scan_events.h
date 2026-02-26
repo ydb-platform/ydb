@@ -15,6 +15,11 @@
 
 namespace NKikimr::NKqp::NScanPrivate {
 
+inline std::atomic<int64_t> gLiveFetcherBatches{0};
+inline std::atomic<int64_t> gLiveSendDataWithArrow{0};
+inline std::atomic<int64_t> gDispatchedToCompute{0};
+inline std::atomic<int64_t> gComputeHandled{0};
+
 struct TEvScanExchange {
 
     enum EEvents {
@@ -53,6 +58,12 @@ struct TEvScanExchange {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
+        ~TEvSendData() {
+            if (ArrowBatch) {
+                gLiveSendDataWithArrow.fetch_sub(1);
+            }
+        }
+
         TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
@@ -63,6 +74,7 @@ struct TEvScanExchange {
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
+            gLiveSendDataWithArrow.fetch_add(1);
         }
 
         TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch, std::vector<ui32>&& dataIndexes)
@@ -76,6 +88,7 @@ struct TEvScanExchange {
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
+            gLiveSendDataWithArrow.fetch_add(1);
         }
 
         TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, TVector<TOwnedCellVec>&& rows)

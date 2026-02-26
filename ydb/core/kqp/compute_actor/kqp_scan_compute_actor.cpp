@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
@@ -181,6 +182,22 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
+    if (ScanDataInFlight > 0) {
+        --ScanDataInFlight;
+    }
+    const int64_t seq = gComputeHandled.fetch_add(1);
+    if (seq % 100 == 0) {
+        Cerr << "COMPUTE_HANDLE: seq=" << seq
+             << " fetchers=" << Fetchers.size()
+             << " live_batches=" << gLiveFetcherBatches.load()
+             << " live_events=" << gLiveSendDataWithArrow.load()
+             << " dispatched=" << gDispatchedToCompute.load()
+             << " in_mailbox=" << (gDispatchedToCompute.load() - seq)
+             << " stored_bytes=" << (ScanData ? ScanData->GetStoredBytes() : 0)
+             << " free_space=" << CalculateFreeSpace()
+             << " self=" << SelfId()
+             << Endl;
+    }
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
 
@@ -193,7 +210,16 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        const long origRefCount = msg.GetArrowBatch().use_count();
+        auto arrowBatch = NArrow::DeepCopy(msg.GetArrowBatch());
+        Cerr << "COMPUTE_DEEP_COPY: orig_ptr=" << (void*)msg.GetArrowBatch().get()
+             << " new_ptr=" << (void*)arrowBatch.get()
+             << " orig_refcount=" << origRefCount
+             << " orig_refcount_after=" << msg.GetArrowBatch().use_count()
+             << " orig_cols=" << msg.GetArrowBatch()->num_columns()
+             << " new_cols=" << arrowBatch->num_columns()
+             << Endl;
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(arrowBatch, std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else if (!msg.GetRows().empty()) {
         ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else {
@@ -204,12 +230,22 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     } else {
         DoExecute();
     }
+
+    if (msg.GetArrowBatch()) {
+        const long finalRefCount = msg.GetArrowBatch().use_count();
+        if (finalRefCount != 1) {
+            Cerr << "REFCOUNT_LEAK: ptr=" << (void*)msg.GetArrowBatch().get()
+                 << " final_refcount=" << finalRefCount
+                 << Endl;
+        }
+    }
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
+    ++ScanDataInFlight;
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
@@ -225,6 +261,9 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!ScanData || ScanData->IsFinished()) {
         return;
     }
+    if (ScanDataInFlight >= MaxScanDataInFlight) {
+        return;
+    }
     const auto hasNewMemoryPred = [&]() {
         const ui64 freeSpace = CalculateFreeSpace();
         return freeSpace > prevFreeSpace;
@@ -233,10 +272,21 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
     const ui64 freeSpace = CalculateFreeSpace();
+    static std::atomic<ui64> pollSeq{0};
+    const ui64 ps = pollSeq.fetch_add(1);
+    if (ps % 100 == 0) {
+        Cerr << "POLL_SOURCES: seq=" << ps
+             << " fetchers=" << Fetchers.size()
+             << " free_space=" << freeSpace
+             << " stored_bytes=" << ScanData->GetStoredBytes()
+             << " self=" << SelfId()
+             << Endl;
+    }
     CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
+    ++ScanDataInFlight;
     CA_LOG_D("POLL_SOURCES:FINISH");
 }
 

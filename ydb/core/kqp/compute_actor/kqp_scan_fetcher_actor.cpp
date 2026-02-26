@@ -1,6 +1,7 @@
 #include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -77,6 +78,7 @@ void TKqpScanFetcherActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ". ";
 
     ShardsScanningPolicy.FillRequestScanFeatures(Meta, MaxInFlight, IsAggregationRequest);
+    MaxInFlight = 2;
     for (const auto& read : Meta.GetReads()) {
         auto& state = PendingShards.emplace_back(TShardState(read.GetShardId()));
         state.Ranges = BuildSerializedTableRanges(read);
@@ -85,6 +87,12 @@ void TKqpScanFetcherActor::Bootstrap() {
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
+    const ui64 fetcherCount = AliveFetcherCount.fetch_add(1) + 1;
+    Cerr << "FETCHER_BOOTSTRAP: alive_fetchers=" << fetcherCount
+         << " shards=" << PendingShards.size()
+         << " compute=" << ComputeActorIds.size()
+         << " max_in_flight=" << MaxInFlight
+         << " self_id=" << SelfId() << Endl;
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size())(
         "self_id", SelfId());
     StartTableScan();
@@ -99,6 +107,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) 
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
         "in flight scans", InFlightShards.GetScansCount())("in flight shards", InFlightShards.GetShardsCount());
     InFlightComputes.OnComputeAck(ev->Sender, ev->Get()->GetFreeSpace());
+    // StartTableScan();
     CheckFinish();
 }
 
@@ -150,6 +159,43 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (ev->Get()->Finished) {
         state->State = EShardState::PostRunning;
     }
+
+    if (ev->Get()->ArrowBatch) {
+        ev->Get()->ArrowBatch = NArrow::ClaimMemoryOwnership(ev->Get()->ArrowBatch);
+        gLiveFetcherBatches.fetch_add(1);
+        auto captured = ev->Get()->ArrowBatch;
+        ev->Get()->ArrowBatch = std::shared_ptr<arrow::Table>(
+            captured.get(),
+            [captured](arrow::Table*) mutable {
+                captured.reset();
+                gLiveFetcherBatches.fetch_sub(1);
+            }
+        );
+    }
+
+    static std::atomic<ui64> scanDataSeq{0};
+    const ui64 seq = scanDataSeq.fetch_add(1);
+    if (seq % 100 == 0) {
+        const int64_t dispatched = gDispatchedToCompute.load();
+        const int64_t handled = gComputeHandled.load();
+        Cerr << "SCAN_DATA: seq=" << seq
+             << " alive_fetchers=" << AliveFetcherCount.load()
+             << " live_batches=" << gLiveFetcherBatches.load()
+             << " live_events=" << gLiveSendDataWithArrow.load()
+             << " dispatched=" << dispatched
+             << " handled=" << handled
+             << " in_mailbox=" << (dispatched - handled)
+             << " in_queues=" << (gLiveSendDataWithArrow.load() - (dispatched - handled))
+             << " self=" << SelfId()
+             << " packs=" << InFlightComputes.GetPacksToSendCount()
+             << " pending=" << PendingShards.size()
+             << " inflight=" << InFlightShards.GetShardsCount()
+             << " finished=" << ev->Get()->Finished
+             << " has_arrow=" << (ev->Get()->ArrowBatch ? 1 : 0)
+             << " rows=" << ev->Get()->GetRowsCount()
+             << Endl;
+    }
+
     PendingScanData.emplace_back(std::make_pair(ev, startTime));
 
     ProcessScanData();
@@ -574,8 +620,10 @@ void TKqpScanFetcherActor::ProcessScanData() {
 
 void TKqpScanFetcherActor::StartTableScan() {
     const ui32 maxAllowedInFlight = MaxInFlight;
+    constexpr ui32 MaxPendingPacksBeforeBackpressure = 16;
     bool isFirst = true;
-    while (!PendingShards.empty() && GetShardsInProgressCount() + 1 <= maxAllowedInFlight) {
+    while (!PendingShards.empty() && GetShardsInProgressCount() + 1 <= maxAllowedInFlight
+        && InFlightComputes.GetPacksToSendCount() < MaxPendingPacksBeforeBackpressure) {
         if (isFirst) {
             CA_LOG_D("BEFORE: " << PendingShards.size() << " + " << InFlightShards.GetScansCount() << " + " << PendingResolveShards.size());
             isFirst = false;

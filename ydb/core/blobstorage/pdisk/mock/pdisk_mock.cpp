@@ -503,7 +503,7 @@ public:
                 delete ptr;
             });
 
-            TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
+            NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
             res->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
                 delete ptr;
             });

@@ -166,16 +166,16 @@ class LocalCluster:
                 'hdd': 9
             }
         )
-        logger.info("Database created, waiting for it to be fully ready...")
-        # Give the database a moment to propagate through the cluster
-        time.sleep(3)
+        # logger.info("Database created, waiting for it to be fully ready...")
+        # # Give the database a moment to propagate through the cluster
+        # time.sleep(3)
 
-        # Verify database exists before starting slots
-        try:
-            status = self.cluster.get_database_status(nbs_database)
-            logger.info("Database status: %s", status)
-        except Exception as e:
-            logger.warning("Could not get database status: %s", e)
+        # # Verify database exists before starting slots
+        # try:
+        #     status = self.cluster.get_database_status(nbs_database)
+        #     logger.info("Database status: %s", status)
+        # except Exception as e:
+        #     logger.warning("Could not get database status: %s", e)
 
         logger.info("Registering and starting NBS dynamic slots...")
         slots = self.cluster.register_and_start_slots(nbs_database, count=1)
@@ -226,8 +226,7 @@ def main():
     )
     parser.add_argument(
         '--enable-nbs',
-        type=bool,
-        default=False,
+        action='store_true',
         help='Enable NBS (Network Block Storage) configuration and dynamic nodes'
     )
     parser.add_argument(

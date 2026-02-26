@@ -26,7 +26,7 @@ code workspace/workspace.code-workspace
     tmux
     cd ../../tests/tools/local_cluster
     ya make
-    YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydb_bg/ydb/apps/ydbd/ydbd --enable-nbs true --port-offset 0
+    YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydb_bg/ydb/apps/ydbd/ydbd --enable-nbs --port-offset 0
     ```
 3) Forward the monitoring ports via SSH.
 

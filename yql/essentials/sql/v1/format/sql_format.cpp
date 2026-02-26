@@ -993,7 +993,10 @@ private:
 
             case TRule_named_nodes_stmt::TBlock3::kAlt2: {
                 const auto& alt = msg.GetBlock3().GetAlt2();
-                Out(" (");
+                if (OutColumn_ != 0) {
+                    Out(' ');
+                }
+                Out('(');
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);

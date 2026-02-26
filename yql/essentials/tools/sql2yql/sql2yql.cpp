@@ -438,7 +438,9 @@ int BuildAST(int argc, char** argv) {
                 }
             }
 
-            const bool isSQLv1 = (syntaxVersion == 1 && !res.Has("pg"));
+            const bool isSQLv1 =
+                (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
+                 !res.Has("pg"));
 
             bool hasError = !TestIssues(parseRes, flags.contains("StrictWarningAsError"));
 

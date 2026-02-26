@@ -454,6 +454,7 @@ struct TShardedTableOptions {
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
         bool UserSIDs = true;
+        bool TraceIds = false;
     };
 
     struct TFamily {

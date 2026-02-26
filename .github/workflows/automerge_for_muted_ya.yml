@@ -2,7 +2,9 @@
 name: Automerge for muted_ya (main)
 
 on:
-  workflow_dispatch: #cron disabled cause of bug in github api: automerge lead to missing of labels in on close pull events env
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
 
 jobs:
   set-automerge:

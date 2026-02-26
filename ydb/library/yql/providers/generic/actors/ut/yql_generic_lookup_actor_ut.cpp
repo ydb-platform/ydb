@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
     // Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
     class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
-        using TLookupActorFactory = std::function<std::pair<NActors::IActor*, std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>>(const NActors::TActorId&, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&)>;
+        using TLookupActorFactory = std::function<std::pair<NActors::IActor*, std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>>(const NActors::TActorId&, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&, NKikimr::NMiniKQL::TTypeEnvironment&)>;
         using TCallback = std::function<void(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&, NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr&)>;
     public:
         TCallLookupActor(
@@ -42,6 +42,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             TCallback&& callback,
             const NActors::TActorId& edge)
             : Alloc(std::move(alloc))
+            , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
             , LookupActorFactory(std::move(lookupActorFactory))
             , Callback(std::move(callback))
             , Edge(edge)
@@ -53,7 +54,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             Become(&TCallLookupActor::StateFunc);
             auto guard = Guard(*Alloc);
             NActors::IActor* actor;
-            std::tie(actor, Request) = LookupActorFactory(SelfId(), Alloc);
+            std::tie(actor, Request) = LookupActorFactory(SelfId(), Alloc, *TypeEnv);
             LookupActorFactory = {};
             LookupActor = RegisterWithSameMailbox(actor);
             auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(std::move(Request));
@@ -83,6 +84,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             if (Alloc) {
                 auto guard = Guard(*Alloc);
                 Request.reset();
+                TypeEnv.reset();
             }
             Alloc.reset();
         }
@@ -97,6 +99,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     private:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
+        std::shared_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
         NActors::TActorId LookupActor;
         TLookupActorFactory LookupActorFactory;
         TCallback Callback;
@@ -202,8 +205,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
-        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc) {
-        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(*alloc);
+        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
         NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
         NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
@@ -419,8 +421,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
-        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc) {
-        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(*alloc);
+        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
         NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
         NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};

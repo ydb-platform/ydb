@@ -6,6 +6,8 @@
 
 namespace NKikimr::NKqp {
 
+constexpr TDuration StreamingQueryUpdateCountersPeriod = TDuration::Seconds(10);
+
 struct IStreamingQueryCounters : public TThrRefBase {
 
     virtual ~IStreamingQueryCounters() = default;

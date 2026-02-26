@@ -92,17 +92,63 @@ class TestIncorrectCompression(object):
         except ydb.issues.Error as ex:
             assert error_text in ex.message
 
-    def test_create_row_based_table_with_compression(self):
-        compressed_table_path = f"{self.test_dir}/create_row_table"
+    def test_create_row_based_table_with_column_compression(self):
+        table_path = f"{self.test_dir}/create_row_table"
 
         try:
             self.ydb_client.query(
                 f"""
-                    CREATE TABLE `{compressed_table_path}` (
+                    CREATE TABLE `{table_path}` (
                         key Uint64 NOT NULL,
                         vStr Utf8 COMPRESSION(algorithm=lz4),
                         PRIMARY KEY(key),
                     )
+                """
+            )
+            assert False, 'Should Fail'
+        except ydb.issues.Error as ex:
+            assert "Column Compression is not supported in row tables" in ex.message
+
+    def test_alter_row_based_table_alter_column_compression(self):
+        table_path = f"{self.test_dir}/alter_row_table_alter_column"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+            """
+        )
+
+        try:
+            self.ydb_client.query(
+                f"""
+                    ALTER TABLE `{table_path}` ALTER COLUMN  vStr SET COMPRESSION(algorithm=lz4);
+                """
+            )
+            assert False, 'Should Fail'
+        except ydb.issues.Error as ex:
+            assert "Column Compression is not supported in row tables" in ex.message
+
+    def test_alter_row_based_table_add_column_with_compression(self):
+        table_path = f"{self.test_dir}/alter_row_table_alter_column"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+            """
+        )
+
+        try:
+            self.ydb_client.query(
+                f"""
+                    ALTER TABLE `{table_path}` ADD COLUMN  vStr2 Utf8 COMPRESSION(algorithm=zstd);
                 """
             )
             assert False, 'Should Fail'

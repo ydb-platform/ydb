@@ -326,6 +326,13 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             if (!alter.family().empty()) {
                 column->SetFamilyName(alter.family());
             }
+
+            if (alter.has_compression()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Column Compression is not supported in row tables";
+                return false;
+            }
+
             switch (alter.default_value_case()) {
                 case Ydb::Table::ColumnMeta::kFromSequence: {
                     auto fromSequence = column->MutableDefaultFromSequence();
@@ -706,6 +713,12 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
 
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
+        }
+
+        if (column.has_compression()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Column Compression is not supported in row tables";
+            return false;
         }
 
         switch (column.default_value_case()) {

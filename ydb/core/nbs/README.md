@@ -26,7 +26,7 @@ code workspace/workspace.code-workspace
     tmux
     cd ../../tests/tools/local_cluster
     ya make
-    YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydb_bg/ydb/apps/ydbd/ydbd
+    YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydb_bg/ydb/apps/ydbd/ydbd --enable-nbs --port-offset 0
     ```
 3) Forward the monitoring ports via SSH.
 
@@ -66,7 +66,7 @@ code workspace/workspace.code-workspace
 2) Create partition:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1000 --pool ddp1 --type=ssd
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
 3) Write some data:

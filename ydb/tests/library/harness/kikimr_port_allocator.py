@@ -266,19 +266,20 @@ class DefaultFirstNodePortAllocator(KikimrPortAllocatorInterface):
     Port allocator that uses default ports for the first node
     and unique ports with offset for other nodes.
     """
-    def __init__(self):
+    def __init__(self, base_offset=0):
         super(DefaultFirstNodePortAllocator, self).__init__()
         self.__node_allocators = {}
+        self.base_offset = base_offset
 
     def get_node_port_allocator(self, node_index):
         if node_index not in self.__node_allocators:
             if node_index == 1:
-                # First node uses default ports
-                self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(base_port_offset=0)
+                # First node uses base offset
+                self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(base_port_offset=self.base_offset)
             else:
-                # Other nodes use ports with offset
-                # Offset is (node_index - 1) * PORT_OFFSET_STEP
-                port_offset = (node_index - 1) * PORT_OFFSET_STEP
+                # Other nodes use base offset + node offset
+                # Offset is base_offset + (node_index - 1) * PORT_OFFSET_STEP
+                port_offset = self.base_offset + (node_index - 1) * PORT_OFFSET_STEP
                 self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(
                     base_port_offset=port_offset,
                     grpc_port=DEFAULT_GRPC_PORT,
@@ -289,8 +290,8 @@ class DefaultFirstNodePortAllocator(KikimrPortAllocatorInterface):
         return self.__node_allocators[node_index]
 
     def get_slot_port_allocator(self, slot_index):
-        # For slots, use offset starting from a large number to avoid conflicts
-        slot_offset = 10000 + (slot_index - 1) * PORT_OFFSET_STEP
+        # For slots, use base offset + large number to avoid conflicts with nodes
+        slot_offset = self.base_offset + 10000 + (slot_index - 1) * PORT_OFFSET_STEP
         return KikimrFixedNodePortAllocator(
             base_port_offset=slot_offset,
             grpc_port=DEFAULT_GRPC_PORT,

@@ -779,8 +779,9 @@ struct TEvBlobStorage {
         EvFullSyncFinished,
         EvAddFullSyncSsts,
         EvAddFullSyncSstsResult,
-        EvChunkReadRaw,
+        EvChunkReadRaw,                                         // 268 636 350
         EvChunkWriteRaw,
+        EvStartCompactionFromDefrag,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -1221,6 +1221,9 @@ static void queue_setting_update(grpc_chttp2_transport* t,
   if (use_value != t->settings[GRPC_LOCAL_SETTINGS][id]) {
     t->settings[GRPC_LOCAL_SETTINGS][id] = use_value;
     t->dirtied_local_settings = true;
+    if (id == GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE) {
+        t->flow_control.set_target_initial_window_size(use_value);
+    }
   }
 }
 

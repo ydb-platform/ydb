@@ -152,7 +152,11 @@ TPartitionResult PartitionInputTablesIntoTasks(
 
     auto [gottenFmrTasks, fmrPartitionStatus] = partitioner.PartitionFmrTablesIntoTasks(fmrInputTables);
     if (!fmrPartitionStatus) {
-        return TPartitionResult{.PartitionStatus = false};
+        return TPartitionResult{.Error = TFmrError{
+            .Component = EFmrComponent::Coordinator,
+            .Reason = EFmrErrorReason::RestartQuery,
+            .ErrorMessage = "Failed to partition fmr input tables into tasks"
+        }};
     }
     YQL_CLOG(INFO, FastMapReduce) << "Successfully partitioned " << fmrInputTables.size() << " input fmr tables into " << gottenFmrTasks.size() << " tasks";
     for (auto& fmrTask: gottenFmrTasks) {
@@ -160,20 +164,31 @@ TPartitionResult PartitionInputTablesIntoTasks(
         currentTasks.emplace_back(fmrTask);
     }
     if (ytInputTables.empty()) {
-        return TPartitionResult{.TaskInputs = currentTasks, .PartitionStatus = true};
+        return TPartitionResult{.TaskInputs = currentTasks};
     }
     auto settings = ytPartitionSettings;
     if (settings.MaxParts <= gottenFmrTasks.size()) {
-        return TPartitionResult{.PartitionStatus = false};
+        return TPartitionResult{.Error = TFmrError{
+            .Component = EFmrComponent::Coordinator,
+            .Reason = EFmrErrorReason::RestartQuery,
+            .ErrorMessage = "Failed to partition yt input tables into tasks: max parts exceeded"
+        }};
     }
     settings.MaxParts = ytPartitionSettings.MaxParts - gottenFmrTasks.size();
     Y_ENSURE(settings.PartitionMode == NYT::ETablePartitionMode::Unordered);
     auto [gottenYtTasks, ytPartitionStatus] = ytCoordinatorService->PartitionYtTables(ytInputTables, clusterConnections, settings);
+    if (!ytPartitionStatus) {
+        return TPartitionResult{.Error = TFmrError{
+            .Component = EFmrComponent::Coordinator,
+            .Reason = EFmrErrorReason::RestartQuery,
+            .ErrorMessage = "Failed to partition yt input tables into tasks"
+        }};
+    }
     for (auto& ytTask: gottenYtTasks) {
         currentTasks.emplace_back(TTaskTableInputRef{.Inputs = {ytTask}});
     }
     YQL_CLOG(INFO, FastMapReduce) << "Gotten " << currentTasks.size() << " yt and fmr tasks to run from operation input tables";
-    return TPartitionResult{.TaskInputs = currentTasks, .PartitionStatus = ytPartitionStatus};
+    return TPartitionResult{.TaskInputs = currentTasks};
 }
 
 }

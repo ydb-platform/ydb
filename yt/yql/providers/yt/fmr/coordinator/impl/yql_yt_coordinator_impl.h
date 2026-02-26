@@ -33,6 +33,16 @@ struct TPartIdInfo {
     TString PartId;
 };
 
+struct TPartitionOperationResult {
+    TString PartitionId;
+    TMaybe<TFmrError> Error;
+};
+
+struct TFmrResourceTasksResult {
+    std::vector<TFmrResourceTaskInfo> Tasks;
+    TMaybe<TFmrError> Error;
+};
+
 IFmrCoordinator::TPtr MakeFmrCoordinator(
     const TFmrCoordinatorSettings& settings = TFmrCoordinatorSettings(),
     IYtCoordinatorService::TPtr ytCoordinatorService = MakeYtCoordinatorService(),

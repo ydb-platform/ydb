@@ -93,8 +93,8 @@ message TFmrTableInputRef {
     repeated string Columns = 3;
     optional string ColumnGroups = 4;
     optional bool   IsFirstRowInclusive = 5;
-    optional string FirstRowKeys = 6;
-    optional string LastRowKeys = 7;
+    optional bytes FirstRowKeys = 6;
+    optional bytes LastRowKeys = 7;
 }
 
 message TSortingColumns {
@@ -117,8 +117,8 @@ message TTableStats {
 
 message TSortedChunkStats {
     bool IsSorted = 1;
-    string FirstRowKeys = 2;
-    string LastRowKeys = 3;
+    bytes FirstRowKeys = 2;
+    bytes LastRowKeys = 3;
 }
 
 message TChunkStats {

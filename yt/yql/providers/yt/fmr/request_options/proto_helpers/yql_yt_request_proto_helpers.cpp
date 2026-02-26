@@ -205,6 +205,9 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         fmrTableInputRef.Columns.emplace_back(column);
     }
     fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
+    fmrTableInputRef.IsFirstRowInclusive = protoFmrTableInputRef.HasIsFirstRowInclusive()
+        ? TMaybe<bool>(protoFmrTableInputRef.GetIsFirstRowInclusive())
+        : Nothing();
     fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
     fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
     return fmrTableInputRef;

@@ -120,7 +120,12 @@ void TSortedPartitioner::TFmrTablesChunkPool::InitTableInputs(const std::vector<
                 const auto& chunk = stats[chunkIdx];
                 Y_ENSURE(chunk.SortedChunkStats.IsSorted, "Every FMR chunk inside SortedPartitioner must be sorted");
                 if (chunk.SortedChunkStats.FirstRowKeys.IsUndefined() || chunk.SortedChunkStats.LastRowKeys.IsUndefined()) {
-                    ythrow yexception() << "Every FMR chunk inside SortedPartitioner must have first and last key bounds";
+                    Error_ = TFmrError{
+                        .Component = EFmrComponent::Coordinator,
+                        .Reason = EFmrErrorReason::RestartQuery,
+                        .ErrorMessage = "Every FMR chunk inside SortedPartitioner must have first and last key bounds"
+                    };
+                    return;
                 }
 
                 auto firstBound = MakeKeyBound(chunk.SortedChunkStats.FirstRowKeys, KeyColumns_);
@@ -158,6 +163,14 @@ void TSortedPartitioner::TFmrTablesChunkPool::InitTableInputs(const std::vector<
             FilterBoundaries_[tableId] = FilterBoundary;
         }
     }
+}
+
+void TSortedPartitioner::TFmrTablesChunkPool::SetError(TFmrError error) {
+    Error_ = std::move(error);
+}
+
+TMaybe<TFmrError> TSortedPartitioner::TFmrTablesChunkPool::GetError() const {
+    return Error_;
 }
 
 bool TSortedPartitioner::TFmrTablesChunkPool::IsNotEmpty() const {
@@ -230,7 +243,7 @@ TSortedPartitionerFilterBoundary TSortedPartitioner::TFmrTablesChunkPool::GetMax
     return it->second;
 }
 
-TMaybe<TSortedPartitioner::TSlice> TSortedPartitioner::ReadSlice(TFmrTablesChunkPool& chunkPool) {
+TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChunkPool& chunkPool) {
     TChunkContainer container;
     std::vector<TFmrTableKeysRange> effectiveRanges;
     effectiveRanges.reserve(chunkPool.GetTableOrder().size());
@@ -247,7 +260,7 @@ TMaybe<TSortedPartitioner::TSlice> TSortedPartitioner::ReadSlice(TFmrTablesChunk
     }
 
     if (container.IsEmpty()) {
-        return Nothing();
+        return TReadSliceResult{};
     }
     const TFmrTableKeysRange& rangeForRead = container.GetKeysRange();
 
@@ -285,11 +298,15 @@ TMaybe<TSortedPartitioner::TSlice> TSortedPartitioner::ReadSlice(TFmrTablesChunk
         } else if (interFirst <= sepKey && sepKey == effLast) {
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = true});
         } else {
-            ythrow yexception() << "Undefined behaviour in ReadSlice: intersection doesn't reach separator key";
+            return TReadSliceResult{.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "Undefined behaviour in ReadSlice: intersection doesn't reach separator key"
+            }};
         }
     }
 
-    return slice;
+    return TReadSliceResult{.Slice = std::move(slice)};
 }
 
 TTaskTableInputRef TSortedPartitioner::CreateTaskInputFromSlices(const std::vector<TSlice>& slices, const std::vector<TFmrTableRef>& inputTables) const {
@@ -426,13 +443,15 @@ TSortedPartitioner::TSortedPartitioner(
     , KeyColumns_(std::move(KeyColumns))
     , Settings_(settings)
 {
+    Y_ENSURE(Settings_.FmrPartitionSettings.MaxParts > 0);
+    Y_ENSURE(Settings_.FmrPartitionSettings.MaxDataWeightPerPart > 0);
 }
 
-std::pair<std::vector<TTaskTableInputRef>, bool> TSortedPartitioner::PartitionTablesIntoTasksSorted(
+TPartitionResult TSortedPartitioner::PartitionTablesIntoTasksSorted(
     const std::vector<TOperationTableRef>& inputTables
 ) {
     if (inputTables.empty()) {
-        return {{}, true};
+        return TPartitionResult{};
     }
 
     std::vector<TFmrTableRef> inputFmrTables;
@@ -441,43 +460,64 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TSortedPartitioner::PartitionTa
         if (auto fmrTable = std::get_if<TFmrTableRef>(&table)) {
             inputFmrTables.push_back(*fmrTable);
         } else {
-            ythrow yexception() << "Unsupported table type for SortedPartitioner: only FMR tables are supported";
+            return TPartitionResult{.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "Unsupported table type for SortedPartitioner: only FMR tables are supported"
+            }};
         }
     }
 
-    return {PartitionFmrTables(inputFmrTables), true};
+    return PartitionFmrTables(inputFmrTables);
 }
 
-std::vector<TTaskTableInputRef> TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTableRef>& inputTables) {
+TPartitionResult TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTableRef>& inputTables) {
     Y_ENSURE(Settings_.FmrPartitionSettings.MaxDataWeightPerPart > 0, "MaxDataWeightPerPart must be > 0");
     Y_ENSURE(!KeyColumns_.Columns.empty(), "KeyColumns must be set for SortedPartitioner");
 
     std::vector<TTaskTableInputRef> tasks;
+    const ui64 maxParts = Settings_.FmrPartitionSettings.MaxParts;
 
     TFmrTablesChunkPool chunkPool(inputTables, PartIdsForTables_, PartIdStats_, KeyColumns_);
+    if (auto error = chunkPool.GetError()) {
+        return TPartitionResult{.Error = *error};
+    }
     const ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
 
     std::vector<TSlice> currentSlices;
     ui64 currentWeight = 0;
 
     while (chunkPool.IsNotEmpty()) {
-        auto slice = ReadSlice(chunkPool);
-        if (!slice.Defined()) {
+        auto sliceResult = ReadSlice(chunkPool);
+        if (sliceResult.Error) {
+            return TPartitionResult{.Error = *sliceResult.Error};
+        }
+        if (!sliceResult.Slice.Defined()) {
             break;
         }
-        if (!currentSlices.empty() && currentWeight + slice->Weight > maxWeight) {
+        auto& slice = *sliceResult.Slice;
+        if (!currentSlices.empty() && currentWeight + slice.Weight > maxWeight) {
             tasks.emplace_back(CreateTaskInputFromSlices(currentSlices, inputTables));
             currentSlices.clear();
             currentWeight = 0;
         }
-        currentWeight += slice->Weight;
-        currentSlices.push_back(std::move(*slice));
+        currentWeight += slice.Weight;
+        currentSlices.push_back(std::move(slice));
     }
     if (!currentSlices.empty()) {
         tasks.emplace_back(CreateTaskInputFromSlices(currentSlices, inputTables));
     }
 
-    return tasks;
+    if (maxParts < tasks.size()) {
+        return TPartitionResult{.Error = TFmrError{
+            .Component = EFmrComponent::Coordinator,
+            .Reason = EFmrErrorReason::RestartQuery,
+            .ErrorMessage = TStringBuilder() << "SortedPartitioner produced " << tasks.size()
+                            << " tasks which exceeds max_parts=" << maxParts
+        }};
+    }
+
+    return TPartitionResult{.TaskInputs = tasks};
 }
 
 ui64 TSortedPartitioner::CollectFmrTotalWeight(const std::vector<TFmrTableRef>& inputTables) {
@@ -501,12 +541,12 @@ TPartitionResult PartitionInputTablesIntoTasksSorted(
     const std::vector<TOperationTableRef>& inputTables,
     TSortedPartitioner& partitioner
 ) {
-    auto [tasks, status] = partitioner.PartitionTablesIntoTasksSorted(inputTables);
-
-    YQL_CLOG(DEBUG, FastMapReduce) << "Successfully partitioned " << inputTables.size()
-                                   << " input tables (sorted) into " << tasks.size() << " tasks";
-
-    return TPartitionResult{.TaskInputs = tasks, .PartitionStatus = status};
+    auto result = partitioner.PartitionTablesIntoTasksSorted(inputTables);
+    if (!result.Error) {
+        YQL_CLOG(DEBUG, FastMapReduce) << "Successfully partitioned " << inputTables.size()
+                                       << " input tables (sorted) into " << result.TaskInputs.size() << " tasks";
+    }
+    return result;
 }
 
 } // namespace NYql::NFmr

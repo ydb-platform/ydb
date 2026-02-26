@@ -26,6 +26,7 @@ message TPrepareOperationRequest {
 message TPrepareOperationResponse {
     string PartitionId = 1;
     uint64 TasksNum = 2;
+    repeated TFmrError ErrorMessages = 3;
 }
 
 message TStartOperationRequest {
@@ -44,6 +45,7 @@ message TStartOperationRequest {
 message TStartOperationResponse {
     EOperationStatus Status = 1;
     string OperationId = 2;
+    repeated TFmrError ErrorMessages = 3;
 }
 
 message TGetOperationResponse {

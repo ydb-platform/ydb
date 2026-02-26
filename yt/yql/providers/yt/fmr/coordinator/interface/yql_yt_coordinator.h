@@ -39,6 +39,7 @@ struct TStartOperationRequest {
 struct TStartOperationResponse {
     EOperationStatus Status;
     TString OperationId;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TPrepareOperationRequest {
@@ -50,6 +51,7 @@ struct TPrepareOperationRequest {
 struct TPrepareOperationResponse {
     TString PartitionId;
     ui64 TasksNum;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TGetOperationRequest {

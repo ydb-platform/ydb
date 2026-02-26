@@ -373,6 +373,9 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
     if (desc.Settings.UserSIDs) {
         settings = node.L(settings, node.Q(node.Y(node.Q("user_sids"), desc.Settings.UserSIDs)));
     }
+    if (desc.Settings.TraceIds) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("trace_ids"), desc.Settings.TraceIds)));
+    }
     if (desc.Settings.VirtualTimestamps) {
         settings = node.L(settings, node.Q(node.Y(node.Q("virtual_timestamps"), desc.Settings.VirtualTimestamps)));
     }

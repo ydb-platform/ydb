@@ -552,7 +552,7 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
     auto ranges = ExtractRanges(source, stageInfo, holderFactory, typeEnv, guard);
 
-    ui64 shard = 0;
+    ui64 shard = 0; // TODO: is it some magic shardId number?
     if (!ranges.empty()) {
         auto& range = source.GetReverse() ? ranges.back() : ranges[0];
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
@@ -851,18 +851,8 @@ TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpPhyTableOperation
     return PrunePartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
-const TShardIdToInfoMap& TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
-    const auto& stageId = stageInfo.Id;
-    auto partition = SourceScanStageIdToParititions.find(stageId);
-
-    if (partition == SourceScanStageIdToParititions.end()) {
-        partition = SourceScanStageIdToParititions.emplace(stageId, std::make_pair(PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan), false)).first;
-        partition->second.second = isFullScan;
-    } else {
-        isFullScan = partition->second.second;
-    }
-
-    return partition->second.first;
+TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
+    return PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
 TShardIdToInfoMap TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {

@@ -574,6 +574,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
                 TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
                 nScanTasks++;
                 break;
+            default:
+                break;
         }
     }
     nComputeTasks = ComputeTasks.size();

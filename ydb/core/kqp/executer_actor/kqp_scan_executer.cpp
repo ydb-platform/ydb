@@ -63,6 +63,10 @@ public:
         YQL_ENSURE(Request.Snapshot.IsValid());
     }
 
+    bool GetSimplifiedUseFollowers() const {
+        return false;
+    }
+
 public:
     STATEFN(WaitResolveState) {
         try {
@@ -123,24 +127,7 @@ private:
 
 private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
-        if (!TBase::HandleResolve(ev)) return;
-        TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    shardIds.insert(partition.ShardId);
-                }
-            }
-        }
-        if (shardIds) {
-            KQP_STLOG_D(KQPSCAN, "Start resolving tablets nodes...",
-                (shard_ids_count, shardIds.size()),
-                (trace_id, TraceId()));
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            auto kqpShardsResolver = CreateKqpShardsResolver(
-                this->SelfId(), TxId, false, std::move(shardIds));
-            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-        } else {
+        if (TBase::HandleResolve(ev) == CONTINUE) {
             GetResourcesSnapshot();
         }
     }

@@ -5,6 +5,8 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/PyYAML
+    ydb/tests/library/clients
     ydb/tests/stress/common
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior

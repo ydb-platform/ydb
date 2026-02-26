@@ -16,6 +16,7 @@ class TestSystemTabletBackup(StressFixture):
             additional_log_configs={
                 "LOCAL_DB_BACKUP": LogLevels.TRACE,
                 "NODE_BROKER": LogLevels.TRACE,
+                "BOOTSTRAPPER": LogLevels.TRACE,
             },
             system_tablet_backup_config={
                 "filesystem": {
@@ -27,8 +28,10 @@ class TestSystemTabletBackup(StressFixture):
     def test_workload(self):
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint", self.endpoint,
+            "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+            "--mon-endpoint", f"http://localhost:{self.cluster.nodes[1].mon_port}",
             "--database", self.database,
             "--duration", self.base_duration,
+            "--backup-path", yatest.common.output_path("system_tablet_backup"),
         ]
         yatest.common.execute(cmd, wait=True)

@@ -1,5 +1,40 @@
 # Changelog
 
+## [14.7.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.6.0...v14.7.0) (2026-02-26)
+
+
+### Features
+
+* add copyText to some elements in popups ([#3496](https://github.com/ydb-platform/ydb-embedded-ui/issues/3496)) ([0dce071](https://github.com/ydb-platform/ydb-embedded-ui/commit/0dce071da8923bf8e8ea2c99334f7f15ff27f62b))
+* add Manage TTL context menu option for tables ([#3475](https://github.com/ydb-platform/ydb-embedded-ui/issues/3475)) ([1d2d03c](https://github.com/ydb-platform/ydb-embedded-ui/commit/1d2d03cc8ca27e165cd00bd19b0e9552b0af1ccb))
+* **Clusters:** add domain and improve search ([#3500](https://github.com/ydb-platform/ydb-embedded-ui/issues/3500)) ([86cb651](https://github.com/ydb-platform/ydb-embedded-ui/commit/86cb6511b98d33aa19a7e92c6a42b9802da809e0))
+* preparing running fetching query statuses ([#3512](https://github.com/ydb-platform/ydb-embedded-ui/issues/3512)) ([a689584](https://github.com/ydb-platform/ydb-embedded-ui/commit/a68958458bfcc76d2c6713284942225d2ec87cc8))
+* use uiFactory for new meta features availability ([#3519](https://github.com/ydb-platform/ydb-embedded-ui/issues/3519)) ([d9e4980](https://github.com/ydb-platform/ydb-embedded-ui/commit/d9e4980daf2c4588bad2c3d12ffc8d0dc878efea))
+
+
+### Bug Fixes
+
+* **QueryEditor:** do not toggle split pane if user touched it ([#3506](https://github.com/ydb-platform/ydb-embedded-ui/issues/3506)) ([729600e](https://github.com/ydb-platform/ydb-embedded-ui/commit/729600e8f0f37081529cd9d7b1656f7b765f727d))
+* **QueryEditor:** tune collapse logic ([#3509](https://github.com/ydb-platform/ydb-embedded-ui/issues/3509)) ([14a1982](https://github.com/ydb-platform/ydb-embedded-ui/commit/14a19824adc4e84186a6050a474e4296cf7ea019))
+* **TenantNameWrapper:** open db page in the same tab ([#3516](https://github.com/ydb-platform/ydb-embedded-ui/issues/3516)) ([70f7c81](https://github.com/ydb-platform/ydb-embedded-ui/commit/70f7c81d6451a4523945637ce3b778db80a70be8))
+* use post requests for tablets actions ([#3522](https://github.com/ydb-platform/ydb-embedded-ui/issues/3522)) ([23169c3](https://github.com/ydb-platform/ydb-embedded-ui/commit/23169c3734aaf93c9e92f3e0e0e8cabc58329ece))
+
+## [14.6.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.5.0...v14.6.0) (2026-02-06)
+
+
+### Features
+
+* hide developer ui in configured ([#3421](https://github.com/ydb-platform/ydb-embedded-ui/issues/3421)) ([817d560](https://github.com/ydb-platform/ydb-embedded-ui/commit/817d56022de9ce7aa2eb06e0c075ff068e801b44))
+* **Tenant:** add schema page, redistribute tabs ([#3402](https://github.com/ydb-platform/ydb-embedded-ui/issues/3402)) ([7c1eee1](https://github.com/ydb-platform/ydb-embedded-ui/commit/7c1eee11305645b56492f91699840e9e7147c5ba))
+
+
+### Bug Fixes
+
+* **HomePage:** check if envs enabled only by uiFactory ([#3435](https://github.com/ydb-platform/ydb-embedded-ui/issues/3435)) ([ca03052](https://github.com/ydb-platform/ydb-embedded-ui/commit/ca030523f3ecb3f21df2d77f620d63c9cab4718a))
+* **Storage:** do not add history entry on type param ([#3418](https://github.com/ydb-platform/ydb-embedded-ui/issues/3418)) ([b1714c7](https://github.com/ydb-platform/ydb-embedded-ui/commit/b1714c7779cbb741a9c7347087090868b85eeed6))
+* **VDisk:** display donor and vdisk popups separately ([#3444](https://github.com/ydb-platform/ydb-embedded-ui/issues/3444)) ([41d6c0a](https://github.com/ydb-platform/ydb-embedded-ui/commit/41d6c0a11ca260e8ffbcbb78f85c1546fdf24e48))
+* **VDiskPopup:** prevent NaN replication progress ([#3443](https://github.com/ydb-platform/ydb-embedded-ui/issues/3443)) ([f5c70c9](https://github.com/ydb-platform/ydb-embedded-ui/commit/f5c70c9d337fd522a0f3b142b23c054829c0f013))
+
 ## [14.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.4.4...v14.5.0) (2026-02-02)
 
 

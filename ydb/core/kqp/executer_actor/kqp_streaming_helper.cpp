@@ -23,9 +23,9 @@ struct TStreamingQueryCounters : public IStreamingQueryCounters {
         SubGroup->RemoveSubgroup("path", Path);
     }
 
-    void Update(const TAggExecStat& stats) {
+    void Update(const TAggExecStat& stats) override {
         CpuMs->Set(stats.CpuTimeMs);
-        MemoryUsageBytes->Set(stats.MaxMemoryUsageBytes);
+        MemoryUsageBytes->Set(stats.MemoryUsageBytes);
         UptimeSeconds->Set(stats.DurationSeconds);
         TaskCount->Set(stats.TasksCount);
         InputBytes->Set(stats.InputBytes);

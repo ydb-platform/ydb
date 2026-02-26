@@ -1318,15 +1318,24 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     }
     metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
-    
+
+    ui64 memoryUsageBytes = 0;
+    ui64 tasksCount = 0;
+    ui64 inputBytes = 0;
+    ui64 outputBytes = 0;
+
     for (const auto& [stageId, stageStat] : StageStats) {
-        metrics->MaxMemoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
-        metrics->TasksCount += stageStat.Task2Index.size();
+        memoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
+        tasksCount += stageStat.Task2Index.size();
         for (auto b : stageStat.IngressBytes)
-            metrics->InputBytes += b;
+            inputBytes += b;
         for (auto b : stageStat.EgressBytes)
-            metrics->OutputBytes += b;
+            outputBytes += b;
     }
+    metrics->MemoryUsageBytes = memoryUsageBytes;
+    metrics->TasksCount = tasksCount;
+    metrics->InputBytes = inputBytes;
+    metrics->OutputBytes = outputBytes;
 }
 
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {

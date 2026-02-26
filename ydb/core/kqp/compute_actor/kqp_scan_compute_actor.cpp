@@ -182,7 +182,9 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
-    WaitingForScanData = false;
+    if (ScanDataInFlight > 0) {
+        --ScanDataInFlight;
+    }
     const int64_t seq = gComputeHandled.fetch_add(1);
     if (seq % 100 == 0) {
         Cerr << "COMPUTE_HANDLE: seq=" << seq
@@ -243,7 +245,7 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
-    WaitingForScanData = true;
+    ++ScanDataInFlight;
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
@@ -259,7 +261,7 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!ScanData || ScanData->IsFinished()) {
         return;
     }
-    if (WaitingForScanData) {
+    if (ScanDataInFlight >= MaxScanDataInFlight) {
         return;
     }
     const auto hasNewMemoryPred = [&]() {
@@ -284,7 +286,7 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
-    WaitingForScanData = true;
+    ++ScanDataInFlight;
     CA_LOG_D("POLL_SOURCES:FINISH");
 }
 

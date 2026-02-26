@@ -66,11 +66,12 @@ private:
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
-            Schedule(RetryInterval, new TEvents::TEvWakeup);
-        } else {
-            PassAway();
+        switch (ev->Get()->Record.GetStatus()) {
+        case NKikimrScheme::StatusAccepted:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            return PassAway();
+        default:
+            return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
     }
 

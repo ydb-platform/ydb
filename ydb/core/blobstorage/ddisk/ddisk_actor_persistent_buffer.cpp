@@ -334,6 +334,7 @@ namespace NKikimr::NDDisk {
                 }
                 auto op = std::make_unique<TPersistentBufferPartIoOp>(InFlightCount, Counters);
                 op->Cookie = opCookie;
+                op->PartCookie = cookie;
                 op->DDiskId = SelfId();
                 op->IsRead = false;
                 op->Size = (ui32)data.size();

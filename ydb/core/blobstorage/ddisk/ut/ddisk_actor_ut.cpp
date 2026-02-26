@@ -134,7 +134,7 @@ public:
         initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
-        TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
+        NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
         initReply->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
             delete ptr;
         });

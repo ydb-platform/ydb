@@ -3,6 +3,8 @@
 #include "defs.h"
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <functional>
+
 namespace NKikimr {
 
 class TMaxTracker {
@@ -10,6 +12,7 @@ class TMaxTracker {
     std::atomic<size_t> CurrentIdx = 0;
     TInstant Last = TInstant::Now();
     ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    std::function<void(i64)> Setter;
 
 public:
 
@@ -23,6 +26,13 @@ public:
 
     void Init(::NMonitoring::TDynamicCounters::TCounterPtr counter) {
         Counter = counter;
+        Setter = {};
+    }
+
+    /// Use for tablet (or other) counters: Update() will call setter(maxVal) instead of Counter->Set().
+    void Init(std::function<void(i64)> setter) {
+        Counter = nullptr;
+        Setter = std::move(setter);
     }
 
     void Collect(i64 val) {
@@ -39,12 +49,15 @@ public:
     // The function is supposed to be called every 1 second.
     // Calling thread can differ from Collect's caller thread
     void Update() {
+        i64 maxVal = Slots[0].load(std::memory_order_relaxed);
+        for (size_t i = 1; i < Slots.size(); ++i) {
+            maxVal = std::max(maxVal, Slots[i].load(std::memory_order_relaxed));
+        }
         if (Counter) {
-            i64 maxVal = Slots[0].load(std::memory_order_relaxed);
-            for (size_t i = 1; i < Slots.size(); ++i) {
-                maxVal = std::max(maxVal, Slots[i].load(std::memory_order_relaxed));
-            }
             Counter->Set(maxVal);
+        }
+        if (Setter) {
+            Setter(maxVal);
         }
         const size_t idx = CurrentIdx.load(std::memory_order_relaxed);
         const size_t newIdx = (idx + 1) % Slots.size();

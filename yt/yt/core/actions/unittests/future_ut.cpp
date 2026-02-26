@@ -42,8 +42,7 @@ TEST_F(TFutureTest, UniqueVoidOK)
     auto uniqueFuture = future.AsUnique();
     EXPECT_FALSE(uniqueFuture.IsSet());
     promise.Set();
-    EXPECT_TRUE(uniqueFuture.IsSet());
-    EXPECT_TRUE(uniqueFuture.Get().IsOK());
+    EXPECT_TRUE(uniqueFuture.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, UniqueVoidError)
@@ -53,8 +52,7 @@ TEST_F(TFutureTest, UniqueVoidError)
     auto uniqueFuture = future.AsUnique();
     EXPECT_FALSE(uniqueFuture.IsSet());
     promise.Set(TError("oops"));
-    EXPECT_TRUE(uniqueFuture.IsSet());
-    EXPECT_EQ(uniqueFuture.Get().GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(uniqueFuture.GetOrCrash().GetCode(), NYT::EErrorCode::Generic);
 }
 
 TEST_F(TFutureTest, VoidUniqueApply)
@@ -86,17 +84,15 @@ TEST_F(TFutureTest, VoidUniqueApply)
         }));
     EXPECT_FALSE(chainedFuture.IsSet());
     promise.Set();
-    EXPECT_TRUE(chainedFuture.IsSet());
-    EXPECT_EQ(chainedFuture.Get().ValueOrThrow(), 888);
+    EXPECT_EQ(chainedFuture.GetOrCrash().ValueOrThrow(), 888);
 }
 
 TEST_F(TFutureTest, WellKnownUniqueFuture)
 {
     auto future = OKFuture.AsUnique();
     // Multiple subscriptions are fine.
-    EXPECT_TRUE(future.IsSet());
-    EXPECT_TRUE(future.Get().IsOK());
-    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(future.GetOrCrash().IsOK());
+    EXPECT_TRUE(future.GetOrCrash().IsOK());
     {
         bool invoked = false;
         future.Subscribe(BIND([&] (const TError& error) {
@@ -118,8 +114,7 @@ TEST_F(TFutureTest, WellKnownUniqueFuture)
 TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    EXPECT_TRUE(f.IsSet());
-    auto result = f.AsUnique().Get();
+    auto result = f.AsUnique().GetOrCrash();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());
 }
@@ -131,8 +126,7 @@ TEST_F(TFutureTest, NoncopyableApply1)
         EXPECT_TRUE(ptrOrError.IsOK());
         EXPECT_EQ(1, *ptrOrError.Value());
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, NoncopyableApply2)
@@ -143,9 +137,8 @@ TEST_F(TFutureTest, NoncopyableApply2)
         EXPECT_EQ(1, *ptrOrError.Value());
         return TErrorOr<int>(2);
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(2, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(2, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply3)
@@ -156,9 +149,8 @@ TEST_F(TFutureTest, NoncopyableApply3)
         EXPECT_EQ(1, *ptrOrError.Value());
         return MakeFuture(2);
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(2, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(2, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply4)
@@ -167,8 +159,7 @@ TEST_F(TFutureTest, NoncopyableApply4)
     auto g = f.AsUnique().Apply(BIND([] (std::unique_ptr<int>&& ptr) {
         EXPECT_EQ(1, *ptr);
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, NoncopyableApply5)
@@ -178,9 +169,8 @@ TEST_F(TFutureTest, NoncopyableApply5)
         EXPECT_EQ(1, *ptr);
         return MakeFuture(2);
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(2, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(2, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply6)
@@ -191,9 +181,8 @@ TEST_F(TFutureTest, NoncopyableApply6)
         EXPECT_EQ(1, *ptrOrError.Value());
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(nullptr, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(nullptr, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply7)
@@ -203,9 +192,8 @@ TEST_F(TFutureTest, NoncopyableApply7)
         EXPECT_EQ(1, *ptr);
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(nullptr, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(nullptr, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply8)
@@ -214,9 +202,8 @@ TEST_F(TFutureTest, NoncopyableApply8)
     auto g = f.Apply(BIND([] {
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(nullptr, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(nullptr, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply9)
@@ -226,9 +213,8 @@ TEST_F(TFutureTest, NoncopyableApply9)
         EXPECT_EQ(1, x);
         return MakeFuture<std::unique_ptr<int>>(nullptr).AsUnique();
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(nullptr, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(nullptr, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApply10)
@@ -238,9 +224,8 @@ TEST_F(TFutureTest, NoncopyableApply10)
         EXPECT_EQ(1, x);
         return MakeFuture<std::unique_ptr<int>>(nullptr).AsUnique();
     }));
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
-    EXPECT_EQ(nullptr, g.Get().Value());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
+    EXPECT_EQ(nullptr, g.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, NoncopyableApplySO5086)
@@ -252,7 +237,7 @@ TEST_F(TFutureTest, NoncopyableApplySO5086)
             return MakeFuture(std::make_unique<int>(42)).AsUnique();
         }))
         .AsUnique()
-        .Get();
+        .BlockingGet();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(42, *result.Value());
 }
@@ -267,8 +252,7 @@ TEST_F(TFutureTest, NonAssignable1)
         EXPECT_EQ(1, object.Value);
     }));
 
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, NonAssignable2)
@@ -288,8 +272,7 @@ TEST_F(TFutureTest, NonAssignable2)
         EXPECT_EQ(1, objects[0].Value().Value);
     }));
 
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, NonAssignable3)
@@ -307,8 +290,7 @@ TEST_F(TFutureTest, NonAssignable3)
         EXPECT_EQ(1, objects[0].Value);
     }));
 
-    EXPECT_TRUE(g.IsSet());
-    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_TRUE(g.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, Unsubscribe)
@@ -416,8 +398,8 @@ TEST_F(TFutureTest, SetAndGet)
     auto future = promise.ToFuture();
 
     promise.Set(57);
-    EXPECT_EQ(57, future.Get().Value());
-    EXPECT_EQ(57, future.Get().Value()); // Second Get() should also work.
+    EXPECT_EQ(57, future.GetOrCrash().Value());
+    EXPECT_EQ(57, future.GetOrCrash().Value()); // Second GetOrCrash() should also work.
 }
 
 TEST_F(TFutureTest, SetAndTryGet)
@@ -474,8 +456,7 @@ TEST_F(TFutureTest, GetUnique)
     std::vector v{1, 2, 3};
     promise.Set(v);
 
-    EXPECT_TRUE(future.IsSet());
-    auto w = future.AsUnique().Get();
+    auto w = future.AsUnique().GetOrCrash();
     EXPECT_TRUE(w.IsOK());
     EXPECT_EQ(v, w.Value());
     EXPECT_TRUE(future.IsSet());
@@ -732,7 +713,7 @@ TEST_F(TFutureTest, ApplyVoidToInt)
     EXPECT_TRUE(source.IsSet());
     EXPECT_TRUE(target.IsSet());
 
-    EXPECT_EQ(17, target.Get().Value());
+    EXPECT_EQ(17, target.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, ApplyVoidToFutureInt)
@@ -774,7 +755,7 @@ TEST_F(TFutureTest, ApplyVoidToFutureInt)
     EXPECT_TRUE(source.IsSet());
     EXPECT_TRUE(target.IsSet());
 
-    EXPECT_EQ(42, target.Get().Value());
+    EXPECT_EQ(42, target.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, ApplyIntToVoid)
@@ -797,7 +778,7 @@ TEST_F(TFutureTest, ApplyIntToVoid)
     EXPECT_TRUE(source.IsSet());
     EXPECT_TRUE(target.IsSet());
 
-    EXPECT_EQ(21, source.Get().Value());
+    EXPECT_EQ(21, source.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, ApplyIntToFutureVoid)
@@ -832,7 +813,7 @@ TEST_F(TFutureTest, ApplyIntToFutureVoid)
     EXPECT_TRUE(source.IsSet());
     EXPECT_FALSE(target.IsSet());
 
-    EXPECT_EQ(21, source.Get().Value());
+    EXPECT_EQ(21, source.GetOrCrash().Value());
 
     // This will sleep for a while until evaluation completion.
     thread.Join();
@@ -865,8 +846,8 @@ TEST_F(TFutureTest, ApplyIntToInt)
     EXPECT_TRUE(source.IsSet());
     EXPECT_TRUE(target.IsSet());
 
-    EXPECT_EQ(21, source.Get().Value());
-    EXPECT_EQ(42, target.Get().Value());
+    EXPECT_EQ(21, source.GetOrCrash().Value());
+    EXPECT_EQ(42, target.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, ApplyIntToFutureInt)
@@ -901,7 +882,7 @@ TEST_F(TFutureTest, ApplyIntToFutureInt)
     EXPECT_TRUE(source.IsSet());
     EXPECT_FALSE(target.IsSet());
 
-    EXPECT_EQ(21, source.Get().Value());
+    EXPECT_EQ(21, source.GetOrCrash().Value());
 
     // This will sleep for a while until evaluation completion.
     thread.Join();
@@ -910,16 +891,15 @@ TEST_F(TFutureTest, ApplyIntToFutureInt)
     EXPECT_TRUE(source.IsSet());
     EXPECT_TRUE(target.IsSet());
 
-    EXPECT_EQ(21, source.Get().Value());
-    EXPECT_EQ(42, target.Get().Value());
+    EXPECT_EQ(21, source.GetOrCrash().Value());
+    EXPECT_EQ(42, target.GetOrCrash().Value());
 }
 
 TEST_F(TFutureTest, TestCancelDelayed)
 {
     auto future = NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(10));
     future.Cancel(TError("Canceled"));
-    EXPECT_TRUE(future.IsSet());
-    EXPECT_FALSE(future.Get().IsOK());
+    EXPECT_FALSE(future.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, CancelDoesntSpuriouslyFail)
@@ -993,8 +973,7 @@ TEST_F(TFutureTest, AnyCombiner)
     auto f = AnySucceeded(futures);
     EXPECT_FALSE(f.IsSet());
     p2.Set(2);
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     auto result = resultOrError.Value();
     EXPECT_EQ(2, result);
@@ -1011,15 +990,14 @@ TEST_F(TFutureTest, AnyCombinerRetainError)
     auto f = AnySet(futures);
     EXPECT_FALSE(f.IsSet());
     p2.Set(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_FALSE(resultOrError.IsOK());
 }
 
 TEST_F(TFutureTest, AnyCombinerEmpty)
 {
     std::vector<TFuture<int>> futures;
-    auto error = AnySucceeded(futures).Get();
+    auto error = AnySucceeded(futures).GetOrCrash();
     EXPECT_EQ(NYT::EErrorCode::FutureCombinerFailure, error.GetCode());
 }
 
@@ -1039,8 +1017,7 @@ TEST_F(TFutureTest, AnyCombinerSkipError)
     p1.Set(TError("oops"));
     EXPECT_FALSE(f.IsSet());
     p2.Set(123);
-    EXPECT_TRUE(f.IsSet());
-    auto result = f.Get();
+    auto result = f.GetOrCrash();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(123, result.Value());
     EXPECT_TRUE(p3.IsCanceled());
@@ -1058,8 +1035,7 @@ TEST_F(TFutureTest, AnyCombinerSuccessShortcut)
     EXPECT_FALSE(f.IsSet());
     EXPECT_FALSE(p2.IsCanceled());
     p1.Set(1);
-    EXPECT_TRUE(f.IsSet());
-    auto result = f.Get();
+    auto result = f.GetOrCrash();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, result.Value());
     EXPECT_TRUE(p2.IsCanceled());
@@ -1129,7 +1105,7 @@ TEST_F(TFutureTest, AnyCombiner1)
 TEST_F(TFutureTest, AllCombinerEmpty)
 {
     std::vector<TFuture<int>> futures{};
-    auto resultOrError = AllSucceeded(futures).Get();
+    auto resultOrError = AllSucceeded(futures).GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     const auto& result = resultOrError.Value();
     EXPECT_TRUE(result.empty());
@@ -1148,8 +1124,7 @@ TEST_F(TFutureTest, AllCombiner)
     p1.Set(2);
     EXPECT_FALSE(f.IsSet());
     p2.Set(10);
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     const auto& result = resultOrError.Value();
     EXPECT_EQ(2, std::ssize(result));
@@ -1170,8 +1145,7 @@ TEST_F(TFutureTest, AllCombinerError)
     p1.Set(2);
     EXPECT_FALSE(f.IsSet());
     p2.Set(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_FALSE(resultOrError.IsOK());
 }
 
@@ -1187,8 +1161,7 @@ TEST_F(TFutureTest, AllCombinerFailureShortcut)
     EXPECT_FALSE(f.IsSet());
     EXPECT_FALSE(p2.IsCanceled());
     p1.Set(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    auto result = f.Get();
+    auto result = f.GetOrCrash();
     EXPECT_FALSE(result.IsOK());
     EXPECT_TRUE(p2.IsCanceled());
 }
@@ -1221,8 +1194,7 @@ TEST_F(TFutureTest, AllCombinerCancel)
     auto f = AllSucceeded(futures);
     EXPECT_FALSE(f.IsSet());
     f.Cancel(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    const auto& result = f.Get();
+    const auto& result = f.GetOrCrash();
     EXPECT_EQ(NYT::EErrorCode::Canceled, result.GetCode());
 }
 
@@ -1255,8 +1227,7 @@ TEST_F(TFutureTest, AllCombinerRetainError)
     p1.Set(2);
     EXPECT_FALSE(f.IsSet());
     p2.Set(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     const auto& result = resultOrError.Value();
     EXPECT_EQ(2, std::ssize(result));
@@ -1326,8 +1297,7 @@ TEST_PI(TFutureTest, AllSetWithTimeoutWorks, testing::Bool())
     EXPECT_FALSE(f.IsSet());
 
     Sleep(TDuration::MilliSeconds(300));
-    EXPECT_TRUE(f.IsSet());
-    const auto& resultOrError = f.Get();
+    const auto& resultOrError = f.GetOrCrash();
 
     EXPECT_TRUE(p1.IsSet());
     EXPECT_TRUE(resultOrError.Value()[0].IsOK());
@@ -1409,8 +1379,7 @@ TEST_F(TFutureTest, AnyNCombinerEmpty)
         p2.ToFuture()
     };
     auto f = AnyNSucceeded(futures, 0);
-    EXPECT_TRUE(f.IsSet());
-    const auto& resultOrError = f.Get();
+    const auto& resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     const auto& result = resultOrError.Value();
     EXPECT_TRUE(result.empty());
@@ -1441,8 +1410,7 @@ TEST_F(TFutureTest, AnyNCombinerInsufficientInputs)
         p1.ToFuture()
     };
     auto f = AnyNSucceeded(futures, 2);
-    EXPECT_TRUE(f.IsSet());
-    const auto& resultOrError = f.Get();
+    const auto& resultOrError = f.GetOrCrash();
     EXPECT_EQ(NYT::EErrorCode::FutureCombinerFailure, resultOrError.GetCode());
     EXPECT_TRUE(p1.IsCanceled());
 }
@@ -1475,8 +1443,7 @@ TEST_F(TFutureTest, AnyNCombinerTooManyFailures)
     EXPECT_FALSE(p3.IsCanceled());
     p1.Set(TError("oops1"));
     p2.Set(TError("oops2"));
-    EXPECT_TRUE(f.IsSet());
-    const auto& resultOrError = f.Get();
+    const auto& resultOrError = f.GetOrCrash();
     EXPECT_EQ(NYT::EErrorCode::FutureCombinerFailure, resultOrError.GetCode());
     EXPECT_TRUE(p3.IsCanceled());
 }
@@ -1515,8 +1482,7 @@ TEST_F(TFutureTest, AnyNCombiner)
     EXPECT_FALSE(p1.IsCanceled());
     p2.Set(1);
     p3.Set(2);
-    EXPECT_TRUE(f.IsSet());
-    const auto& resultOrError = f.Get();
+    const auto& resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     auto result = resultOrError.Value();
     std::sort(result.begin(), result.end());
@@ -1589,8 +1555,7 @@ TEST_F(TFutureTest, AnyNCombinerRetainError)
     p1.Set(2);
     EXPECT_FALSE(f.IsSet());
     p3.Set(TError("oops"));
-    EXPECT_TRUE(f.IsSet());
-    auto resultOrError = f.Get();
+    auto resultOrError = f.GetOrCrash();
     EXPECT_TRUE(resultOrError.IsOK());
     const auto& result = resultOrError.Value();
     EXPECT_EQ(2, std::ssize(result));
@@ -1645,8 +1610,7 @@ TEST_F(TFutureTest, LastPromiseDied)
         EXPECT_FALSE(future.IsSet());
     }
     Sleep(SleepQuantum);
-    EXPECT_TRUE(future.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, future.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.GetOrCrash().GetCode());
 }
 
 TEST_F(TFutureTest, PropagateErrorSync)
@@ -1655,8 +1619,7 @@ TEST_F(TFutureTest, PropagateErrorSync)
     auto f1 = p.ToFuture();
     auto f2 = f1.Apply(BIND([] (int x) { return x + 1; }));
     p.Set(TError("Oops"));
-    EXPECT_TRUE(f2.IsSet());
-    EXPECT_FALSE(f2.Get().IsOK());
+    EXPECT_FALSE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, PropagateErrorAsync)
@@ -1665,8 +1628,7 @@ TEST_F(TFutureTest, PropagateErrorAsync)
     auto f1 = p.ToFuture();
     auto f2 = f1.Apply(BIND([] (int x) { return MakeFuture(x + 1);}));
     p.Set(TError("Oops"));
-    EXPECT_TRUE(f2.IsSet());
-    EXPECT_FALSE(f2.Get().IsOK());
+    EXPECT_FALSE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, WithDeadlineSuccess)
@@ -1676,7 +1638,7 @@ TEST_F(TFutureTest, WithDeadlineSuccess)
     auto f2 = f1.WithDeadline(TInstant::Now() + TDuration::MilliSeconds(100));
     Sleep(TDuration::MilliSeconds(10));
     p.Set();
-    EXPECT_TRUE(f2.Get().IsOK());
+    EXPECT_TRUE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, WithDeadlineOnSet)
@@ -1685,8 +1647,8 @@ TEST_F(TFutureTest, WithDeadlineOnSet)
     p.Set();
     auto f1 = p.ToFuture();
     auto f2 = f1.WithDeadline(TInstant::Now());
-    EXPECT_TRUE(f1.Get().IsOK());
-    EXPECT_TRUE(f2.Get().IsOK());
+    EXPECT_TRUE(f1.GetOrCrash().IsOK());
+    EXPECT_TRUE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, WithDeadlineFail)
@@ -1695,8 +1657,8 @@ TEST_F(TFutureTest, WithDeadlineFail)
     auto f1 = p.ToFuture();
     auto deadline = TInstant::Now() + SleepQuantum;
     auto f2 = f1.WithDeadline(deadline);
-    EXPECT_EQ(NYT::EErrorCode::Timeout, f2.Get().GetCode());
-    EXPECT_EQ(deadline, f2.Get().Attributes().Get<TInstant>("deadline"));
+    EXPECT_EQ(NYT::EErrorCode::Timeout, f2.BlockingGet().GetCode());
+    EXPECT_EQ(deadline, f2.BlockingGet().Attributes().Get<TInstant>("deadline"));
 }
 
 TEST_F(TFutureTest, WithTimeoutSuccess)
@@ -1706,7 +1668,7 @@ TEST_F(TFutureTest, WithTimeoutSuccess)
     auto f2 = f1.WithTimeout(TDuration::MilliSeconds(100));
     Sleep(TDuration::MilliSeconds(10));
     p.Set();
-    EXPECT_TRUE(f2.Get().IsOK());
+    EXPECT_TRUE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, WithTimeoutOnSet)
@@ -1715,8 +1677,8 @@ TEST_F(TFutureTest, WithTimeoutOnSet)
     p.Set();
     auto f1 = p.ToFuture();
     auto f2 = f1.WithTimeout(TDuration::MilliSeconds(0));
-    EXPECT_TRUE(f1.Get().IsOK());
-    EXPECT_TRUE(f2.Get().IsOK());
+    EXPECT_TRUE(f1.GetOrCrash().IsOK());
+    EXPECT_TRUE(f2.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, WithTimeoutFail)
@@ -1724,8 +1686,8 @@ TEST_F(TFutureTest, WithTimeoutFail)
     auto p = NewPromise<int>();
     auto f1 = p.ToFuture();
     auto f2 = f1.WithTimeout(SleepQuantum);
-    EXPECT_EQ(NYT::EErrorCode::Timeout, f2.Get().GetCode());
-    EXPECT_EQ(SleepQuantum, f2.Get().Attributes().Get<TDuration>("timeout"));
+    EXPECT_EQ(NYT::EErrorCode::Timeout, f2.BlockingGet().GetCode());
+    EXPECT_EQ(SleepQuantum, f2.BlockingGet().Attributes().Get<TDuration>("timeout"));
 }
 
 TEST_W(TFutureTest, Holder)
@@ -1765,7 +1727,7 @@ TEST_F(TFutureTest, AbandonGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(NYT::EErrorCode::Canceled, future.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.GetOrCrash().GetCode());
 }
 
 TEST_F(TFutureTest, AbandonSubscribe)
@@ -1888,7 +1850,7 @@ TEST_F(TFutureTest, AbandonBeforeGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_EQ(future.GetOrCrash().GetCode(), NYT::EErrorCode::Canceled);
 }
 
 TEST_F(TFutureTest, AbandonDuringGet)
@@ -1899,7 +1861,7 @@ TEST_F(TFutureTest, AbandonDuringGet)
         Sleep(TDuration::MilliSeconds(100));
         promise.Reset();
     });
-    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
+    EXPECT_EQ(future.BlockingGet().GetCode(), NYT::EErrorCode::Canceled);
     thread.join();
 }
 
@@ -1922,8 +1884,7 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_FALSE(promise.IsSet());
     EXPECT_FALSE(promise.IsCanceled());
     EXPECT_TRUE(immediatelyCancelable.IsSet());
-    EXPECT_TRUE(future2.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, future2.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future2.GetOrCrash().GetCode());
 
     auto immediatelyCancelable2 = future.ToImmediatelyCancelable(/*propagateCancelation*/ false);
     auto future3 = immediatelyCancelable2.Apply(BIND([&] () -> void {}));
@@ -1931,13 +1892,11 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_FALSE(promise.IsSet());
     EXPECT_FALSE(promise.IsCanceled());
     EXPECT_TRUE(immediatelyCancelable2.IsSet());
-    EXPECT_TRUE(future3.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, future3.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future3.GetOrCrash().GetCode());
 
     promise.Set();
     EXPECT_TRUE(uncancelable.IsSet());
-    EXPECT_TRUE(future1.IsSet());
-    EXPECT_TRUE(future1.Get().IsOK());
+    EXPECT_TRUE(future1.GetOrCrash().IsOK());
 }
 
 TEST_F(TFutureTest, AsyncViaCanceledInvoker1)
@@ -2059,7 +2018,7 @@ TEST_F(TFutureTest, ErrorFromException)
     });
 
     static auto getError = [] (auto&& func) -> TError {
-        return BIND(func).AsyncVia(GetSyncInvoker()).Run().Get();
+        return BIND(func).AsyncVia(GetSyncInvoker()).Run().GetOrCrash();
     };
 
     // If there is no exception, there is no error.
@@ -2180,6 +2139,76 @@ TEST_F(TFutureTest, TrySetDoesNotMoveErrorOnFailure)
     EXPECT_FALSE(promise.TrySet(std::move(err)));
     EXPECT_FALSE(err.IsOK());
 }
+
+TEST_F(TFutureTest, Get)
+{
+    auto promise = NewPromise<int>();
+    auto future = promise.ToFuture();
+
+    promise.Set(42);
+
+    EXPECT_EQ(future.Get().Value(), 42);
+}
+
+TEST_F(TFutureTest, GetOrCrashOnUnsetFuture)
+{
+    auto promise = NewPromise<int>();
+    auto future = promise.ToFuture();
+
+    EXPECT_FALSE(future.IsSet());
+    EXPECT_DEATH({ future.GetOrCrash(); }, "IsSet");
+}
+
+TEST_F(TFutureTest, PromiseBlockingGet)
+{
+    auto promise = NewPromise<int>();
+    std::thread([&] {
+        Sleep(TDuration::MilliSeconds(50));
+        promise.Set(42);
+    }).detach();
+    EXPECT_EQ(promise.BlockingGet().Value(), 42);
+}
+
+TEST_F(TFutureTest, PromiseGetOrCrash)
+{
+    auto promise = NewPromise<int>();
+    promise.Set(42);
+    EXPECT_EQ(promise.GetOrCrash().Value(), 42);
+}
+
+TEST_F(TFutureTest, PromiseGetOrCrashOnUnset)
+{
+    auto promise = NewPromise<int>();
+    EXPECT_DEATH({ auto _ = promise.GetOrCrash(); }, "IsSet");
+}
+
+TEST_F(TFutureTest, UniqueFutureBlockingGet)
+{
+    auto promise = NewPromise<std::unique_ptr<int>>();
+    auto future = promise.ToFuture().AsUnique();
+    std::thread([&] {
+        Sleep(TDuration::MilliSeconds(50));
+        promise.Set(std::make_unique<int>(42));
+    }).detach();
+    EXPECT_EQ(*future.BlockingGet().Value(), 42);
+}
+
+TEST_F(TFutureTest, UniqueFutureGetOrCrash)
+{
+    auto promise = NewPromise<std::unique_ptr<int>>();
+    auto future = promise.ToFuture().AsUnique();
+    promise.Set(std::make_unique<int>(42));
+    EXPECT_EQ(*future.GetOrCrash().Value(), 42);
+}
+
+TEST_F(TFutureTest, UniqueFutureGetOrCrashOnUnset)
+{
+    auto promise = NewPromise<std::unique_ptr<int>>();
+    auto future = promise.ToFuture().AsUnique();
+    EXPECT_DEATH({ auto _ = future.GetOrCrash(); }, "IsSet");
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

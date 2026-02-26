@@ -23,6 +23,7 @@
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_format.h"
 
 #include "src/core/lib/transport/timeout_encoding.h"
 
@@ -71,7 +72,7 @@ y_absl::optional<y_absl::string_view> UnknownMap::GetStringValue(
 }  // namespace metadata_detail
 
 ContentTypeMetadata::MementoType ContentTypeMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   auto out = kInvalid;
   auto value_string = value.as_string_view();
   if (value_string == "application/grpc") {
@@ -113,7 +114,7 @@ const char* ContentTypeMetadata::DisplayValue(ValueType content_type) {
 }
 
 GrpcTimeoutMetadata::MementoType GrpcTimeoutMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   auto timeout = ParseTimeout(value);
   if (!timeout.has_value()) {
     on_error("invalid value", value);
@@ -135,7 +136,7 @@ Slice GrpcTimeoutMetadata::Encode(ValueType x) {
 }
 
 TeMetadata::MementoType TeMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   auto out = kInvalid;
   if (value == "trailers") {
     out = kTrailers;
@@ -199,7 +200,7 @@ const char* HttpSchemeMetadata::DisplayValue(ValueType content_type) {
 }
 
 HttpMethodMetadata::MementoType HttpMethodMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   auto out = kInvalid;
   auto value_string = value.as_string_view();
   if (value_string == "POST") {
@@ -244,7 +245,7 @@ const char* HttpMethodMetadata::DisplayValue(ValueType content_type) {
 }
 
 CompressionAlgorithmBasedMetadata::MementoType
-CompressionAlgorithmBasedMetadata::ParseMemento(Slice value,
+CompressionAlgorithmBasedMetadata::ParseMemento(Slice value, bool,
                                                 MetadataParseErrorFn on_error) {
   auto algorithm = ParseCompressionAlgorithm(value.as_string_view());
   if (!algorithm.has_value()) {
@@ -255,7 +256,7 @@ CompressionAlgorithmBasedMetadata::ParseMemento(Slice value,
 }
 
 Duration GrpcRetryPushbackMsMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   int64_t out;
   if (!y_absl::SimpleAtoi(value.as_string_view(), &out)) {
     on_error("not an integer", value);
@@ -277,7 +278,7 @@ TString LbCostBinMetadata::DisplayValue(ValueType x) {
 }
 
 LbCostBinMetadata::MementoType LbCostBinMetadata::ParseMemento(
-    Slice value, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn on_error) {
   if (value.length() < sizeof(double)) {
     on_error("too short", value);
     return {0, ""};
@@ -298,6 +299,10 @@ TString GrpcStreamNetworkState::DisplayValue(ValueType x) {
       return "not seen by server";
   }
   GPR_UNREACHABLE_CODE(return "unknown value");
+}
+
+TString GrpcRegisteredMethod::DisplayValue(void* x) {
+  return y_absl::StrFormat("%p", x);
 }
 
 TString PeerString::DisplayValue(const ValueType& x) {

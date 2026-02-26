@@ -121,6 +121,7 @@ WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
   auto error = PrepareSocket(accept_socket);
   if (!error.ok()) return fail(error);
   // Start the "accept" asynchronously.
+  io_state_->listener_socket->NotifyOnRead(&io_state_->on_accept_cb);
   DWORD addrlen = sizeof(sockaddr_in6) + 16;
   DWORD bytes_received = 0;
   int success =
@@ -132,13 +133,11 @@ WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
   if (success != 0) {
     int last_error = WSAGetLastError();
     if (last_error != ERROR_IO_PENDING) {
+      io_state_->listener_socket->UnregisterReadCallback();
       return fail(GRPC_WSA_ERROR(last_error, "AcceptEx"));
     }
   }
-  // We're ready to do the accept. Calling NotifyOnRead may immediately process
-  // an accept that happened in the meantime.
   io_state_->accept_socket = accept_socket;
-  io_state_->listener_socket->NotifyOnRead(&io_state_->on_accept_cb);
   GRPC_EVENT_ENGINE_TRACE(
       "SinglePortSocketListener::%p listening. listener_socket::%p", this,
       io_state_->listener_socket.get());
@@ -201,7 +200,7 @@ void WindowsEventEngineListener::SinglePortSocketListener::
       peer_address, listener_->iocp_->Watch(io_state_->accept_socket),
       listener_->memory_allocator_factory_->CreateMemoryAllocator(
           y_absl::StrFormat("listener endpoint %s", peer_name)),
-      listener_->config_, listener_->executor_, listener_->engine_);
+      listener_->config_, listener_->thread_pool_, listener_->engine_);
   listener_->accept_cb_(
       std::move(endpoint),
       listener_->memory_allocator_factory_->CreateMemoryAllocator(
@@ -265,12 +264,12 @@ WindowsEventEngineListener::WindowsEventEngineListener(
     IOCP* iocp, AcceptCallback accept_cb,
     y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,
     std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory,
-    std::shared_ptr<EventEngine> engine, Executor* executor,
+    std::shared_ptr<EventEngine> engine, ThreadPool* thread_pool,
     const EndpointConfig& config)
     : iocp_(iocp),
       config_(config),
       engine_(std::move(engine)),
-      executor_(executor),
+      thread_pool_(thread_pool),
       memory_allocator_factory_(std::move(memory_allocator_factory)),
       accept_cb_(std::move(accept_cb)),
       on_shutdown_(std::move(on_shutdown)) {}

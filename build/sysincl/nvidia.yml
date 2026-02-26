@@ -71,6 +71,7 @@
   - npp.h
   - nppdefs.h
   - nppi.h
+  - nppi_filtering_functions.h
   - npps.h
   - nv/target
   - nvToolsExt.h

@@ -39,6 +39,12 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node) {
             return false;
         }
 
+        if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                Ctx_.Pos(), "GROUP BY MODE", NYql::GetMaxLangVersion()))
+        {
+            return false;
+        }
+
         if (mode == "combine") {
             Suffix_ = "Combine";
         } else if (mode == "combinestate") {

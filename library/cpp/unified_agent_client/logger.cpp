@@ -225,7 +225,7 @@ namespace NUnifiedAgent {
     {
     }
 
-    TScopeLogger TScopeLogger::Child(const TString& v, NMonitoring::TDeprecatedCounter* errors) {
+    TScopeLogger TScopeLogger::Child(const TString& v, NMonitoring::TDeprecatedCounter* errors) const {
         return Logger_
             ? Logger_->Child(Join('/', Scope_, v), errors == nullptr ? Errors_ : errors)
             : TScopeLogger();

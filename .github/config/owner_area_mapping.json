@@ -9,13 +9,11 @@
   "yql": "area/yql",
   "docs": "area/docs",
   "core": [
-    "area/core",
-    "area/hive"
+    "area/core"
   ],
   "fq": "area/fq",
   "blobstorage": [
-    "area/blobstorage",
-    "area/actorsystem"
+    "area/blobstorage"
   ],
   "ci": "area/ci",
   "cli": "area/cli",
@@ -25,8 +23,7 @@
   "appteam": "area/appteam",
   "duty": "area/duty",
   "engineering": [
-    "area/engineering",
-    "area/qa"
+    "area/engineering"
   ],
   "postgres-compatibility": "area/pg",
   "security": "area/security",

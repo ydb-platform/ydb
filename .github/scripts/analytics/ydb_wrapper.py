@@ -781,14 +781,11 @@ class YDBWrapper:
             query_name: Query name for logging
         """
         def operation(driver):
-            def callee(session):
-                prepared_query = session.prepare(query)
-                with session.transaction() as tx:
-                    tx.execute(prepared_query, parameters or {}, commit_tx=True)
-                    return 1  # Successful execution
-            
-            with ydb.SessionPool(driver) as pool:
-                return pool.retry_operation_sync(callee)
+            # Use Query Service API because Table Service DML does not support
+            # modifications for column shard tables.
+            with ydb.QuerySessionPool(driver) as pool:
+                pool.execute_with_retries(query=query, parameters=parameters or {})
+                return 1  # Successful execution
         
         return self._execute_with_logging("dml_query", operation, query, None, query_name)
     

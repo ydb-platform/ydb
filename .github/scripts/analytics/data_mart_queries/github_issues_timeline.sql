@@ -4,7 +4,7 @@
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
 --
 $timeline_days = 365;
-$recent_days = 365;  -- only these days are selected (today and $recent_days-1 days back)
+$recent_days = 31;  -- only these days are selected (today and $recent_days-1 days back)
 
 -- Owner by area (prefix match): area/cs/analytics -> area/cs in mapping. Return matched_area (om.area) for output.
 -- Distinct areas from source github_data/issues. New areas get owner/area from fallback in output.
@@ -124,5 +124,4 @@ CROSS JOIN (
       AND (t.closed_at IS NULL OR Cast(t.closed_at AS Date) >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 ) AS i
 WHERE i.created_date <= dt.d
-  AND dt.d >= CurrentUtcDate() - $recent_days * Interval("P1D")
-  AND dt.d < CurrentUtcDate() + Interval("P1D");
+  AND dt.d >= CurrentUtcDate() - $recent_days * Interval("P1D");

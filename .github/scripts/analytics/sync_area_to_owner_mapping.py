@@ -8,7 +8,7 @@ import json
 import os
 import sys
 import ydb
-from typing import List, Tuple
+from typing import List, Set, Tuple
 from ydb_wrapper import YDBWrapper
 
 
@@ -39,6 +39,33 @@ def create_table(ydb_wrapper, table_path: str):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
+def get_existing_areas(ydb_wrapper: YDBWrapper, table_path: str) -> Set[str]:
+    query = f"""
+        SELECT area
+        FROM `{table_path}`
+    """
+    rows = ydb_wrapper.execute_scan_query(query, "sync_area_to_owner_mapping_existing_areas")
+    return {row["area"] for row in rows if row.get("area")}
+
+
+def delete_stale_areas(ydb_wrapper: YDBWrapper, table_path: str, stale_areas: List[str]) -> None:
+    if not stale_areas:
+        return
+
+    delete_query = f"""
+        DECLARE $area AS Utf8;
+
+        DELETE FROM `{table_path}`
+        WHERE area = $area;
+    """
+    for area in stale_areas:
+        ydb_wrapper.execute_dml(
+            delete_query,
+            {"$area": area},
+            query_name="sync_area_to_owner_mapping_delete_stale_area",
+        )
+
+
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_dir = os.path.join(script_dir, '..', '..', 'config')
@@ -54,6 +81,7 @@ def main():
         create_table(ydb_wrapper, table_path)
 
         bulk_rows = [{'area': a, 'owner_team': o} for a, o in rows]
+        desired_areas = {a for a, _ in rows}
         col_types = (
             ydb.BulkUpsertColumns()
             .add_column("area", ydb.PrimitiveType.Utf8)
@@ -61,6 +89,14 @@ def main():
         )
         ydb_wrapper.bulk_upsert(table_path, bulk_rows, col_types)
         print(f"Upserted {len(bulk_rows)} rows to {table_path}")
+
+        existing_areas = get_existing_areas(ydb_wrapper, table_path)
+        stale_areas = sorted(existing_areas - desired_areas)
+        delete_stale_areas(ydb_wrapper, table_path, stale_areas)
+        if stale_areas:
+            print(f"Deleted {len(stale_areas)} stale area rows from {table_path}")
+        else:
+            print("No stale area rows to delete")
     return 0
 
 

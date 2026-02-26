@@ -7,6 +7,7 @@ $sla_low_days = 30;
 $sla_med_days = 7;
 $sla_high_days = 7;
 $sla_noprio_days = 7;
+$window_days = 365;
 
 -- Owner by area (prefix match), same as timeline view
 $owner_mapping = (
@@ -37,7 +38,7 @@ $bugs = (
         END AS owner_team
     FROM `test_results/analytics/github_issues_timeline` AS t
     LEFT JOIN $owner_mapping AS o ON t.area = o.area
-    WHERE t.date >= CurrentUtcDate() - 365 * Interval("P1D")
+    WHERE t.date >= CurrentUtcDate() - $window_days * Interval("P1D")
       AND t.is_open_at_end_of_day = 1
       AND t.max_branch IS NOT NULL AND t.max_branch != '-'
 );

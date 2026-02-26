@@ -191,13 +191,15 @@ namespace NKikimr::NDDisk {
                 ui64 PartCookie;
                 NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
                 TString ErrorMessage;
+                bool IsErase = false;
 
                 TEvWritePersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage)
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, bool isErase = false)
                     : InflightCookie(inflightCookie)
                     , PartCookie(partCookie)
                     , Status(status)
                     , ErrorMessage(errorMessage)
+                    , IsErase(isErase)
                 {}
             };
 

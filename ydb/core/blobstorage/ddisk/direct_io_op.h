@@ -88,7 +88,7 @@ namespace NKikimr::NDDisk {
 
         virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) = 0;
 
-        void SetData(TRope& data);
+        void SetData(TRope&& data);
     };
 
     struct TDDiskActor::TSingleDirectIoOp : TDDiskActor::TDirectIoOpBase {
@@ -113,6 +113,7 @@ namespace NKikimr::NDDisk {
 
     struct TDDiskActor::TPersistentBufferPartIoOp : TDDiskActor::TSingleDirectIoOp {
         ui64 PartCookie;
+        bool IsErase = false;
 
         TPersistentBufferPartIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
             : TSingleDirectIoOp(inFlightCount, counters)

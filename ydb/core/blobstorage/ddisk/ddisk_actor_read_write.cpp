@@ -234,7 +234,7 @@ namespace NKikimr::NDDisk {
         if (instr.PayloadId) {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
-        op->SetData(data);
+        op->SetData(std::move(data));
         op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);

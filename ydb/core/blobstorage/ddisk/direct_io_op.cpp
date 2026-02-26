@@ -11,7 +11,7 @@
 namespace NKikimr::NDDisk {
 #if defined(__linux__)
 
-void TDDiskActor::TDirectIoOpBase::SetData(TRope& data) {
+void TDDiskActor::TDirectIoOpBase::SetData(TRope&& data) {
     // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
     // TODO: should we check page size? And for large writes and huge pages should properly align?
     auto iter = data.Begin();
@@ -96,7 +96,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
     if (IsRead) {
         reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(Cookie, PartCookie, status, reason, std::move(AlignedDataHolder));
     } else {
-        reply = std::make_unique<TEvPrivate::TEvWritePersistentBufferPart>(Cookie, PartCookie, status, reason);
+        reply = std::make_unique<TEvPrivate::TEvWritePersistentBufferPart>(Cookie, PartCookie, status, reason, IsErase);
     }
     Y_ABORT_UNLESS(!InterconnectSession);
     actorSystem->Send(DDiskId, reply.release());

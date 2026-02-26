@@ -1,4 +1,3 @@
-
 RECURSE(
     apps
     core

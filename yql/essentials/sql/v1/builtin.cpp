@@ -2861,6 +2861,10 @@ public:
         return new TInvalidBuiltin(GetPos(), Info_);
     }
 
+    TSourceNameResult GetSourceName() const override {
+        return std::unexpected(Info_);
+    }
+
 private:
     TString Info_;
 };

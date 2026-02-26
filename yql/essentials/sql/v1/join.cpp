@@ -4,6 +4,8 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/charset/ci_string.h>
+#include <library/cpp/iterator/enumerate.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
@@ -241,14 +243,19 @@ protected:
         ui32 rightArg = 0;
         ui32 leftSourceIdx = 0;
         ui32 rightSourceIdx = 0;
-        const TString* leftSource = nullptr;
-        const TString* rightSource = nullptr;
+        TSourceNameResult leftSource = std::unexpected(nullptr);
+        TSourceNameResult rightSource = std::unexpected(nullptr);
         const TString* sameColumnNamePtr = nullptr;
         TSet<TString> joinedSources;
         if (op) {
             const TString* columnNamePtr = nullptr;
-            for (auto& arg : op->GetArgs()) {
+            for (const auto& [i, arg] : Enumerate(op->GetArgs())) {
                 const auto sourceNamePtr = arg->GetSourceName();
+                if (!sourceNamePtr && std::holds_alternative<TString>(sourceNamePtr.error())) {
+                    ctx.Error() << "JOIN: bad '" << op->GetOpName() << "' "
+                                << i << "th argument: " << std::get<TString>(sourceNamePtr.error());
+                    return false;
+                }
                 if (!sourceNamePtr) {
                     ctx.Error(expr->GetPos()) << "JOIN: each equality predicate argument must depend on exactly one JOIN input";
                     return false;

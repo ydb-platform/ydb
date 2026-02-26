@@ -423,7 +423,7 @@ private:
 
         TString name = *term->GetColumnName();
 
-        if (const auto* source = term->GetSourceName();
+        if (const auto source = term->GetSourceName();
             source && !source->empty() &&
             Source && 1 < Source->Sources.size()) {
             name.prepend(".").prepend(*source);

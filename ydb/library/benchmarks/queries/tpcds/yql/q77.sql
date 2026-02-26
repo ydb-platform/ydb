@@ -103,7 +103,12 @@ $ss =
  from   $ws ws left join $wr wr
         on  ws.wp_web_page_sk = wr.wp_web_page_sk
  ) x
- group by rollup (channel, id)
+ -- group by rollup (channel, id)
+ group by grouping sets (
+  (channel, id),
+  (channel),
+  ((sales < 0) as FAKE)
+ )
  order by channel
          ,id
          ,sales

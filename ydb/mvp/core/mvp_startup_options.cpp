@@ -61,8 +61,12 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     NLastGetopt::TOptsParseResult parsedArgs = startupOptions.ParseArgs(argc, argv);
     startupOptions.LoadConfig(parsedArgs);
     startupOptions.SetPorts();
-    startupOptions.LoadTokens();
-    startupOptions.OverrideTokensConfig();
+    startupOptions.LoadTokensFromTokenFile();
+    startupOptions.OverrideTokensFromConfig();
+    startupOptions.MergeAccessServiceType();
+    startupOptions.MigrateJwtInfoToOAuth2Exchange();
+    startupOptions.ValidateOAuth2ExchangeTokenNames(startupOptions.Tokens.GetOAuth2Exchange(), "token file config");
+    startupOptions.ValidateOAuth2ExchangeTokenEndpointScheme(startupOptions.Tokens.GetOAuth2Exchange(), "token file config");
     startupOptions.ValidateTokensConfig();
     startupOptions.LoadCertificates();
 
@@ -115,7 +119,7 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
 
 void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic) {
     if (generic.HasAccessServiceType()) {
-        AccessServiceType = generic.GetAccessServiceType();
+        AccessServiceTypeFromConfig = generic.GetAccessServiceType();
     }
 
     if (generic.HasLogging()
@@ -183,12 +187,12 @@ TString TMvpStartupOptions::AddSchemeToUserToken(const TString& token, const TSt
     return scheme + " " + token;
 }
 
-void TMvpStartupOptions::LoadTokens() {
+void TMvpStartupOptions::LoadTokensFromTokenFile() {
     if (!YdbTokenFile.empty()) {
         if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
-            MigrateJwtInfoToOAuth2Exchange();
-            ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
-            ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
+            if (Tokens.HasAccessServiceType()) {
+                AccessServiceTypeFromTokenFile = Tokens.GetAccessServiceType();
+            }
             if (Tokens.HasStaffApiUserTokenInfo()) {
                 UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (Tokens.HasStaffApiUserToken()) {
@@ -199,11 +203,28 @@ void TMvpStartupOptions::LoadTokens() {
             ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
         }
     }
+}
+
+void TMvpStartupOptions::MergeAccessServiceType() {
+    if (AccessServiceTypeFromConfig && AccessServiceTypeFromTokenFile
+        && *AccessServiceTypeFromConfig != *AccessServiceTypeFromTokenFile)
+    {
+        ythrow yexception() << CONFIG_ERROR_PREFIX
+                            << "token file access_service_type must match access_service_type";
+    }
+
+    if (AccessServiceTypeFromConfig) {
+        AccessServiceType = *AccessServiceTypeFromConfig;
+    } else if (AccessServiceTypeFromTokenFile) {
+        AccessServiceType = *AccessServiceTypeFromTokenFile;
+    } else {
+        AccessServiceType = NMvp::yandex_v2;
+    }
 
     Tokens.SetAccessServiceType(AccessServiceType);
 }
 
-void TMvpStartupOptions::OverrideTokensConfig() {
+void TMvpStartupOptions::OverrideTokensFromConfig() {
     if (!TokensOverrideConfig.has_value()) {
         return;
     }

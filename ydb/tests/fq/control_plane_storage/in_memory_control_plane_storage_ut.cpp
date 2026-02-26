@@ -4,7 +4,6 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
@@ -36,7 +35,8 @@ public:
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        NTestUtils::SetupSignalHandlers();
+        SetupSignalActions();
+        EnableYDBBacktraceFormat();
 
         TFqSetupSettings settings;
         settings.VerbosityLevel = TFqSetupSettings::EVerbosity::InitLogs;

@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/testlib/common
     ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/public/sdk/cpp/src/client/datastreams

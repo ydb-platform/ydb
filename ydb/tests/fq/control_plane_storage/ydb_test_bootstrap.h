@@ -13,7 +13,6 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/init/init.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
@@ -102,7 +101,8 @@ struct TTestBootstrap {
     TTestBootstrap(std::string tablePrefix, const NConfig::TControlPlaneStorageConfig& config = {})
         : Config(config)
     {
-        NTestUtils::SetupSignalHandlers();
+        SetupSignalActions();
+        EnableYDBBacktraceFormat();
 
         Cerr << "Netstat: " << Exec("netstat --all --program") << Endl;
         Cerr << "Process stat: " << Exec("ps aux") << Endl;

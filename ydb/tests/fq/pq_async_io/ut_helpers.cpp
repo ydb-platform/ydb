@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 
@@ -12,6 +11,16 @@
 #include <util/system/env.h>
 
 namespace NYql::NDq {
+
+namespace {
+
+void SegmentationFaultHandler(int) {
+    Cerr << "segmentation fault call stack:" << Endl;
+    FormatBackTrace(&Cerr);
+    abort();
+}
+
+}
 
 NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
@@ -56,7 +65,8 @@ NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic) {
 }
 
 TPqIoTestFixture::TPqIoTestFixture() {
-    NTestUtils::SetupSignalHandlers();
+    NKikimr::EnableYDBBacktraceFormat();
+    signal(SIGSEGV, &SegmentationFaultHandler);
 }
 
 TPqIoTestFixture::~TPqIoTestFixture() {

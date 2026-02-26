@@ -51,6 +51,12 @@ private:
     const NYql::NPureCalc::IProgramFactoryPtr ProgramFactory;
 };
 
+void SegmentationFaultHandler(int) {
+    Cerr << "segmentation fault call stack:" << Endl;
+    FormatBackTrace(&Cerr);
+    abort();
+}
+
 //// TBaseFixture::ICell
 
 class TOptionalCell : public TBaseFixture::ICell {
@@ -152,24 +158,41 @@ TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, ::NFq::NRowDispatcher::NTests::FunctionRegistry.Get(), {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
+    , Runtime(1, true)
 {
+    NKikimr::EnableYDBBacktraceFormat();
+    signal(SIGSEGV, &SegmentationFaultHandler);
+
     Alloc.Ref().UseRefLocking = true;
 }
 
-void TBaseFixture::SetUp(NUnitTest::TTestContext& ctx) {
-    Settings.WaitTimeout = WAIT_TIMEOUT;
-    Settings.LogSettings.AddLogPriority(NKikimrServices::EServiceKikimr::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    TBase::SetUp(ctx);
+void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
+    // Init runtime
+    TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
+    Runtime.SetLogBackend(NActors::CreateStderrBackend());
+    Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
+    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
+    Runtime.Initialize(app->Unwrap());
+
+    // Init tls context
+    auto* actorSystem = Runtime.GetActorSystem(0);
+    Mailbox = std::make_unique<NActors::TMailbox>();
+    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, "test thread");
+    ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
+    PrevActorCtx = NActors::TlsActivationContext;
+    NActors::TlsActivationContext = ActorCtx.get();
 }
 
-void TBaseFixture::TearDown(NUnitTest::TTestContext& ctx) {
+void TBaseFixture::TearDown(NUnitTest::TTestContext&) {
     with_lock(Alloc) {
         ProgramBuilder.reset();
         TypeEnv.reset();
         HolderFactory.reset();
     }
 
-    TBase::TearDown(ctx);
+    // Release tls context
+    NActors::TlsActivationContext = PrevActorCtx;
+    PrevActorCtx = nullptr;
 }
 
 void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const {

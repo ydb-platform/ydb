@@ -1533,10 +1533,10 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         }
     }
 
-    for (const auto& [taskParam, actorId] : stageInfo.Meta.ControlPlaneActors) {
+    if (const auto& infoAggregator = GetMeta().DqInfoAggregator) {
         NActorsProto::TActorId actorIdProto;
-        ActorIdToProto(actorId, &actorIdProto);
-        (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
+        ActorIdToProto(infoAggregator, &actorIdProto);
+        (*result->MutableTaskParams())["dq_info_aggregator"] = actorIdProto.SerializeAsString();
     }
 
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());

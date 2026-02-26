@@ -2,7 +2,7 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 4-21/1 * * *"  # Every hour from 4:00 to 21:00 UTC
+    - cron: "0 4-21/1 * * *"  # Every 1 hours from 4:00 to 21:00 UTC
   workflow_dispatch:
     inputs:
       branches:
@@ -89,7 +89,7 @@ jobs:
           PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
-      # Always checkout main to get up-to-date scripts
+      # Всегда checkout main для получения актуальных скриптов
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
@@ -107,7 +107,7 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Get base_muted_ya.txt from target branch
+      # Получаем base_muted_ya.txt из целевой ветки
       - name: Get base muted_ya.txt from target branch
         run: |
           echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
@@ -151,13 +151,13 @@ jobs:
       - name: Create PR branch and apply changes
         if: env.changes == 'true'
         run: |
-          # Create PR branch from target branch
+          # Создаем PR ветку на основе целевой ветки
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           
-          # Copy new file into PR branch (file stays in working dir)
+          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
           cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
           
-          # Commit changes
+          # Коммитим изменения
           git add .github/config/muted_ya.txt
           git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
           
@@ -264,7 +264,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          # Checkout main again for script access
+          # Возвращаемся на main для доступа к скриптам
           git checkout main
           
           python .github/scripts/create_or_update_pr.py create_or_update \
@@ -277,7 +277,7 @@ jobs:
         if: env.changes == 'true'
         id: comment_pr
         run: |
-          # Read PR body content
+          # Читаем содержимое PR body
           PR_BODY_CONTENT=$(cat pr_body_content.txt)
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMPLETE_BODY=$(cat << EOF
@@ -296,38 +296,32 @@ jobs:
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
-          BASE_BRANCH: ${{ matrix.BASE_BRANCH }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const fs = require('fs');
-
-            // Read comment from file and post to PR
+            
+            // Читаем комментарий из файла
             const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
             const commentBody = fs.readFileSync(commentFile, 'utf8');
+            
+            // Добавляем комментарий
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: commentBody
             });
-
-            // Labels from env; for stable-* add automerge (automerge_pr merges after checks).
-            const labelsToAdd = (process.env.LABELS || "")
-              .split(',')
-              .map(l => l.trim())
-              .filter(l => l);
-            if (process.env.BASE_BRANCH.startsWith('stable-')) {
-              labelsToAdd.push('automerge');
-            }
-            core.info(`Applying labels: ${labelsToAdd.join(', ')}`);
+            
+            // Добавляем лейблы
+            const labelsToAdd = process.env.LABELS.split(',');
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               labels: labelsToAdd
             });
-
-            // Request reviewers from env
+            
+            // Добавляем ревьюеров
             const reviewers = JSON.parse(process.env.REVIEWERS);
             await github.rest.pulls.requestReviewers({
               owner: context.repo.owner,
@@ -335,7 +329,7 @@ jobs:
               pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               team_reviewers: reviewers
             });
-
+          
       - name: Enable auto-merge (squash)
         if: env.changes == 'true'
         uses: actions/github-script@v7
@@ -343,11 +337,13 @@ jobs:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            
             const { data: pullRequest } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr
             });
+            
             const mutation = `
               mutation EnableAutoMerge {
                 enablePullRequestAutoMerge(input: {
@@ -358,6 +354,7 @@ jobs:
                 }
               }
             `;
+            
             try {
               await github.graphql(mutation);
               console.log("Auto-merge with squash successfully enabled");

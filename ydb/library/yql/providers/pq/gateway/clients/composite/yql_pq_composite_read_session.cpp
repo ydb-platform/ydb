@@ -118,7 +118,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         ~TValueReporter() {
             if (ActorSystem) {
                 LastValue.ClearAction();
-                ActorSystem->Send(AggregatorActor, new NDq::TPqInfoAggregationActorEvents::TEvUpdateCounter(LastValue));
+                ActorSystem->Send(std::make_unique<IEventHandle>(AggregatorActor, SelfId, new NDq::TPqInfoAggregationActorEvents::TEvUpdateCounter(LastValue)));
             }
         }
 

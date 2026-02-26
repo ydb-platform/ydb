@@ -7,7 +7,9 @@ SRCS(
     load_actor_adapter.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
+    region.cpp
     request.cpp
+    vchunk.cpp
 )
 
 PEERDIR(

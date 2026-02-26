@@ -12,6 +12,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
@@ -19,6 +20,13 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TDiskIds
+{
+    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
+    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
+};
+using TPartitionIds = TVector<TDiskIds>;
 
 class TPartitionActor
     : public NActors::TActor<TPartitionActor>
@@ -41,7 +49,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
-
+    static constexpr size_t NumDirectBlockGroups = 32;
 
 public:
     TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);
@@ -86,21 +94,18 @@ private:
         const NActors::TActorContext& ctx);
     void Start(
         const NActors::TActorContext& ctx,
-        TVector<NKikimr::NBsController::TDDiskId> ddiskIds,
-        TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds);
+        TPartitionIds ids);
 
     bool HaveStoredTabletInfo();
 
-    void LoadTabletInfo(
-        const NActors::TActorContext& ctx,
-        TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
-        TVector<NKikimr::NBsController::TDDiskId>& persistentBufferDDiskIds);
+    void LoadTabletInfo(const NActors::TActorContext& ctx,
+                        TPartitionIds &ids);
 
     void StoreTabletInfo(
         const NActors::TActorContext& ctx,
-        const TVector<NKikimr::NBsController::TDDiskId>& ddiskIds,
-        const TVector<NKikimr::NBsController::TDDiskId>&
-            persistentBufferDDiskIds);
+        const TPartitionIds& ids);
+
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

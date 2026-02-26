@@ -15,7 +15,10 @@ message TConnectionsInfo {
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
     }
     repeated TConnectionInfo Connections = 1;
-    NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 2;
-    NKikimrBlockStore.TVolumeConfig VolumeConfig = 3;
+}
 
+message TTabletInfo {
+    NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 1;
+    NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;
+    repeated TConnectionsInfo ConnectionsInfo = 3;
 }

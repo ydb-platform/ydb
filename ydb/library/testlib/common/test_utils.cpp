@@ -6,6 +6,9 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <csignal>
+#include <cstring>
+
 namespace NTestUtils {
 
 namespace {

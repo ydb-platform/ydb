@@ -162,6 +162,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
+    ui32 index,
     TVector<NBsController::TDDiskId> ddisksIds,
     TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
     ui32 blockSize,
@@ -178,8 +179,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
-    Y_ASSERT(ddisksIds.size() == 1 || ddisksIds.size() >= 3);
-    Executor = TExecutor::Create("DirectBlockGroup");
+    Executor = TExecutor::Create(
+        TStringBuilder() << "DirectBlockGroup_" << TabletId << "_" << Generation
+                         << "_" << index);
     Executor->Start();
 
     Y_UNUSED(TabletId);
@@ -419,7 +421,8 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
             if (blockMeta.ReadyToFlush()) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Trying to flush block " << blockIndex);
-                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex);
+                // TODO обсудить, что должно тут быть в vChunkIndex
+                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex, 0);
             }
         });
     }
@@ -439,6 +442,7 @@ void TDirectBlockGroup::HandleDDiskBufferConnected(
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TDirectBlockGroup::WriteBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -447,6 +451,7 @@ TDirectBlockGroup::WriteBlocksLocal(
 
     auto requestHandler = std::make_shared<TWriteRequestHandler>(
         ActorSystem,
+        vChunkIndex,
         std::move(request),
         std::move(traceId),
         TabletId);
@@ -516,7 +521,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             storageRequestId,   // lsn
@@ -600,17 +605,19 @@ void TDirectBlockGroup::RequestBlockFlush(
     const TWriteRequestHandler& requestHandler)
 {
     RequestBlockFlush(requestHandler.Span.GetTraceId(),
-                      requestHandler.GetStartIndex());
+                      requestHandler.GetStartIndex(),
+                    requestHandler.GetVChunkIndex());
 }
 
-void TDirectBlockGroup::RequestBlockFlush(NWilson::TTraceId parentTrace,
-                                          ui64 blockIndex)
+void TDirectBlockGroup::RequestBlockFlush(const NWilson::TTraceId& parentTrace,
+                                          ui64 blockIndex, ui32 vChunkIndex)
 {
     // TODO handle case with different lsn in block's persistent buffers
     for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
         if (SyncRequestsByDDiskId[i] == nullptr) {
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,
+                vChunkIndex,
                 i,   // persistentBufferIndex
                 NWilson::TTraceId(parentTrace), TabletId);
         }
@@ -768,6 +775,7 @@ void TDirectBlockGroup::HandleErasePersistentBufferResult(
 
 NThreading::TFuture<TReadBlocksLocalResponse>
 TDirectBlockGroup::ReadBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -776,6 +784,7 @@ TDirectBlockGroup::ReadBlocksLocal(
 
     auto requestHandler = std::make_shared<TReadRequestHandler>(
         ActorSystem,
+        vChunkIndex,
         std::move(request),
         std::move(traceId),
         TabletId);
@@ -855,7 +864,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             DirtyMap->GetLsnByPersistentBufferIndex(requestRange.Start, 0),
@@ -881,7 +890,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             NKikimr::NDDisk::TReadInstruction(true),

@@ -1053,5 +1053,13 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
     node.Locks.erase(lockId);
 }
 
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
+    Y_UNUSED(ev);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
+    Y_UNUSED(ev);
+}
+
 } // namespace NLongTxService
 } // namespace NKikimr

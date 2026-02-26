@@ -38,7 +38,7 @@ class TMetadataActor : public TActor<TMetadataActor> {
     }
 
     void Handle(TEvCommitVDiskMetadata::TPtr& ev) {
-        if (!AppData()->FeatureFlags.GetEnableTinyDisks()) {
+        if (!LogCtx->WriteMetadata) {
             Send(ev->Sender, new TEvCommitVDiskMetadataDone);
             return;
         }
@@ -63,7 +63,7 @@ class TMetadataActor : public TActor<TMetadataActor> {
     }
 
     void Handle(NPDisk::TEvCutLog::TPtr& ev) {
-        if (!AppData()->FeatureFlags.GetEnableTinyDisks()) {
+        if (!LogCtx->WriteMetadata) {
             return;
         }
 

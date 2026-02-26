@@ -32,11 +32,11 @@
 #include <util/system/hostname.h>
 
 namespace NActors {
-using NMonitoring::TEvMon;
 
 namespace {
 
 using namespace NKikimr;
+using NMonitoring::TEvMon;
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {

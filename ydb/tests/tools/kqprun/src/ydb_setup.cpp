@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/util/aws.h>
 
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
@@ -23,6 +24,27 @@ using namespace NKikimrRun;
 namespace NKqpRun {
 
 namespace {
+
+class TAwsApiGuard {
+public:
+    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
+        : Config_{
+            .LogConfig{
+                .LogLevel = config.GetLogConfig().GetLogLevel(),
+                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
+            },
+        }
+    {
+        NKikimr::InitAwsAPI(Config_);
+    }
+
+    ~TAwsApiGuard() {
+        NKikimr::ShutdownAwsAPI(Config_);
+    }
+
+private:
+    const NKikimr::TAwsClientConfig Config_;
+};
 
 class TKqprunServer : public NKikimr::Tests::TServer {
     using TBase = NKikimr::Tests::TServer;
@@ -566,6 +588,7 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
+        , AwsApiGuard_(Settings_.AppConfig.GetAwsClientConfig())
         , Finished_(std::make_shared<std::atomic_bool>(false))
     {
         TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
@@ -859,6 +882,7 @@ private:
 
 private:
     TYdbSetupSettings Settings_;
+    TAwsApiGuard AwsApiGuard_;
 
     TKqprunServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;

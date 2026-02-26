@@ -4,7 +4,6 @@
 #include <util/datetime/base.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
@@ -694,7 +693,7 @@ private:
 }  // namespace NFqRun
 
 int main(int argc, const char* argv[]) {
-    NTestUtils::SetupSignalHandlers();
+    SetupSignalActions();
 
     try {
         NFqRun::TMain().Run(argc, argv);

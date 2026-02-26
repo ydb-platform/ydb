@@ -3,8 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
+
 #include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/library/testlib/common/test_with_actor_system.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
@@ -12,9 +12,7 @@ namespace NFq::NRowDispatcher::NTests {
 
 static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
 
-class TBaseFixture : public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
-    using TBase = NTestUtils::TTestWithActorSystemFixture;
-
+class TBaseFixture : public NUnitTest::TBaseFixture, public TTypeParser {
 public:
     // Helper classes for checking serialized rows in multi type format
     class ICell : public TThrRefBase {
@@ -59,8 +57,8 @@ public:
     TBaseFixture();
 
 public:
-    void SetUp(NUnitTest::TTestContext& ctx) override;
-    void TearDown(NUnitTest::TTestContext& ctx) override;
+    virtual void SetUp(NUnitTest::TTestContext& ctx) override;
+    virtual void TearDown(NUnitTest::TTestContext& ctx) override;
 
 public:
     void CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const;
@@ -70,6 +68,16 @@ public:
 public:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
+    NActors::TTestActorRuntime Runtime;
+
+private:
+    // Like NKikimr::TActorSystemStub but with Runtime as actor system in tls context
+    // it enables logging in unit test thread
+    // and using NActors::TActivationContext::ActorSystem() method
+    std::unique_ptr<NActors::TMailbox> Mailbox;
+    std::unique_ptr<NActors::TExecutorThread> ExecutorThread;
+    std::unique_ptr<NActors::TActorContext> ActorCtx;
+    NActors::TActivationContext* PrevActorCtx;
 };
 
 NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner);

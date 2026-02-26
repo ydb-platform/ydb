@@ -4,7 +4,3 @@ RECURSE(
     dummy
     native
 )
-
-RECURSE_FOR_TESTS(
-    ut
-)

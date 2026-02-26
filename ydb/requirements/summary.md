@@ -1,8 +1,19 @@
 # Summary
 
-**Completed tests: 11/79: 13.92%**
+**Completed tests: 15/92: 16.3%**
 
 ## Non-functional Requirements
+
+#### [ISSUE-14851](https://github.com/ydb-platform/ydb/issues/14851): Test Suite: datashard/types
+**Description**: * get all types of data;
+* get a column feature: regular column, primary key, indexed column, TTL column, ...;
+* perform all operations, including SELECT, INSERT, DELETE, TTL,  CDC, ASYNC REPLICATION, BACKUP/RESTORE, INDEX...
+
+Надо не забыть тесты-кейсы с совместимостью версий (фреймворк с @maximyurchuk )
+
+Есть мнение, что после реализации тест-кейсов нам очень бы помог coverage для анализа непокрытого кода
+
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F12:8%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-14851-test-suite-datashardtypes)
 
 ## Functional Requirements
 
@@ -19,7 +30,7 @@
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-14680-test-suite-reading-data)
 
 #### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F8:12%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13527-test-suite-csread-write)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-3%2F9:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13527-test-suite-csread-write)
 
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-14639-test-suite-cswrite-data)
@@ -57,7 +68,7 @@
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13526-test-suite-cstieringttl)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-5%2F12:41%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-13526-test-suite-cstieringttl)
 
 #### [ISSUE-14685](https://github.com/ydb-platform/ydb/issues/14685): Test Suite: CS/TTL deletion
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F7:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./traceability_matrix.md#issue-14685-test-suite-csttl-deletion)

@@ -139,7 +139,7 @@ public:
     static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
 
     // Db management
-    virtual void CreateDedicatedTenant(const TString& path) = 0;
+    virtual void CreateDedicatedTenant(const TString& path, const TString& unitKind) = 0;
     virtual void DropDedicatedTenant(const TString& path) = 0;
 
     struct TTenantInfo {

@@ -698,12 +698,12 @@ public:
         return sharedInfo;
     }
 
-    void CreateDedicatedTenant(const TString& path) override {
+    void CreateDedicatedTenant(const TString& path, const TString& unitKind) override {
         Ydb::Cms::CreateDatabaseRequest request;
         request.set_path(path);
 
         auto storage = request.mutable_resources()->add_storage_units();
-        storage->set_unit_kind("test-recreated-db");
+        storage->set_unit_kind(unitKind);
         storage->set_count(1);
 
         Tenants_->CreateTenant(std::move(request));

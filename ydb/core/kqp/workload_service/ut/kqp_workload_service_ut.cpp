@@ -386,18 +386,24 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TestWhenDiskSpaceIsExhausted(1, "delayed_requests");
     }
 
+    //
     // Verifies that resource pools function correctly after tenant recreation.
     // Even if the DatabaseId (path) remains the same, a recreated tenant receives
-    // a new internal PathId. Crucially, all previous resource pools are dropped
-    // along with the old tenant and are not present in the fresh instance.
+    // a new internal PathId. The workload service uses DatabaseId as a key for
+    // a cache.
+    //
     // The workload service must detect this lifecycle change, invalidate any
-    // cached state tied to the old PathId, and re-resolve metadata to avoid
-    // "PathId mismatch" or "Pool not found" errors in the new database.
+    // cached state tied to the same DatabaseId but a different PathId,
+    // and re-resolve metadata to avoid "PathId mismatch" or "Pool not found"
+    // errors in the new database.
+    //
     Y_UNIT_TEST(TestResourcePoolAfterTenantRecreation) {
-        auto tweakFnc = [](Tests::TServerSettings& serverSettings) -> void {
+        auto unitKind = "test-recreated-db";
+        auto dbName = "/Root/test-recreated-db";
+        auto tweakFnc = [&](Tests::TServerSettings& serverSettings) -> void {
             serverSettings.SetDynamicNodeCount(1).AddStoragePool(
-                "test-recreated-db",
-                "/Root/test-recreated-db:test-recreated-db"
+                unitKind,
+                TStringBuilder() << dbName << ":" << unitKind
             );
         };
 
@@ -410,14 +416,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
             .CreateSamplePool(false)
             .Create(tweakFnc);
 
-        auto dbName = "/Root/test-recreated-db";
         auto myPoolId = "my_pool";
-
         auto defPool = TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dbName);
         auto myPool = TQueryRunnerSettings().PoolId(myPoolId).Database(dbName);
 
         Cerr << "------ Creating Tenant" << Endl;
-        ydb->CreateDedicatedTenant(dbName);
+        ydb->CreateDedicatedTenant(dbName, unitKind);
         ydb->CreateResourcePool(dbName, myPoolId, NResourcePool::TPoolSettings());
 
         TSampleQueries::TSelect42::CheckResult(
@@ -430,7 +434,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         ydb->DropDedicatedTenant(dbName);
 
         Cerr << "------ Creating Tenant" << Endl;
-        ydb->CreateDedicatedTenant(dbName);
+        ydb->CreateDedicatedTenant(dbName, unitKind);
 
         // The custom pool is still alive, is it a bug or feature?
         TSampleQueries::TSelect42::CheckResult(

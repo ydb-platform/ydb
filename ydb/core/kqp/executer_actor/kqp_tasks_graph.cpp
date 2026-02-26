@@ -1327,7 +1327,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
 
     if (output.Transform) {
         auto* transformDesc = outputDesc.MutableTransform();
-        auto& transform = output.Transform;
+        const auto& transform = output.Transform;
 
         transformDesc->SetType(transform->Type);
         transformDesc->SetInputType(transform->InputType);
@@ -1533,10 +1533,10 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         }
     }
 
-    if (const auto& infoAggregator = GetMeta().DqInfoAggregator) {
+    for (const auto& [taskParam, actorId] : stageInfo.Meta.ControlPlaneActors) {
         NActorsProto::TActorId actorIdProto;
-        ActorIdToProto(infoAggregator, &actorIdProto);
-        (*result->MutableTaskParams())["dq_info_aggregator"] = actorIdProto.SerializeAsString();
+        ActorIdToProto(actorId, &actorIdProto);
+        (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
     }
 
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
@@ -2505,6 +2505,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->SetIndex(fullTextSource.GetIndex());
     settings->SetDatabase(GetMeta().Database);
     settings->MutableTable()->CopyFrom(fullTextSource.GetTable());
+    settings->SetIndexType(fullTextSource.GetIndexType());
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
@@ -2520,7 +2521,6 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
-
 
     if (fullTextSource.HasTakeLimit())
     {
@@ -3080,11 +3080,13 @@ void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTra
 
     FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
-    output.Transform.ConstructInPlace();
-    output.Transform->Type = TString(NYql::KqpTableSinkName);
-    output.Transform->InputType = transform.GetInputType();
-    output.Transform->OutputType = transform.GetOutputType();
-    output.Transform->Settings.PackFrom(settings);
+    TTransform outputTransform;
+    outputTransform.Type = NYql::KqpTableSinkName;
+    outputTransform.InputType = transform.GetInputType();
+    outputTransform.OutputType = transform.GetOutputType();
+    outputTransform.Settings.PackFrom(settings);
+
+    output.Transform = std::move(outputTransform);
 }
 
 

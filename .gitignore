@@ -104,9 +104,8 @@ path.bash.inc
 # Editor config
 /.editorconfig
 
-# Cursor ignore (keep .cursor/rules/ in repo so team shares rules)
-.cursor/*
-!.cursor/rules
+# Cursor ignore
+.cursor/
 .cursorignore
 
 # Harness local cluster working directory

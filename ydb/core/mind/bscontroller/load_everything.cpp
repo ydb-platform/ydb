@@ -710,7 +710,11 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (Self->EnableConfigV2) {
+            Self->PendingV2MigrationCheck = true;
+        }
         if (!Self->SelfManagementEnabled) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
         }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");

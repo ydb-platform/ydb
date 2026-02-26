@@ -1,0 +1,23 @@
+AccessServiceType: nebius_v1
+
+OAuth2Exchange {
+  Name: "static-creds-token"
+  SubjectCredentials {
+    PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIJQQIBADANBgkqhkiG9w0BAQ...truncated...\n-----END PRIVATE KEY-----\n"
+  }
+}
+
+JwtInfo {
+  Name: "service-account-jwt"
+  Endpoint: "grpcs://tokens.net:443"
+  AccountId: "serviceaccount-e0temgfn9kqq7ahxw3"
+  KeyId: "publickey-e0tcbg4j24w3xprekz"
+  PublicKey: "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...\n-----END PUBLIC KEY-----\n"
+  PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIJQQIBADANBgkqhkiG9w0BAQ...truncated...\n-----END PRIVATE KEY-----\n"
+  Audience: "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+}
+
+SecretInfo {
+  Name: "secret-name"
+  Secret: "replace-with-real-client-secret"
+}

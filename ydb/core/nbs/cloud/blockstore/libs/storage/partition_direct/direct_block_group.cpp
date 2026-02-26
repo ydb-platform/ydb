@@ -115,6 +115,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
+    ui32 index,
     TVector<NBsController::TDDiskId> ddisksIds,
     TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
     ui32 blockSize,
@@ -130,7 +131,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
-    Executor = TExecutor::Create("DirectBlockGroup");
+    Executor = TExecutor::Create(
+        TStringBuilder() << "DirectBlockGroup_" << TabletId << "_" << Generation
+                         << "_" << index);
     Executor->Start();
 
     Y_UNUSED(TabletId);
@@ -373,6 +376,7 @@ void TDirectBlockGroup::HandleDDiskBufferConnected(
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TDirectBlockGroup::WriteBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -381,6 +385,7 @@ TDirectBlockGroup::WriteBlocksLocal(
 
     auto requestHandler = std::make_shared<TWriteRequestHandler>(
         ActorSystem,
+        vChunkIndex,
         std::move(request),
         std::move(traceId),
         TabletId);
@@ -444,7 +449,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             storageRequestId,   // lsn
@@ -531,6 +536,7 @@ void TDirectBlockGroup::RequestBlockFlush(
         if (SyncRequestsByDDiskId[i] == nullptr) {
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,
+                requestHandler.GetVChunkIndex(),
                 i,   // persistentBufferIndex
                 requestHandler.Span.GetTraceId(),
                 TabletId);
@@ -690,6 +696,7 @@ void TDirectBlockGroup::HandleErasePersistentBufferResult(
 
 NThreading::TFuture<TReadBlocksLocalResponse>
 TDirectBlockGroup::ReadBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -698,6 +705,7 @@ TDirectBlockGroup::ReadBlocksLocal(
 
     auto requestHandler = std::make_shared<TReadRequestHandler>(
         ActorSystem,
+        vChunkIndex,
         std::move(request),
         std::move(traceId),
         TabletId);
@@ -771,7 +779,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             DirtyMap->GetLsnByPersistentBufferIndex(requestRange.Start, 0),
@@ -797,7 +805,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
-                0,   // vChunkIndex
+                requestHandler->GetVChunkIndex(),
                 requestHandler->GetStartOffset(),
                 requestHandler->GetSize()),
             NKikimr::NDDisk::TReadInstruction(true),

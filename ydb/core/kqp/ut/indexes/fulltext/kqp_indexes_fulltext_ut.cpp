@@ -461,7 +461,6 @@ Y_UNIT_TEST(AddIndexWithRelevanceSettings) {
     {
         Ydb::Table::FulltextIndexSettings fulltextSettings;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-            layout: FLAT_RELEVANCE
             columns {
                 column: "Text"
                 analyzers {

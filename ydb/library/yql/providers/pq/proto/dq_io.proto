@@ -95,6 +95,7 @@ message TDqPqTopicSource {
     bool SkipJsonErrors = 27;
     google.protobuf.Duration MaxPartitionReadSkew = 28;
     uint64 ReadSessionBufferBytes = 29;
+    google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
 }
 
 message TDqPqTopicSink {
@@ -107,4 +108,34 @@ message TDqPqTopicSink {
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
     bool EnableDeduplication = 9;
+}
+
+message TEvDqPqUpdateCounterValue {
+    // Settings applied only on first aggregated value registration
+    message TSettings {
+        // If no over rules applied, report aggregate with this period
+        optional google.protobuf.Duration ReportPeriod = 1;
+
+        // If scalar aggregate changed on this value, it will be immediately reported
+        optional int64 ScalarAggDeltaThreshold = 2;
+    }
+
+    // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
+    optional string CounterId = 1;
+    optional uint64 SeqNo = 5;
+    optional TSettings Settings = 2;
+
+    oneof Action {
+        int64 AggMin = 3;
+        int64 AggSum = 4;
+    }
+}
+
+message TEvDqPqOnAggregatedValueUpdated {
+    optional string CounterId = 1;
+    optional uint64 SeqNo = 3;
+
+    oneof Update {
+        int64 Scalar = 2;
+    }
 }

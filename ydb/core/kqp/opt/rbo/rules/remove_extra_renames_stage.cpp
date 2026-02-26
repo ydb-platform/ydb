@@ -39,7 +39,7 @@ struct Scope {
 class Scopes {
 public:
     void ComputeScopesRec(TIntrusivePtr<IOperator> &op, ui32 &currScope);
-    void ComputeScopes(TIntrusivePtr<IOperator> &op);
+    bool ComputeScopes(TIntrusivePtr<IOperator> &op);
 
     THashMap<ui32, Scope> ScopeMap;
     THashMap<IOperator*, ui32> RevScopeMap;
@@ -80,17 +80,22 @@ void Scopes::ComputeScopesRec(TIntrusivePtr<IOperator>& op, ui32& currScope) {
     }
 }
 
-void Scopes::ComputeScopes(TIntrusivePtr<IOperator>& op) {
+bool Scopes::ComputeScopes(TIntrusivePtr<IOperator>& op) {
     ui32 currScope = 0;
     ScopeMap[0] = Scope();
     ComputeScopesRec(op, currScope);
     for (auto &[id, sc] : ScopeMap) {
+        // FIXME: Somehow we can have an empty vec of operators.
+        if (sc.Operators.empty()) {
+            return false;
+        }
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
             const auto parentScopeId = RevScopeMap.at(p.first);
             sc.ParentScopes.push_back(parentScopeId);
         }
     }
+    return true;
 }
 
 struct TIntTUnitPairHash {
@@ -110,7 +115,9 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
     auto scopes = Scopes();
-    scopes.ComputeScopes(root.GetInput());
+    if (!scopes.ComputeScopes(root.GetInput())) {
+        return;
+    }
 
     for (auto &[id, sc] : scopes.ScopeMap) {
         YQL_CLOG(TRACE, CoreDq) << "Scope map: " << id << ": " << sc.ToString(ctx.ExprCtx);

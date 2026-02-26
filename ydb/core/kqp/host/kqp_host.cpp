@@ -1490,14 +1490,9 @@ private:
             return nullptr;
         }
 
-        if (SessionCtx->Config().GetEnableNewRBO()) {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
-        else {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
+        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
+            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1585,7 +1580,8 @@ private:
                 if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {

@@ -58,8 +58,15 @@ private:
     const TCPULimits CPULimits;
 
 public:
+    static inline std::atomic<ui64> AliveFetcherCount{0};
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_FETCH_ACTOR;
+    }
+
+    ~TKqpScanFetcherActor() {
+        const ui64 remaining = AliveFetcherCount.fetch_sub(1) - 1;
+        Cerr << "FETCHER_DESTROY: alive_fetchers=" << remaining << Endl;
     }
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,

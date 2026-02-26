@@ -28,7 +28,7 @@ public:
         const TSortedPartitionSettings& settings
     );
 
-    std::pair<std::vector<TTaskTableInputRef>, bool> PartitionTablesIntoTasksSorted(
+    TPartitionResult PartitionTablesIntoTasksSorted(
         const std::vector<TOperationTableRef>& inputTables
     );
 
@@ -78,6 +78,9 @@ private:
         TSortedPartitionerFilterBoundary GetMaxFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) const;
         TFmrTableKeysRange GetEffectiveKeysRange(const TChunkUnit& chunk) const;
 
+        void SetError(TFmrError error);
+        TMaybe<TFmrError> GetError() const;
+
     private:
         void InitTableInputs(const std::vector<TFmrTableRef>& inputTables);
 
@@ -87,9 +90,10 @@ private:
         const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables_;
         const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats_;
         const TSortingColumns& KeyColumns_;
+        TMaybe<TFmrError> Error_;
     };
 
-    std::vector<TTaskTableInputRef> PartitionFmrTables(
+    TPartitionResult PartitionFmrTables(
         const std::vector<TFmrTableRef>& inputTables
     );
 
@@ -100,7 +104,12 @@ private:
         ui64 Weight = 0;
     };
 
-    TMaybe<TSlice> ReadSlice(TFmrTablesChunkPool& chunkPool);
+    struct TReadSliceResult {
+        TMaybe<TSlice> Slice;
+        TMaybe<TFmrError> Error;
+    };
+
+    TReadSliceResult ReadSlice(TFmrTablesChunkPool& chunkPool);
     TTaskTableInputRef CreateTaskInputFromSlices(const std::vector<TSlice>& slices, const std::vector<TFmrTableRef>& inputTables) const;
 
     std::unordered_map<TString, std::vector<TTableRange>> ProcessChunkForSlice(

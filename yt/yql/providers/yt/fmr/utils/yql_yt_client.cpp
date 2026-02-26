@@ -1,6 +1,12 @@
 #include "yql_yt_client.h"
 
+#include <yql/essentials/utils/log/log.h>
+
 namespace NYql::NFmr {
+
+namespace {
+const TString TMP_YQL_PREFIX = "tmp/yql/";
+}
 
 void NormalizeRichPath(NYT::TRichYPath& richPath) {
     TString prefix = NYT::TConfig::Get()->Prefix;

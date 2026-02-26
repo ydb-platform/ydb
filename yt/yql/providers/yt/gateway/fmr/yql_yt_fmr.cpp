@@ -81,6 +81,32 @@ TFmrOperationResult MergeSeveralFmrOperationResults(const std::vector<TFmrOperat
     return operationResult;
 }
 
+void ProcessFmrOperationResult(const TFmrOperationResult& fmrOperationResult, NCommon::TOperationResult& result, const TPosition& pos) {
+    if (fmrOperationResult.Repeat()) {
+        result.SetRepeat(true);
+    }
+
+    std::vector<TFmrError> fmrErrors;
+    for (const auto& fmrError: fmrOperationResult.Errors) {
+        if (fmrError.Reason == EFmrErrorReason::RestartOperation) {
+            result.SetRepeat(true);
+        } else {
+            fmrErrors.emplace_back(fmrError);
+        }
+    }
+
+    result.AddIssues(GetIssuesFromFmrErrors(fmrErrors, pos));
+    if (fmrErrors.empty()) {
+        result.SetSuccess();
+    }
+}
+
+bool HasFmrErrorReason(const TFmrOperationResult& fmrOperationResult, EFmrErrorReason reason) {
+    return AnyOf(fmrOperationResult.Errors, [reason](const TFmrError& error) {
+        return error.Reason == reason;
+    });
+}
+
 class TFmrYtGateway final: public TYtForwardingGatewayBase {
 public:
     TFmrYtGateway(IYtGateway::TPtr&& slave, IFmrCoordinator::TPtr coordinator, TFmrServices::TPtr fmrServices, const TFmrYtGatewaySettings& settings)
@@ -212,6 +238,41 @@ public:
         PingSessionThread_.join();
     }
 
+    TFuture<TRunResult> UploadFmrInputsAndForwardToUnderlyingGateway(
+        const TExecContextSimple<TRunOptions>::TPtr& execCtx,
+        const TExprNode::TPtr& node,
+        TExprContext& ctx,
+        TRunOptions&& options,
+        const TPosition& nodePos)
+    {
+        TString sessionId = options.SessionId();
+        std::unordered_map<TString, TVector<TOutputInfo>> outputTablesByCluster;
+
+        for (auto& inputInfo : execCtx->InputTables_) {
+            TFmrTableId inputFmrTableId(inputInfo.Cluster, inputInfo.Name);
+            TFmrTableId fmrTableId = GetAliasOrFmrId(inputFmrTableId, sessionId);
+
+            TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
+
+            auto status = GetTablePresenceStatus(fmrTableId, sessionId);
+            if (status == ETablePresenceStatus::OnlyInFmr) {
+                TOutputInfo outputTableInfo;
+                outputTableInfo.Path = inputInfo.Name;
+                outputTableInfo.Spec = inputInfo.Spec;
+                outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
+                if (!columnGroupSpec.empty()) {
+                    outputTableInfo.ColumnGroups = NYT::NodeFromYsonString(columnGroupSpec);
+                }
+                outputTablesByCluster[inputInfo.Cluster].emplace_back(outputTableInfo);
+            }
+        }
+        if (!outputTablesByCluster.empty()) {
+            return UploadSeveralFmrTablesToYt<TRunResult, TRunOptions>(outputTablesByCluster, TRunOptions(options), nodePos);
+        }
+
+        return Slave_->Run(node, ctx, std::move(options));
+    }
+
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());
@@ -235,46 +296,26 @@ public:
         }
 
         TFuture<TFmrOperationResult> future;
-
         if (auto op = opBase.Maybe<TYtMerge>()) {
             future = DoMerge(execCtx);
         } else if (auto op = opBase.Maybe<TYtMap>()) {
             future = DoMap(op.Cast(), execCtx, ctx);
         } else {
-            std::vector<ui64> fmrInputTables; // list of tables to upload from fmr to yt
-            std::unordered_map<TString, TVector<TOutputInfo>> outputTablesByCluster;
-
-            for (auto& inputInfo : execCtx->InputTables_) {
-                TString outputCluster = inputInfo.Cluster;
-                TOutputInfo outputTableInfo;
-                outputTableInfo.Path = inputInfo.Name;
-                outputTableInfo.Spec = inputInfo.Spec;
-                outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
-
-                TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(inputInfo.Cluster, inputInfo.Name), sessionId);
-
-                TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
-                if (!columnGroupSpec.empty()) {
-                    outputTableInfo.ColumnGroups = NYT::NodeFromYsonString(columnGroupSpec);
-                }
-
-                auto status = GetTablePresenceStatus(fmrTableId, sessionId);
-                if (status == ETablePresenceStatus::OnlyInFmr) {
-                    outputTablesByCluster[outputCluster].emplace_back(outputTableInfo);
-                }
-            }
-            if (!outputTablesByCluster.empty()) {
-                return UploadSeveralFmrTablesToYt<TRunResult, TRunOptions>(outputTablesByCluster, std::move(options), nodePos);
-            }
-            return Slave_->Run(node, ctx, std::move(options));
+            // We don't support this operation
+            return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
         }
-        return future.Apply([this, pos = nodePos, options = std::move(options), execCtx] (const TFuture<TFmrOperationResult>& f) {
+
+        return future.Apply([this, pos = nodePos, options = std::move(options), execCtx, node, &ctx] (const TFuture<TFmrOperationResult>& f) mutable {
             try {
                 auto fmrOperationResult = f.GetValue(); // rethrow error if any
+                if (HasFmrErrorReason(fmrOperationResult, EFmrErrorReason::FallbackOperation)) {
+                    return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), pos);
+                }
+
                 TRunResult result;
-                result.AddIssues(GetIssuesFromFmrErrors(fmrOperationResult.Errors, pos));
+                ProcessFmrOperationResult(fmrOperationResult, result, pos);
+
                 if (fmrOperationResult.Success()) {
-                    result.SetSuccess();
                     auto outputTables = execCtx->OutTables_;
                     YQL_ENSURE(fmrOperationResult.TablesStats.size() == outputTables.size());
                     for (size_t i = 0; i < outputTables.size(); ++i) {
@@ -330,24 +371,7 @@ public:
             try {
                 TFmrOperationResult dumpFmrTablesOpResult = f.GetValue();
                 TOperationResult result;
-                std::vector<TFmrError> fmrErrors;
-
-                if (dumpFmrTablesOpResult.Repeat()) {
-                    // Setting repeat if we loaded at least one fmr table to yt successfully, so that after loading fmr tables to yt provider will execute the same operation again with underlying gateway.
-                    result.SetRepeat(true);
-                }
-
-                for (auto& fmrError: dumpFmrTablesOpResult.Errors) {
-                    if (fmrError.Reason == EFmrErrorReason::RestartOperation) {
-                        result.SetRepeat(true);
-                    } else {
-                        fmrErrors.emplace_back(fmrError);
-                    }
-                }
-                if (fmrErrors.empty()) {
-                    result.SetSuccess();
-                }
-                result.AddIssues(GetIssuesFromFmrErrors(fmrErrors, pos));
+                ProcessFmrOperationResult(dumpFmrTablesOpResult, result, pos);
 
                 if constexpr (std::is_same_v<TOperationResult, TRunResult>) {
                     for (auto& [outputCluster, outputTables]: outputFmrTabesByCluster) {
@@ -380,15 +404,20 @@ public:
         return NYql::TransformPath(tmpFolder, table, true, session->UserName_);
     }
 
-    NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
-        TString realTableName = GetTransformedPath(sessionId, table, tmpFolder);
+    NYT::TRichYPath GetWriteTableWithTransformedPath(const TString& sessionId, const TString& cluster, const TString& transformedTablePath) const {
+        TString realTableName = transformedTablePath;
         realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
-        auto richYPath = NYT::TRichYPath(realTableName);
+        auto richYPath = NYT::TRichYPath(realTableName).Cluster(cluster);
         TYtSettings::TConstPtr config = nullptr;
         auto clusterConnection = GetTableClusterConnection(cluster, sessionId, config);
         richYPath.TransactionId(GetGuid(clusterConnection.TransactionId));
         YQL_CLOG(DEBUG, ProviderYt) << "Write table path: " << SerializeRichPath(richYPath);
         return richYPath;
+    }
+
+    NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
+        TString transformedTablePath = GetTransformedPath(sessionId, table, tmpFolder);
+        return GetWriteTableWithTransformedPath(sessionId, cluster, transformedTablePath);
     }
 
     TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) final {
@@ -406,7 +435,7 @@ public:
         bool isAnonymous = NYql::HasSetting(publish.Publish().Settings().Ref(), EYtSettingType::Anonymous);
 
         TString tmpFolder = GetTablesTmpFolder(*config, cluster);
-        auto outputTableRichPath = GetWriteTable(sessionId, cluster, outputPath, tmpFolder).Cluster(cluster);
+        auto outputTableRichPath = GetWriteTable(sessionId, cluster, outputPath, tmpFolder);
         TFmrTableId fmrOutputTableId(outputTableRichPath);
 
         std::vector<TYtTableRef> inputTables;
@@ -899,8 +928,15 @@ private:
         YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.TaskType << " operation";
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
 
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession] (const auto& startOperationFuture) {
+        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession] (const auto& startOperationFuture) mutable {
             TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
+            if (startOperationResponse.Status == EOperationStatus::Failed) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
+                TFmrOperationResult result;
+                result.Errors = startOperationResponse.ErrorMessages;
+                promise.SetValue(std::move(result));
+                return;
+            }
             TString operationId = startOperationResponse.OperationId;
 
             auto& operationStates = Sessions_[sessionId]->OperationStates;
@@ -925,8 +961,15 @@ private:
         YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.TaskType << " operation";
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
 
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, &startOperationRequest] (const auto& startOperationFuture) {
+        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, &startOperationRequest] (const auto& startOperationFuture) mutable {
             TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
+            if (startOperationResponse.Status == EOperationStatus::Failed) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
+                TFmrOperationResult result;
+                result.Errors = startOperationResponse.ErrorMessages;
+                promise.SetValue(std::move(result));
+                return;
+            }
             TString operationId = startOperationResponse.OperationId;
 
             auto& operationStates = Sessions_[sessionId]->OperationStates;
@@ -1072,8 +1115,11 @@ private:
 
         fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
 
-        auto richPath = GetWriteTable(sessionId, outputCluster, outputPath, GetTablesTmpFolder(*config, outputCluster)).Cluster(outputCluster);
-        auto filePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(outputCluster).Path(outputPath).IsTemp(true));
+        auto richPath = GetWriteTableWithTransformedPath(sessionId, outputCluster, outputPath);
+        auto filePath = fmrTable.FilePath;
+        if (!filePath.Defined()) {
+            filePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(outputCluster).Path(outputPath).IsTemp(true));
+        }
 
         fmrTable.FilePath = filePath;
         PrepareDestination(execCtx, outputTableIndex);
@@ -1105,7 +1151,7 @@ private:
                 YQL_CLOG(TRACE, FastMapReduce) << "Creating session for distributed upload from fmr to yt";
                 TStartDistributedWriteOptions options;
                 auto writeSession = YtJobService_->StartDistributedWriteSession(
-                    SortedUploadOperationParams.Output.RichPath,
+                    SortedUploadOperationParams.Output,
                     tasksNum,
                     clusterConnection,
                     options
@@ -1175,7 +1221,7 @@ private:
 
         fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
 
-        auto richPath = GetWriteTable(sessionId, outputCluster, outputPath, GetTablesTmpFolder(*config, outputCluster)).Cluster(outputCluster);
+        auto richPath = GetWriteTableWithTransformedPath(sessionId, outputCluster, outputPath);
 
         auto filePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(outputCluster).Path(outputPath).IsTemp(true));
 
@@ -1261,6 +1307,8 @@ private:
         auto outputTable = outputTables[0];
         TString outputCluster = execCtx->Cluster_;
 
+
+
         auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
         TFmrTableId outputTableFmrId(outputCluster, outputTable.Path);
         auto columnGroupSpec = outputTableColumnGroups[0];
@@ -1271,6 +1319,37 @@ private:
             .SerializedColumnGroups = columnGroupSpec
         };
         if (GetIsSorted(outputTable)) {
+            for (const auto& inputTable : execCtx->InputTables_) {
+                TFmrTableId inputId = GetAliasOrFmrId(TFmrTableId(inputTable.Cluster, inputTable.Name), sessionId);
+                const auto inputStatus = GetTablePresenceStatus(inputId, sessionId);
+                if (inputStatus == ETablePresenceStatus::OnlyInYt || inputStatus == ETablePresenceStatus::Undefined) {
+                    YQL_CLOG(INFO, FastMapReduce) << "SortedMerge fallback requested due to non-FMR input table: "
+                        << inputId << ", status=" << inputStatus;
+                    TFmrOperationResult result;
+                    result.Errors.emplace_back(TFmrError{
+                        .Component = EFmrComponent::Gateway,
+                        .Reason = EFmrErrorReason::FallbackOperation,
+                        .ErrorMessage = "SortedMerge has non-FMR inputs, fallback to native gateway"
+                    });
+                    return MakeFuture(result);
+                }
+
+                if (inputStatus == ETablePresenceStatus::OnlyInFmr || inputStatus == ETablePresenceStatus::Both) {
+                    const auto meta = GetFmrTableMeta(inputId, sessionId);
+                    if (!meta.DoesExist) {
+                        YQL_CLOG(INFO, FastMapReduce) << "SortedMerge fallback requested due to missing FMR meta for input table: "
+                            << inputId << ", status=" << inputStatus;
+                        TFmrOperationResult result;
+                        result.Errors.emplace_back(TFmrError{
+                            .Component = EFmrComponent::Gateway,
+                            .Reason = EFmrErrorReason::FallbackOperation,
+                            .ErrorMessage = "SortedMerge has inputs without FMR meta, fallback to native gateway"
+                        });
+                        return MakeFuture(result);
+                    }
+                }
+            }
+
             fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
             fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
             SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
@@ -1317,57 +1396,6 @@ private:
         TYtSettings::TConstPtr& config)
     {
         auto [mergeInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, sessionId, config);
-
-        std::vector<TString> ytInputTables;
-        std::vector<TString> unsortedInputTables;
-        std::vector<TString> incompatibleSortedInputTables;
-        for (const auto& inputTable : mergeInputTables) {
-            if (auto ytInput = std::get_if<TYtTableRef>(&inputTable)) {
-                ytInputTables.emplace_back(ytInput->GetCluster() + "." + ytInput->GetPath());
-                continue;
-            }
-
-            const auto& fmrInput = std::get<TFmrTableRef>(inputTable);
-            const bool hasSortingSpec = !fmrInput.SortColumns.empty() && !fmrInput.SortOrder.empty();
-            if (!hasSortingSpec) {
-                unsortedInputTables.emplace_back(fmrInput.FmrTableId.Id);
-                continue;
-            }
-
-            if (fmrInput.SortColumns != fmrOutputTable.SortColumns || fmrInput.SortOrder != fmrOutputTable.SortOrder) {
-                incompatibleSortedInputTables.emplace_back(fmrInput.FmrTableId.Id);
-            }
-        }
-
-        if (!ytInputTables.empty()) {
-            TFmrOperationResult result;
-            result.Errors.emplace_back(TFmrError{
-                .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
-                .ErrorMessage = "SortedMerge supports only inputs present in FMR. Inputs resolved to YT tables: " + JoinRange(", ", ytInputTables.begin(), ytInputTables.end())
-            });
-            return MakeFuture(result);
-        }
-
-        if (!unsortedInputTables.empty()) {
-            TFmrOperationResult result;
-            result.Errors.emplace_back(TFmrError{
-                .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
-                .ErrorMessage = "SortedMerge requires sorted FMR inputs. Missing sorting metadata for tables: " + JoinRange(", ", unsortedInputTables.begin(), unsortedInputTables.end())
-            });
-            return MakeFuture(result);
-        }
-
-        if (!incompatibleSortedInputTables.empty()) {
-            TFmrOperationResult result;
-            result.Errors.emplace_back(TFmrError{
-                .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
-                .ErrorMessage = "SortedMerge input sorting spec is incompatible with output sorting spec for tables: " + JoinRange(", ", incompatibleSortedInputTables.begin(), incompatibleSortedInputTables.end())
-            });
-            return MakeFuture(result);
-        }
 
         TSortedMergeOperationParams sortedMergeOperationParams{.Input = mergeInputTables, .Output = fmrOutputTable};
         TStartOperationRequest sortedMergeOperationRequest{

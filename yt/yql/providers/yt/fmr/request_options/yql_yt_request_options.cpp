@@ -6,14 +6,26 @@
 
 namespace NYql::NFmr {
 
+const std::set<TStringBuf> retraibleMarkers = {
+    FmrNonRetryableCoordinatorExceptionMarker,
+    FmrNonRetryableJobExceptionMarker
+};
+
+EFmrErrorReason errorMessageMarkersToReason(const TStringBuf& message) {
+    for (const auto& maker: retraibleMarkers) {
+        if (message.contains(maker)) {
+            return EFmrErrorReason::RestartQuery;
+        }
+    }
+    return  EFmrErrorReason::Unknown;
+}
+
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage) {
     TStringBuf message = errorMessage;
     if (TryParseTerminationMessage(message).Defined()) {
         return EFmrErrorReason::UdfTerminate;
-    } else if (message.contains(FmrNonRetryableJobExceptionMarker)) {
-        return EFmrErrorReason::RestartQuery;
     }
-    return EFmrErrorReason::Unknown;
+    return errorMessageMarkersToReason(message);
 }
 
 void TFmrUserJobSettings::Save(IOutputStream* buffer) const {

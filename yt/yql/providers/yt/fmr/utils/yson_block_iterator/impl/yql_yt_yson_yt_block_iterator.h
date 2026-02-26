@@ -52,7 +52,7 @@ private:
 
     TMaybe<TFmrTableKeysBoundary> FirstBound_;
     TMaybe<TFmrTableKeysBoundary> LastBound_;
-    TMaybe<bool> IsFirstBoundInclusive_;
+    bool IsFirstBoundInclusive_ = true;
 };
 
 } // namespace NYql::NFmr

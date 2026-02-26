@@ -46,6 +46,7 @@ enum class EFmrComponent {
     Unknown,
     Coordinator,
     Worker,
+    Gateway,
     Job
 };
 
@@ -53,6 +54,7 @@ enum class EFmrErrorReason {
     Unknown,
     RestartOperation,
     RestartQuery,
+    FallbackOperation,
     UdfTerminate
 };
 
@@ -67,12 +69,22 @@ struct TFmrError {
 };
 
 static constexpr TStringBuf FmrNonRetryableJobExceptionMarker = "[FmrNonRetryableJobException] ";
+static constexpr TStringBuf FmrNonRetryableCoordinatorExceptionMarker = "[FmrNonRetryableCoordinatorException] ";
 
 class TFmrNonRetryableJobException: public yexception {
 public:
     TFmrNonRetryableJobException() : yexception()
 {
     *this << ToString(FmrNonRetryableJobExceptionMarker);
+}
+};
+
+
+class TFmrNonRetryableCoordinatorException: public yexception {
+public:
+    TFmrNonRetryableCoordinatorException() : yexception()
+{
+    *this << ToString(FmrNonRetryableCoordinatorExceptionMarker);
 }
 };
 

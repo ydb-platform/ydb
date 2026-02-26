@@ -36,6 +36,7 @@ ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.DropTableWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.LostBorrowAckWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable

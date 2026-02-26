@@ -1,3 +1,5 @@
+$window_days = 365;
+
 SELECT
     tm.state_filtered AS state_filtered,
     tm.test_name AS test_name,
@@ -36,7 +38,7 @@ FROM (
         Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
     FROM `test_results/analytics/tests_monitor` AS t
     WHERE
-      t.date_window >= CurrentUtcDate() - 365 * Interval("P1D")
+      t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
       and t.branch = 'main'
       and t.build_type = 'relwithdebinfo'
         and t.is_test_chunk = 0

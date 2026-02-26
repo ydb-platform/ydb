@@ -66,7 +66,7 @@ oidc:
         UNIT_ASSERT_EXCEPTION_CONTAINS(TMVP(3, argv), yexception, "SecretName must be specified");
     }
 
-    Y_UNIT_TEST(SecretNameMustNotBeEmptyInTokenFileSecretInfo) {
+    Y_UNIT_TEST(SecretInfoValueMustNotBeEmpty) {
         TTempFileHandle tmpTokenFile = MakeTestFile(R"pb(
 OAuthInfo {
   Name: "service-account-jwt"

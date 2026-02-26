@@ -9,14 +9,14 @@ struct TStreamingQueryCounters : public IStreamingQueryCounters {
     TStreamingQueryCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& path)
         : Path(path)
     {
-        auto subGroup = counters->GetSubgroup("subsystem", "streaming_queries");
-        SubGroup = subGroup->GetSubgroup("path", Path);
-        CpuMs = SubGroup->GetCounter("streaming.query.cpu.usage.milliseconds");
-        MemoryUsageBytes = SubGroup->GetCounter("streaming.query.memory.usage.bytes");
-        UptimeSeconds = SubGroup->GetCounter("streaming.query.uptime.seconds");
-        TaskCount = SubGroup->GetCounter("streaming.query.tasks.count");
-        InputBytes = SubGroup->GetCounter("streaming.query.input.bytes");
-        OutputBytes = SubGroup->GetCounter("streaming.query.output.bytes");
+        SubGroup = counters->GetSubgroup("subsystem", "streaming_queries");
+        auto queryGroup = SubGroup->GetSubgroup("path", Path);
+        CpuMs = queryGroup->GetCounter("streaming.query.cpu.usage.milliseconds");
+        MemoryUsageBytes = queryGroup->GetCounter("streaming.query.memory.usage.bytes");
+        UptimeSeconds = queryGroup->GetCounter("streaming.query.uptime.seconds");
+        TaskCount = queryGroup->GetCounter("streaming.query.tasks.count");
+        InputBytes = queryGroup->GetCounter("streaming.query.input.bytes");
+        OutputBytes = queryGroup->GetCounter("streaming.query.output.bytes");
     }
 
     ~TStreamingQueryCounters() {

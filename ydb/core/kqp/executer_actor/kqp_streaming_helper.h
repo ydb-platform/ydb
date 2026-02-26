@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
-
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimr::NKqp {
 

@@ -65,7 +65,7 @@ public:
     virtual void AddSpeedAndIops(const TSpeedAndIops& data) = 0;
     virtual void SetTestType(const TString& testType) = 0;
     virtual void SetInFlight(ui32 inFlight) = 0;
-    virtual void SetSkipStatistics(bool skip) = 0;
+    virtual void SetSkipStatistics(bool skip) { Y_UNUSED(skip); }
 
     template<typename T>
     void AddGlobalParam(const TString& name, const T& value) {
@@ -634,6 +634,15 @@ struct TPerfTestConfig {
         }
         return nullptr;
     }
+
+    TPerfTestConfig(const TString& path, const TString name, const TString type, const TString outputFormatName,
+            const TString monPort, bool doLockFile, const TString runCountStr = "1",
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
+            bool disablePDiskDataEncryption = false)
+        : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
+                monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
+                disablePDiskDataEncryption)
+    {}
 
     TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",

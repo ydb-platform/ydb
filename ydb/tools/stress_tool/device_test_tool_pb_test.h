@@ -217,7 +217,9 @@ protected:
     }
 
     void HandleBoot(TEvTablet::TEvBoot::TPtr& ev, const TActorContext& ctx) {
-        LaunchTestOnAllDevices(ctx);
+        if (CurrentTest < TestProto.PersistentBufferTestListSize()) {
+            LaunchTestOnAllDevices(ctx);
+        }
         Y_UNUSED(ev);
     }
 

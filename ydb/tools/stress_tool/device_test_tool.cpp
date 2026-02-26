@@ -104,7 +104,8 @@ int main(int argc, char **argv) {
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 
 #ifndef NDEBUG
-    Cerr << "Warning: you're running stress tool built without NDEBUG defined, results will be much worse than expected";
+    Cerr << "Warning: you're running stress tool built without NDEBUG defined, results will be much worse than expected"
+        << Endl;
 #endif
 
     // When run-count > 1, only one test is allowed in the config

@@ -1637,7 +1637,7 @@ protected:
 
     void ProcessStreamingQueryCounters() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        if (!CheckpointCoordinatorId || !context || context->StreamingQueryPath.empty()) {
+        if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
             return;
         }
         if (!StreamingQueryCounters) {

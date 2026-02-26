@@ -50,7 +50,7 @@ class Workload:
                 """)
             session_pool.execute_with_retries(f"""
                     CREATE TOPIC `{self.topic_name}`
-                      (CONSUMER `shared_consumer` 
+                      (CONSUMER `shared_consumer`
                         WITH (
                           type='shared',
                           keep_messages_order = true,
@@ -75,6 +75,7 @@ class Workload:
             ]
             + subcmds
         )
+
     def write_to_topic(self):
         logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
         subcmds = [

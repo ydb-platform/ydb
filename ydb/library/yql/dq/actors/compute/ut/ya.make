@@ -27,13 +27,11 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute/ut/proto
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/actors/task_runner
-    ydb/library/yql/dq/comp_nodes/no_llvm
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/public/ydb_issue
     yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/no_llvm
     yql/essentials/minikql/computation
     yql/essentials/minikql/invoke_builtins
     yql/essentials/providers/common/comp_nodes

@@ -2,7 +2,6 @@ package NYql.NDqProto;
 option cc_enable_arenas = true;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/duration.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
@@ -301,33 +300,3 @@ message TEvChannelUpdateV2 {
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
 };
-
-message TEvUpdateCounterValue {
-    // Settings applied only on first aggregated value registration
-    message TSettings {
-        // If no over rules applied, report aggregate with this period
-        optional google.protobuf.Duration ReportPeriod = 1;
-
-        // If scalar aggregate changed on this value, it will be immediately reported
-        optional int64 ScalarAggDeltaThreshold = 2;
-    }
-
-    // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
-    optional string CounterId = 1;
-    optional uint64 SeqNo = 5;
-    optional TSettings Settings = 2;
-
-    oneof Action {
-        int64 AggMin = 3;
-        int64 AggSum = 4;
-    }
-}
-
-message TEvOnAggregatedValueUpdated {
-    optional string CounterId = 1;
-    optional uint64 SeqNo = 3;
-
-    oneof Update {
-        int64 Scalar = 2;
-    }
-}

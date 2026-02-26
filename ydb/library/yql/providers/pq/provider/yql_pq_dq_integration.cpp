@@ -4,6 +4,7 @@
 #include "yql_pq_topic_key_parser.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -240,8 +241,14 @@ public:
                     srcDesc.SetReadSessionBufferBytes(*bufferSize);
                 }
 
+                std::optional<NDqProto::TDqIntegrationCommonSettings> commonSettings;
                 if (const auto maxPartitionReadSkew = State_->Configuration->MaxPartitionReadSkew.Get()) {
                     *srcDesc.MutableMaxPartitionReadSkew() = NProtoInterop::CastToProto(*maxPartitionReadSkew);
+
+                    NDqProto::TDqControlPlaneActorSettings aggregatorSettings;
+                    aggregatorSettings.SetType("PqInfoAggregator");
+                    commonSettings = NDqProto::TDqIntegrationCommonSettings();
+                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
                 }
 
                 bool sharedReading = false;
@@ -282,6 +289,8 @@ public:
                         skipErrors = FromString<bool>(Value(setting));
                     } else if (name == StreamingTopicRead) {
                         streamingTopicRead = FromString<bool>(Value(setting));
+                    } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
+                        *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
                     }
                 }
 
@@ -352,7 +361,13 @@ public:
                 TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
-                protoSettings.PackFrom(srcDesc);
+                if (commonSettings) {
+                    commonSettings->MutableSettings()->PackFrom(srcDesc);
+                    protoSettings.PackFrom(*commonSettings);
+                } else {
+                    protoSettings.PackFrom(srcDesc);
+                }
+
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
@@ -641,6 +656,10 @@ public:
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;
+        }
+
+        if (State_->Configuration->MaxPartitionReadSkew.Get()) {
+            Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
         if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {

@@ -338,7 +338,7 @@ NTable::TBulkUpsertResult LoadCustomers(
     auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         TString last;
         if (customerId <= 1000) {
             last = GetLastName(customerId - 1);
@@ -402,7 +402,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
 
     TInstant date = TInstant::Now();
 
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("H_C_W_ID").Int32(wh)

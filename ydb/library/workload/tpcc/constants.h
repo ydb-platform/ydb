@@ -16,6 +16,8 @@ constexpr int DISTRICT_LOW_ID = 1;
 constexpr int DISTRICT_HIGH_ID = 10;
 constexpr int DISTRICT_COUNT = DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1;
 
+constexpr int C_INVALID_CUSTOMER_ID = 0;
+constexpr int C_FIRST_CUSTOMER_ID = 1;
 constexpr int C_ID_C = 259; // in range [0, 1023]
 constexpr int CUSTOMERS_PER_DISTRICT = 3000;
 

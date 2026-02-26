@@ -1,0 +1,1 @@
+select count(*) from kv where strings_minmax = "<0-x()DDycQ5P#fk@t4,>DCX%;FS1/!SyzB";

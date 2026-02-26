@@ -4,17 +4,18 @@ import pyarrow.compute as pc
 import numpy as np
 import string
 import argparse 
+import random
 def random_string_array(size):
     """
     Generate a numpy array of random strings
     """
 
     strs = [
-        "asd;nlasnjdfpoanfasdo[fvnwvnwqp0v vojv noqwvc]",
-        " cpka9324tphcp35 gn2[s dn[weqodf niwq0fpo ]]",
-        "ncvopwdcvqow opcddwo dvoc1 j   wfvdcq  3wv",
-        "cascbiq vpiqewvvpvcv23114uu2381904"
-     ]
+        ":Fpj]&KhQB7?sPK+M9nSsOJo~xq*B{A$NQQlE5Uy0q^z",
+        "k*d(n=MT-VYT:Z8Yad(D49j82.PUoy",
+        "<0-x()DDycQ5P#fk@t4,>DCX%;FS1/!SyzB",
+        "j>.(tjZ\\v4fLr3>}P0VR7K^"
+    ]
     
     return np.tile(strs, size // len(strs))
 
@@ -25,27 +26,47 @@ def stream_to_parquet_pyarrow(output_file, total_rows=1_000, chunk_size=100_000)
     # Define schema
     schema = pa.schema([
         pa.field('k', pa.int64()),
-        pa.field('v_no_index', pa.int64()),
-        pa.field('v_minmax', pa.int64()),
-        pa.field('v_bloom', pa.int64()),
-        pa.field('string_data', pa.string())
+        pa.field('ints_no_index', pa.int64()),
+        pa.field('ints_minmax', pa.int64()),
+        pa.field('strings_no_index', pa.string()),
+        pa.field('strings_minmax', pa.string()),
+        pa.field('needle_in_a_haystack_minmax', pa.int64())
     ])
     
     # Create writer
     writer = pq.ParquetWriter(output_file, schema)
-    
+
+    needle_row_index = int(random.random()*(total_rows-1))
+    needle = 123
+    print(f"needle in {needle_row_index} row")
+    needle_chunk_index = needle_row_index // chunk_size
     try:
         for chunk_num in range(0, total_rows, chunk_size):
             # Generate chunk data
             chunk_rows = min(chunk_size, total_rows - chunk_num)
+
+            ints = np.tile([1,2,3,4], chunk_size // 4)
             
+            strings = np.tile([
+                ":Fpj]&KhQB7?sPK+M9nSsOJo~xq*B{A$NQQlE5Uy0q^z",
+                "k*d(n=MT-VYT:Z8Yad(D49j82.PUoy",
+                "<0-x()DDycQ5P#fk@t4,>DCX%;FS1/!SyzB",
+                "j>.(tjZ\\v4fLr3>}P0VR7K^"
+            ], chunk_size // 4)
+
+            haystack = np.tile([1,2,3,4], chunk_size // 4)
+            if chunk_num == needle_chunk_index:
+                haystack[needle_row_index%chunk_size] = needle
+
+
             # Create PyArrow Table
             table = pa.Table.from_pydict({
                 'k': np.arange(chunk_num*chunk_size, chunk_num*chunk_size+chunk_size),
-                'v_no_index': np.tile([1,2,3,4], chunk_size // 4),
-                "v_minmax": np.tile([1,2,3,4], chunk_size // 4),
-                'v_bloom': np.tile([1,2,3,4], chunk_size // 4),
-                'string_data': random_string_array(chunk_size)
+                'ints_no_index': ints,
+                "ints_minmax": ints,
+                'strings_no_index': strings,
+                'strings_minmax': strings,
+                'needle_in_a_haystack_minmax': haystack
             })
             
             # Write chunk

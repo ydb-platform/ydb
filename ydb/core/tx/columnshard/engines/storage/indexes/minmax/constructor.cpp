@@ -19,7 +19,9 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
             return nullptr;
         }
         columnId = columnInfo->GetId();
+        // currentSchema.GetIndexes()
     }
+    // currentSchema.GetIndexes().GetById(1)->GetIndexMeta()
     return std::make_shared<NMinMax::TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId),
         GetInheritPortionStorage().value_or(false), columnId, DataExtractor);
 }

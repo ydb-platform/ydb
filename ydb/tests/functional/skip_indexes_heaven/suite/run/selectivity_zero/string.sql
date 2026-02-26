@@ -1,0 +1,1 @@
+select count(*) from kv where strings_minmax = "fffffffffffffffff";

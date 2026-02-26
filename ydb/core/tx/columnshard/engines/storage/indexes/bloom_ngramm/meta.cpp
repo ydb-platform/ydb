@@ -340,7 +340,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 }
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+    const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;

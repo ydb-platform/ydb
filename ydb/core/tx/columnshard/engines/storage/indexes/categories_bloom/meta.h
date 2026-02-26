@@ -21,7 +21,7 @@ private:
     }
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const override;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
 

@@ -174,17 +174,17 @@ protected:
     }
 
     virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
-        const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) const override {
+        const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const override {
         AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
-        TKeyPair chunkValue = NArrowProtocol::Deserialize(data, MinMaxType);
+        TKeyPair chunkValue = NArrowProtocol::Deserialize(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
         return !Skip(chunkValue, requestValue, op);
     }
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override {
         auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-        AFL_VERIFY(MinMaxType->Equals(gotType))(
-            "arrow error", MySprintf("inconsistent type field in TIndexInfo: TIndexInfo: %s, *this: %s", gotType->ToString(), MinMaxType->ToString()));
-        return NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(data, MinMaxType).DetachResult()->ToString();
+        // AFL_VERIFY(MinMaxType->Equals(gotType))(
+        //     "arrow error", MySprintf("inconsistent type field in TIndexInfo: TIndexInfo: %s, *this: %s", gotType->ToString(), MinMaxType->ToString()));
+        return NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(data, gotType).DetachResult()->ToString();
     }
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {

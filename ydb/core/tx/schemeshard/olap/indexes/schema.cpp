@@ -23,6 +23,7 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
     }
+    
     auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
     if (!object) {
         return false;

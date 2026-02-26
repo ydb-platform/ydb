@@ -71,7 +71,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
 }
 
 bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+    const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const {
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     const ui32 bitsCount = data.GetBitsCount();

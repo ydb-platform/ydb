@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
+#include <util/generic/array_ref.h>
+#include <util/generic/deque.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -13,6 +15,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     namespace NTypeIds = NScheme::NTypeIds;
     using TTypeInfo = NScheme::TTypeInfo;
+    using TTypeInfoOrder = NScheme::TTypeInfoOrder;
 
     Y_UNIT_TEST(NullCell) {
         TCell nullCell;
@@ -185,24 +188,16 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT_VALUES_EQUAL(cells[9].AsBuf().data(), bigStrVal);
         UNIT_ASSERT_VALUES_EQUAL(cells[11].AsValue<i32>(), intVal);
 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec.GetCells().data(), cells.data(),
-                                                         types.data(),
-                                                         vec.GetCells().size(), cells.size()),
-                                 0);
+        UNIT_ASSERT_VALUES_EQUAL(CompareKeys(vec.GetCells(), cells, types), 0);
 
         TSerializedCellVec vecCopy(vec);
 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vecCopy.GetCells().data(), cells.data(),
-                                                         types.data(),
-                                                         vecCopy.GetCells().size(), cells.size()),
-                                 0);
+        UNIT_ASSERT_VALUES_EQUAL(CompareKeys(vecCopy.GetCells(), cells, types), 0);
 
 
         TSerializedCellVec vec2(std::move(vecCopy));
 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec2.GetCells().data(), cells.data(),
-                                                         types.data(),
-                                                         vec2.GetCells().size(), cells.size()),
+        UNIT_ASSERT_VALUES_EQUAL(CompareKeys(vec2.GetCells(), cells, types),
                                  0);
 
         TSerializedCellVec vec3;
@@ -216,9 +211,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT(vec3);
 
 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(),
-                                                         types.data(),
-                                                         vec3.GetCells().size(), cells.size()),
+        UNIT_ASSERT_VALUES_EQUAL(CompareKeys(vec3.GetCells(), cells, types),
                                  0);
 
         const int ITERATIONS = 1000;//10000000;
@@ -311,7 +304,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), cells.size());
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), types.size());
 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(matrix.GetCells().data(), cells.data(), types.data(), matrix.GetCells().size(), cells.size()), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CompareKeys(matrix.GetCells(), cells, types), 0);
 
         UNIT_ASSERT_VALUES_EQUAL(hash, GetCellsHash(matrix.GetCells(), types));
     }
@@ -697,5 +690,44 @@ Y_UNIT_TEST_SUITE(Scheme) {
         appended.resize(1);
 
         UNIT_ASSERT(!TSerializedCellVec::UnsafeAppendCells(cells, appended));
+    }
+
+    Y_UNIT_TEST(CompareKeysSupportsContiguousContainers) {
+        ui64 intVal = 42;
+        const std::initializer_list<TCell> values = {TCell::Make(intVal), TCell::Make(intVal)};
+        const std::initializer_list<TTypeInfo> types = {TTypeInfo(NTypeIds::Uint64), TTypeInfo(NTypeIds::Uint64)};
+
+        // vectors
+        Y_UNUSED(CompareKeys(TVector<TCell>(values), TVector<TCell>(values), TVector<TTypeInfo>(types)));
+        Y_UNUSED(CompareKeys(std::vector<TCell>(values), std::vector<TCell>(values), std::vector<TTypeInfo>(types)));
+
+        // array and array refs
+        {
+            TVector<TCell> cells(values);
+            TVector<TTypeInfo> types_(types);
+            Y_UNUSED(CompareKeys(TArrayRef<TCell>(cells), TArrayRef<TCell>(cells), TArrayRef<TTypeInfo>(types_)));
+            Y_UNUSED(CompareKeys(std::span<TCell>(cells), std::span<TCell>(cells), std::span<TTypeInfo>(types_)));
+        }
+        {
+            const std::initializer_list<const TCell> values = {TCell::Make(intVal), TCell::Make(intVal)};
+            const std::initializer_list<const TTypeInfo> types = {TTypeInfo(NTypeIds::Uint64), TTypeInfo(NTypeIds::Uint64)};
+            Y_UNUSED(CompareKeys(TConstArrayRef<TCell>(values), TConstArrayRef<TCell>(values), TConstArrayRef<TTypeInfo>(types)));
+        }
+        {
+            std::array<TCell, 2> values = {TCell::Make(intVal), TCell::Make(intVal)};
+            std::array<TTypeInfo, 2> types = {TTypeInfo(NTypeIds::Uint64), TTypeInfo(NTypeIds::Uint64)};
+            Y_UNUSED(CompareKeys(values, values, types));
+        }
+
+        // TTypeInfoOrder and TypeInfo compatibility
+        {
+            const auto types = {TTypeInfoOrder(NTypeIds::Uint64), TTypeInfoOrder(NTypeIds::Uint64)};
+            Y_UNUSED(CompareKeys(TVector<TCell>(values), TVector<TCell>(values), TVector<TTypeInfoOrder>(types)));
+        }
+
+        // use of non-contiguous containers should result in compilation errors
+        // Y_UNUSED(CompareKeys(std::deque<TCell>(values), std::deque<TCell>(values), std::deque<TTypeInfo>(types)));
+        // Y_UNUSED(CompareKeys(std::list<TCell>(values), std::list<TCell>(values), std::list<TTypeInfo>(types)));
+
     }
 }

@@ -370,8 +370,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return true;
         }
 
-        const int cmp = CompareTypedCellVectors(prevKey->data(), key.data(),
-            KeyDesc->KeyColumnTypes.data(), prevKey->size(), key.size());
+        const int cmp = CompareKeys(*prevKey, key, KeyDesc->KeyColumnTypes);
         if (cmp <= 0) {
             return true;
         }

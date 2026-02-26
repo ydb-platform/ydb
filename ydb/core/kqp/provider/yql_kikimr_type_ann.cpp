@@ -937,8 +937,13 @@ private:
                     }
                 }
             } else {
-                // TODO: rewrite?
                 const auto families = columnItem.Cast<TCoAtomList>();
+                if (families.Size() > 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(columnItem.Pos()), TStringBuilder()
+                        << " Column: \"" << columnMeta.Name
+                        << "\". Several column families for a single column are not yet supported"));
+                    return false;
+                }
                 for (const auto family : families) {
                     columnMeta.Families.push_back(TString(family.Value()));
                 }

@@ -16555,9 +16555,9 @@
     ],
     "test_sql_negative.test[join-eq_bad_dependency_detection-]": [
         {
-            "checksum": "8fa4772f7feae8be57c57a98421e5ae2",
-            "size": 165,
-            "uri": "https://{canondata_backend}/1936273/5444587eab49aaa39a9440817ff2785ec843e026/resource.tar.gz#test_sql_negative.test_join-eq_bad_dependency_detection-_/err_file.out"
+            "checksum": "6e948e476887db152eaed88d8f2ac7d3",
+            "size": 108,
+            "uri": "https://{canondata_backend}/1937424/8c5919806bb7867e347ea9ea4857472b7a334da3/resource.tar.gz#test_sql_negative.test_join-eq_bad_dependency_detection-_/err_file.out"
         }
     ],
     "test_sql_negative.test[join-join_and_distinct_key_without_correlation-]": [

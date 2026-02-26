@@ -509,7 +509,7 @@ bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) {
             }
         }
         if (term->IsAsterisk()) {
-            const auto& source = *term->GetSourceName();
+            const auto source = *term->GetSourceName();
             if (source.empty() && terms.ysize() > 1) {
                 Ctx_.Error(term->GetPos()) << "Unable to use plain '*' with other projection items. Please use qualified asterisk instead: '<table>.*' (<table> can be either table name or table alias).";
                 return false;
@@ -520,7 +520,7 @@ bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) {
         } else if (label.empty()) {
             const auto* column = term->GetColumnName();
             if (column && !column->empty()) {
-                const auto& source = *term->GetSourceName();
+                const auto source = *term->GetSourceName();
                 const auto usedName = source.empty() ? *column : source + '.' + *column;
                 if (!labels.insert(usedName).second) {
                     Ctx_.Error(term->GetPos()) << "Unable to use duplicate column names. Collision in name: " << usedName;

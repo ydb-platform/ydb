@@ -1456,6 +1456,103 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    void TestQueryClient(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+             R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id as id2 FROM `/Root/foo` WHERE name != '3_name' order by id;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id as id2 FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, name FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b not in [1, 2] order by b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b in [1, 2] order by b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
+            R"([[3]])",
+            R"([[3;["3_name"]]])",
+            R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
+            R"([[1;[1]];[2;[2]]])",
+            R"([[3;["3_name"];[3]]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session2 = queryClient.GetSession().GetValueSync().GetSession();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto result =
+                session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+     Y_UNIT_TEST_TWIN(QueryClient, ColumnStore) {
+        TestQueryClient(ColumnStore);
+    }
+
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;

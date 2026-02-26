@@ -129,6 +129,10 @@ struct IUnversionedColumnarRowBatch
 
     struct TColumn
     {
+        // Note that TColumn objects form a tree via |Dictionary| and |Rle| fields.
+        // Top-level (aka root) columns refer to the actual table columns.
+        // Leaf columns are imaginary columns that store encoding-specific data (e.g. dictionaries).
+
         //! Id in name table.
         //! -1 for non-root columns.
         int Id = -1;

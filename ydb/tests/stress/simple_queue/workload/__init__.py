@@ -443,7 +443,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=200)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=50)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -454,7 +454,7 @@ class Workload:
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
-        self.pool_semaphore = threading.BoundedSemaphore(value=100)
+        self.pool_semaphore = threading.BoundedSemaphore(value=25)
         self.worker_exception = []
 
     def random_points(self, size=1):

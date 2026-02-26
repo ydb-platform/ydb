@@ -198,9 +198,9 @@ public:
                 }
             } else {
                 ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                    .Ticket = SecurityToken,
-                    .Database = Database,
-                    .PeerName = PeerName,
+                    .Ticket = std::string(SecurityToken),
+                    .Database = std::string(Database),
+                    .PeerName = std::string(PeerName),
                     .Entries = Entries
                 }));
             }

@@ -28,11 +28,13 @@ public:
     virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
@@ -91,6 +93,7 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
+        ui32 index,
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
@@ -102,11 +105,13 @@ public:
     void EstablishConnections(NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;

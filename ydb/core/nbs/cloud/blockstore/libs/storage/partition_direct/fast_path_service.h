@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mon/mon.h>
@@ -22,7 +23,7 @@ class TFastPathService
 private:
     TMutex Lock;
     NActors::TActorSystem* const ActorSystem = nullptr;
-    NStorage::NPartitionDirect::IDirectBlockGroupPtr DirectBlockGroup;
+    std::shared_ptr<NStorage::NPartitionDirect::TRegion> Region;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
@@ -35,11 +36,7 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
-        TVector<NKikimr::NBsController::TDDiskId> ddiskIds,
-        TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
-        ui32 blockSize,
-        ui64 blocksCount,
-        ui32 storageMedia,
+        std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
         const NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 

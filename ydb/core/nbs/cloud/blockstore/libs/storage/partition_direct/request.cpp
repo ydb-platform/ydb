@@ -19,13 +19,20 @@ constexpr size_t BlockSize = 4096;
 ////////////////////////////////////////////////////////////////////////////////
 
 TBaseRequestHandler::TBaseRequestHandler(
-    NActors::TActorSystem* actorSystem)
+    NActors::TActorSystem* actorSystem,
+    ui32 vChunkIndex)
     : ActorSystem(actorSystem)
+    , VChunkIndex(vChunkIndex)
 {}
 
 NActors::TActorSystem* TBaseRequestHandler::GetActorSystem() const
 {
     return ActorSystem;
+}
+
+ui32 TBaseRequestHandler::GetVChunkIndex() const
+{
+    return VChunkIndex;
 }
 
 void TBaseRequestHandler::ChildSpanEndOk(ui64 requestId)
@@ -48,11 +55,11 @@ void TBaseRequestHandler::ChildSpanEndError(
 
 TIORequestsHandler::TIORequestsHandler(
     NActors::TActorSystem* actorSystem,
+    ui32 vChunkIndex,
     TBlockRange64 range)
-    : TBaseRequestHandler(actorSystem)
+    : TBaseRequestHandler(actorSystem, vChunkIndex)
     , Range(range)
 {}
-
 
 ui64 TIORequestsHandler::GetStartIndex() const
 {
@@ -73,10 +80,11 @@ ui64 TIORequestsHandler::GetSize() const
 
 TWriteRequestHandler::TWriteRequestHandler(
     NActors::TActorSystem* actorSystem,
+    ui32 vChunkIndex,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TIORequestsHandler(actorSystem, request->Range)
+    : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
 {
     Future = NThreading::NewPromise<TWriteBlocksLocalResponse>();
@@ -88,7 +96,7 @@ TWriteRequestHandler::TWriteRequestHandler(
         NWilson::EFlags::NONE,
         GetActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
-    Span.Attribute("vChunkIndex", static_cast<i64>(0));
+    Span.Attribute("vChunkIndex", static_cast<i64>(vChunkIndex));
     Span.Attribute("startIndex", static_cast<i64>(Request->Range.Start));
     Span.Attribute("size", static_cast<i64>(GetSize()));
 }
@@ -173,10 +181,11 @@ void TWriteRequestHandler::SetResponse(NProto::TError error)
 
 TSyncRequestHandler::TSyncRequestHandler(
     NActors::TActorSystem* actorSystem,
+    ui32 vChunkIndex,
     ui8 persistentBufferIndex,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TBaseRequestHandler(actorSystem)
+    : TBaseRequestHandler(actorSystem, vChunkIndex)
     , PersistentBufferIndex(persistentBufferIndex)
 {
     Span = NWilson::TSpan(
@@ -242,7 +251,7 @@ TVector<NKikimr::NDDisk::TBlockSelector> TSyncRequestHandler::GetBlockSelectors(
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     for (const auto& request: SyncRequests) {
         selectors.push_back(NKikimr::NDDisk::TBlockSelector(
-            0,   // vChunkIndex
+            GetVChunkIndex(),
             request.StartIndex * BlockSize,
             BlockSize));
     }
@@ -265,7 +274,7 @@ TVector<ui64> TSyncRequestHandler::GetLsns() const
 TEraseRequestHandler::TEraseRequestHandler(
     NActors::TActorSystem* actorSystem,
     std::shared_ptr<TSyncRequestHandler> syncRequestHandler)
-    : TBaseRequestHandler(actorSystem)
+    : TBaseRequestHandler(actorSystem, syncRequestHandler->GetVChunkIndex())
     , SyncRequestHandler(std::move(syncRequestHandler))
 {
     Span = NWilson::TSpan(
@@ -325,10 +334,11 @@ TVector<ui64> TEraseRequestHandler::GetLsns() const
 
 TReadRequestHandler::TReadRequestHandler(
     NActors::TActorSystem* actorSystem,
+    ui32 vChunkIndex,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
     ui64 tabletId)
-    : TIORequestsHandler(actorSystem, request->Range)
+    : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
 {
     Y_UNUSED(traceId);
@@ -401,7 +411,9 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     TString name,
     ui64 tabletId,
     ui8 requiredAckCount)
-    : TBaseRequestHandler(actorSystem)
+    : TBaseRequestHandler(
+        actorSystem,
+        0)   // vChunkIndex. Temporary set to 0 since restore will be moved to vchunk.
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {

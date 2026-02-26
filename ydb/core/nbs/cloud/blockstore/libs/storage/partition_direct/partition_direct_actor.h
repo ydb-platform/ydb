@@ -12,6 +12,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -38,7 +39,6 @@ private:
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
-
 
 public:
     TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);

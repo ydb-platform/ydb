@@ -40,10 +40,12 @@ void TInMemoryDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TInMemoryDirectBlockGroup::WriteBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
+    Y_UNUSED(vChunkIndex);
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
 
@@ -112,10 +114,12 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
 
 NThreading::TFuture<TReadBlocksLocalResponse>
 TInMemoryDirectBlockGroup::ReadBlocksLocal(
+    ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
+    Y_UNUSED(vChunkIndex);
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
 

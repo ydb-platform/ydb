@@ -8,6 +8,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -136,15 +137,16 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         StorageConfig.GetPersistentBufferDDiskPoolName());
 
     // TODO: fill with tablet id
-    request->Record.SetTabletId(1);
+    request->Record.SetTabletId(TabletID());
 
-    // TODO: add more direct block groups
-    auto* query = request->Record.AddQueries();
-    query->SetDirectBlockGroupId(0);
+    for (size_t i = 0; i < 32; i++) {
+        auto* query = request->Record.AddQueries();
+        query->SetDirectBlockGroupId(i);
 
-    // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1 vchunk
-    // since disk size will be 128MB.
-    query->SetTargetNumVChunks(1);
+        // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1 vchunk
+        // since disk size will be 128MB.
+        query->SetTargetNumVChunks(1);
+    }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
 }
@@ -162,28 +164,42 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         msg->Record.DebugString().data());
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
-        Y_ABORT_UNLESS(msg->Record.GetResponses().size() == 1);
-        const auto& response = msg->Record.GetResponses()[0];
-        Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == 0);
-        Y_ABORT_UNLESS(response.GetActualNumVChunks() == 1);
+        Y_ABORT_UNLESS(msg->Record.GetResponses().size() == 32);
 
-        TVector<NBsController::TDDiskId> ddiskIds;
-        TVector<NBsController::TDDiskId> persistentBufferDDiskIds;
-        for (const auto& node: response.GetNodes()) {
-            ddiskIds.emplace_back(node.GetDDiskId());
-            persistentBufferDDiskIds.emplace_back(
-                node.GetPersistentBufferDDiskId());
+        TVector<IDirectBlockGroupPtr> directBlockGroups;
+        for (size_t i = 0; i < 32; i++) {
+            const auto& response = msg->Record.GetResponses()[i];
+            Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == i);
+            Y_ABORT_UNLESS(response.GetActualNumVChunks() == 1);
+
+            TVector<NBsController::TDDiskId> ddiskIds;
+            TVector<NBsController::TDDiskId> persistentBufferDDiskIds;
+            for (const auto& node: response.GetNodes()) {
+                ddiskIds.emplace_back(node.GetDDiskId());
+                persistentBufferDDiskIds.emplace_back(
+                    node.GetPersistentBufferDDiskId());
+            }
+
+            directBlockGroups.emplace_back(std::make_shared<TDirectBlockGroup>(
+                TActivationContext::ActorSystem(),
+                TabletID(),
+                1,                 // generation
+                i, // directBlockGroupIndex
+                std::move(ddiskIds),
+                std::move(persistentBufferDDiskIds),
+                VolumeConfig.GetBlockSize(),
+                VolumeConfig.GetPartitions(0).GetBlockCount(),
+                3 // syncRequestsBatchSize
+            ));
+            directBlockGroups[i]->EstablishConnections({});
         }
 
+        auto region = std::make_shared<TRegion>(std::move(directBlockGroups));
         auto fastPathService = std::make_shared<TFastPathService>(
             TActivationContext::ActorSystem(),
-            SelfId().Hash(),   // tabletId
+            TabletID(),
             1,                 // generation
-            std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            VolumeConfig.GetBlockSize(),
-            VolumeConfig.GetPartitions(0).GetBlockCount(),
-            VolumeConfig.GetStorageMediaKind(),   // storageMedia
+            std::move(region),
             StorageConfig,
             AppData()->Counters);
 

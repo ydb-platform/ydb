@@ -83,9 +83,11 @@ std::unique_ptr<TAllocationHolder> TTrackedMemoryChunkProvider::Allocate(size_t 
     });
 
     if (MemoryTracker_) {
-        auto error = MemoryTracker_->TryAcquire(allocatedSize);
-        if (!AllowMemoryOvercommit_) {
-            error.ThrowOnError();
+        if (AllowMemoryOvercommit_) {
+            MemoryTracker_->Acquire(allocatedSize);
+        } else {
+            MemoryTracker_->TryAcquire(allocatedSize)
+                .ThrowOnError();
         }
     }
 

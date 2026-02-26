@@ -138,7 +138,7 @@ public:
         TString FilterExpr_;
         TCallback Callback_;
 
-        bool Started_ = false;
+        std::atomic<bool> Started_ = false;
         bool HasData_ = false;
         bool Frozen_ = false;
         ui64 ExpectedFilteredRows_ = 0;

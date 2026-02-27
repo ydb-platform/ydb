@@ -382,12 +382,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(pr.Size == selector.Size);
 
         ui64 operationCookie = NextCookie++;
-        auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{
-            .Sender = ev->Sender,
-            .Cookie = ev->Cookie,
-            .Session = ev->InterconnectSession,
-            .Span = std::move(span)
-        });
+        auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{.Span = std::move(span)});
         Y_ABORT_UNLESS(inserted);
 
         GetPersistentBufferRecordData(pr, creds.TabletId, selector.VChunkIndex, lsn, [this, selector, operationCookie, ev = std::move(ev)](TRope data) {

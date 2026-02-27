@@ -2291,6 +2291,121 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(0, 0);
     }
 
+    Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
+        constexpr ui32 partitionCount = 10;
+        constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
+        constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.MaxPartitionReadSkew = "10s";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT time FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (time String NOT NULL)
+                )
+                WHERE time LIKE "%lunch%";
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        TVector<TString> firstBatch;
+        for (ui32 p = 0; p < partitionCount; ++p) {
+            firstBatch.push_back(fmt::format("lunch time {}", p));
+            WriteTopicMessage(inputTopicName, fmt::format(R"({{"time": "lunch time {}"}})", p), p);
+        }
+        ReadTopicMessages(outputTopicName, firstBatch, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+
+        Sleep(CheckpointPeriod * 3);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 0);
+        Sleep(TDuration::MilliSeconds(500));
+
+        TVector<TString> secondBatch;
+        for (ui32 p = 0; p < partitionCount; ++p) {
+            secondBatch.push_back(fmt::format("next lunch time {}", p));
+            WriteTopicMessage(inputTopicName, fmt::format(R"({{"time": "next lunch time {}"}})", p), p);
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(2, 1);  // 2 executions (initial + restarted), 1 lease (running)
+        TVector<TString> allExpected;
+        for (const auto& s : firstBatch) {
+            allExpected.push_back(s);
+        }
+        for (const auto& s : secondBatch) {
+            allExpected.push_back(s);
+        }
+        ReadTopicMessages(outputTopicName, allExpected, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+    }
+
+    Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
+        constexpr ui32 partitionCount = 2;
+        constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
+        constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.MaxPartitionReadSkew = "10s";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    ),
+                    WATERMARK_IDLE_TIMEOUT = "PT5S"
+                );
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        TVector<TString> expectedOutputs;
+        for (ui32 i = 0; i < 10; ++i) {
+            TString value = fmt::format("v{}", i);
+            expectedOutputs.push_back("k" + value);
+            WriteTopicMessage(inputTopicName, fmt::format(R"({{"key": "k", "value": "{}"}})", value), 0);
+            ReadTopicMessages(outputTopicName, expectedOutputs);
+        }
+    }
+
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
         constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";

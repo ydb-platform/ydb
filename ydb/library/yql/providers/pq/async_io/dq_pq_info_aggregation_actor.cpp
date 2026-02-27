@@ -1,8 +1,9 @@
-#include "dq_info_aggregation_actor.h"
+#include "dq_pq_info_aggregation_actor.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
@@ -21,12 +22,12 @@ namespace {
 
 using namespace NActors;
 
-class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public IActorExceptionHandler {
-    using TBase = TActor<TDqInfoAggregationActor>;
+class TDqPqInfoAggregationActor : public TActor<TDqPqInfoAggregationActor>, public IActorExceptionHandler {
+    using TBase = TActor<TDqPqInfoAggregationActor>;
 
     struct TPrivateEvents {
         enum EEv : ui32 {
-            EvSendStatistics = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvSendStatistics = TPqInfoAggregationActorEvents::EvEnd,
             EvEnd,
         };
 
@@ -50,7 +51,7 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
     public:
         using TPtr = std::shared_ptr<TAggregatorBase>;
 
-        TAggregatorBase(const TString& name, TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
+        TAggregatorBase(const TString& name, TDqPqInfoAggregationActor* self, const TString& counterId, const NPq::NProto::TEvDqPqUpdateCounterValue::TSettings& settings)
             : Self(self)
             , Name(name)
             , CounterId(counterId)
@@ -81,7 +82,7 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
             return SenderValues.empty();
         }
 
-        void Update(const NDqProto::TEvUpdateCounterValue& value, const TActorId& sender) {
+        void Update(const NPq::NProto::TEvDqPqUpdateCounterValue& value, const TActorId& sender) {
             const auto newValue = GetUpdateValue(value);
             const ui64 newSeqNo = value.GetSeqNo();
             const auto [it, inserted] = SenderValues.emplace(sender, TSenderInfo{.Value = newValue, .SeqNo = newSeqNo});
@@ -114,7 +115,7 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
                 LOG_D("Send value: " << LastSentValue.GetScalar() << ", seq no: " << LastSentValue.GetSeqNo());
 
                 for (const auto& [sender, _] : SenderValues) {
-                    Self->Send(sender, new TInfoAggregationActorEvents::TEvOnAggregateUpdated(LastSentValue), IEventHandle::FlagTrackDelivery);
+                    Self->Send(sender, new TPqInfoAggregationActorEvents::TEvOnAggregateUpdated(LastSentValue), IEventHandle::FlagTrackDelivery);
                 }
             }
         }
@@ -124,7 +125,7 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
         }
 
     protected:
-        virtual i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const = 0;
+        virtual i64 GetUpdateValue(const NPq::NProto::TEvDqPqUpdateCounterValue& value) const = 0;
 
         virtual void DoUpdate(i64 newValue, std::optional<i64> oldValue, const TActorId& sender) = 0;
 
@@ -149,24 +150,24 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
             return false;
         }
 
-        TDqInfoAggregationActor* Self;
+        TDqPqInfoAggregationActor* Self;
         const TString Name;
         const TString CounterId;
         const TDuration SendPeriod;
         const i64 DeltaThreshold = 0;
-        NDqProto::TEvOnAggregatedValueUpdated LastSentValue;
+        NPq::NProto::TEvDqPqOnAggregatedValueUpdated LastSentValue;
         std::unordered_map<TActorId, TSenderInfo> SenderValues;
     };
 
     class TMinAggregator final : public TAggregatorBase {
     public:
-        TMinAggregator(TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
+        TMinAggregator(TDqPqInfoAggregationActor* self, const TString& counterId, const NPq::NProto::TEvDqPqUpdateCounterValue::TSettings& settings)
             : TAggregatorBase(__func__, self, counterId, settings)
         {}
 
     protected:
-        i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const final {
-            Y_VALIDATE(value.GetActionCase() == NDqProto::TEvUpdateCounterValue::kAggMin, "Unexpected action case");
+        i64 GetUpdateValue(const NPq::NProto::TEvDqPqUpdateCounterValue& value) const final {
+            Y_VALIDATE(value.GetActionCase() == NPq::NProto::TEvDqPqUpdateCounterValue::kAggMin, "Unexpected action case");
             return value.GetAggMin();
         }
 
@@ -194,12 +195,12 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
 
     class TSumAggregator final : public TAggregatorBase {
     public:
-        TSumAggregator(TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
+        TSumAggregator(TDqPqInfoAggregationActor* self, const TString& counterId, const NPq::NProto::TEvDqPqUpdateCounterValue::TSettings& settings)
             : TAggregatorBase(__func__, self, counterId, settings)
         {}
 
-        i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const final {
-            Y_VALIDATE(value.GetActionCase() == NDqProto::TEvUpdateCounterValue::kAggSum, "Unexpected action case");
+        i64 GetUpdateValue(const NPq::NProto::TEvDqPqUpdateCounterValue& value) const final {
+            Y_VALIDATE(value.GetActionCase() == NPq::NProto::TEvDqPqUpdateCounterValue::kAggSum, "Unexpected action case");
             return value.GetAggSum();
         }
 
@@ -221,16 +222,16 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
         i64 Sum = 0;
     };
 
-    static constexpr char ActorName[] = "DQ_INFO_AGGREGATION_ACTOR";
+    static constexpr char ActorName[] = "DQ_PQ_INFO_AGGREGATION_ACTOR";
 
 public:
-    explicit TDqInfoAggregationActor(const TTxId& txId)
+    explicit TDqPqInfoAggregationActor(const TTxId& txId)
         : TBase(&TThis::StateFunc)
         , TxId(txId)
     {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TInfoAggregationActorEvents::TEvUpdateCounter, Handle);
+        hFunc(TPqInfoAggregationActorEvents::TEvUpdateCounter, Handle);
         hFunc(TPrivateEvents::TEvSendStatistics, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvents::TEvPoison, Handle);
@@ -242,14 +243,14 @@ public:
     }
 
 private:
-    void Handle(TInfoAggregationActorEvents::TEvUpdateCounter::TPtr& ev) {
+    void Handle(TPqInfoAggregationActorEvents::TEvUpdateCounter::TPtr& ev) {
         const auto& sender = ev->Sender;
         const auto& record = ev->Get()->Record;
         const auto& counterId = record.GetCounterId();
         LOG_D("Received TEvUpdateCounter from: " << sender << ", counter: " << counterId);
         LOG_T("Received TEvUpdateCounter from: " << sender << ", data: " << record.ShortDebugString());
 
-        if (record.GetActionCase() == NDqProto::TEvUpdateCounterValue::ACTION_NOT_SET) {
+        if (record.GetActionCase() == NPq::NProto::TEvDqPqUpdateCounterValue::ACTION_NOT_SET) {
             RemoveSender(sender);
             return;
         }
@@ -257,13 +258,13 @@ private:
         const auto [it, inserted] = AggregateValues.emplace(counterId, nullptr);
         if (inserted) {
             switch (record.GetActionCase()) {
-                case NDqProto::TEvUpdateCounterValue::kAggMin:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::kAggMin:
                     it->second = std::make_shared<TMinAggregator>(this, counterId, record.GetSettings());
                     break;
-                case NDqProto::TEvUpdateCounterValue::kAggSum:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::kAggSum:
                     it->second = std::make_shared<TSumAggregator>(this, counterId, record.GetSettings());
                     break;
-                case NDqProto::TEvUpdateCounterValue::ACTION_NOT_SET:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::ACTION_NOT_SET:
                     Y_VALIDATE(false, "Unexpected action case");
             }
 
@@ -336,8 +337,14 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateDqInfoAggregationActor(const TTxId& txId) {
-    return new TDqInfoAggregationActor(txId);
+IActor* CreateDqPqInfoAggregationActor(const TTxId& txId) {
+    return new TDqPqInfoAggregationActor(txId);
+}
+
+void RegisterDqPqInfoAggregationActorFactory(TDqAsyncIoFactory& factory) {
+    factory.RegisterControlPlane("PqInfoAggregator", [](IDqAsyncIoFactory::TControlPlaneArguments&& args) {
+        return CreateDqPqInfoAggregationActor(args.TxId);
+    });
 }
 
 } // namespace NYql::NDq

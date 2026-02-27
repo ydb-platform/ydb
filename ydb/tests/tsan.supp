@@ -1,2 +1,7 @@
 # see https://github.com/ydb-platform/ydb/issues/34930
 race:free_threadstate
+
+# see https://github.com/ydb-platform/ydb/issues/34938
+# Data race in grpcio PollerCompletionQueue: _poll (worker thread) vs shutdown (main thread during finalization).
+# The race is inside the grpcio Cython code, not in YDB.
+race:PollerCompletionQueue

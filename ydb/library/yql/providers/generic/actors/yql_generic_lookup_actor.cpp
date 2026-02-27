@@ -150,6 +150,7 @@ namespace NYql::NDq {
             }
             auto component = taskCounters->GetSubgroup("component", "LookupSrc");
             Count = component->GetCounter("Reqs");
+            Fullscans = component->GetCounter("Fullscans");
             Keys = component->GetCounter("Keys");
             ResultChunks = component->GetCounter("Chunks");
             ResultRows = component->GetCounter("Rows");
@@ -351,6 +352,9 @@ namespace NYql::NDq {
                 Count->Inc();
                 InFlight->Inc();
                 Keys->Add(request->size());
+                if (fullscanLimit > 0) {
+                    Fullscans->Inc();
+                }
             }
             ++LocalInFlight;
 
@@ -642,6 +646,7 @@ namespace NYql::NDq {
         ui32 LocalInFlight = 0;
         ILookupRetryPolicy::TPtr RetryPolicy;
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
         ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;

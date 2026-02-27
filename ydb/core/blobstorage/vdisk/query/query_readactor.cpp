@@ -41,8 +41,10 @@ namespace NKikimr {
 
                 // create request
                 std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
-                            Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
-                            Priority, cookie));
+                    Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
+                    Priority, cookie));
+
+                msg->BlobId = it->HugeBlobId;
 
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));

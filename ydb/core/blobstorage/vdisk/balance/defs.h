@@ -77,6 +77,7 @@ namespace NBalancing {
         TLogoBlobID Key;
         NMatrix::TVectorType PartsMask;
         std::variant<TDiskPart, TRope> PartData;
+        bool IsHugeBlob;
     };
 
     static constexpr ui64 READ_TIMEOUT_TAG = 0;

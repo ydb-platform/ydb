@@ -7,5 +7,7 @@ items:
   href: S3-enrichment.md
 - name: Форматы данных при чтении/записи топиков
   href: streaming-query-formats.md
+- name: Гарантии доставки данных
+  href: guarantees.md
 - name: Чекпоинты
   href: checkpoints.md

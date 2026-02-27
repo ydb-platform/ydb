@@ -215,6 +215,7 @@ class YdbQueue(object):
     def __init__(self, idx, database, stats, driver, pool, mode):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
+        self.mode = mode
         self.table_name = self.table_name_with_timestamp()
         self.queries = {}
         self.pool = pool
@@ -227,7 +228,6 @@ class YdbQueue(object):
         self.ops = ydb.BaseRequestSettings().with_operation_timeout(19).with_timeout(20)
         self.driver.scheme_client.make_directory(self.working_dir)
         self.driver.scheme_client.make_directory(self.copies_dir)
-        self.mode = mode
         print("Working dir %s" % self.working_dir)
         self.prepare_new_queue(self.table_name)
         # a queue with tables to drop
@@ -240,8 +240,8 @@ class YdbQueue(object):
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
-            return os.path.join(working_dir, "queue_" + str(timestamp()))
-        return os.path.join(self.working_dir, "queue_" + str(timestamp()))
+            return os.path.join(working_dir, f"queue_{self.mode}" + str(timestamp()))
+        return os.path.join(self.working_dir, f"queue_{self.mode}" + str(timestamp()))
 
     def prepare_new_queue(self, table_name=None):
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
@@ -443,7 +443,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=50)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -454,7 +454,7 @@ class Workload:
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
-        self.pool_semaphore = threading.BoundedSemaphore(value=25)
+        self.pool_semaphore = threading.BoundedSemaphore(value=2)
         self.worker_exception = []
 
     def random_points(self, size=1):

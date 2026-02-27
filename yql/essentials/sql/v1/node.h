@@ -1262,6 +1262,7 @@ struct TIndexDescription {
         GlobalFulltextRelevance,
         LocalBloomFilter,
         LocalBloomNgramFilter,
+        GlobalJson
     };
 
     struct TIndexSetting {

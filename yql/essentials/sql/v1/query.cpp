@@ -156,6 +156,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("globalFulltextPlain");
         case TIndexDescription::EType::GlobalFulltextRelevance:
             return node.Q("globalFulltextRelevance");
+        case TIndexDescription::EType::GlobalJson:
+            return node.Q("globalJson");
         case TIndexDescription::EType::LocalBloomFilter:
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:

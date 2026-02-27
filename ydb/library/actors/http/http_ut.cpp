@@ -10,7 +10,9 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/resource/resource.h>
 #include <util/system/tempfile.h>
+#include <util/system/condvar.h>
 #include <thread>
+#include <atomic>
 
 enum EService : NActors::NLog::EComponent {
     MIN,
@@ -1483,8 +1485,40 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 }
 
 Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
+    // Backend that does not save anything and only signals
+    // when a given substring is written to the log to avoid Sleep().
+    class TSignalingLogBackend : public TLogBackend {
+    public:
+        TSignalingLogBackend(TStringBuf expectedSubstring)
+            : ExpectedSubstring_(expectedSubstring)
+        {
+        }
+
+        void WriteData(const TLogRecord& rec) override {
+            if (TStringBuf(rec.Data, rec.Len).Contains(ExpectedSubstring_)) {
+                Seen_.store(true);
+                TGuard<TMutex> g(Mutex_);
+                CondVar_.Signal();
+            }
+        }
+
+        void ReopenLog() override {}
+
+        void WaitFor(TDuration timeout) {
+            TGuard<TMutex> g(Mutex_);
+            CondVar_.WaitT(Mutex_, timeout, [this] { return Seen_.load(); });
+        }
+
+        bool Seen() const { return Seen_.load(); }
+
+    private:
+        TStringBuf ExpectedSubstring_;
+        std::atomic<bool> Seen_{false};
+        TMutex Mutex_;
+        TCondVar CondVar_;
+    };
+
     struct TMtlsTestSetup {
-        TStringStream LogStream;
         TAutoPtr<TLogBackend> LogBackend;
         NKikimr::TCertAndKey CaCertAndKey;
         NKikimr::TCertAndKey ServerCertAndKey;
@@ -1505,10 +1539,16 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         NActors::TActorId ProxyId;
         NActors::TActorId ServerId;
 
-        TMtlsTestSetup(const bool useRealThreads = false, const bool secureConnection = true)
-            : LogBackend(new TStreamLogBackend(&LogStream))
-            , ActorSystem(1, useRealThreads)
+        TMtlsTestSetup(
+            const bool useRealThreads = false,
+            const bool secureConnection = true,
+            TAutoPtr<TLogBackend> customLogBackend = nullptr
+        )
+            : ActorSystem(1, useRealThreads)
         {
+            if (customLogBackend) {
+                LogBackend = std::move(customLogBackend);
+            }
             // Generate certificates
             CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
             ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
@@ -1532,7 +1572,9 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             UntrustedClientCertFile.Write(UntrustedClientCertAndKey.Certificate.c_str(), UntrustedClientCertAndKey.Certificate.size());
             UntrustedClientKeyFile.Write(UntrustedClientCertAndKey.PrivateKey.c_str(), UntrustedClientCertAndKey.PrivateKey.size());
 
-            ActorSystem.SetLogBackend(LogBackend);
+            if (LogBackend) {
+                ActorSystem.SetLogBackend(LogBackend);
+            }
             ActorSystem.Initialize();
 
             NActors::IActor* proxy = NHttp::CreateHttpProxy();
@@ -1575,30 +1617,25 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
     }
 
     Y_UNIT_TEST(UntrustedClientCertificate) {
-        // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
-        TMtlsTestSetup setup(/* useRealThreads */ true);
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
 
-        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
-        std::thread clientThread([&setup, httpRequest]() {
-            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
-            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
-            // client thread blocked waiting for response from server.
-            NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
-        });
+        {
+            // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend));
 
-        const TDuration timeout = TDuration::Seconds(2);
-        const TInstant deadline = TInstant::Now() + timeout;
-        bool errorFound = false;
-        while (TInstant::Now() < deadline) {
-            if (setup.LogStream.Str().Contains("connection closed - error in Accept")) {
-                errorFound = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(50));
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
         }
-        UNIT_ASSERT_C(errorFound, "No connection error happened for untrusted client");
 
-        clientThread.join();
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened for untrusted client");
     }
 
     Y_UNIT_TEST(NoClientCertificate) {

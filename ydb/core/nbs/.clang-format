@@ -1,7 +1,6 @@
 ---
 Language:        Cpp
 AccessModifierOffset: -4
-VanillaContinuationIndenter: true
 AlignAfterOpenBracket: AlwaysBreak
 AlignArrayOfStructures: None
 AlignConsecutiveAssignments:
@@ -371,3 +370,7 @@ WhitespaceSensitiveMacros:
   - NS_SWIFT_NAME
   - PP_STRINGIZE
   - STRINGIZE
+
+# Use unpatched ContinuationIndenter,
+# remove this line if you use vanilla clang-format code
+VanillaContinuationIndenter: true

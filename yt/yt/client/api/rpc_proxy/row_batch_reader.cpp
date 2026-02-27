@@ -5,9 +5,11 @@
 
 #include <yt/yt/client/table_client/name_table.h>
 
+#include <yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
+
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 
-#include <yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
+#include <yt/yt/core/rpc/dispatcher.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -137,7 +139,7 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
                 }));
             }
             return MakeFuture(std::move(rows));
-        }));
+        }).AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
 }
 
 void TRowBatchReader::ApplyStatistics(const NProto::TRowsetStatistics& /*statistics*/)

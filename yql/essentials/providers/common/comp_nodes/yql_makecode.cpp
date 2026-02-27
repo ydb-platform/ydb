@@ -64,8 +64,8 @@ public:
 
             case NYql::TExprNode::List: {
                 NYql::TExprNode::TListType items;
-                for (ui32 i = 0; i < Args_.size(); ++i) {
-                    auto argValue = Args_[i]->GetValue(ctx);
+                for (const auto& arg : Args_) {
+                    auto argValue = arg->GetValue(ctx);
                     auto iter = argValue.GetListIterator();
                     NUdf::TUnboxedValue codeValue;
                     while (iter.Next(codeValue)) {

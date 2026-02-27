@@ -23,6 +23,7 @@
 #include <openssl/sha.h>
 
 #include <map>
+#include <ranges>
 #include <unordered_set>
 
 namespace NYql {
@@ -172,9 +173,9 @@ struct TContext {
     }
 
     TExprNode::TListType FindBinding(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Bindings.find(name);
-            if (it->Bindings.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Bindings.find(name);
+            if (frame.Bindings.cend() != r) {
                 return r->second;
             }
         }
@@ -183,9 +184,9 @@ struct TContext {
     }
 
     TString FindImport(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Imports.find(name);
-            if (it->Imports.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Imports.find(name);
+            if (frame.Imports.cend() != r) {
                 return r->second;
             }
         }

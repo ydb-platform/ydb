@@ -642,8 +642,7 @@ public:
     TNodePtr Build(TContext& ctx) final {
         TNodePtr block;
         auto muxArgs = Y();
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (auto& source : Sources_) {
             auto input = source->Build(ctx);
             auto ref = ctx.MakeName("src");
             muxArgs->Add(ref);

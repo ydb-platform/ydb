@@ -279,8 +279,7 @@ bool ScanColumns(
             }
 
             for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
-                for (ui32 inputIndex = 0; inputIndex < inputs.size(); ++inputIndex) {
-                    auto& x = inputs[inputIndex];
+                for (auto& x : inputs) {
                     if (priority != x.Priority) {
                         continue;
                     }

@@ -279,8 +279,7 @@ public:
                 return nullptr;
             }
 
-            for (ui32 index = 0; index < Args_.size(); ++index) {
-                auto& arg = Args_[index];
+            for (auto& arg : Args_) {
                 if (arg.HasAt) {
                     ctx.Error(Pos_) << "Temporary tables are not supported here";
                     return nullptr;
@@ -1096,14 +1095,14 @@ public:
         Node_ = L(Node_, datasource);
 
         if (Name_ == TStringBuf("flags")) {
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         }
         else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Name_));
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         }
         else if (Name_ == TStringBuf("auth")) {

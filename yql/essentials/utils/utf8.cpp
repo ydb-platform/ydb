@@ -3,6 +3,7 @@
 #include <util/charset/wide.h>
 
 #include <cctype>
+#include <ranges>
 #include <vector>
 #include <array>
 
@@ -262,8 +263,7 @@ std::optional<std::string> NextValidUtf8(const std::string_view& str) {
     TUtf32String wide = UTF8ToUTF32<false>(str);
     bool incremented = false;
     size_t toDrop = 0;
-    for (auto it = wide.rbegin(); it != wide.rend(); ++it) {
-        auto& c = *it;
+    for (char32_t& c : std::ranges::reverse_view(wide)) {
         if (c < 0x10ffff) {
             c = (c == 0xd7ff) ? 0xe000 : (c + 1);
             incremented = true;
@@ -288,8 +288,7 @@ std::optional<std::string> NextLexicographicString(const std::string_view& str) 
     bool incremented = false;
     size_t toDrop = 0;
     std::string result{str};
-    for (auto it = result.rbegin(); it != result.rend(); ++it) {
-        auto& c = *it;
+    for (char& c : std::ranges::reverse_view(result)) {
         if (ui8(c) < 0xff) {
             ++c;
             incremented = true;

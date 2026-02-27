@@ -1654,8 +1654,8 @@ private:
             auto srtuctType = underlyingType->Cast<TStructExprType>();
             const auto& items = srtuctType->GetItems();
             bool allVoid = true;
-            for (ui32 i = 0; i < items.size(); ++i) {
-                allVoid = allVoid && (items[i]->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
+            for (const auto* item : items) {
+                allVoid = allVoid && (item->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
             }
 
             Out_ << (allVoid ? TStringBuf("Enum<") : TStringBuf("Variant<"));

@@ -1515,8 +1515,8 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
 TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
     std::vector<TType*> blockItems;
     blockItems.reserve(wideComponents.size());
-    for (size_t i = 0; i < wideComponents.size(); i++) {
-        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
+    for (auto* wideComponent : wideComponents) {
+        blockItems.push_back(NewBlockType(wideComponent, TBlockType::EShape::Many));
     }
     blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
     return NewMultiType(blockItems);
@@ -6701,8 +6701,8 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         }
 
         measureInputDataArg = Arg(NewListType(measureInputDataRowType));
-        for (size_t i = 0; i != getMeasures.size(); ++i) {
-            measures.push_back(getMeasures[i](measureInputDataArg, matchedVarsArg));
+        for (const auto& getMeasure : getMeasures) {
+            measures.push_back(getMeasure(measureInputDataArg, matchedVarsArg));
         }
     }
 

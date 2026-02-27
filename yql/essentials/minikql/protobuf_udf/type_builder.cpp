@@ -87,8 +87,8 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     , Info_(nullptr)
     , YsonType_(nullptr)
 {
-    for (size_t i = 0; i < BasicTypes_.size(); ++i) {
-        BasicTypes_[i] = nullptr;
+    for (auto& basicType : BasicTypes_) {
+        basicType = nullptr;
     }
 }
 

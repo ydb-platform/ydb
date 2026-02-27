@@ -139,9 +139,9 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joi
         return false;
     }
 
-    for (size_t i = 0; i < stats.KeyColumns->Data.size(); i++) {
+    for (const auto& name : stats.KeyColumns->Data) {
         if (std::find_if(joinKeys.begin(), joinKeys.end(),
-                         [&](const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i]; }) == joinKeys.end()) {
+                         [&](const TJoinColumn& c) { return c.AttributeName == name; }) == joinKeys.end()) {
             return false;
         }
     }

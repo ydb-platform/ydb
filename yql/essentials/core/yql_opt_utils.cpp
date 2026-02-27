@@ -869,13 +869,13 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
                 .Build());
         } else {
             const auto& multiFields = column->Child(0)->Children();
-            for (ui32 field = 0; field < multiFields.size(); ++field) {
+            for (const auto& multiField : multiFields) {
                 finalRowNodes.push_back(ctx.Builder(pos)
                     .List()
-                        .Atom(0, multiFields[field]->Content())
+                        .Atom(0, multiField->Content())
                         .Callable(1, "Member")
                             .Add(0, opt)
-                            .Atom(1, multiFields[field]->Content())
+                            .Atom(1, multiField->Content())
                         .Seal()
                     .Seal()
                     .Build());
@@ -1848,9 +1848,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
             if (node->Head().IsList()) {
                 auto dependsOnArgs = node->Head().ChildrenList();
                 bool changed = false;
-                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
-                    if (dependsOnArgs[i].Get() == arg) {
-                        dependsOnArgs[i] = placeHolder;
+                for (auto& dependsOnArg : dependsOnArgs) {
+                    if (dependsOnArg.Get() == arg) {
+                        dependsOnArg = placeHolder;
                         changed = true;
                     }
                 }

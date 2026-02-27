@@ -7502,12 +7502,12 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 
             returnType = *inputArrayType;
         }
     } else if (returnType == NPg::AnyElementOid) {
-        for (ui32 i = 0; i < argTypes.size(); ++i) {
-            if (!argTypes[i]) {
+        for (const ui32 argType : argTypes) {
+            if (!argType) {
                 continue;
             }
 
-            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            const auto& typeDesc = NPg::LookupType(argType);
             if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
                 returnType = typeDesc.ElementTypeId;
                 return;

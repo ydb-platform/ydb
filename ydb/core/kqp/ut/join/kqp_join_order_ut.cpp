@@ -807,6 +807,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckSorting(plan));
     }
 
+    Y_UNIT_TEST_TWIN(TPCDS14, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds14.sql", "stats/tpcds1000s.json", false, ColumnStore);
+    }
+
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }

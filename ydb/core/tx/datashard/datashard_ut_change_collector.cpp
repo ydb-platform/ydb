@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         {
         }
 
-        TStructRecord(const NACLib::TUserContext::TPtr userCtx, 
+        TStructRecord(const NACLib::TUserContext::TPtr userCtx,
                 NTable::ERowOp rop,
                 const TStructKey<ui32>& key,
                 const TStructValue& update = {},

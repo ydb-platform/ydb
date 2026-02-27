@@ -3784,7 +3784,7 @@ public:
             : (TxManager->IsVolatile()
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
-        if (UserCtx != nullptr) {                
+        if (UserCtx != nullptr) {
             evWrite->Record.SetUserSID(UserCtx->GetUserSID());
             evWrite->Record.SetUserTraceId(UserCtx->GetUserTraceId());
         }

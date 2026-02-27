@@ -293,7 +293,6 @@ private:
     bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         Y_ABORT("Unimplemented!");
     }
-
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     NYql::TIssueManager IssueManager;

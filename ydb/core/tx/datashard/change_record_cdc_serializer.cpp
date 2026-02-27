@@ -545,7 +545,7 @@ protected:
             if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
                 auto& userIdentityJson = json["userIdentity"];
                 if (userCtx->GetUserSID() == BUILTIN_ACL_CDC_TTL) {
-                    userIdentityJson["type"] = "Service";   
+                    userIdentityJson["type"] = "Service";
                     userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
                 } else {
                     userIdentityJson["type"] = "User";

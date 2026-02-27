@@ -6,7 +6,6 @@
 
 namespace NKikimr::NChangeExchange {
 
-
 TChangeRecordBase::~TChangeRecordBase() {}
 
 TIntrusivePtr<NACLib::TUserContext> TChangeRecordBase::GetUserCtx() const {

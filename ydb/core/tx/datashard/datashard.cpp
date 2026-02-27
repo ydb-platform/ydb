@@ -900,10 +900,10 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
-        
+
         TString userSID;
         TString userTraceId;
-        
+
         auto userCtx = record.GetUserCtx();
         if (userCtx != nullptr) {
             userSID = userCtx->GetUserSID();
@@ -3388,7 +3388,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
             .WithUserSID(ev->Get()->Record.GetUserSID())
             .WithUserTraceId(ev->Get()->Record.GetUserTraceId())
             .Build();
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx), 
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx),
             ctx );
     }
 }

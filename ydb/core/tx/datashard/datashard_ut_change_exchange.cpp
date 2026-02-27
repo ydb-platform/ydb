@@ -1776,7 +1776,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto userCtx = NACLib::TUserContextBuilder()
             .WithUserTraceId("trace-id")
             .Build();
-        auto checkUserCtx = NACLib::TUserContextBuilder().Build();            
+        auto checkUserCtx = NACLib::TUserContextBuilder().Build();
         CheckLogDebezium(userCtx, checkUserCtx, true, false);
     }
 

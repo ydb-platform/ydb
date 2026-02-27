@@ -24,6 +24,7 @@
 
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/container/flat_hash_map.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
 

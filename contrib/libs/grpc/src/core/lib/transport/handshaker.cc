@@ -22,6 +22,7 @@
 
 #include <inttypes.h>
 
+#include <initializer_list>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <utility>
@@ -31,6 +32,7 @@
 
 #include <grpc/byte_buffer.h>
 #include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
 #include <grpc/slice_buffer.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>

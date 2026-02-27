@@ -22,6 +22,7 @@
 
 #include <string.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "y_absl/strings/str_cat.h"

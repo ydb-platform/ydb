@@ -50,7 +50,6 @@ void gpr_free(void* p) { free(p); }
 
 void* gpr_realloc(void* p, size_t size) {
   if ((size == 0) && (p == nullptr)) return nullptr;
-  // NOLINTNEXTLINE(bugprone-suspicious-realloc-usage)
   p = realloc(p, size);
   if (!p) {
     abort();

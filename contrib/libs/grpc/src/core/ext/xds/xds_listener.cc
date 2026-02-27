@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 
+#include <initializer_list>
 #include <set>
 #include <utility>
 
@@ -43,7 +44,8 @@
 #include "google/protobuf/any.upb.h"
 #include "google/protobuf/duration.upb.h"
 #include "google/protobuf/wrappers.upb.h"
-#include "upb/text/encode.h"
+#include "upb/text_encode.h"
+#include "upb/upb.h"
 
 #include <grpc/support/log.h>
 
@@ -57,7 +59,6 @@
 #include "src/core/lib/gprpp/match.h"
 #include "src/core/lib/gprpp/validation_errors.h"
 #include "src/core/lib/iomgr/sockaddr.h"
-#include "src/core/lib/matchers/matchers.h"
 
 namespace grpc_core {
 
@@ -72,8 +73,8 @@ TString XdsListenerResource::HttpConnectionManager::ToString() const {
       [](const TString& rds_name) {
         return y_absl::StrCat("rds_name=", rds_name);
       },
-      [](const std::shared_ptr<const XdsRouteConfigResource>& route_config) {
-        return y_absl::StrCat("route_config=", route_config->ToString());
+      [](const XdsRouteConfigResource& route_config) {
+        return y_absl::StrCat("route_config=", route_config.ToString());
       }));
   contents.push_back(y_absl::StrCat("http_max_stream_duration=",
                                   http_max_stream_duration.ToString()));
@@ -488,24 +489,20 @@ XdsListenerResource::HttpConnectionManager HttpConnectionManagerParse(
   return http_connection_manager;
 }
 
-y_absl::StatusOr<std::shared_ptr<const XdsListenerResource>>
-LdsResourceParseClient(
+y_absl::StatusOr<XdsListenerResource> LdsResourceParseClient(
     const XdsResourceType::DecodeContext& context,
     const envoy_config_listener_v3_ApiListener* api_listener) {
-  auto lds_update = std::make_shared<XdsListenerResource>();
+  XdsListenerResource lds_update;
   ValidationErrors errors;
   ValidationErrors::ScopedField field(&errors, "api_listener.api_listener");
   auto* api_listener_field =
       envoy_config_listener_v3_ApiListener_api_listener(api_listener);
   auto extension = ExtractXdsExtension(context, api_listener_field, &errors);
   if (extension.has_value()) {
-    lds_update->listener = HttpConnectionManagerParse(
+    lds_update.listener = HttpConnectionManagerParse(
         /*is_client=*/true, context, std::move(*extension), &errors);
   }
-  if (!errors.ok()) {
-    return errors.status(y_absl::StatusCode::kInvalidArgument,
-                         "errors validating ApiListener");
-  }
+  if (!errors.ok()) return errors.status("errors validating ApiListener");
   return std::move(lds_update);
 }
 
@@ -990,9 +987,9 @@ XdsListenerResource::FilterChainMap BuildFilterChainMap(
   return BuildFromInternalFilterChainMap(&internal_filter_chain_map);
 }
 
-y_absl::StatusOr<std::shared_ptr<const XdsListenerResource>>
-LdsResourceParseServer(const XdsResourceType::DecodeContext& context,
-                       const envoy_config_listener_v3_Listener* listener) {
+y_absl::StatusOr<XdsListenerResource> LdsResourceParseServer(
+    const XdsResourceType::DecodeContext& context,
+    const envoy_config_listener_v3_Listener* listener) {
   ValidationErrors errors;
   XdsListenerResource::TcpListener tcp_listener;
   // address
@@ -1049,16 +1046,13 @@ LdsResourceParseServer(const XdsResourceType::DecodeContext& context,
     }
   }
   // Return result.
-  if (!errors.ok()) {
-    return errors.status(y_absl::StatusCode::kInvalidArgument,
-                         "errors validating server Listener");
-  }
-  auto lds_update = std::make_shared<XdsListenerResource>();
-  lds_update->listener = std::move(tcp_listener);
+  if (!errors.ok()) return errors.status("errors validating server Listener");
+  XdsListenerResource lds_update;
+  lds_update.listener = std::move(tcp_listener);
   return lds_update;
 }
 
-y_absl::StatusOr<std::shared_ptr<const XdsListenerResource>> LdsResourceParse(
+y_absl::StatusOr<XdsListenerResource> LdsResourceParse(
     const XdsResourceType::DecodeContext& context,
     const envoy_config_listener_v3_Listener* listener) {
   // Check whether it's a client or server listener.
@@ -1126,9 +1120,10 @@ XdsResourceType::DecodeResult XdsListenerResourceType::Decode(
     if (GRPC_TRACE_FLAG_ENABLED(*context.tracer)) {
       gpr_log(GPR_INFO, "[xds_client %p] parsed Listener %s: %s",
               context.client, result.name->c_str(),
-              (*listener)->ToString().c_str());
+              listener->ToString().c_str());
     }
-    result.resource = std::move(*listener);
+    result.resource =
+        std::make_unique<XdsListenerResource>(std::move(*listener));
   }
   return result;
 }

@@ -25,7 +25,6 @@
 
 #include <grpc/event_engine/event_engine.h>
 
-#include "src/core/lib/event_engine/forkable.h"
 #include "src/core/lib/event_engine/poller.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine_closure.h"
 
@@ -88,8 +87,7 @@ class EventHandle {
   virtual ~EventHandle() = default;
 };
 
-class PosixEventPoller : public grpc_event_engine::experimental::Poller,
-                         public Forkable {
+class PosixEventPoller : public grpc_event_engine::experimental::Poller {
  public:
   // Return an opaque handle to perform actions on the provided file descriptor.
   virtual EventHandle* CreateHandle(int fd, y_absl::string_view name,

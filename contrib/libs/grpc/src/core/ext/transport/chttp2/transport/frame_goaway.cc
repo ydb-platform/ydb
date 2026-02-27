@@ -22,6 +22,8 @@
 
 #include <string.h>
 
+#include <initializer_list>
+
 #include "y_absl/base/attributes.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_format.h"

@@ -295,23 +295,23 @@ class CallOpSendMessage {
   /// Send \a message using \a options for the write. The \a options are cleared
   /// after use.
   template <class M>
-  GRPC_MUST_USE_RESULT Status SendMessage(const M& message,
-                                          WriteOptions options);
+  Status SendMessage(const M& message,
+                     WriteOptions options) GRPC_MUST_USE_RESULT;
 
   template <class M>
-  GRPC_MUST_USE_RESULT Status SendMessage(const M& message);
+  Status SendMessage(const M& message) GRPC_MUST_USE_RESULT;
 
   /// Send \a message using \a options for the write. The \a options are cleared
   /// after use. This form of SendMessage allows gRPC to reference \a message
   /// beyond the lifetime of SendMessage.
   template <class M>
-  GRPC_MUST_USE_RESULT Status SendMessagePtr(const M* message,
-                                             WriteOptions options);
+  Status SendMessagePtr(const M* message,
+                        WriteOptions options) GRPC_MUST_USE_RESULT;
 
   /// This form of SendMessage allows gRPC to reference \a message beyond the
   /// lifetime of SendMessage.
   template <class M>
-  GRPC_MUST_USE_RESULT Status SendMessagePtr(const M* message);
+  Status SendMessagePtr(const M* message) GRPC_MUST_USE_RESULT;
 
  protected:
   void AddOp(grpc_op* ops, size_t* nops) {

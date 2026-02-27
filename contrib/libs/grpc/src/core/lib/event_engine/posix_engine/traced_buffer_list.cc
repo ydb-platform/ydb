@@ -279,8 +279,6 @@ void TracedBufferList::ProcessTimestamp(struct sock_extended_err* serr,
       elem = elem->next_;
       continue;
     }
-    g_timestamps_callback(elem->arg_, &(elem->ts_),
-                          y_absl::DeadlineExceededError("Ack timed out"));
     if (prev != nullptr) {
       prev->next_ = elem->next_;
       delete elem;

@@ -41,9 +41,7 @@ class TlsCredentials final : public grpc_channel_credentials {
       grpc_core::RefCountedPtr<grpc_call_credentials> call_creds,
       const char* target_name, grpc_core::ChannelArgs* args) override;
 
-  static grpc_core::UniqueTypeName Type();
-
-  grpc_core::UniqueTypeName type() const override { return Type(); }
+  grpc_core::UniqueTypeName type() const override;
 
   grpc_tls_credentials_options* options() const { return options_.get(); }
 

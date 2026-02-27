@@ -27,6 +27,7 @@
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/channel/promise_based_filter.h"
 #include "src/core/lib/config/core_configuration.h"
@@ -35,6 +36,8 @@
 #include "src/core/lib/promise/context.h"
 #include "src/core/lib/promise/map.h"
 #include "src/core/lib/promise/pipe.h"
+#include "src/core/lib/promise/poll.h"
+#include "src/core/lib/surface/channel_init.h"
 #include "src/core/lib/surface/channel_stack_type.h"
 #include "src/core/lib/transport/transport.h"
 
@@ -96,8 +99,12 @@ ArenaPromise<ServerMetadataHandle> ServerCallTracerFilter::MakeCallPromise(
 }  // namespace
 
 void RegisterServerCallTracerFilter(CoreConfiguration::Builder* builder) {
-  builder->channel_init()->RegisterFilter(GRPC_SERVER_CHANNEL,
-                                          &ServerCallTracerFilter::kFilter);
+  builder->channel_init()->RegisterStage(
+      GRPC_SERVER_CHANNEL, GRPC_CHANNEL_INIT_BUILTIN_PRIORITY,
+      [](ChannelStackBuilder* builder) {
+        builder->AppendFilter(&ServerCallTracerFilter::kFilter);
+        return true;
+      });
 }
 
 }  // namespace grpc_core

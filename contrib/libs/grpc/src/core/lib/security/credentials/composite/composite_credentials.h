@@ -56,7 +56,7 @@ class grpc_composite_channel_credentials : public grpc_channel_credentials {
 
   grpc_core::RefCountedPtr<grpc_channel_credentials>
   duplicate_without_call_credentials() override {
-    return inner_creds_->duplicate_without_call_credentials();
+    return inner_creds_;
   }
 
   grpc_core::RefCountedPtr<grpc_channel_security_connector>
@@ -69,9 +69,7 @@ class grpc_composite_channel_credentials : public grpc_channel_credentials {
     return inner_creds_->update_arguments(std::move(args));
   }
 
-  static grpc_core::UniqueTypeName Type();
-
-  grpc_core::UniqueTypeName type() const override { return Type(); }
+  grpc_core::UniqueTypeName type() const override;
 
   const grpc_channel_credentials* inner_creds() const {
     return inner_creds_.get();

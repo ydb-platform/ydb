@@ -22,6 +22,8 @@
 
 #include <utility>
 
+#include "y_absl/strings/string_view.h"
+
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/string_util.h>

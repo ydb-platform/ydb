@@ -22,7 +22,6 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log_windows.h>
 
-#include "src/core/lib/event_engine/thread_pool/thread_pool.h"
 #include "src/core/lib/event_engine/time_util.h"
 #include "src/core/lib/event_engine/trace.h"
 #include "src/core/lib/event_engine/windows/iocp.h"
@@ -33,8 +32,8 @@
 namespace grpc_event_engine {
 namespace experimental {
 
-IOCP::IOCP(ThreadPool* thread_pool) noexcept
-    : thread_pool_(thread_pool),
+IOCP::IOCP(Executor* executor) noexcept
+    : executor_(executor),
       iocp_handle_(CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr,
                                           (ULONG_PTR) nullptr, 0)) {
   GPR_ASSERT(iocp_handle_);
@@ -45,7 +44,7 @@ IOCP::IOCP(ThreadPool* thread_pool) noexcept
 IOCP::~IOCP() {}
 
 std::unique_ptr<WinSocket> IOCP::Watch(SOCKET socket) {
-  auto wrapped_socket = std::make_unique<WinSocket>(socket, thread_pool_);
+  auto wrapped_socket = std::make_unique<WinSocket>(socket, executor_);
   HANDLE ret = CreateIoCompletionPort(
       reinterpret_cast<HANDLE>(socket), iocp_handle_,
       reinterpret_cast<uintptr_t>(wrapped_socket.get()), 0);

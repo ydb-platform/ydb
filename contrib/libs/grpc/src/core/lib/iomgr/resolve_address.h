@@ -23,12 +23,10 @@
 
 #include <stddef.h>
 
-#include "y_absl/container/flat_hash_set.h"
 #include "y_absl/status/statusor.h"
 
 #include <grpc/event_engine/event_engine.h>
 
-#include "src/core/lib/event_engine/handle_containers.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/pollset_set.h"
@@ -45,21 +43,9 @@ constexpr Duration kDefaultDNSRequestTimeout = Duration::Minutes(2);
 // A singleton class used for async and blocking DNS resolution
 class DNSResolver {
  public:
-  /// Task handle for DNS Resolution requests.
-  struct LookupTaskHandle {
-    intptr_t keys[2];
-    static const LookupTaskHandle kInvalid;
-    friend bool operator==(const LookupTaskHandle& lhs,
-                           const LookupTaskHandle& rhs);
-    friend bool operator!=(const LookupTaskHandle& lhs,
-                           const LookupTaskHandle& rhs);
-  };
-  using TaskHandle = LookupTaskHandle;
-  using TaskHandleSet = y_absl::flat_hash_set<
-      TaskHandle,
-      grpc_event_engine::experimental::TaskHandleComparator<TaskHandle>::Hash>;
-
-  static const TaskHandle kNullHandle;
+  using TaskHandle = ::grpc_event_engine::experimental::EventEngine::
+      DNSResolver::LookupTaskHandle;
+  static constexpr TaskHandle kNullHandle{0, 0};
 
   virtual ~DNSResolver() {}
 

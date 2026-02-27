@@ -21,6 +21,7 @@
 #include "src/core/lib/surface/event_string.h"
 
 #include <algorithm>
+#include <initializer_list>
 #include <vector>
 
 #include "y_absl/strings/str_format.h"

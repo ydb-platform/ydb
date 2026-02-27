@@ -19,6 +19,7 @@
 
 #include <string.h>
 
+#include <initializer_list>
 #include <memory>
 #include <utility>
 
@@ -32,7 +33,6 @@
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/json.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
@@ -40,7 +40,6 @@
 #include "src/core/lib/http/parser.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_reader.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/transport/error_utils.h"
 
@@ -62,16 +61,16 @@ UrlExternalAccountCredentials::Create(Options options,
 UrlExternalAccountCredentials::UrlExternalAccountCredentials(
     Options options, std::vector<TString> scopes, grpc_error_handle* error)
     : ExternalAccountCredentials(options, std::move(scopes)) {
-  auto it = options.credential_source.object().find("url");
-  if (it == options.credential_source.object().end()) {
+  auto it = options.credential_source.object_value().find("url");
+  if (it == options.credential_source.object_value().end()) {
     *error = GRPC_ERROR_CREATE("url field not present.");
     return;
   }
-  if (it->second.type() != Json::Type::kString) {
+  if (it->second.type() != Json::Type::STRING) {
     *error = GRPC_ERROR_CREATE("url field must be a string.");
     return;
   }
-  y_absl::StatusOr<URI> tmp_url = URI::Parse(it->second.string());
+  y_absl::StatusOr<URI> tmp_url = URI::Parse(it->second.string_value());
   if (!tmp_url.ok()) {
     *error = GRPC_ERROR_CREATE(
         y_absl::StrFormat("Invalid credential source url. Error: %s",
@@ -81,51 +80,51 @@ UrlExternalAccountCredentials::UrlExternalAccountCredentials(
   url_ = *tmp_url;
   // The url must follow the format of <scheme>://<authority>/<path>
   std::vector<y_absl::string_view> v =
-      y_absl::StrSplit(it->second.string(), y_absl::MaxSplits('/', 3));
+      y_absl::StrSplit(it->second.string_value(), y_absl::MaxSplits('/', 3));
   url_full_path_ = y_absl::StrCat("/", v[3]);
-  it = options.credential_source.object().find("headers");
-  if (it != options.credential_source.object().end()) {
-    if (it->second.type() != Json::Type::kObject) {
+  it = options.credential_source.object_value().find("headers");
+  if (it != options.credential_source.object_value().end()) {
+    if (it->second.type() != Json::Type::OBJECT) {
       *error = GRPC_ERROR_CREATE(
           "The JSON value of credential source headers is not an object.");
       return;
     }
-    for (auto const& header : it->second.object()) {
-      headers_[header.first] = header.second.string();
+    for (auto const& header : it->second.object_value()) {
+      headers_[header.first] = header.second.string_value();
     }
   }
-  it = options.credential_source.object().find("format");
-  if (it != options.credential_source.object().end()) {
+  it = options.credential_source.object_value().find("format");
+  if (it != options.credential_source.object_value().end()) {
     const Json& format_json = it->second;
-    if (format_json.type() != Json::Type::kObject) {
+    if (format_json.type() != Json::Type::OBJECT) {
       *error = GRPC_ERROR_CREATE(
           "The JSON value of credential source format is not an object.");
       return;
     }
-    auto format_it = format_json.object().find("type");
-    if (format_it == format_json.object().end()) {
+    auto format_it = format_json.object_value().find("type");
+    if (format_it == format_json.object_value().end()) {
       *error = GRPC_ERROR_CREATE("format.type field not present.");
       return;
     }
-    if (format_it->second.type() != Json::Type::kString) {
+    if (format_it->second.type() != Json::Type::STRING) {
       *error = GRPC_ERROR_CREATE("format.type field must be a string.");
       return;
     }
-    format_type_ = format_it->second.string();
+    format_type_ = format_it->second.string_value();
     if (format_type_ == "json") {
-      format_it = format_json.object().find("subject_token_field_name");
-      if (format_it == format_json.object().end()) {
+      format_it = format_json.object_value().find("subject_token_field_name");
+      if (format_it == format_json.object_value().end()) {
         *error = GRPC_ERROR_CREATE(
             "format.subject_token_field_name field must be present if the "
             "format is in Json.");
         return;
       }
-      if (format_it->second.type() != Json::Type::kString) {
+      if (format_it->second.type() != Json::Type::STRING) {
         *error = GRPC_ERROR_CREATE(
             "format.subject_token_field_name field must be a string.");
         return;
       }
-      format_subject_token_field_name_ = format_it->second.string();
+      format_subject_token_field_name_ = format_it->second.string_value();
     }
   }
 }
@@ -173,7 +172,8 @@ void UrlExternalAccountCredentials::RetrieveSubjectToken(
     http_request_creds = RefCountedPtr<grpc_channel_credentials>(
         grpc_insecure_credentials_create());
   } else {
-    http_request_creds = CreateHttpRequestSSLCredentials();
+    http_request_creds = RefCountedPtr<grpc_channel_credentials>(
+        CreateHttpRequestSSLCredentials());
   }
   http_request_ =
       HttpRequest::Get(std::move(*url_for_request), nullptr /* channel args */,
@@ -200,26 +200,26 @@ void UrlExternalAccountCredentials::OnRetrieveSubjectTokenInternal(
   y_absl::string_view response_body(ctx_->response.body,
                                   ctx_->response.body_length);
   if (format_type_ == "json") {
-    auto response_json = JsonParse(response_body);
-    if (!response_json.ok() || response_json->type() != Json::Type::kObject) {
+    auto response_json = Json::Parse(response_body);
+    if (!response_json.ok() || response_json->type() != Json::Type::OBJECT) {
       FinishRetrieveSubjectToken(
           "", GRPC_ERROR_CREATE(
                   "The format of response is not a valid json object."));
       return;
     }
     auto response_it =
-        response_json->object().find(format_subject_token_field_name_);
-    if (response_it == response_json->object().end()) {
+        response_json->object_value().find(format_subject_token_field_name_);
+    if (response_it == response_json->object_value().end()) {
       FinishRetrieveSubjectToken(
           "", GRPC_ERROR_CREATE("Subject token field not present."));
       return;
     }
-    if (response_it->second.type() != Json::Type::kString) {
+    if (response_it->second.type() != Json::Type::STRING) {
       FinishRetrieveSubjectToken(
           "", GRPC_ERROR_CREATE("Subject token field must be a string."));
       return;
     }
-    FinishRetrieveSubjectToken(response_it->second.string(), error);
+    FinishRetrieveSubjectToken(response_it->second.string_value(), error);
     return;
   }
   FinishRetrieveSubjectToken(TString(response_body), y_absl::OkStatus());

@@ -22,12 +22,13 @@
 
 #include <string.h>
 
-#include <memory>
-#include <utility>
-
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
+#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gprpp/crash.h"
+#include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/lib/slice/slice_internal.h"
 #include "src/core/tsi/alts/crypt/gsec.h"
 #include "src/core/tsi/alts/zero_copy_frame_protector/alts_grpc_integrity_only_record_protocol.h"
 #include "src/core/tsi/alts/zero_copy_frame_protector/alts_grpc_privacy_integrity_record_protocol.h"
@@ -109,7 +110,7 @@ static bool read_frame_size(const grpc_slice_buffer* sb,
 /// for protect or unprotect.
 ///
 static tsi_result create_alts_grpc_record_protocol(
-    std::unique_ptr<grpc_core::GsecKeyInterface> key, bool is_client,
+    const uint8_t* key, size_t key_size, bool is_rekey, bool is_client,
     bool is_integrity_only, bool is_protect, bool enable_extra_copy,
     alts_grpc_record_protocol** record_protocol) {
   if (key == nullptr || record_protocol == nullptr) {
@@ -118,10 +119,9 @@ static tsi_result create_alts_grpc_record_protocol(
   grpc_status_code status;
   gsec_aead_crypter* crypter = nullptr;
   char* error_details = nullptr;
-  bool is_rekey = key->IsRekey();
-  status = gsec_aes_gcm_aead_crypter_create(std::move(key), kAesGcmNonceLength,
-                                            kAesGcmTagLength, &crypter,
-                                            &error_details);
+  status = gsec_aes_gcm_aead_crypter_create(key, key_size, kAesGcmNonceLength,
+                                            kAesGcmTagLength, is_rekey,
+                                            &crypter, &error_details);
   if (status != GRPC_STATUS_OK) {
     gpr_log(GPR_ERROR, "Failed to create AEAD crypter, %s", error_details);
     gpr_free(error_details);
@@ -259,11 +259,12 @@ static const tsi_zero_copy_grpc_protector_vtable
         alts_zero_copy_grpc_protector_max_frame_size};
 
 tsi_result alts_zero_copy_grpc_protector_create(
-    const grpc_core::GsecKeyFactoryInterface& key_factory, bool is_client,
+    const uint8_t* key, size_t key_size, bool is_rekey, bool is_client,
     bool is_integrity_only, bool enable_extra_copy,
     size_t* max_protected_frame_size,
     tsi_zero_copy_grpc_protector** protector) {
-  if (protector == nullptr) {
+  if (grpc_core::ExecCtx::Get() == nullptr || key == nullptr ||
+      protector == nullptr) {
     gpr_log(
         GPR_ERROR,
         "Invalid nullptr arguments to alts_zero_copy_grpc_protector create.");
@@ -275,11 +276,11 @@ tsi_result alts_zero_copy_grpc_protector_create(
           gpr_zalloc(sizeof(alts_zero_copy_grpc_protector)));
   // Creates alts_grpc_record_protocol objects.
   tsi_result status = create_alts_grpc_record_protocol(
-      key_factory.Create(), is_client, is_integrity_only,
+      key, key_size, is_rekey, is_client, is_integrity_only,
       /*is_protect=*/true, enable_extra_copy, &impl->record_protocol);
   if (status == TSI_OK) {
     status = create_alts_grpc_record_protocol(
-        key_factory.Create(), is_client, is_integrity_only,
+        key, key_size, is_rekey, is_client, is_integrity_only,
         /*is_protect=*/false, enable_extra_copy, &impl->unrecord_protocol);
     if (status == TSI_OK) {
       // Sets maximum frame size.

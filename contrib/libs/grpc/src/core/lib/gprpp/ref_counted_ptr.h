@@ -21,13 +21,9 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <stddef.h>
-
 #include <iosfwd>
 #include <type_traits>
 #include <utility>
-
-#include "y_absl/hash/hash.h"
 
 #include "src/core/lib/gprpp/debug_location.h"
 
@@ -336,65 +332,6 @@ template <typename T>
 bool operator<(const WeakRefCountedPtr<T>& p1, const WeakRefCountedPtr<T>& p2) {
   return p1.get() < p2.get();
 }
-
-//
-// y_absl::Hash integration
-//
-
-template <typename H, typename T>
-H AbslHashValue(H h, const RefCountedPtr<T>& p) {
-  return H::combine(std::move(h), p.get());
-}
-
-template <typename H, typename T>
-H AbslHashValue(H h, const WeakRefCountedPtr<T>& p) {
-  return H::combine(std::move(h), p.get());
-}
-
-// Heterogenous lookup support.
-template <typename T>
-struct RefCountedPtrHash {
-  using is_transparent = void;
-  size_t operator()(const RefCountedPtr<T>& p) const {
-    return y_absl::Hash<RefCountedPtr<T>>{}(p);
-  }
-  size_t operator()(const WeakRefCountedPtr<T>& p) const {
-    return y_absl::Hash<WeakRefCountedPtr<T>>{}(p);
-  }
-  size_t operator()(T* p) const { return y_absl::Hash<T*>{}(p); }
-};
-template <typename T>
-struct RefCountedPtrEq {
-  using is_transparent = void;
-  bool operator()(const RefCountedPtr<T>& p1,
-                  const RefCountedPtr<T>& p2) const {
-    return p1 == p2;
-  }
-  bool operator()(const WeakRefCountedPtr<T>& p1,
-                  const WeakRefCountedPtr<T>& p2) const {
-    return p1 == p2;
-  }
-  bool operator()(const RefCountedPtr<T>& p1,
-                  const WeakRefCountedPtr<T>& p2) const {
-    return p1 == p2.get();
-  }
-  bool operator()(const WeakRefCountedPtr<T>& p1,
-                  const RefCountedPtr<T>& p2) const {
-    return p1 == p2.get();
-  }
-  bool operator()(const RefCountedPtr<T>& p1, const T* p2) const {
-    return p1 == p2;
-  }
-  bool operator()(const WeakRefCountedPtr<T>& p1, const T* p2) const {
-    return p1 == p2;
-  }
-  bool operator()(const T* p1, const RefCountedPtr<T>& p2) const {
-    return p2 == p1;
-  }
-  bool operator()(const T* p1, const WeakRefCountedPtr<T>& p2) const {
-    return p2 == p1;
-  }
-};
 
 }  // namespace grpc_core
 

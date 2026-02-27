@@ -28,6 +28,8 @@
 #include <sys/un.h>
 
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
 #include "y_absl/status/statusor.h"
@@ -42,9 +44,9 @@
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/resolved_address.h"
-#include "src/core/lib/resolver/endpoint_addresses.h"
 #include "src/core/lib/resolver/resolver.h"
 #include "src/core/lib/resolver/resolver_factory.h"
+#include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
@@ -52,7 +54,7 @@ namespace {
 
 class BinderResolver : public Resolver {
  public:
-  BinderResolver(EndpointAddressesList addresses, ResolverArgs args)
+  BinderResolver(ServerAddressList addresses, ResolverArgs args)
       : result_handler_(std::move(args.result_handler)),
         addresses_(std::move(addresses)),
         channel_args_(std::move(args.args)) {}
@@ -69,7 +71,7 @@ class BinderResolver : public Resolver {
 
  private:
   std::unique_ptr<ResultHandler> result_handler_;
-  EndpointAddressesList addresses_;
+  ServerAddressList addresses_;
   ChannelArgs channel_args_;
 };
 
@@ -82,7 +84,7 @@ class BinderResolverFactory : public ResolverFactory {
   }
 
   OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
-    EndpointAddressesList addresses;
+    ServerAddressList addresses;
     if (!ParseUri(args.uri, &addresses)) return nullptr;
     return MakeOrphanable<BinderResolver>(std::move(addresses),
                                           std::move(args));
@@ -115,7 +117,7 @@ class BinderResolverFactory : public ResolverFactory {
     return y_absl::OkStatus();
   }
 
-  static bool ParseUri(const URI& uri, EndpointAddressesList* addresses) {
+  static bool ParseUri(const URI& uri, ServerAddressList* addresses) {
     grpc_resolved_address addr;
     {
       if (!uri.authority().empty()) {

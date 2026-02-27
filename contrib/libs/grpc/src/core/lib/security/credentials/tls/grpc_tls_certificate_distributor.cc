@@ -18,6 +18,8 @@
 
 #include "src/core/lib/security/credentials/tls/grpc_tls_certificate_distributor.h"
 
+#include <algorithm>
+
 #include "y_absl/status/status.h"
 
 #include <grpc/grpc_security.h>

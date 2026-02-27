@@ -28,6 +28,7 @@
 
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/status/status.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 
@@ -84,9 +85,11 @@ struct secure_endpoint {
                             grpc_core::CSliceRef(leftover_slices[i]));
     }
     grpc_slice_buffer_init(&output_buffer);
-    memory_owner = grpc_core::ResourceQuotaFromChannelArgs(channel_args)
-                       ->memory_quota()
-                       ->CreateMemoryOwner();
+    memory_owner =
+        grpc_core::ResourceQuotaFromChannelArgs(channel_args)
+            ->memory_quota()
+            ->CreateMemoryOwner(y_absl::StrCat(grpc_endpoint_get_peer(transport),
+                                             ":secure_endpoint"));
     self_reservation = memory_owner.MakeReservation(sizeof(*this));
     if (zero_copy_protector) {
       read_staging_buffer = grpc_empty_slice();

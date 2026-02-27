@@ -19,7 +19,6 @@
 
 #include <stdlib.h>
 
-#include <cstddef>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -35,10 +34,7 @@ namespace grpc_core {
 
 namespace arena_promise_detail {
 
-struct ArgType {
-  alignas(std::max_align_t) char buffer[sizeof(void*)];
-};
-
+using ArgType = std::aligned_storage_t<sizeof(void*)>;
 template <typename T>
 T*& ArgAsPtr(ArgType* arg) {
   static_assert(sizeof(ArgType) >= sizeof(T**),

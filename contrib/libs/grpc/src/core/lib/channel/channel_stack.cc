@@ -28,20 +28,12 @@
 #include <grpc/support/log.h>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/channel_stack_trace.h"
 #include "src/core/lib/gpr/alloc.h"
-#include "src/core/lib/surface/channel_init.h"
 
 using grpc_event_engine::experimental::EventEngine;
 
 grpc_core::TraceFlag grpc_trace_channel(false, "channel");
-
-static int register_get_name_fn = []() {
-  grpc_core::NameFromChannelFilter = [](const grpc_channel_filter* filter) {
-    return filter->name;
-  };
-  return 0;
-}();
+grpc_core::TraceFlag grpc_trace_channel_stack(false, "channel_stack");
 
 // Memory layouts.
 

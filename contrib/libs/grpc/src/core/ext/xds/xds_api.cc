@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <algorithm>
 #include <set>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
@@ -40,9 +41,9 @@
 #include "google/protobuf/struct.upb.h"
 #include "google/protobuf/timestamp.upb.h"
 #include "google/rpc/status.upb.h"
-#include "upb/base/string_view.h"
-#include "upb/reflection/def.h"
-#include "upb/text/encode.h"
+#include "upb/def.h"
+#include "upb/text_encode.h"
+#include "upb/upb.h"
 #include "upb/upb.hpp"
 
 #include <grpc/status.h>
@@ -103,30 +104,33 @@ void PopulateMetadata(const XdsApiContext& context,
 void PopulateMetadataValue(const XdsApiContext& context,
                            google_protobuf_Value* value_pb, const Json& value) {
   switch (value.type()) {
-    case Json::Type::kNull:
+    case Json::Type::JSON_NULL:
       google_protobuf_Value_set_null_value(value_pb, 0);
       break;
-    case Json::Type::kNumber:
+    case Json::Type::NUMBER:
       google_protobuf_Value_set_number_value(
-          value_pb, strtod(value.string().c_str(), nullptr));
+          value_pb, strtod(value.string_value().c_str(), nullptr));
       break;
-    case Json::Type::kString:
+    case Json::Type::STRING:
       google_protobuf_Value_set_string_value(
-          value_pb, StdStringToUpbString(value.string()));
+          value_pb, StdStringToUpbString(value.string_value()));
       break;
-    case Json::Type::kBoolean:
-      google_protobuf_Value_set_bool_value(value_pb, value.boolean());
+    case Json::Type::JSON_TRUE:
+      google_protobuf_Value_set_bool_value(value_pb, true);
       break;
-    case Json::Type::kObject: {
+    case Json::Type::JSON_FALSE:
+      google_protobuf_Value_set_bool_value(value_pb, false);
+      break;
+    case Json::Type::OBJECT: {
       google_protobuf_Struct* struct_value =
           google_protobuf_Value_mutable_struct_value(value_pb, context.arena);
-      PopulateMetadata(context, struct_value, value.object());
+      PopulateMetadata(context, struct_value, value.object_value());
       break;
     }
-    case Json::Type::kArray: {
+    case Json::Type::ARRAY: {
       google_protobuf_ListValue* list_value =
           google_protobuf_Value_mutable_list_value(value_pb, context.arena);
-      PopulateListValue(context, list_value, value.array());
+      PopulateListValue(context, list_value, value.array_value());
       break;
     }
   }
@@ -324,17 +328,11 @@ y_absl::Status XdsApi::ParseAdsResponse(y_absl::string_view encoded_response,
       const auto* resource_wrapper = envoy_service_discovery_v3_Resource_parse(
           serialized_resource.data(), serialized_resource.size(), arena.ptr());
       if (resource_wrapper == nullptr) {
-        parser->ResourceWrapperParsingFailed(
-            i, "Can't decode Resource proto wrapper");
+        parser->ResourceWrapperParsingFailed(i);
         continue;
       }
       const auto* resource =
           envoy_service_discovery_v3_Resource_resource(resource_wrapper);
-      if (resource == nullptr) {
-        parser->ResourceWrapperParsingFailed(
-            i, "No resource present in Resource proto wrapper");
-        continue;
-      }
       type_url = y_absl::StripPrefix(
           UpbStringToAbsl(google_protobuf_Any_type_url(resource)),
           "type.googleapis.com/");
@@ -507,24 +505,6 @@ TString XdsApi::CreateLrsRequest(
   return SerializeLrsRequest(context, request);
 }
 
-namespace {
-
-void MaybeLogLrsResponse(
-    const XdsApiContext& context,
-    const envoy_service_load_stats_v3_LoadStatsResponse* response) {
-  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
-      gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    const upb_MessageDef* msg_type =
-        envoy_service_load_stats_v3_LoadStatsResponse_getmsgdef(context.symtab);
-    char buf[10240];
-    upb_TextEncode(response, msg_type, nullptr, 0, buf, sizeof(buf));
-    gpr_log(GPR_DEBUG, "[xds_client %p] received LRS response: %s",
-            context.client, buf);
-  }
-}
-
-}  // namespace
-
 y_absl::Status XdsApi::ParseLrsResponse(y_absl::string_view encoded_response,
                                       bool* send_all_clusters,
                                       std::set<TString>* cluster_names,
@@ -538,8 +518,6 @@ y_absl::Status XdsApi::ParseLrsResponse(y_absl::string_view encoded_response,
   if (decoded_response == nullptr) {
     return y_absl::UnavailableError("Can't decode response.");
   }
-  const XdsApiContext context = {client_, tracer_, symtab_->ptr(), arena.ptr()};
-  MaybeLogLrsResponse(context, decoded_response);
   // Check send_all_clusters.
   if (envoy_service_load_stats_v3_LoadStatsResponse_send_all_clusters(
           decoded_response)) {

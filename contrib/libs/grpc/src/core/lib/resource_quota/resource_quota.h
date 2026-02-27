@@ -24,7 +24,6 @@
 #include "y_absl/strings/string_view.h"
 
 #include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
 
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/cpp_impl_of.h"

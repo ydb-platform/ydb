@@ -25,6 +25,7 @@
 
 #include <stddef.h>
 
+#include <type_traits>
 #include <utility>
 
 #include "src/core/lib/gprpp/construct_destruct.h"
@@ -138,7 +139,7 @@ class ManualConstructor {
   void Destroy() { Destruct(get()); }
 
  private:
-  alignas(Type) char space_[sizeof(Type)];
+  typename std::aligned_storage<sizeof(Type), alignof(Type)>::type space_;
 };
 
 }  // namespace grpc_core

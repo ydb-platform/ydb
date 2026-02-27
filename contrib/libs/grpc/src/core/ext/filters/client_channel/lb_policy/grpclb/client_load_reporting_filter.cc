@@ -25,6 +25,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/types/optional.h"
 
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.h"
@@ -33,6 +34,7 @@
 #include "src/core/lib/promise/context.h"
 #include "src/core/lib/promise/map.h"
 #include "src/core/lib/promise/pipe.h"
+#include "src/core/lib/promise/poll.h"
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"

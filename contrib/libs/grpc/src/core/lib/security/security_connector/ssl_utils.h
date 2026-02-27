@@ -23,7 +23,6 @@
 
 #include <stddef.h>
 
-#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <utility>
@@ -32,7 +31,6 @@
 #include "y_absl/status/status.h"
 #include "y_absl/strings/string_view.h"
 
-#include <grpc/grpc_crl_provider.h>
 #include <grpc/grpc_security.h>
 #include <grpc/grpc_security_constants.h>
 #include <grpc/slice.h>
@@ -88,7 +86,6 @@ grpc_security_status grpc_ssl_tsi_client_handshaker_factory_init(
     tsi_tls_version max_tls_version, tsi_ssl_session_cache* ssl_session_cache,
     tsi::TlsSessionKeyLoggerCache::TlsSessionKeyLogger* tls_session_key_logger,
     const char* crl_directory,
-    std::shared_ptr<grpc_core::experimental::CrlProvider> crl_provider,
     tsi_ssl_client_handshaker_factory** handshaker_factory);
 
 grpc_security_status grpc_ssl_tsi_server_handshaker_factory_init(
@@ -97,8 +94,7 @@ grpc_security_status grpc_ssl_tsi_server_handshaker_factory_init(
     grpc_ssl_client_certificate_request_type client_certificate_request,
     tsi_tls_version min_tls_version, tsi_tls_version max_tls_version,
     tsi::TlsSessionKeyLoggerCache::TlsSessionKeyLogger* tls_session_key_logger,
-    const char* crl_directory, bool send_client_ca_list,
-    std::shared_ptr<grpc_core::experimental::CrlProvider> crl_provider,
+    const char* crl_directory,
     tsi_ssl_server_handshaker_factory** handshaker_factory);
 
 // Free the memory occupied by key cert pairs.

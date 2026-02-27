@@ -22,11 +22,14 @@
 
 #include <algorithm>
 #include <set>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 #include <vector>
 
 #include "y_absl/status/status.h"
 #include "y_absl/strings/string_view.h"
+#include "y_absl/types/optional.h"
 #include "google/protobuf/duration.upb.h"
 #include "upb/upb.hpp"
 #include "xds/service/orca/v3/orca.upb.h"
@@ -77,11 +80,9 @@ class OrcaProducer::ConnectivityWatcher
     grpc_pollset_set_destroy(interested_parties_);
   }
 
-  void OnConnectivityStateChange(
-      RefCountedPtr<ConnectivityStateWatcherInterface> self,
-      grpc_connectivity_state state, const y_absl::Status&) override {
+  void OnConnectivityStateChange(grpc_connectivity_state state,
+                                 const y_absl::Status&) override {
     producer_->OnConnectivityStateChange(state);
-    self.reset();
   }
 
   grpc_pollset_set* interested_parties() override {
@@ -217,7 +218,9 @@ void OrcaProducer::Start(RefCountedPtr<Subchannel> subchannel) {
   connected_subchannel_ = subchannel_->connected_subchannel();
   auto connectivity_watcher = MakeRefCounted<ConnectivityWatcher>(WeakRef());
   connectivity_watcher_ = connectivity_watcher.get();
-  subchannel_->WatchConnectivityState(std::move(connectivity_watcher));
+  subchannel_->WatchConnectivityState(
+      /*health_check_service_name=*/y_absl::nullopt,
+      std::move(connectivity_watcher));
 }
 
 void OrcaProducer::Orphan() {
@@ -226,7 +229,8 @@ void OrcaProducer::Orphan() {
     stream_client_.reset();
   }
   GPR_ASSERT(subchannel_ != nullptr);  // Should not be called before Start().
-  subchannel_->CancelConnectivityStateWatch(connectivity_watcher_);
+  subchannel_->CancelConnectivityStateWatch(
+      /*health_check_service_name=*/y_absl::nullopt, connectivity_watcher_);
   subchannel_->RemoveDataProducer(this);
 }
 

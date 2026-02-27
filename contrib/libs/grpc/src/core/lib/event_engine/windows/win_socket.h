@@ -23,7 +23,7 @@
 
 #include <grpc/event_engine/event_engine.h>
 
-#include "src/core/lib/event_engine/thread_pool/thread_pool.h"
+#include "src/core/lib/event_engine/executor/executor.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/sync.h"
 
@@ -35,7 +35,6 @@ class WinSocket {
   struct OverlappedResult {
     int wsa_error;
     DWORD bytes_transferred;
-    y_absl::Status error_status;
   };
 
   // State related to a Read or Write socket operation
@@ -44,16 +43,13 @@ class WinSocket {
     explicit OpState(WinSocket* win_socket) noexcept;
     // Signal a result has returned
     // If a callback is already primed for notification, it will be executed via
-    // the WinSocket's ThreadPool. Otherwise, a "pending iocp" flag will
+    // the WinSocket's Executor. Otherwise, a "pending iocp" flag will
     // be set.
     void SetReady();
-    // Set WSA error results for a completed op.
+    // Set error results for a completed op
     void SetError(int wsa_error);
     // Set an OverlappedResult. Useful when WSARecv returns immediately.
     void SetResult(OverlappedResult result);
-    // Set error results for a completed op.
-    // This is a manual override, meant to override any WSA status code.
-    void SetErrorStatus(y_absl::Status error_status);
     // Retrieve the results of an overlapped operation (via Winsock API) and
     // store them locally.
     void GetOverlappedResult();
@@ -71,27 +67,19 @@ class WinSocket {
 
     OVERLAPPED overlapped_;
     WinSocket* win_socket_ = nullptr;
-    EventEngine::Closure* closure_ = nullptr;
+    std::atomic<EventEngine::Closure*> closure_{nullptr};
+    bool has_pending_iocp_ = false;
     OverlappedResult result_;
   };
 
-  WinSocket(SOCKET socket, ThreadPool* thread_pool) noexcept;
+  WinSocket(SOCKET socket, Executor* executor) noexcept;
   ~WinSocket();
-  // Provide a closure that will be called when an IOCP completion has occurred.
-  //
-  // Notification callbacks *must be registered* before any WSASend or WSARecv
-  // operations are started. Only one closure can be registered at a time for
-  // each read or send operation.
+  // Calling NotifyOnRead means either of two things:
+  //  - The IOCP already completed in the background, and we need to call
+  //    the callback now.
+  //  - The IOCP hasn't completed yet, and we're queuing it for later.
   void NotifyOnRead(EventEngine::Closure* on_read);
   void NotifyOnWrite(EventEngine::Closure* on_write);
-  // Remove the notification callback for read/write events.
-  //
-  // This method should only be called if no IOCP event is pending for the
-  // socket. It is UB if an IOCP event comes through and a notification is not
-  // registered.
-  void UnregisterReadCallback();
-  void UnregisterWriteCallback();
-
   bool IsShutdown();
   // Shutdown socket operations, but do not delete the WinSocket.
   // Connections will be disconnected, and the socket will be closed.
@@ -116,7 +104,7 @@ class WinSocket {
 
   SOCKET socket_;
   std::atomic<bool> is_shutdown_{false};
-  ThreadPool* thread_pool_;
+  Executor* executor_;
   // These OpStates are effectively synchronized using their respective
   // OVERLAPPED structures and the Overlapped I/O APIs. For example, OpState
   // users should not attempt to read their bytes_transeferred until

@@ -50,8 +50,9 @@ extern void RegisterServiceConfigChannelArgFilter(
 extern void RegisterExtraFilters(CoreConfiguration::Builder* builder);
 extern void RegisterResourceQuota(CoreConfiguration::Builder* builder);
 extern void FaultInjectionFilterRegister(CoreConfiguration::Builder* builder);
-extern void RegisterDnsResolver(CoreConfiguration::Builder* builder);
 extern void RegisterBackendMetricFilter(CoreConfiguration::Builder* builder);
+extern void RegisterNativeDnsResolver(CoreConfiguration::Builder* builder);
+extern void RegisterAresDnsResolver(CoreConfiguration::Builder* builder);
 extern void RegisterSockaddrResolver(CoreConfiguration::Builder* builder);
 extern void RegisterFakeResolver(CoreConfiguration::Builder* builder);
 extern void RegisterPriorityLbPolicy(CoreConfiguration::Builder* builder);
@@ -62,8 +63,8 @@ extern void RegisterPickFirstLbPolicy(CoreConfiguration::Builder* builder);
 extern void RegisterRoundRobinLbPolicy(CoreConfiguration::Builder* builder);
 extern void RegisterWeightedRoundRobinLbPolicy(
     CoreConfiguration::Builder* builder);
+extern void RegisterRingHashLbPolicy(CoreConfiguration::Builder* builder);
 extern void RegisterHttpProxyMapper(CoreConfiguration::Builder* builder);
-extern void RegisterConnectedChannel(CoreConfiguration::Builder* builder);
 #ifndef GRPC_NO_RLS
 extern void RegisterRlsLbPolicy(CoreConfiguration::Builder* builder);
 #endif  // !GRPC_NO_RLS
@@ -85,11 +86,11 @@ void BuildCoreConfiguration(CoreConfiguration::Builder* builder) {
   RegisterPickFirstLbPolicy(builder);
   RegisterRoundRobinLbPolicy(builder);
   RegisterWeightedRoundRobinLbPolicy(builder);
+  RegisterRingHashLbPolicy(builder);
   BuildClientChannelConfiguration(builder);
   SecurityRegisterHandshakerFactories(builder);
   RegisterClientAuthorityFilter(builder);
   RegisterChannelIdleFilters(builder);
-  RegisterConnectedChannel(builder);
   RegisterGrpcLbPolicy(builder);
   RegisterHttpFilters(builder);
   RegisterDeadlineFilter(builder);
@@ -97,7 +98,8 @@ void BuildCoreConfiguration(CoreConfiguration::Builder* builder) {
   RegisterServiceConfigChannelArgFilter(builder);
   RegisterResourceQuota(builder);
   FaultInjectionFilterRegister(builder);
-  RegisterDnsResolver(builder);
+  RegisterAresDnsResolver(builder);
+  RegisterNativeDnsResolver(builder);
   RegisterSockaddrResolver(builder);
   RegisterFakeResolver(builder);
   RegisterHttpProxyMapper(builder);

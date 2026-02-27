@@ -25,6 +25,7 @@
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 
 #include <grpc/slice.h>

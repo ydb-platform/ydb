@@ -17,9 +17,11 @@
 #include <grpc/support/port_platform.h>
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
@@ -34,11 +36,11 @@
 #include "y_absl/strings/strip.h"
 #include "y_absl/types/optional.h"
 
-#include <grpc/impl/channel_arg_names.h>
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/core/ext/filters/client_channel/resolver/dns/event_engine/service_config_helper.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
@@ -59,8 +61,11 @@
 
 #if GRPC_ARES == 1
 
+#include <stdio.h>
+
 #include <address_sorting/address_sorting.h>
 
+#include "y_absl/container/flat_hash_set.h"
 #include "y_absl/strings/str_cat.h"
 
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.h"
@@ -69,8 +74,11 @@
 #include "src/core/lib/backoff/backoff.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/config/config_vars.h"
+#include "src/core/lib/event_engine/handle_containers.h"
+#include "src/core/lib/iomgr/gethostname.h"
 #include "src/core/lib/iomgr/resolve_address.h"
-#include "src/core/lib/resolver/endpoint_addresses.h"
+#include "src/core/lib/json/json.h"
+#include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/service_config/service_config_impl.h"
 #include "src/core/lib/transport/error_utils.h"
 
@@ -178,9 +186,9 @@ class AresClientChannelDNSResolver : public PollingResolver {
     std::unique_ptr<grpc_ares_request> txt_request_
         Y_ABSL_GUARDED_BY(on_resolved_mu_);
     // Output fields from ares request.
-    std::unique_ptr<EndpointAddressesList> addresses_
+    std::unique_ptr<ServerAddressList> addresses_
         Y_ABSL_GUARDED_BY(on_resolved_mu_);
-    std::unique_ptr<EndpointAddressesList> balancer_addresses_
+    std::unique_ptr<ServerAddressList> balancer_addresses_
         Y_ABSL_GUARDED_BY(on_resolved_mu_);
     char* service_config_json_ Y_ABSL_GUARDED_BY(on_resolved_mu_) = nullptr;
   };
@@ -226,6 +234,97 @@ AresClientChannelDNSResolver::~AresClientChannelDNSResolver() {
 OrphanablePtr<Orphanable> AresClientChannelDNSResolver::StartRequest() {
   return MakeOrphanable<AresRequestWrapper>(
       Ref(DEBUG_LOCATION, "dns-resolving"));
+}
+
+bool ValueInJsonArray(const Json::Array& array, const char* value) {
+  for (const Json& entry : array) {
+    if (entry.type() == Json::Type::STRING && entry.string_value() == value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TString ChooseServiceConfig(char* service_config_choice_json,
+                                grpc_error_handle* error) {
+  auto json = Json::Parse(service_config_choice_json);
+  if (!json.ok()) {
+    *error = absl_status_to_grpc_error(json.status());
+    return "";
+  }
+  if (json->type() != Json::Type::ARRAY) {
+    *error = GRPC_ERROR_CREATE(
+        "Service Config Choices, error: should be of type array");
+    return "";
+  }
+  const Json* service_config = nullptr;
+  std::vector<grpc_error_handle> error_list;
+  for (const Json& choice : json->array_value()) {
+    if (choice.type() != Json::Type::OBJECT) {
+      error_list.push_back(GRPC_ERROR_CREATE(
+          "Service Config Choice, error: should be of type object"));
+      continue;
+    }
+    // Check client language, if specified.
+    auto it = choice.object_value().find("clientLanguage");
+    if (it != choice.object_value().end()) {
+      if (it->second.type() != Json::Type::ARRAY) {
+        error_list.push_back(GRPC_ERROR_CREATE(
+            "field:clientLanguage error:should be of type array"));
+      } else if (!ValueInJsonArray(it->second.array_value(), "c++")) {
+        continue;
+      }
+    }
+    // Check client hostname, if specified.
+    it = choice.object_value().find("clientHostname");
+    if (it != choice.object_value().end()) {
+      if (it->second.type() != Json::Type::ARRAY) {
+        error_list.push_back(GRPC_ERROR_CREATE(
+            "field:clientHostname error:should be of type array"));
+      } else {
+        char* hostname = grpc_gethostname();
+        if (hostname == nullptr ||
+            !ValueInJsonArray(it->second.array_value(), hostname)) {
+          continue;
+        }
+      }
+    }
+    // Check percentage, if specified.
+    it = choice.object_value().find("percentage");
+    if (it != choice.object_value().end()) {
+      if (it->second.type() != Json::Type::NUMBER) {
+        error_list.push_back(GRPC_ERROR_CREATE(
+            "field:percentage error:should be of type number"));
+      } else {
+        int random_pct = rand() % 100;
+        int percentage;
+        if (sscanf(it->second.string_value().c_str(), "%d", &percentage) != 1) {
+          error_list.push_back(GRPC_ERROR_CREATE(
+              "field:percentage error:should be of type integer"));
+        } else if (random_pct > percentage || percentage == 0) {
+          continue;
+        }
+      }
+    }
+    // Found service config.
+    it = choice.object_value().find("serviceConfig");
+    if (it == choice.object_value().end()) {
+      error_list.push_back(GRPC_ERROR_CREATE(
+          "field:serviceConfig error:required field missing"));
+    } else if (it->second.type() != Json::Type::OBJECT) {
+      error_list.push_back(GRPC_ERROR_CREATE(
+          "field:serviceConfig error:should be of type object"));
+    } else if (service_config == nullptr) {
+      service_config = &it->second;
+    }
+  }
+  if (!error_list.empty()) {
+    service_config = nullptr;
+    *error = GRPC_ERROR_CREATE_FROM_VECTOR("Service Config Choices Parser",
+                                           &error_list);
+  }
+  if (service_config == nullptr) return "";
+  return service_config->Dump();
 }
 
 void AresClientChannelDNSResolver::AresRequestWrapper::OnHostnameResolved(
@@ -299,19 +398,21 @@ AresClientChannelDNSResolver::AresRequestWrapper::OnResolvedLocked(
     if (addresses_ != nullptr) {
       result.addresses = std::move(*addresses_);
     } else {
-      result.addresses.emplace();
+      result.addresses = ServerAddressList();
     }
     if (service_config_json_ != nullptr) {
-      auto service_config_string = ChooseServiceConfig(service_config_json_);
-      if (!service_config_string.ok()) {
+      grpc_error_handle service_config_error;
+      TString service_config_string =
+          ChooseServiceConfig(service_config_json_, &service_config_error);
+      if (!service_config_error.ok()) {
         result.service_config = y_absl::UnavailableError(
             y_absl::StrCat("failed to parse service config: ",
-                         StatusToString(service_config_string.status())));
-      } else if (!service_config_string->empty()) {
+                         StatusToString(service_config_error)));
+      } else if (!service_config_string.empty()) {
         GRPC_CARES_TRACE_LOG("resolver:%p selected service config choice: %s",
-                             this, service_config_string->c_str());
+                             this, service_config_string.c_str());
         result.service_config = ServiceConfigImpl::Create(
-            resolver_->channel_args(), *service_config_string);
+            resolver_->channel_args(), service_config_string);
         if (!result.service_config.ok()) {
           result.service_config = y_absl::UnavailableError(
               y_absl::StrCat("failed to parse service config: ",
@@ -320,8 +421,8 @@ AresClientChannelDNSResolver::AresRequestWrapper::OnResolvedLocked(
       }
     }
     if (balancer_addresses_ != nullptr) {
-      result.args =
-          SetGrpcLbBalancerAddresses(result.args, *balancer_addresses_);
+      result.args = SetGrpcLbBalancerAddresses(
+          result.args, ServerAddressList(*balancer_addresses_));
     }
   } else {
     GRPC_CARES_TRACE_LOG("resolver:%p dns resolution failed: %s", this,
@@ -535,7 +636,7 @@ class AresDNSResolver : public DNSResolver {
         y_absl::StatusOr<std::vector<grpc_resolved_address>>)>
         on_resolve_address_done_;
     // currently resolving addresses
-    std::unique_ptr<EndpointAddressesList> addresses_;
+    std::unique_ptr<ServerAddressList> addresses_;
   };
 
   class AresSRVRequest : public AresRequest {
@@ -583,7 +684,7 @@ class AresDNSResolver : public DNSResolver {
         y_absl::StatusOr<std::vector<grpc_resolved_address>>)>
         on_resolve_address_done_;
     // currently resolving addresses
-    std::unique_ptr<EndpointAddressesList> balancer_addresses_;
+    std::unique_ptr<ServerAddressList> balancer_addresses_;
   };
 
   class AresTXTRequest : public AresRequest {
@@ -704,13 +805,12 @@ class AresDNSResolver : public DNSResolver {
   // the previous default DNS resolver, used to delegate blocking DNS calls to
   std::shared_ptr<DNSResolver> default_resolver_ = GetDNSResolver();
   Mutex mu_;
-  TaskHandleSet open_requests_ Y_ABSL_GUARDED_BY(mu_);
+  grpc_event_engine::experimental::LookupTaskHandleSet open_requests_
+      Y_ABSL_GUARDED_BY(mu_);
   intptr_t aba_token_ Y_ABSL_GUARDED_BY(mu_) = 0;
 };
 
-}  // namespace
-
-bool ShouldUseAresDnsResolver(y_absl::string_view resolver_env) {
+bool ShouldUseAres(y_absl::string_view resolver_env) {
 #ifdef _win_
   // ARC-6747: Disable on Windows due to assert and resolving problems.
   return !resolver_env.empty() && y_absl::EqualsIgnoreCase(resolver_env, "ares");
@@ -719,16 +819,23 @@ bool ShouldUseAresDnsResolver(y_absl::string_view resolver_env) {
 #endif
 }
 
+bool UseAresDnsResolver() {
+  return ShouldUseAres(ConfigVars::Get().DnsResolver());
+}
+
+}  // namespace
+
 void RegisterAresDnsResolver(CoreConfiguration::Builder* builder) {
-  builder->resolver_registry()->RegisterResolverFactory(
-      std::make_unique<AresClientChannelDNSResolverFactory>());
+  if (UseAresDnsResolver()) {
+    builder->resolver_registry()->RegisterResolverFactory(
+        std::make_unique<AresClientChannelDNSResolverFactory>());
+  }
 }
 
 }  // namespace grpc_core
 
 void grpc_resolver_dns_ares_init() {
-  if (grpc_core::ShouldUseAresDnsResolver(
-          grpc_core::ConfigVars::Get().DnsResolver())) {
+  if (grpc_core::UseAresDnsResolver()) {
     address_sorting_init();
     grpc_error_handle error = grpc_ares_init();
     if (!error.ok()) {
@@ -740,8 +847,7 @@ void grpc_resolver_dns_ares_init() {
 }
 
 void grpc_resolver_dns_ares_shutdown() {
-  if (grpc_core::ShouldUseAresDnsResolver(
-          grpc_core::ConfigVars::Get().DnsResolver())) {
+  if (grpc_core::UseAresDnsResolver()) {
     address_sorting_shutdown();
     grpc_ares_cleanup();
   }
@@ -750,9 +856,6 @@ void grpc_resolver_dns_ares_shutdown() {
 #else  // GRPC_ARES == 1
 
 namespace grpc_core {
-bool ShouldUseAresDnsResolver(y_absl::string_view /* resolver_env */) {
-  return false;
-}
 void RegisterAresDnsResolver(CoreConfiguration::Builder*) {}
 }  // namespace grpc_core
 

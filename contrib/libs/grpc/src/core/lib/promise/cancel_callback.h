@@ -17,6 +17,8 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <utility>
+
 #include "src/core/lib/promise/detail/promise_like.h"
 
 namespace grpc_core {

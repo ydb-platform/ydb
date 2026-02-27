@@ -4,14 +4,13 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.60.2)
+VERSION(1.54.3)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/libs/protobuf
     contrib/libs/protoc
-    contrib/restricted/abseil-cpp-tstring
 )
 
 ADDINCL(

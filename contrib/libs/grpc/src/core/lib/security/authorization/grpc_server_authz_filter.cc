@@ -24,6 +24,7 @@
 
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_join.h"
+#include "y_absl/strings/string_view.h"
 
 #include <grpc/support/log.h>
 
@@ -33,7 +34,6 @@
 #include "src/core/lib/promise/promise.h"
 #include "src/core/lib/security/authorization/authorization_engine.h"
 #include "src/core/lib/security/authorization/evaluate_args.h"
-#include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
 
 namespace grpc_core {

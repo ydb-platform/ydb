@@ -20,16 +20,15 @@
 
 #include "src/core/lib/security/credentials/tls/tls_credentials.h"
 
-#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <utility>
 
+#include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 
 #include <grpc/grpc.h>
 #include <grpc/grpc_security_constants.h>
-#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/log.h>
 
 #include "src/core/lib/channel/channel_args.h"
@@ -46,14 +45,6 @@ bool CredentialOptionSanityCheck(grpc_tls_credentials_options* options,
   if (options == nullptr) {
     gpr_log(GPR_ERROR, "TLS credentials options is nullptr.");
     return false;
-  }
-  if (!options->crl_directory().empty() && options->crl_provider() != nullptr) {
-    gpr_log(GPR_ERROR,
-            "Setting crl_directory and crl_provider not supported. Using the "
-            "crl_provider.");
-    // TODO(gtcooke94) - Maybe return false here. Right now object lifetime of
-    // this options struct is leaky if false is returned and represents a more
-    // complex fix to handle in another PR.
   }
   // In the following conditions, there won't be any issues, but it might
   // indicate callers are doing something wrong with the API.
@@ -108,7 +99,7 @@ TlsCredentials::create_security_connector(
   return sc;
 }
 
-grpc_core::UniqueTypeName TlsCredentials::Type() {
+grpc_core::UniqueTypeName TlsCredentials::type() const {
   static grpc_core::UniqueTypeName::Factory kFactory("Tls");
   return kFactory.Create();
 }

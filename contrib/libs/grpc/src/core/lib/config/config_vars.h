@@ -32,22 +32,22 @@
 
 namespace grpc_core {
 
-class GPR_DLL ConfigVars {
+class ConfigVars {
  public:
   struct Overrides {
     y_absl::optional<int32_t> client_channel_backup_poll_interval_ms;
     y_absl::optional<bool> enable_fork_support;
     y_absl::optional<bool> abort_on_leaks;
     y_absl::optional<bool> not_use_system_ssl_roots;
+    y_absl::optional<TString> experiments;
     y_absl::optional<TString> dns_resolver;
+    y_absl::optional<TString> trace;
     y_absl::optional<TString> verbosity;
     y_absl::optional<TString> stacktrace_minloglevel;
     y_absl::optional<TString> poll_strategy;
     y_absl::optional<TString> system_ssl_roots_dir;
     y_absl::optional<TString> default_ssl_roots_file_path;
     y_absl::optional<TString> ssl_cipher_suites;
-    y_absl::optional<TString> experiments;
-    y_absl::optional<TString> trace;
   };
   ConfigVars(const ConfigVars&) = delete;
   ConfigVars& operator=(const ConfigVars&) = delete;
@@ -112,13 +112,13 @@ class GPR_DLL ConfigVars {
   bool enable_fork_support_;
   bool abort_on_leaks_;
   bool not_use_system_ssl_roots_;
+  TString experiments_;
   TString dns_resolver_;
+  TString trace_;
   TString verbosity_;
   TString stacktrace_minloglevel_;
   TString poll_strategy_;
   TString ssl_cipher_suites_;
-  TString experiments_;
-  TString trace_;
   y_absl::optional<TString> override_system_ssl_roots_dir_;
   y_absl::optional<TString> override_default_ssl_roots_file_path_;
 };

@@ -23,7 +23,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <memory>
 #include <set>
 #include <vector>
 
@@ -34,43 +33,28 @@
 #include "y_absl/types/optional.h"
 #include "envoy/config/core/v3/address.upb.h"
 #include "envoy/config/core/v3/base.upb.h"
+#include "envoy/config/core/v3/health_check.upb.h"
 #include "envoy/config/endpoint/v3/endpoint.upb.h"
 #include "envoy/config/endpoint/v3/endpoint.upbdefs.h"
 #include "envoy/config/endpoint/v3/endpoint_components.upb.h"
 #include "envoy/type/v3/percent.upb.h"
 #include "google/protobuf/wrappers.upb.h"
-#include "upb/text/encode.h"
+#include "upb/text_encode.h"
 
 #include <grpc/support/log.h>
 
 #include "src/core/ext/xds/upb_utils.h"
+#include "src/core/ext/xds/xds_cluster.h"
 #include "src/core/ext/xds/xds_health_status.h"
 #include "src/core/ext/xds/xds_resource_type.h"
 #include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/env.h"
 #include "src/core/lib/gprpp/validation_errors.h"
 #include "src/core/lib/iomgr/resolved_address.h"
 
-// IWYU pragma: no_include "y_absl/meta/type_traits.h"
-
 namespace grpc_core {
-
-namespace {
-
-// TODO(roth): Remove this once dualstack support is stable.
-bool XdsDualstackEndpointsEnabled() {
-  auto value = GetEnv("GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS");
-  if (!value.has_value()) return false;
-  bool parsed_value;
-  bool parse_succeeded = gpr_parse_bool_value(value->c_str(), &parsed_value);
-  return parse_succeeded && parsed_value;
-}
-
-}  // namespace
 
 //
 // XdsEndpointResource
@@ -78,7 +62,7 @@ bool XdsDualstackEndpointsEnabled() {
 
 TString XdsEndpointResource::Priority::Locality::ToString() const {
   std::vector<TString> endpoint_strings;
-  for (const EndpointAddresses& endpoint : endpoints) {
+  for (const ServerAddress& endpoint : endpoints) {
     endpoint_strings.emplace_back(endpoint.ToString());
   }
   return y_absl::StrCat("{name=", name->AsHumanReadableString(),
@@ -167,44 +151,17 @@ void MaybeLogClusterLoadAssignment(
   }
 }
 
-y_absl::optional<grpc_resolved_address> ParseCoreAddress(
-    const envoy_config_core_v3_Address* address, ValidationErrors* errors) {
-  if (address == nullptr) {
-    errors->AddError("field not present");
-    return y_absl::nullopt;
-  }
-  ValidationErrors::ScopedField field(errors, ".socket_address");
-  const envoy_config_core_v3_SocketAddress* socket_address =
-      envoy_config_core_v3_Address_socket_address(address);
-  if (socket_address == nullptr) {
-    errors->AddError("field not present");
-    return y_absl::nullopt;
-  }
-  TString address_str = UpbStringToStdString(
-      envoy_config_core_v3_SocketAddress_address(socket_address));
-  uint32_t port;
-  {
-    ValidationErrors::ScopedField field(errors, ".port_value");
-    port = envoy_config_core_v3_SocketAddress_port_value(socket_address);
-    if (GPR_UNLIKELY(port >> 16) != 0) {
-      errors->AddError("invalid port");
-      return y_absl::nullopt;
-    }
-  }
-  auto addr = StringToSockaddr(address_str, port);
-  if (!addr.ok()) {
-    errors->AddError(addr.status().message());
-    return y_absl::nullopt;
-  }
-  return *addr;
-}
-
-y_absl::optional<EndpointAddresses> EndpointAddressesParse(
+y_absl::optional<ServerAddress> ServerAddressParse(
     const envoy_config_endpoint_v3_LbEndpoint* lb_endpoint,
     ValidationErrors* errors) {
   // health_status
   const int32_t health_status =
       envoy_config_endpoint_v3_LbEndpoint_health_status(lb_endpoint);
+  if (!XdsOverrideHostEnabled() &&
+      health_status != envoy_config_core_v3_UNKNOWN &&
+      health_status != envoy_config_core_v3_HEALTHY) {
+    return y_absl::nullopt;
+  }
   auto status = XdsHealthStatus::FromUpb(health_status);
   if (!status.has_value()) return y_absl::nullopt;
   // load_balancing_weight
@@ -221,7 +178,7 @@ y_absl::optional<EndpointAddresses> EndpointAddressesParse(
     }
   }
   // endpoint
-  std::vector<grpc_resolved_address> addresses;
+  grpc_resolved_address grpc_address;
   {
     ValidationErrors::ScopedField field(errors, ".endpoint");
     const envoy_config_endpoint_v3_Endpoint* endpoint =
@@ -230,34 +187,46 @@ y_absl::optional<EndpointAddresses> EndpointAddressesParse(
       errors->AddError("field not present");
       return y_absl::nullopt;
     }
-    {
-      ValidationErrors::ScopedField field(errors, ".address");
-      auto address = ParseCoreAddress(
-          envoy_config_endpoint_v3_Endpoint_address(endpoint), errors);
-      if (address.has_value()) addresses.push_back(*address);
+    ValidationErrors::ScopedField field2(errors, ".address");
+    const envoy_config_core_v3_Address* address =
+        envoy_config_endpoint_v3_Endpoint_address(endpoint);
+    if (address == nullptr) {
+      errors->AddError("field not present");
+      return y_absl::nullopt;
     }
-    if (XdsDualstackEndpointsEnabled()) {
-      size_t size;
-      auto* additional_addresses =
-          envoy_config_endpoint_v3_Endpoint_additional_addresses(endpoint,
-                                                                 &size);
-      for (size_t i = 0; i < size; ++i) {
-        ValidationErrors::ScopedField field(
-            errors, y_absl::StrCat(".additional_addresses[", i, "].address"));
-        auto address = ParseCoreAddress(
-            envoy_config_endpoint_v3_Endpoint_AdditionalAddress_address(
-                additional_addresses[i]),
-            errors);
-        if (address.has_value()) addresses.push_back(*address);
+    ValidationErrors::ScopedField field3(errors, ".socket_address");
+    const envoy_config_core_v3_SocketAddress* socket_address =
+        envoy_config_core_v3_Address_socket_address(address);
+    if (socket_address == nullptr) {
+      errors->AddError("field not present");
+      return y_absl::nullopt;
+    }
+    TString address_str = UpbStringToStdString(
+        envoy_config_core_v3_SocketAddress_address(socket_address));
+    uint32_t port;
+    {
+      ValidationErrors::ScopedField field(errors, ".port_value");
+      port = envoy_config_core_v3_SocketAddress_port_value(socket_address);
+      if (GPR_UNLIKELY(port >> 16) != 0) {
+        errors->AddError("invalid port");
+        return y_absl::nullopt;
       }
     }
+    auto addr = StringToSockaddr(address_str, port);
+    if (!addr.ok()) {
+      errors->AddError(addr.status().message());
+    } else {
+      grpc_address = *addr;
+    }
   }
-  if (addresses.empty()) return y_absl::nullopt;
-  // Convert to EndpointAddresses.
-  return EndpointAddresses(
-      addresses, ChannelArgs()
-                     .Set(GRPC_ARG_ADDRESS_WEIGHT, weight)
-                     .Set(GRPC_ARG_XDS_HEALTH_STATUS, status->status()));
+  // Convert to ServerAddress.
+  std::map<const char*, std::unique_ptr<ServerAddress::AttributeInterface>>
+      attributes;
+  attributes[ServerAddressWeightAttribute::kServerAddressWeightAttributeKey] =
+      std::make_unique<ServerAddressWeightAttribute>(weight);
+  attributes[XdsEndpointHealthStatusAttribute::kKey] =
+      std::make_unique<XdsEndpointHealthStatusAttribute>(*status);
+  return ServerAddress(grpc_address, ChannelArgs(), std::move(attributes));
 }
 
 struct ParsedLocality {
@@ -317,17 +286,16 @@ y_absl::optional<ParsedLocality> LocalityParse(
   for (size_t i = 0; i < size; ++i) {
     ValidationErrors::ScopedField field(errors,
                                         y_absl::StrCat(".lb_endpoints[", i, "]"));
-    auto endpoint = EndpointAddressesParse(lb_endpoints[i], errors);
-    if (endpoint.has_value()) {
-      for (const auto& address : endpoint->addresses()) {
-        bool inserted = address_set->insert(address).second;
-        if (!inserted) {
-          errors->AddError(y_absl::StrCat(
-              "duplicate endpoint address \"",
-              grpc_sockaddr_to_uri(&address).value_or("<unknown>"), "\""));
-        }
+    auto address = ServerAddressParse(lb_endpoints[i], errors);
+    if (address.has_value()) {
+      bool inserted = address_set->insert(address->address()).second;
+      if (!inserted) {
+        errors->AddError(y_absl::StrCat(
+            "duplicate endpoint address \"",
+            grpc_sockaddr_to_uri(&address->address()).value_or("<unknown>"),
+            "\""));
       }
-      parsed_locality.locality.endpoints.push_back(std::move(*endpoint));
+      parsed_locality.locality.endpoints.push_back(std::move(*address));
     }
   }
   // priority
@@ -388,12 +356,12 @@ void DropParseAndAppend(
   drop_config->AddCategory(std::move(category), numerator);
 }
 
-y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
+y_absl::StatusOr<XdsEndpointResource> EdsResourceParse(
     const XdsResourceType::DecodeContext& /*context*/,
     const envoy_config_endpoint_v3_ClusterLoadAssignment*
         cluster_load_assignment) {
   ValidationErrors errors;
-  auto eds_resource = std::make_shared<XdsEndpointResource>();
+  XdsEndpointResource eds_resource;
   // endpoints
   {
     ValidationErrors::ScopedField field(&errors, "endpoints");
@@ -409,11 +377,11 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
         GPR_ASSERT(parsed_locality->locality.lb_weight != 0);
         // Make sure prorities is big enough. Note that they might not
         // arrive in priority order.
-        if (eds_resource->priorities.size() < parsed_locality->priority + 1) {
-          eds_resource->priorities.resize(parsed_locality->priority + 1);
+        if (eds_resource.priorities.size() < parsed_locality->priority + 1) {
+          eds_resource.priorities.resize(parsed_locality->priority + 1);
         }
         auto& locality_map =
-            eds_resource->priorities[parsed_locality->priority].localities;
+            eds_resource.priorities[parsed_locality->priority].localities;
         auto it = locality_map.find(parsed_locality->locality.name.get());
         if (it != locality_map.end()) {
           errors.AddError(y_absl::StrCat(
@@ -426,8 +394,8 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
         }
       }
     }
-    for (size_t i = 0; i < eds_resource->priorities.size(); ++i) {
-      const auto& priority = eds_resource->priorities[i];
+    for (size_t i = 0; i < eds_resource.priorities.size(); ++i) {
+      const auto& priority = eds_resource.priorities[i];
       if (priority.localities.empty()) {
         errors.AddError(y_absl::StrCat("priority ", i, " empty"));
       } else {
@@ -447,7 +415,7 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
     }
   }
   // policy
-  eds_resource->drop_config = MakeRefCounted<XdsEndpointResource::DropConfig>();
+  eds_resource.drop_config = MakeRefCounted<XdsEndpointResource::DropConfig>();
   const auto* policy = envoy_config_endpoint_v3_ClusterLoadAssignment_policy(
       cluster_load_assignment);
   if (policy != nullptr) {
@@ -459,15 +427,12 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
     for (size_t i = 0; i < drop_size; ++i) {
       ValidationErrors::ScopedField field(
           &errors, y_absl::StrCat(".drop_overloads[", i, "]"));
-      DropParseAndAppend(drop_overload[i], eds_resource->drop_config.get(),
+      DropParseAndAppend(drop_overload[i], eds_resource.drop_config.get(),
                          &errors);
     }
   }
   // Return result.
-  if (!errors.ok()) {
-    return errors.status(y_absl::StatusCode::kInvalidArgument,
-                         "errors parsing EDS resource");
-  }
+  if (!errors.ok()) return errors.status("errors parsing EDS resource");
   return eds_resource;
 }
 
@@ -501,9 +466,10 @@ XdsResourceType::DecodeResult XdsEndpointResourceType::Decode(
     if (GRPC_TRACE_FLAG_ENABLED(*context.tracer)) {
       gpr_log(GPR_INFO, "[xds_client %p] parsed ClusterLoadAssignment %s: %s",
               context.client, result.name->c_str(),
-              (*eds_resource)->ToString().c_str());
+              eds_resource->ToString().c_str());
     }
-    result.resource = std::move(*eds_resource);
+    result.resource =
+        std::make_unique<XdsEndpointResource>(std::move(*eds_resource));
   }
   return result;
 }

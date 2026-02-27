@@ -16,7 +16,10 @@
 
 #include "src/core/lib/channel/promise_based_filter.h"
 
+#include <inttypes.h>
+
 #include <algorithm>
+#include <initializer_list>
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
@@ -38,7 +41,7 @@
 #include "src/core/lib/gprpp/manual_constructor.h"
 #include "src/core/lib/gprpp/status_helper.h"
 #include "src/core/lib/iomgr/error.h"
-#include "src/core/lib/promise/seq.h"
+#include "src/core/lib/promise/detail/basic_seq.h"
 #include "src/core/lib/slice/slice.h"
 
 extern grpc_core::TraceFlag grpc_trace_channel;
@@ -243,8 +246,16 @@ void BaseCallData::CapturedBatch::CancelWith(grpc_error_handle error,
   auto* batch = std::exchange(batch_, nullptr);
   GPR_ASSERT(batch != nullptr);
   uintptr_t& refcnt = *RefCountField(batch);
+  gpr_log(GPR_DEBUG, "%sCancelWith: %p refs=%" PRIdPTR " err=%s [%s]",
+          releaser->call()->DebugTag().c_str(), batch, refcnt,
+          error.ToString().c_str(),
+          grpc_transport_stream_op_batch_string(batch, false).c_str());
   if (refcnt == 0) {
     // refcnt==0 ==> cancelled
+    if (grpc_trace_channel.enabled()) {
+      gpr_log(GPR_INFO, "%sCANCEL BATCH REQUEST ALREADY CANCELLED",
+              Activity::current()->DebugTag().c_str());
+    }
     return;
   }
   refcnt = 0;
@@ -301,9 +312,6 @@ BaseCallData::Flusher::~Flusher() {
   if (grpc_trace_channel.enabled()) {
     gpr_log(GPR_INFO, "FLUSHER:forward batch: %s",
             grpc_transport_stream_op_batch_string(release_[0], false).c_str());
-  }
-  if (call_->call_context_ != nullptr && call_->call_context_->traced()) {
-    release_[0]->is_traced = true;
   }
   grpc_call_next_op(call_->elem(), release_[0]);
   GRPC_CALL_STACK_UNREF(call_->call_stack(), "flusher");
@@ -721,7 +729,7 @@ void BaseCallData::ReceiveMessage::OnComplete(y_absl::Status status) {
       Crash(y_absl::StrFormat("ILLEGAL STATE: %s", StateString(state_)));
     case State::kForwardedBatchNoPipe:
       state_ = State::kBatchCompletedNoPipe;
-      break;
+      return;
     case State::kForwardedBatch:
       state_ = State::kBatchCompleted;
       break;
@@ -784,8 +792,6 @@ void BaseCallData::ReceiveMessage::Done(const ServerMetadata& metadata,
       }
     } break;
     case State::kBatchCompletedNoPipe:
-      state_ = State::kBatchCompletedButCancelledNoPipe;
-      break;
     case State::kBatchCompletedButCancelled:
     case State::kBatchCompletedButCancelledNoPipe:
       Crash(y_absl::StrFormat("ILLEGAL STATE: %s", StateString(state_)));
@@ -1315,13 +1321,10 @@ ClientCallData::ClientCallData(grpc_call_element* elem,
 }
 
 ClientCallData::~ClientCallData() {
-  ScopedActivity scoped_activity(this);
   GPR_ASSERT(poll_ctx_ == nullptr);
   if (recv_initial_metadata_ != nullptr) {
     recv_initial_metadata_->~RecvInitialMetadata();
   }
-  initial_metadata_outstanding_token_ =
-      ClientInitialMetadataOutstandingToken::Empty();
 }
 
 TString ClientCallData::DebugTag() const {
@@ -1581,7 +1584,7 @@ void ClientCallData::StartPromise(Flusher* flusher) {
   promise_ = filter->MakeCallPromise(
       CallArgs{WrapMetadata(send_initial_metadata_batch_->payload
                                 ->send_initial_metadata.send_initial_metadata),
-               std::move(initial_metadata_outstanding_token_), nullptr,
+               std::move(initial_metadata_outstanding_token_),
                server_initial_metadata_pipe() == nullptr
                    ? nullptr
                    : &server_initial_metadata_pipe()->sender,
@@ -2052,8 +2055,7 @@ void ServerCallData::StartBatch(grpc_transport_stream_op_batch* b) {
                !batch->recv_initial_metadata && !batch->recv_message &&
                !batch->recv_trailing_metadata);
     PollContext poll_ctx(this, &flusher);
-    Completed(batch->payload->cancel_stream.cancel_error,
-              batch->payload->cancel_stream.tarpit, &flusher);
+    Completed(batch->payload->cancel_stream.cancel_error, &flusher);
     if (is_last()) {
       batch.CompleteWith(&flusher);
     } else {
@@ -2172,8 +2174,7 @@ void ServerCallData::StartBatch(grpc_transport_stream_op_batch* b) {
 }
 
 // Handle cancellation.
-void ServerCallData::Completed(grpc_error_handle error,
-                               bool tarpit_cancellation, Flusher* flusher) {
+void ServerCallData::Completed(grpc_error_handle error, Flusher* flusher) {
   if (grpc_trace_channel.enabled()) {
     gpr_log(
         GPR_DEBUG,
@@ -2203,7 +2204,6 @@ void ServerCallData::Completed(grpc_error_handle error,
             }));
         batch->cancel_stream = true;
         batch->payload->cancel_stream.cancel_error = error;
-        batch->payload->cancel_stream.tarpit = tarpit_cancellation;
         flusher->Resume(batch);
       }
       break;
@@ -2339,8 +2339,7 @@ void ServerCallData::RecvTrailingMetadataReady(grpc_error_handle error) {
   }
   Flusher flusher(this);
   PollContext poll_ctx(this, &flusher);
-  Completed(error, recv_trailing_metadata_->get(GrpcTarPit()).has_value(),
-            &flusher);
+  Completed(error, &flusher);
   flusher.AddClosure(original_recv_trailing_metadata_ready_, std::move(error),
                      "continue recv trailing");
 }
@@ -2375,7 +2374,7 @@ void ServerCallData::RecvInitialMetadataReady(grpc_error_handle error) {
   FakeActivity(this).Run([this, filter] {
     promise_ = filter->MakeCallPromise(
         CallArgs{WrapMetadata(recv_initial_metadata_),
-                 ClientInitialMetadataOutstandingToken::Empty(), nullptr,
+                 ClientInitialMetadataOutstandingToken::Empty(),
                  server_initial_metadata_pipe() == nullptr
                      ? nullptr
                      : &server_initial_metadata_pipe()->sender,
@@ -2560,8 +2559,7 @@ void ServerCallData::WakeInsideCombiner(Flusher* flusher) {
           break;
         case SendTrailingState::kInitial: {
           GPR_ASSERT(*md->get_pointer(GrpcStatusMetadata()) != GRPC_STATUS_OK);
-          Completed(StatusFromMetadata(*md), md->get(GrpcTarPit()).has_value(),
-                    flusher);
+          Completed(StatusFromMetadata(*md), flusher);
         } break;
         case SendTrailingState::kCancelled:
           // Nothing to do.

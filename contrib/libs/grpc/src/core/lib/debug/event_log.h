@@ -72,7 +72,7 @@ class EventLog {
   std::vector<Entry> EndCollection(
       y_absl::Span<const y_absl::string_view> wanted_events);
 
-  PerCpu<Fragment> fragments_{PerCpuOptions().SetCpusPerShard(2)};
+  PerCpu<Fragment> fragments_;
   gpr_cycle_counter collection_begin_;
   static std::atomic<EventLog*> g_instance_;
 };

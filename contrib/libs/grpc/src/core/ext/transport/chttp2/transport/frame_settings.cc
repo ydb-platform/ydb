@@ -22,21 +22,23 @@
 
 #include <string.h>
 
+#include <initializer_list>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_format.h"
+#include "y_absl/strings/string_view.h"
 
 #include <grpc/slice_buffer.h>
 #include <grpc/support/log.h>
 
 #include "src/core/ext/transport/chttp2/transport/flow_control.h"
+#include "src/core/ext/transport/chttp2/transport/frame.h"
 #include "src/core/ext/transport/chttp2/transport/frame_goaway.h"
 #include "src/core/ext/transport/chttp2/transport/http_trace.h"
 #include "src/core/ext/transport/chttp2/transport/internal.h"
-#include "src/core/ext/transport/chttp2/transport/legacy_frame.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/debug_location.h"

@@ -50,9 +50,7 @@
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/status_helper.h"
 #include "src/core/lib/gprpp/strerror.h"
-#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/time.h"
-#include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
 #include "src/core/lib/slice/slice.h"
 
@@ -522,7 +520,7 @@ void PosixEndpointImpl::UpdateRcvLowat() {
 void PosixEndpointImpl::MaybeMakeReadSlices() {
   static const int kBigAlloc = 64 * 1024;
   static const int kSmallAlloc = 8 * 1024;
-  if (incoming_buffer_->Length() < std::max<size_t>(min_progress_size_, 1)) {
+  if (incoming_buffer_->Length() < static_cast<size_t>(min_progress_size_)) {
     size_t allocate_length = min_progress_size_;
     const size_t target_length = static_cast<size_t>(target_length_);
     // If memory pressure is low and we think there will be more than
@@ -532,8 +530,8 @@ void PosixEndpointImpl::MaybeMakeReadSlices() {
     if (low_memory_pressure && target_length > allocate_length) {
       allocate_length = target_length;
     }
-    int extra_wanted = std::max<int>(
-        1, allocate_length - static_cast<int>(incoming_buffer_->Length()));
+    int extra_wanted =
+        allocate_length - static_cast<int>(incoming_buffer_->Length());
     if (extra_wanted >=
         (low_memory_pressure ? kSmallAlloc * 3 / 2 : kBigAlloc)) {
       while (extra_wanted > 0) {
@@ -552,40 +550,28 @@ void PosixEndpointImpl::MaybeMakeReadSlices() {
   }
 }
 
-bool PosixEndpointImpl::HandleReadLocked(y_absl::Status& status) {
+void PosixEndpointImpl::HandleRead(y_absl::Status status) {
+  read_mu_.Lock();
   if (status.ok() && memory_owner_.is_valid()) {
     MaybeMakeReadSlices();
     if (!TcpDoRead(status)) {
       UpdateRcvLowat();
       // We've consumed the edge, request a new one.
-      return false;
+      read_mu_.Unlock();
+      handle_->NotifyOnRead(on_read_);
+      return;
     }
   } else {
-    if (!memory_owner_.is_valid() && status.ok()) {
-      status = TcpAnnotateError(y_absl::UnknownError("Shutting down endpoint"));
+    if (!memory_owner_.is_valid()) {
+      status = y_absl::UnknownError("Shutting down endpoint");
     }
     incoming_buffer_->Clear();
     last_read_buffer_.Clear();
   }
-  return true;
-}
-
-void PosixEndpointImpl::HandleRead(y_absl::Status status) {
-  bool ret = false;
-  y_absl::AnyInvocable<void(y_absl::Status)> cb = nullptr;
-  grpc_core::EnsureRunInExecCtx([&, this]() mutable {
-    grpc_core::MutexLock lock(&read_mu_);
-    ret = HandleReadLocked(status);
-    if (ret) {
-      cb = std::move(read_cb_);
-      read_cb_ = nullptr;
-      incoming_buffer_ = nullptr;
-    }
-  });
-  if (!ret) {
-    handle_->NotifyOnRead(on_read_);
-    return;
-  }
+  y_absl::AnyInvocable<void(y_absl::Status)> cb = std::move(read_cb_);
+  read_cb_ = nullptr;
+  incoming_buffer_ = nullptr;
+  read_mu_.Unlock();
   cb(status);
   Unref();
 }
@@ -1247,7 +1233,8 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
   GPR_ASSERT(options.resource_quota != nullptr);
   auto peer_addr_string = sock.PeerAddressString();
   mem_quota_ = options.resource_quota->memory_quota();
-  memory_owner_ = mem_quota_->CreateMemoryOwner();
+  memory_owner_ = mem_quota_->CreateMemoryOwner(
+      peer_addr_string.ok() ? *peer_addr_string : "");
   self_reservation_ = memory_owner_.MakeReservation(sizeof(PosixEndpointImpl));
   auto local_address = sock.LocalAddress();
   if (local_address.ok()) {

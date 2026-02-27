@@ -14,19 +14,13 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <memory>
-#include <util/generic/string.h>
-#include <util/string/cast.h>
-
 #include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
 
 #include "src/core/lib/config/config_vars.h"
-#include "src/core/lib/event_engine/forkable.h"
 #include "src/core/lib/event_engine/posix_engine/ev_epoll1_linux.h"
 #include "src/core/lib/event_engine/posix_engine/ev_poll_posix.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
-#include "src/core/lib/gprpp/no_destruct.h"
 #include "src/core/lib/iomgr/port.h"
 
 namespace grpc_event_engine {
@@ -34,25 +28,15 @@ namespace experimental {
 
 #ifdef GRPC_POSIX_SOCKET_TCP
 namespace {
-// TODO(yijiem): this object is thread-unsafe, if we are creating pollers in
-// multiple threads (e.g. multiple event engines) or if we are creating pollers
-// while we are forking then we will run into issues.
-grpc_core::NoDestruct<ObjectGroupForkHandler> g_poller_fork_manager;
-
-class PollerForkCallbackMethods {
- public:
-  static void Prefork() { g_poller_fork_manager->Prefork(); }
-  static void PostforkParent() { g_poller_fork_manager->PostforkParent(); }
-  static void PostforkChild() { g_poller_fork_manager->PostforkChild(); }
-};
 
 bool PollStrategyMatches(y_absl::string_view strategy, y_absl::string_view want) {
   return strategy == "all" || strategy == want;
 }
+
 }  // namespace
 
-std::shared_ptr<PosixEventPoller> MakeDefaultPoller(Scheduler* scheduler) {
-  std::shared_ptr<PosixEventPoller> poller;
+PosixEventPoller* MakeDefaultPoller(Scheduler* scheduler) {
+  PosixEventPoller* poller = nullptr;
   auto strings =
       y_absl::StrSplit(grpc_core::ConfigVars::Get().PollStrategy(), ',');
   for (auto it = strings.begin(); it != strings.end() && poller == nullptr;
@@ -69,16 +53,12 @@ std::shared_ptr<PosixEventPoller> MakeDefaultPoller(Scheduler* scheduler) {
       poller = MakePollPoller(scheduler, /*use_phony_poll=*/true);
     }
   }
-  g_poller_fork_manager->RegisterForkable(
-      poller, PollerForkCallbackMethods::Prefork,
-      PollerForkCallbackMethods::PostforkParent,
-      PollerForkCallbackMethods::PostforkChild);
   return poller;
 }
 
 #else  // GRPC_POSIX_SOCKET_TCP
 
-std::shared_ptr<PosixEventPoller> MakeDefaultPoller(Scheduler* /*scheduler*/) {
+PosixEventPoller* MakeDefaultPoller(Scheduler* /*scheduler*/) {
   return nullptr;
 }
 

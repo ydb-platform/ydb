@@ -32,7 +32,6 @@
 
 #include <grpc/compression.h>
 #include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/time.h>
@@ -76,7 +75,7 @@ Channel::Channel(bool is_client, bool is_promising, TString target,
       channelz_node_(channel_args.GetObjectRef<channelz::ChannelNode>()),
       allocator_(channel_args.GetObject<ResourceQuota>()
                      ->memory_quota()
-                     ->CreateMemoryOwner()),
+                     ->CreateMemoryOwner(target)),
       target_(std::move(target)),
       channel_stack_(std::move(channel_stack)) {
   // We need to make sure that grpc_shutdown() does not shut things down
@@ -175,7 +174,8 @@ const grpc_arg_pointer_vtable channelz_node_arg_vtable = {
 
 y_absl::StatusOr<RefCountedPtr<Channel>> Channel::Create(
     const char* target, ChannelArgs args,
-    grpc_channel_stack_type channel_stack_type, Transport* optional_transport) {
+    grpc_channel_stack_type channel_stack_type,
+    grpc_transport* optional_transport) {
   if (!args.GetString(GRPC_ARG_DEFAULT_AUTHORITY).has_value()) {
     auto ssl_override = args.GetString(GRPC_SSL_TARGET_NAME_OVERRIDE_ARG);
     if (ssl_override.has_value()) {
@@ -222,8 +222,8 @@ y_absl::StatusOr<RefCountedPtr<Channel>> Channel::Create(
   }
   ChannelStackBuilderImpl builder(
       grpc_channel_stack_type_string(channel_stack_type), channel_stack_type,
-      args.SetObject(optional_transport));
-  builder.SetTarget(target);
+      args);
+  builder.SetTarget(target).SetTransport(optional_transport);
   if (!CoreConfiguration::Get().channel_init().CreateStack(&builder)) {
     return nullptr;
   }
@@ -283,7 +283,7 @@ static grpc_call* grpc_channel_create_call_internal(
     grpc_channel* c_channel, grpc_call* parent_call, uint32_t propagation_mask,
     grpc_completion_queue* cq, grpc_pollset_set* pollset_set_alternative,
     grpc_core::Slice path, y_absl::optional<grpc_core::Slice> authority,
-    grpc_core::Timestamp deadline, bool registered_method) {
+    grpc_core::Timestamp deadline) {
   auto channel = grpc_core::Channel::FromC(c_channel)->Ref();
   GPR_ASSERT(channel->is_client());
   GPR_ASSERT(!(cq != nullptr && pollset_set_alternative != nullptr));
@@ -299,7 +299,6 @@ static grpc_call* grpc_channel_create_call_internal(
   args.path = std::move(path);
   args.authority = std::move(authority);
   args.send_deadline = deadline;
-  args.registered_method = registered_method;
 
   grpc_call* call;
   GRPC_LOG_IF_ERROR("call_create", grpc_call_create(&args, &call));
@@ -321,8 +320,7 @@ grpc_call* grpc_channel_create_call(grpc_channel* channel,
       host != nullptr
           ? y_absl::optional<grpc_core::Slice>(grpc_core::CSliceRef(*host))
           : y_absl::nullopt,
-      grpc_core::Timestamp::FromTimespecRoundUp(deadline),
-      /*registered_method=*/false);
+      grpc_core::Timestamp::FromTimespecRoundUp(deadline));
 
   return call;
 }
@@ -338,7 +336,7 @@ grpc_call* grpc_channel_create_pollset_set_call(
       host != nullptr
           ? y_absl::optional<grpc_core::Slice>(grpc_core::CSliceRef(*host))
           : y_absl::nullopt,
-      deadline, /*registered_method=*/true);
+      deadline);
 }
 
 namespace grpc_core {
@@ -416,8 +414,7 @@ grpc_call* grpc_channel_create_registered_call(
       rc->authority.has_value()
           ? y_absl::optional<grpc_core::Slice>(rc->authority->Ref())
           : y_absl::nullopt,
-      grpc_core::Timestamp::FromTimespecRoundUp(deadline),
-      /*registered_method=*/true);
+      grpc_core::Timestamp::FromTimespecRoundUp(deadline));
 
   return call;
 }

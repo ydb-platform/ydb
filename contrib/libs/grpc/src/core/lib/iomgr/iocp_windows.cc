@@ -43,7 +43,6 @@ static ULONG g_iocp_kick_token;
 static OVERLAPPED g_iocp_custom_overlap;
 
 static gpr_atm g_custom_events = 0;
-static gpr_atm g_pending_socket_shutdowns = 0;
 
 static HANDLE g_iocp;
 
@@ -91,7 +90,6 @@ grpc_iocp_work_status grpc_iocp_work(grpc_core::Timestamp deadline) {
   } else {
     abort();
   }
-  gpr_mu_lock(&socket->state_mu);
   if (socket->shutdown_called) {
     info->bytes_transferred = 0;
     info->wsa_error = WSA_OPERATION_ABORTED;
@@ -102,11 +100,7 @@ grpc_iocp_work_status grpc_iocp_work(grpc_core::Timestamp deadline) {
     info->wsa_error = success ? 0 : WSAGetLastError();
   }
   GPR_ASSERT(overlapped == &info->overlapped);
-  bool should_destroy = grpc_socket_become_ready(socket, info);
-  gpr_mu_unlock(&socket->state_mu);
-  if (should_destroy) {
-    grpc_winsocket_finish(socket);
-  }
+  grpc_socket_become_ready(socket, info);
   return GRPC_IOCP_WORK_WORK;
 }
 
@@ -128,13 +122,11 @@ void grpc_iocp_kick(void) {
 void grpc_iocp_flush(void) {
   grpc_core::ExecCtx exec_ctx;
   grpc_iocp_work_status work_status;
-  // This method is called during grpc_shutdown. We make the loop
-  // spin until any pending socket shutdowns are complete.
+
   do {
     work_status = grpc_iocp_work(grpc_core::Timestamp::InfPast());
   } while (work_status == GRPC_IOCP_WORK_KICK ||
-           grpc_core::ExecCtx::Get()->Flush() ||
-           gpr_atm_acq_load(&g_pending_socket_shutdowns) != 0);
+           grpc_core::ExecCtx::Get()->Flush());
 }
 
 void grpc_iocp_shutdown(void) {
@@ -161,19 +153,6 @@ void grpc_iocp_add_socket(grpc_winsocket* socket) {
   }
   socket->added_to_iocp = 1;
   GPR_ASSERT(ret == g_iocp);
-}
-
-void grpc_iocp_register_socket_shutdown_socket_locked(grpc_winsocket* socket) {
-  if (!socket->shutdown_registered) {
-    socket->shutdown_registered = true;
-    gpr_atm_full_fetch_add(&g_pending_socket_shutdowns, 1);
-  }
-}
-
-void grpc_iocp_finish_socket_shutdown(grpc_winsocket* socket) {
-  if (socket->shutdown_registered) {
-    gpr_atm_full_fetch_add(&g_pending_socket_shutdowns, -1);
-  }
 }
 
 #endif  // GRPC_WINSOCK_SOCKET

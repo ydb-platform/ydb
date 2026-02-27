@@ -24,10 +24,13 @@
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 
+#include <grpc/support/log.h>
+
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/surface/channel_stack_type.h"
+#include "src/core/lib/transport/transport_fwd.h"
 
 namespace grpc_core {
 
@@ -51,6 +54,16 @@ class ChannelStackBuilder {
   // Query the target.
   y_absl::string_view target() const { return target_; }
 
+  // Set the transport.
+  ChannelStackBuilder& SetTransport(grpc_transport* transport) {
+    GPR_ASSERT(transport_ == nullptr);
+    transport_ = transport;
+    return *this;
+  }
+
+  // Query the transport.
+  grpc_transport* transport() const { return transport_; }
+
   // Query the channel args.
   const ChannelArgs& channel_args() const { return args_; }
 
@@ -64,10 +77,6 @@ class ChannelStackBuilder {
 
   // The type of channel stack being built.
   grpc_channel_stack_type channel_stack_type() const { return type_; }
-
-  // TODO(ctiller): re-evaluate the need for AppendFilter, PrependFilter.
-  // Their usefulness is largely zero now that we have ordering constraints in
-  // channel init.
 
   // Helper to add a filter to the front of the stack.
   void PrependFilter(const grpc_channel_filter* filter);
@@ -99,6 +108,8 @@ class ChannelStackBuilder {
   const grpc_channel_stack_type type_;
   // The target
   TString target_{unknown_target()};
+  // The transport
+  grpc_transport* transport_ = nullptr;
   // Channel args
   ChannelArgs args_;
   // The in-progress stack

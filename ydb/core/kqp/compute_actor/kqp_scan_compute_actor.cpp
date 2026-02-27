@@ -181,7 +181,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
-    InFlightBytes = 0;
+    const ui64 reserve = GetMemoryLimits().ChannelBufferSize;
+    InFlightBytes = InFlightBytes > reserve ? InFlightBytes - reserve : 0;
     const int64_t seq = gComputeHandled.fetch_add(1);
     if (seq % 100 == 0) {
         const int64_t dispatched = gDispatchedToCompute.load();
@@ -226,7 +227,7 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
     const ui64 freeSpace = CalculateFreeSpace();
     if (freeSpace) {
         Send(ev->Sender, new TEvScanExchange::TEvAckData(freeSpace));
-        InFlightBytes += freeSpace;
+        InFlightBytes += GetMemoryLimits().ChannelBufferSize;
     }
 }
 
@@ -250,16 +251,30 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
         return;
     }
-    CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size());
+    static std::atomic<ui64> pollSeq{0};
+    const ui64 pseq = pollSeq.fetch_add(1);
+    const ui64 infBefore = InFlightBytes;
+    ui32 acksSent = 0;
     for (auto&& i : Fetchers) {
         const ui64 freeSpace = CalculateFreeSpace();
         if (!freeSpace) {
             break;
         }
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
-        InFlightBytes += freeSpace;
+        InFlightBytes += GetMemoryLimits().ChannelBufferSize;
+        ++acksSent;
     }
-    CA_LOG_D("POLL_SOURCES:FINISH");
+    if (pseq % 100 == 0) {
+        Cerr << "POLL_SOURCES: pseq=" << pseq
+             << " acks=" << acksSent
+             << " fetchers=" << Fetchers.size()
+             << " inf_before=" << infBefore
+             << " inf_after=" << InFlightBytes
+             << " stored=" << ScanData->GetStoredBytes()
+             << " prev_fs=" << prevFreeSpace
+             << " self=" << SelfId()
+             << Endl;
+    }
 }
 
 void TKqpScanComputeActor::DoBootstrap() {

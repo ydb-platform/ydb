@@ -300,7 +300,7 @@ i64 TFDStorage::FindInterestingOrderingIdx(
     const std::vector<TJoinColumn>& interestingOrdering,
     TOrdering::EType type,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, true, tableAliases);
     return orderingIdx;
 }
 
@@ -416,7 +416,7 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, false, tableAliases);
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, true, tableAliases);
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);

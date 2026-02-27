@@ -10,6 +10,7 @@ TVChunk::TVChunk(
     : Index(index)
     , DirectBlockGroup(std::move(directBlockGroup))
 {
+    DirectBlockGroup->EstablishConnections({}, Index);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(

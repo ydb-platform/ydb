@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/blockstore_config.proto";
+import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+
+package NYdb.NBS.PartitionDirect.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
+
+message TDBGConnectionsIds {
+    message TDDiskConnectionIds {
+        NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
+        NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+    }
+    repeated TDDiskConnectionIds DDiskConnectionIds = 1;
+}
+
+message TTabletInfo {
+    NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 1;
+    NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;
+    repeated TDBGConnectionsIds DBGConnectionsIds = 3;
+}

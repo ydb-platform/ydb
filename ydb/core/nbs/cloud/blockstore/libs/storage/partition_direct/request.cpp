@@ -410,10 +410,11 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     NWilson::TTraceId traceId,
     TString name,
     ui64 tabletId,
+    ui32 vChunkIndex,
     ui8 requiredAckCount)
     : TBaseRequestHandler(
         actorSystem,
-        0)   // vChunkIndex. Temporary set to 0 since restore will be moved to vchunk.
+        vChunkIndex)
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {

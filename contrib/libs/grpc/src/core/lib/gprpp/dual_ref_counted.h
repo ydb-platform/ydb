@@ -49,13 +49,13 @@ class DualRefCounted : public Orphanable {
  public:
   ~DualRefCounted() override = default;
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref() {
+  RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
     IncrementRefCount();
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref(const DebugLocation& location,
-                                                const char* reason) {
+  RefCountedPtr<Child> Ref(const DebugLocation& location,
+                           const char* reason) GRPC_MUST_USE_RESULT {
     IncrementRefCount(location, reason);
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
@@ -103,7 +103,7 @@ class DualRefCounted : public Orphanable {
     WeakUnref(location, reason);
   }
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> RefIfNonZero() {
+  RefCountedPtr<Child> RefIfNonZero() GRPC_MUST_USE_RESULT {
     uint64_t prev_ref_pair = refs_.load(std::memory_order_acquire);
     do {
       const uint32_t strong_refs = GetStrongRefs(prev_ref_pair);
@@ -121,8 +121,8 @@ class DualRefCounted : public Orphanable {
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> RefIfNonZero(
-      const DebugLocation& location, const char* reason) {
+  RefCountedPtr<Child> RefIfNonZero(const DebugLocation& location,
+                                    const char* reason) GRPC_MUST_USE_RESULT {
     uint64_t prev_ref_pair = refs_.load(std::memory_order_acquire);
     do {
       const uint32_t strong_refs = GetStrongRefs(prev_ref_pair);
@@ -146,13 +146,13 @@ class DualRefCounted : public Orphanable {
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
 
-  GRPC_MUST_USE_RESULT WeakRefCountedPtr<Child> WeakRef() {
+  WeakRefCountedPtr<Child> WeakRef() GRPC_MUST_USE_RESULT {
     IncrementWeakRefCount();
     return WeakRefCountedPtr<Child>(static_cast<Child*>(this));
   }
 
-  GRPC_MUST_USE_RESULT WeakRefCountedPtr<Child> WeakRef(
-      const DebugLocation& location, const char* reason) {
+  WeakRefCountedPtr<Child> WeakRef(const DebugLocation& location,
+                                   const char* reason) GRPC_MUST_USE_RESULT {
     IncrementWeakRefCount(location, reason);
     return WeakRefCountedPtr<Child>(static_cast<Child*>(this));
   }

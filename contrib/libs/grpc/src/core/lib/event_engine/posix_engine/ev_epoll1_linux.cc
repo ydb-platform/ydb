@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include <atomic>
+#include <initializer_list>
 #include <memory>
 
 #include "y_absl/status/status.h"
@@ -346,7 +347,7 @@ void Epoll1EventHandle::HandleShutdownInternal(y_absl::Status why,
       }
     }
     write_closure_->SetShutdown(why);
-    error_closure_->SetShutdown(why);
+    write_closure_->SetShutdown(why);
   }
 }
 
@@ -367,7 +368,10 @@ Epoll1Poller::Epoll1Poller(Scheduler* scheduler)
   ForkPollerListAddPoller(this);
 }
 
-void Epoll1Poller::Shutdown() { ForkPollerListRemovePoller(this); }
+void Epoll1Poller::Shutdown() {
+  ForkPollerListRemovePoller(this);
+  delete this;
+}
 
 void Epoll1Poller::Close() {
   grpc_core::MutexLock lock(&mu_);
@@ -561,10 +565,10 @@ void Epoll1Poller::Kick() {
   GPR_ASSERT(wakeup_fd_->Wakeup().ok());
 }
 
-std::shared_ptr<Epoll1Poller> MakeEpoll1Poller(Scheduler* scheduler) {
+Epoll1Poller* MakeEpoll1Poller(Scheduler* scheduler) {
   static bool kEpoll1PollerSupported = InitEpoll1PollerLinux();
   if (kEpoll1PollerSupported) {
-    return std::make_shared<Epoll1Poller>(scheduler);
+    return new Epoll1Poller(scheduler);
   }
   return nullptr;
 }
@@ -621,9 +625,7 @@ void Epoll1Poller::Kick() { grpc_core::Crash("unimplemented"); }
 
 // If GRPC_LINUX_EPOLL is not defined, it means epoll is not available. Return
 // nullptr.
-std::shared_ptr<Epoll1Poller> MakeEpoll1Poller(Scheduler* /*scheduler*/) {
-  return nullptr;
-}
+Epoll1Poller* MakeEpoll1Poller(Scheduler* /*scheduler*/) { return nullptr; }
 
 void Epoll1Poller::PrepareFork() {}
 

@@ -27,6 +27,7 @@
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 
+#include <grpc/slice.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 

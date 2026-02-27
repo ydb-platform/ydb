@@ -29,6 +29,7 @@
 #include "y_absl/functional/any_invocable.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/synchronization/mutex.h"
 
 #include <grpc/event_engine/endpoint_config.h>
 #include <grpc/event_engine/event_engine.h>
@@ -36,7 +37,6 @@
 #include <grpc/event_engine/slice_buffer.h>
 
 #include "src/core/lib/event_engine/posix.h"
-#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_POSIX_SOCKET_TCP
@@ -80,7 +80,7 @@ class PosixEngineListenerImpl
   // This class represents accepting for one bind fd belonging to the listener.
   // Each AsyncConnectionAcceptor takes a ref to the parent
   // PosixEngineListenerImpl object. So the PosixEngineListenerImpl can be
-  // deleted only after all AsyncConnectionAcceptors get destroyed.
+  // deleted only after all AsyncConnectionAcceptor's get destroyed.
   class AsyncConnectionAcceptor {
    public:
     AsyncConnectionAcceptor(std::shared_ptr<EventEngine> engine,
@@ -111,8 +111,6 @@ class PosixEngineListenerImpl
     }
     ListenerSocketsContainer::ListenerSocket& Socket() { return socket_; }
     ~AsyncConnectionAcceptor() {
-      // If uds socket, unlink it so that the corresponding file is deleted.
-      UnlinkIfUnixDomainSocket(*socket_.sock.LocalAddress());
       handle_->OrphanHandle(nullptr, nullptr, "");
       delete notify_on_accept_;
     }
@@ -149,11 +147,12 @@ class PosixEngineListenerImpl
     y_absl::StatusOr<ListenerSocket> Find(
         const grpc_event_engine::experimental::EventEngine::ResolvedAddress&
             addr) override {
-      for (auto* acceptor : acceptors_) {
-        if (acceptor->Socket().addr.size() == addr.size() &&
-            memcmp(acceptor->Socket().addr.address(), addr.address(),
+      for (auto acceptor = acceptors_.begin(); acceptor != acceptors_.end();
+           ++acceptor) {
+        if ((*acceptor)->Socket().addr.size() == addr.size() &&
+            memcmp((*acceptor)->Socket().addr.address(), addr.address(),
                    addr.size()) == 0) {
-          return acceptor->Socket();
+          return (*acceptor)->Socket();
         }
       }
       return y_absl::NotFoundError("Socket not found!");
@@ -177,7 +176,7 @@ class PosixEngineListenerImpl
   friend class AsyncConnectionAcceptor;
   // The mutex ensures thread safety when multiple threads try to call Bind
   // and Start in parallel.
-  grpc_core::Mutex mu_;
+  y_absl::Mutex mu_;
   PosixEventPoller* poller_;
   PosixTcpOptions options_;
   std::shared_ptr<EventEngine> engine_;

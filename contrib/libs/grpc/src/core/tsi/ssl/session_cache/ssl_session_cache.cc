@@ -62,11 +62,7 @@ class SslSessionLRUCache::Node {
 };
 
 SslSessionLRUCache::SslSessionLRUCache(size_t capacity) : capacity_(capacity) {
-  if (capacity == 0) {
-    gpr_log(
-        GPR_ERROR,
-        "SslSessionLRUCache capacity is zero. SSL sessions cannot be resumed.");
-  }
+  GPR_ASSERT(capacity > 0);
 }
 
 SslSessionLRUCache::~SslSessionLRUCache() {
@@ -98,10 +94,6 @@ SslSessionLRUCache::Node* SslSessionLRUCache::FindLocked(
 }
 
 void SslSessionLRUCache::Put(const char* key, SslSessionPtr session) {
-  if (session == nullptr) {
-    gpr_log(GPR_ERROR, "Attempted to put null SSL session in session cache.");
-    return;
-  }
   grpc_core::MutexLock lock(&lock_);
   Node* node = FindLocked(key);
   if (node != nullptr) {

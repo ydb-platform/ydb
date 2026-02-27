@@ -18,6 +18,7 @@
 
 #include <string.h>
 
+#include <algorithm>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 

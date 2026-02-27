@@ -24,16 +24,12 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
-#include "y_absl/strings/string_view.h"
-
 #include <grpc/grpc_security.h>
 
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/time.h"
-#include "src/core/lib/gprpp/validation_errors.h"
+#include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_args.h"
-#include "src/core/lib/json/json_object_loader.h"
 #include "src/core/lib/security/certificate_provider/certificate_provider_factory.h"
 
 namespace grpc_core {
@@ -43,7 +39,10 @@ class FileWatcherCertificateProviderFactory
  public:
   class Config : public CertificateProviderFactory::Config {
    public:
-    y_absl::string_view name() const override;
+    static RefCountedPtr<Config> Parse(const Json& config_json,
+                                       grpc_error_handle* error);
+
+    const char* name() const override;
 
     TString ToString() const override;
 
@@ -57,22 +56,18 @@ class FileWatcherCertificateProviderFactory
 
     Duration refresh_interval() const { return refresh_interval_; }
 
-    static const JsonLoaderInterface* JsonLoader(const JsonArgs& args);
-    void JsonPostLoad(const Json& json, const JsonArgs& args,
-                      ValidationErrors* errors);
-
    private:
     TString identity_cert_file_;
     TString private_key_file_;
     TString root_cert_file_;
-    Duration refresh_interval_ = Duration::Minutes(10);
+    Duration refresh_interval_;
   };
 
-  y_absl::string_view name() const override;
+  const char* name() const override;
 
   RefCountedPtr<CertificateProviderFactory::Config>
-  CreateCertificateProviderConfig(const Json& config_json, const JsonArgs& args,
-                                  ValidationErrors* errors) override;
+  CreateCertificateProviderConfig(const Json& config_json,
+                                  grpc_error_handle* error) override;
 
   RefCountedPtr<grpc_tls_certificate_provider> CreateCertificateProvider(
       RefCountedPtr<CertificateProviderFactory::Config> config) override;

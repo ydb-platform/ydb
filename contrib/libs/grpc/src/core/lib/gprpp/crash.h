@@ -34,9 +34,6 @@ void SetCustomCrashFunction(CustomCrashFunction fn);
 [[noreturn]] void Crash(y_absl::string_view message,
                         ::grpc_core::SourceLocation location = {});
 
-[[noreturn]] void CrashWithStdio(y_absl::string_view message,
-                                 ::grpc_core::SourceLocation location = {});
-
 }  // namespace grpc_core
 
 #endif  // GRPC_SRC_CORE_LIB_GPRPP_CRASH_H

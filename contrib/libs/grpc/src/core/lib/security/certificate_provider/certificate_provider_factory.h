@@ -24,15 +24,12 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
-#include "y_absl/strings/string_view.h"
-
 #include <grpc/grpc_security.h>
 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/validation_errors.h"
+#include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_args.h"
 
 namespace grpc_core {
 
@@ -47,7 +44,7 @@ class CertificateProviderFactory {
 
     // Name of the type of the CertificateProvider. Unique to each type of
     // config.
-    virtual y_absl::string_view name() const = 0;
+    virtual const char* name() const = 0;
 
     virtual TString ToString() const = 0;
   };
@@ -55,11 +52,10 @@ class CertificateProviderFactory {
   virtual ~CertificateProviderFactory() = default;
 
   // Name of the plugin.
-  virtual y_absl::string_view name() const = 0;
+  virtual const char* name() const = 0;
 
   virtual RefCountedPtr<Config> CreateCertificateProviderConfig(
-      const Json& config_json, const JsonArgs& args,
-      ValidationErrors* errors) = 0;
+      const Json& config_json, grpc_error_handle* error) = 0;
 
   // Create a CertificateProvider instance from config.
   virtual RefCountedPtr<grpc_tls_certificate_provider>

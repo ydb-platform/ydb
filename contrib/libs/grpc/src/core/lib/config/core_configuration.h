@@ -18,8 +18,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <atomic>
-
-#include "y_absl/functional/any_invocable.h"
+#include <functional>
 
 #include <grpc/support/log.h>
 
@@ -37,7 +36,7 @@ namespace grpc_core {
 
 // Global singleton that stores library configuration - factories, etc...
 // that plugins might choose to extend.
-class GRPC_DLL CoreConfiguration {
+class CoreConfiguration {
  public:
   CoreConfiguration(const CoreConfiguration&) = delete;
   CoreConfiguration& operator=(const CoreConfiguration&) = delete;
@@ -99,7 +98,7 @@ class GRPC_DLL CoreConfiguration {
 
   // Stores a builder for RegisterBuilder
   struct RegisteredBuilder {
-    y_absl::AnyInvocable<void(Builder*)> builder;
+    std::function<void(Builder*)> builder;
     RegisteredBuilder* next;
   };
 
@@ -155,7 +154,7 @@ class GRPC_DLL CoreConfiguration {
   // Attach a registration function globally.
   // Each registration function is called *in addition to*
   // BuildCoreConfiguration for the default core configuration.
-  static void RegisterBuilder(y_absl::AnyInvocable<void(Builder*)> builder);
+  static void RegisterBuilder(std::function<void(Builder*)> builder);
 
   // Drop the core configuration. Users must ensure no other threads are
   // accessing the configuration.

@@ -33,7 +33,6 @@
 
 #include <grpc/grpc_security.h>  // IWYU pragma: keep
 #include <grpc/grpc_security_constants.h>
-#include <grpc/impl/channel_arg_names.h>
 #include <grpc/slice.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
@@ -59,7 +58,6 @@
 #include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/iomgr/pollset.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_reader.h"
 #include "src/core/lib/security/credentials/alts/check_gcp_environment.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/credentials/external/external_account_credentials.h"
@@ -271,15 +269,14 @@ static grpc_error_handle create_default_creds_from_path(
   error = grpc_load_file(creds_path.c_str(), 0, &creds_data);
   if (!error.ok()) goto end;
   {
-    auto json_or =
-        grpc_core::JsonParse(grpc_core::StringViewFromSlice(creds_data));
+    auto json_or = Json::Parse(grpc_core::StringViewFromSlice(creds_data));
     if (!json_or.ok()) {
       error = absl_status_to_grpc_error(json_or.status());
       goto end;
     }
     json = std::move(*json_or);
   }
-  if (json.type() != Json::Type::kObject) {
+  if (json.type() != Json::Type::OBJECT) {
     error = grpc_error_set_str(GRPC_ERROR_CREATE("Failed to parse JSON"),
                                grpc_core::StatusStrProperty::kRawBytes,
                                grpc_core::StringViewFromSlice(creds_data));

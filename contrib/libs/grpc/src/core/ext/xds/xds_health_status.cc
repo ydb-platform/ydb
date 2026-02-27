@@ -18,10 +18,10 @@
 
 #include "src/core/ext/xds/xds_health_status.h"
 
-#include <util/generic/string.h>
-#include <util/string/cast.h>
-
+#include "y_absl/strings/str_cat.h"
 #include "envoy/config/core/v3/health_check.upb.h"
+
+#include "src/core/lib/gpr/useful.h"
 
 namespace grpc_core {
 
@@ -61,6 +61,20 @@ const char* XdsHealthStatus::ToString() const {
 
 bool operator<(const XdsHealthStatus& hs1, const XdsHealthStatus& hs2) {
   return hs1.status() < hs2.status();
+}
+
+const char* XdsEndpointHealthStatusAttribute::kKey =
+    "xds_endpoint_health_status";
+
+int XdsEndpointHealthStatusAttribute::Cmp(
+    const AttributeInterface* other) const {
+  const auto* other_attr =
+      static_cast<const XdsEndpointHealthStatusAttribute*>(other);
+  return QsortCompare(status_, other_attr->status_);
+}
+
+TString XdsEndpointHealthStatusAttribute::ToString() const {
+  return y_absl::StrCat("{status_=", status_.ToString(), "}");
 }
 
 }  // namespace grpc_core

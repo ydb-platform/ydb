@@ -22,7 +22,7 @@
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
-#include "upb/reflection/def.h"
+#include "upb/def.h"
 
 #include "src/core/ext/xds/xds_common_types.h"
 #include "src/core/ext/xds/xds_http_filters.h"

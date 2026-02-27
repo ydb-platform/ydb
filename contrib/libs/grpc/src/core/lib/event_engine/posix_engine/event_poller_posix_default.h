@@ -17,8 +17,6 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <memory>
-
 namespace grpc_event_engine {
 namespace experimental {
 
@@ -27,7 +25,7 @@ class Scheduler;
 
 // Return an instance of an event poller which is tied to the specified
 // scheduler.
-std::shared_ptr<PosixEventPoller> MakeDefaultPoller(Scheduler* scheduler);
+PosixEventPoller* MakeDefaultPoller(Scheduler* scheduler);
 
 }  // namespace experimental
 }  // namespace grpc_event_engine

@@ -1,64 +1,57 @@
---- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool.h       (index)
-+++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool.h       (working tree)
-@@ -39,6 +39,12 @@ class ThreadPool : public Forkable {
-   // Run must not be called after Quiesce completes
-   virtual void Run(y_absl::AnyInvocable<void()> callback) = 0;
-   virtual void Run(EventEngine::Closure* closure) = 0;
-+
-+  static void SetThreadsLimit(size_t count);
-+  static size_t GetThreadsLimit();
-+
-+ private:
-+  static size_t threads_limit_;
- };
+--- a/src/core/lib/event_engine/thread_pool.cc	(e2ca673ad16f4cb0e0e81da057545ef9583bd947)
++++ b/src/core/lib/event_engine/thread_pool.cc	(working tree)
+@@ -34,9 +34,30 @@
+ #include "src/core/lib/gprpp/thd.h"
+ #include "src/core/lib/gprpp/time.h"
  
- // Creates a default thread pool.
---- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool_factory.cc      (index)
-+++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool_factory.cc      (working tree)
-@@ -17,6 +17,8 @@
- 
- #include <memory>
- 
-+#include <grpc/support/cpu.h>
-+
- #include "src/core/lib/event_engine/forkable.h"
- #include "src/core/lib/event_engine/thread_pool/thread_pool.h"
- #include "src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.h"
-@@ -36,6 +38,14 @@ class ThreadPoolForkCallbackMethods {
- };
- }  // namespace
- 
-+void ThreadPool::SetThreadsLimit(size_t count) {
-+    threads_limit_ = count;
++namespace {
++    size_t threads_limit_ = 0;
 +}
 +
-+size_t ThreadPool::GetThreadsLimit() { return threads_limit_; }
-+
-+size_t ThreadPool::threads_limit_ = grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
-+
- std::shared_ptr<ThreadPool> MakeThreadPool(size_t reserve_threads) {
-   auto thread_pool = std::make_shared<WorkStealingThreadPool>(reserve_threads);
-   g_thread_pool_fork_manager->RegisterForkable(
---- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc        (index)
-+++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc        (working tree)
-@@ -174,7 +174,7 @@ void WorkStealingThreadPool::PostforkChild() { pool_->Postfork(); }
+ namespace grpc_event_engine {
+ namespace experimental {
  
- WorkStealingThreadPool::WorkStealingThreadPoolImpl::WorkStealingThreadPoolImpl(
-     size_t reserve_threads)
--    : reserve_threads_(reserve_threads), queue_(this), lifeguard_(this) {}
-+    : reserve_threads_(std::min(reserve_threads, ThreadPool::GetThreadsLimit())), queue_(this), lifeguard_(this) {}
++size_t ThreadPool::SetThreadsLimit(size_t count) {
++    size_t prev = threads_limit_;
++    threads_limit_ = count;
++    return prev;
++}
++
++unsigned ThreadPool::GetMaxSystemThread() {
++    unsigned max_threads = grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
++
++    if (threads_limit_) {
++        unsigned new_max_threads = std::min(max_threads, static_cast<unsigned>(threads_limit_));
++        gpr_log(GPR_INFO, "Threads limit changed from %u to %u", max_threads, new_max_threads);
++        max_threads = new_max_threads;
++    }
++    return max_threads;
++}
++
+ void ThreadPool::StartThread(StatePtr state, StartThreadReason reason) {
+   state->thread_count.Add();
+   const auto now = grpc_core::Timestamp::Now();
+--- a/src/core/lib/event_engine/thread_pool.h	(e2ca673ad16f4cb0e0e81da057545ef9583bd947)
++++ b/src/core/lib/event_engine/thread_pool.h	(working tree)
+@@ -62,6 +62,9 @@ class ThreadPool final : public Forkable, public Executor {
+   // Returns true if the current thread is a thread pool thread.
+   static bool IsThreadPoolThread();
  
- void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
-   for (size_t i = 0; i < reserve_threads_; i++) {
-@@ -361,6 +361,11 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
-     backoff_.Reset();
-     return;
-   }
++  // Set the maximum numbers of treads for threadpool
++  static size_t SetThreadsLimit(size_t count);
 +
-+  if (living_thread_count > ThreadPool::GetThreadsLimit()) {
-+    return;
-+  }
+  private:
+   class Queue {
+    public:
+@@ -129,8 +132,9 @@ class ThreadPool final : public Forkable, public Executor {
+   static void StartThread(StatePtr state, StartThreadReason reason);
+   void Postfork();
+ 
+-  const unsigned reserve_threads_ =
+-      grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
++  unsigned GetMaxSystemThread();
 +
-   // All workers are busy and the pool is not throttled. Start a new thread.
-   // TODO(hork): new threads may spawn when there is no work in the global
-   // queue, nor any work to steal. Add more sophisticated logic about when to
++  const unsigned reserve_threads_ = GetMaxSystemThread();
+   const StatePtr state_ = std::make_shared<State>(reserve_threads_);
+   std::atomic<bool> quiesced_{false};
+ };

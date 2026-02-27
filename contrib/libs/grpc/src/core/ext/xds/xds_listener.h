@@ -35,7 +35,7 @@
 #include "y_absl/types/variant.h"
 #include "envoy/config/listener/v3/listener.upbdefs.h"
 #include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upbdefs.h"
-#include "upb/reflection/def.h"
+#include "upb/def.h"
 
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/ext/xds/xds_client.h"
@@ -52,8 +52,7 @@ namespace grpc_core {
 struct XdsListenerResource : public XdsResourceType::ResourceData {
   struct HttpConnectionManager {
     // The RDS resource name or inline RouteConfiguration.
-    y_absl::variant<TString, std::shared_ptr<const XdsRouteConfigResource>>
-        route_config;
+    y_absl::variant<TString, XdsRouteConfigResource> route_config;
 
     // Storing the Http Connection Manager Common Http Protocol Option
     // max_stream_duration
@@ -72,17 +71,8 @@ struct XdsListenerResource : public XdsResourceType::ResourceData {
     std::vector<HttpFilter> http_filters;
 
     bool operator==(const HttpConnectionManager& other) const {
-      if (y_absl::holds_alternative<TString>(route_config)) {
-        if (route_config != other.route_config) return false;
-      } else {
-        auto& rc1 = y_absl::get<std::shared_ptr<const XdsRouteConfigResource>>(
-            route_config);
-        auto* rc2 = y_absl::get_if<std::shared_ptr<const XdsRouteConfigResource>>(
-            &other.route_config);
-        if (rc2 == nullptr) return false;
-        if (!(*rc1 == **rc2)) return false;
-      }
-      return http_max_stream_duration == other.http_max_stream_duration &&
+      return route_config == other.route_config &&
+             http_max_stream_duration == other.http_max_stream_duration &&
              http_filters == other.http_filters;
     }
 

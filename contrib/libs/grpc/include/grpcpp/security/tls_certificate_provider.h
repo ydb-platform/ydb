@@ -32,7 +32,7 @@ namespace experimental {
 // Interface for a class that handles the process to fetch credential data.
 // Implementations should be a wrapper class of an internal provider
 // implementation.
-class GRPCXX_DLL CertificateProviderInterface {
+class CertificateProviderInterface {
  public:
   virtual ~CertificateProviderInterface() = default;
   virtual grpc_tls_certificate_provider* c_provider() = 0;
@@ -41,7 +41,7 @@ class GRPCXX_DLL CertificateProviderInterface {
 // A struct that stores the credential data presented to the peer in handshake
 // to show local identity. The private_key and certificate_chain should always
 // match.
-struct GRPCXX_DLL IdentityKeyCertPair {
+struct IdentityKeyCertPair {
   TString private_key;
   TString certificate_chain;
 };
@@ -49,8 +49,7 @@ struct GRPCXX_DLL IdentityKeyCertPair {
 // A basic CertificateProviderInterface implementation that will load credential
 // data from static string during initialization. This provider will always
 // return the same cert data for all cert names, and reloading is not supported.
-class GRPCXX_DLL StaticDataCertificateProvider
-    : public CertificateProviderInterface {
+class StaticDataCertificateProvider : public CertificateProviderInterface {
  public:
   StaticDataCertificateProvider(
       const TString& root_certificate,
@@ -85,7 +84,7 @@ class GRPCXX_DLL StaticDataCertificateProvider
 //   then renaming the new directory to the original name of the old directory.
 //   2)  using a symlink for the directory. When need to change, put new
 //   credential data in a new directory, and change symlink.
-class GRPCXX_DLL FileWatcherCertificateProvider final
+class FileWatcherCertificateProvider final
     : public CertificateProviderInterface {
  public:
   // Constructor to get credential updates from root and identity file paths.

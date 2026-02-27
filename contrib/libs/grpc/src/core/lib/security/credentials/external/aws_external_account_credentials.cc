@@ -19,6 +19,7 @@
 
 #include <string.h>
 
+#include <initializer_list>
 #include <map>
 #include <utility>
 
@@ -33,7 +34,6 @@
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/json.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
@@ -41,8 +41,6 @@
 #include "src/core/lib/http/httpcli_ssl_credentials.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_reader.h"
-#include "src/core/lib/json/json_writer.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/uri/uri_parser.h"
 
@@ -95,51 +93,52 @@ AwsExternalAccountCredentials::AwsExternalAccountCredentials(
     Options options, std::vector<TString> scopes, grpc_error_handle* error)
     : ExternalAccountCredentials(options, std::move(scopes)) {
   audience_ = options.audience;
-  auto it = options.credential_source.object().find("environment_id");
-  if (it == options.credential_source.object().end()) {
+  auto it = options.credential_source.object_value().find("environment_id");
+  if (it == options.credential_source.object_value().end()) {
     *error = GRPC_ERROR_CREATE("environment_id field not present.");
     return;
   }
-  if (it->second.type() != Json::Type::kString) {
+  if (it->second.type() != Json::Type::STRING) {
     *error = GRPC_ERROR_CREATE("environment_id field must be a string.");
     return;
   }
-  if (it->second.string() != kExpectedEnvironmentId) {
+  if (it->second.string_value() != kExpectedEnvironmentId) {
     *error = GRPC_ERROR_CREATE("environment_id does not match.");
     return;
   }
-  it = options.credential_source.object().find("region_url");
-  if (it == options.credential_source.object().end()) {
+  it = options.credential_source.object_value().find("region_url");
+  if (it == options.credential_source.object_value().end()) {
     *error = GRPC_ERROR_CREATE("region_url field not present.");
     return;
   }
-  if (it->second.type() != Json::Type::kString) {
+  if (it->second.type() != Json::Type::STRING) {
     *error = GRPC_ERROR_CREATE("region_url field must be a string.");
     return;
   }
-  region_url_ = it->second.string();
-  it = options.credential_source.object().find("url");
-  if (it != options.credential_source.object().end() &&
-      it->second.type() == Json::Type::kString) {
-    url_ = it->second.string();
+  region_url_ = it->second.string_value();
+  it = options.credential_source.object_value().find("url");
+  if (it != options.credential_source.object_value().end() &&
+      it->second.type() == Json::Type::STRING) {
+    url_ = it->second.string_value();
   }
-  it =
-      options.credential_source.object().find("regional_cred_verification_url");
-  if (it == options.credential_source.object().end()) {
+  it = options.credential_source.object_value().find(
+      "regional_cred_verification_url");
+  if (it == options.credential_source.object_value().end()) {
     *error =
         GRPC_ERROR_CREATE("regional_cred_verification_url field not present.");
     return;
   }
-  if (it->second.type() != Json::Type::kString) {
+  if (it->second.type() != Json::Type::STRING) {
     *error = GRPC_ERROR_CREATE(
         "regional_cred_verification_url field must be a string.");
     return;
   }
-  regional_cred_verification_url_ = it->second.string();
-  it = options.credential_source.object().find("imdsv2_session_token_url");
-  if (it != options.credential_source.object().end() &&
-      it->second.type() == Json::Type::kString) {
-    imdsv2_session_token_url_ = it->second.string();
+  regional_cred_verification_url_ = it->second.string_value();
+  it =
+      options.credential_source.object_value().find("imdsv2_session_token_url");
+  if (it != options.credential_source.object_value().end() &&
+      it->second.type() == Json::Type::STRING) {
+    imdsv2_session_token_url_ = it->second.string_value();
   }
 }
 
@@ -417,7 +416,7 @@ void AwsExternalAccountCredentials::OnRetrieveSigningKeysInternal(
   }
   y_absl::string_view response_body(ctx_->response.body,
                                   ctx_->response.body_length);
-  auto json = JsonParse(response_body);
+  auto json = Json::Parse(response_body);
   if (!json.ok()) {
     FinishRetrieveSubjectToken(
         "", GRPC_ERROR_CREATE(
@@ -425,33 +424,36 @@ void AwsExternalAccountCredentials::OnRetrieveSigningKeysInternal(
                              json.status().ToString())));
     return;
   }
-  if (json->type() != Json::Type::kObject) {
+  if (json->type() != Json::Type::OBJECT) {
     FinishRetrieveSubjectToken(
         "", GRPC_ERROR_CREATE("Invalid retrieve signing keys response: "
                               "JSON type is not object"));
     return;
   }
-  auto it = json->object().find("AccessKeyId");
-  if (it != json->object().end() && it->second.type() == Json::Type::kString) {
-    access_key_id_ = it->second.string();
+  auto it = json->object_value().find("AccessKeyId");
+  if (it != json->object_value().end() &&
+      it->second.type() == Json::Type::STRING) {
+    access_key_id_ = it->second.string_value();
   } else {
     FinishRetrieveSubjectToken(
         "", GRPC_ERROR_CREATE(y_absl::StrFormat(
                 "Missing or invalid AccessKeyId in %s.", response_body)));
     return;
   }
-  it = json->object().find("SecretAccessKey");
-  if (it != json->object().end() && it->second.type() == Json::Type::kString) {
-    secret_access_key_ = it->second.string();
+  it = json->object_value().find("SecretAccessKey");
+  if (it != json->object_value().end() &&
+      it->second.type() == Json::Type::STRING) {
+    secret_access_key_ = it->second.string_value();
   } else {
     FinishRetrieveSubjectToken(
         "", GRPC_ERROR_CREATE(y_absl::StrFormat(
                 "Missing or invalid SecretAccessKey in %s.", response_body)));
     return;
   }
-  it = json->object().find("Token");
-  if (it != json->object().end() && it->second.type() == Json::Type::kString) {
-    token_ = it->second.string();
+  it = json->object_value().find("Token");
+  if (it != json->object_value().end() &&
+      it->second.type() == Json::Type::STRING) {
+    token_ = it->second.string_value();
   } else {
     FinishRetrieveSubjectToken(
         "", GRPC_ERROR_CREATE(y_absl::StrFormat("Missing or invalid Token in %s.",
@@ -487,26 +489,20 @@ void AwsExternalAccountCredentials::BuildSubjectToken() {
   }
   // Construct subject token
   Json::Array headers;
-  headers.push_back(Json::FromObject(
-      {{"key", Json::FromString("Authorization")},
-       {"value", Json::FromString(signed_headers["Authorization"])}}));
+  headers.push_back(Json(
+      {{"key", "Authorization"}, {"value", signed_headers["Authorization"]}}));
+  headers.push_back(Json({{"key", "host"}, {"value", signed_headers["host"]}}));
   headers.push_back(
-      Json::FromObject({{"key", Json::FromString("host")},
-                        {"value", Json::FromString(signed_headers["host"])}}));
-  headers.push_back(Json::FromObject(
-      {{"key", Json::FromString("x-amz-date")},
-       {"value", Json::FromString(signed_headers["x-amz-date"])}}));
-  headers.push_back(Json::FromObject(
-      {{"key", Json::FromString("x-amz-security-token")},
-       {"value", Json::FromString(signed_headers["x-amz-security-token"])}}));
-  headers.push_back(Json::FromObject(
-      {{"key", Json::FromString("x-goog-cloud-target-resource")},
-       {"value", Json::FromString(audience_)}}));
-  Json subject_token_json =
-      Json::FromObject({{"url", Json::FromString(cred_verification_url_)},
-                        {"method", Json::FromString("POST")},
-                        {"headers", Json::FromArray(headers)}});
-  TString subject_token = UrlEncode(JsonDump(subject_token_json));
+      Json({{"key", "x-amz-date"}, {"value", signed_headers["x-amz-date"]}}));
+  headers.push_back(Json({{"key", "x-amz-security-token"},
+                          {"value", signed_headers["x-amz-security-token"]}}));
+  headers.push_back(
+      Json({{"key", "x-goog-cloud-target-resource"}, {"value", audience_}}));
+  Json::Object object{{"url", Json(cred_verification_url_)},
+                      {"method", Json("POST")},
+                      {"headers", Json(headers)}};
+  Json subject_token_json(object);
+  TString subject_token = UrlEncode(subject_token_json.Dump());
   FinishRetrieveSubjectToken(subject_token, y_absl::OkStatus());
 }
 

@@ -45,14 +45,12 @@ class RefCount {
  public:
   using Value = intptr_t;
 
-  RefCount() : RefCount(1) {}
-
   // `init` is the initial refcount stored in this object.
   //
   // `trace` is a string to be logged with trace events; if null, no
   // trace logging will be done.  Tracing is a no-op in non-debug builds.
   explicit RefCount(
-      Value init,
+      Value init = 1,
       const char*
 #ifndef NDEBUG
           // Leave unnamed if NDEBUG to avoid unused parameter warning
@@ -279,13 +277,13 @@ class RefCounted : public Impl {
   // Note: Depending on the Impl used, this dtor can be implicitly virtual.
   ~RefCounted() = default;
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref() {
+  RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
     IncrementRefCount();
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref(const DebugLocation& location,
-                                                const char* reason) {
+  RefCountedPtr<Child> Ref(const DebugLocation& location,
+                           const char* reason) GRPC_MUST_USE_RESULT {
     IncrementRefCount(location, reason);
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
@@ -305,12 +303,12 @@ class RefCounted : public Impl {
     }
   }
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> RefIfNonZero() {
+  RefCountedPtr<Child> RefIfNonZero() GRPC_MUST_USE_RESULT {
     return RefCountedPtr<Child>(refs_.RefIfNonZero() ? static_cast<Child*>(this)
                                                      : nullptr);
   }
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> RefIfNonZero(
-      const DebugLocation& location, const char* reason) {
+  RefCountedPtr<Child> RefIfNonZero(const DebugLocation& location,
+                                    const char* reason) GRPC_MUST_USE_RESULT {
     return RefCountedPtr<Child>(refs_.RefIfNonZero(location, reason)
                                     ? static_cast<Child*>(this)
                                     : nullptr);

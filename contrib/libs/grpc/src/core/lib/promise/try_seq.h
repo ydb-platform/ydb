@@ -17,8 +17,6 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <stdlib.h>
-
 #include <type_traits>
 #include <utility>
 
@@ -28,7 +26,6 @@
 
 #include "src/core/lib/promise/detail/basic_seq.h"
 #include "src/core/lib/promise/detail/promise_like.h"
-#include "src/core/lib/promise/detail/seq_state.h"
 #include "src/core/lib/promise/detail/status.h"
 #include "src/core/lib/promise/poll.h"
 
@@ -43,11 +40,6 @@ struct TrySeqTraitsWithSfinae {
   template <typename Next>
   static auto CallFactory(Next* next, T&& value) {
     return next->Make(std::forward<T>(value));
-  }
-  static bool IsOk(const T&) { return true; }
-  template <typename R>
-  static R ReturnValue(T&&) {
-    abort();
   }
   template <typename F, typename Elem>
   static auto CallSeqFactory(F& f, Elem&& elem, T&& value)
@@ -67,11 +59,6 @@ struct TrySeqTraitsWithSfinae<y_absl::StatusOr<T>> {
   template <typename Next>
   static auto CallFactory(Next* next, y_absl::StatusOr<T>&& status) {
     return next->Make(std::move(*status));
-  }
-  static bool IsOk(const y_absl::StatusOr<T>& status) { return status.ok(); }
-  template <typename R>
-  static R ReturnValue(y_absl::StatusOr<T>&& status) {
-    return StatusCast<R>(status.status());
   }
   template <typename F, typename Elem>
   static auto CallSeqFactory(F& f, Elem&& elem, y_absl::StatusOr<T> value)
@@ -99,11 +86,6 @@ struct TrySeqTraitsWithSfinae<
   static auto CallFactory(Next* next, T&&) {
     return next->Make();
   }
-  static bool IsOk(const T& status) { return IsStatusOk(status); }
-  template <typename R>
-  static R ReturnValue(T&& status) {
-    return R(std::move(status));
-  }
   template <typename Result, typename RunNext>
   static Poll<Result> CheckResultAndRunNext(T prior, RunNext run_next) {
     if (!IsStatusOk(prior)) return Result(std::move(prior));
@@ -118,11 +100,6 @@ struct TrySeqTraitsWithSfinae<y_absl::Status> {
   static auto CallFactory(Next* next, y_absl::Status&&) {
     return next->Make();
   }
-  static bool IsOk(const y_absl::Status& status) { return status.ok(); }
-  template <typename R>
-  static R ReturnValue(y_absl::Status&& status) {
-    return StatusCast<R>(std::move(status));
-  }
   template <typename Result, typename RunNext>
   static Poll<Result> CheckResultAndRunNext(y_absl::Status prior,
                                             RunNext run_next) {
@@ -134,17 +111,8 @@ struct TrySeqTraitsWithSfinae<y_absl::Status> {
 template <typename T>
 using TrySeqTraits = TrySeqTraitsWithSfinae<T>;
 
-template <typename P, typename... Fs>
-class TrySeq {
- public:
-  explicit TrySeq(P&& promise, Fs&&... factories)
-      : state_(std::forward<P>(promise), std::forward<Fs>(factories)...) {}
-
-  auto operator()() { return state_.PollOnce(); }
-
- private:
-  SeqState<TrySeqTraits, P, Fs...> state_;
-};
+template <typename... Fs>
+using TrySeq = BasicSeq<TrySeqTraits, Fs...>;
 
 template <typename I, typename F, typename Arg>
 struct TrySeqIterTraits {

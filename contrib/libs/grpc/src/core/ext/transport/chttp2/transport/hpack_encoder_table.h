@@ -21,7 +21,8 @@
 #include <stdint.h>
 
 #include <limits>
-#include <vector>
+
+#include "y_absl/container/inlined_vector.h"
 
 #include "src/core/ext/transport/chttp2/transport/hpack_constants.h"
 
@@ -58,7 +59,6 @@ class HPackEncoderTable {
            table_elems_ - index;
   }
   // Check if an element index is convertable to a dynamic index
-  // Note that 0 is always not convertable
   bool ConvertableToDynamicIndex(uint32_t index) const {
     return index > tail_remote_index_;
   }
@@ -73,7 +73,8 @@ class HPackEncoderTable {
   uint32_t table_elems_ = 0;
   uint32_t table_size_ = 0;
   // The size of each element in the HPACK table.
-  std::vector<EntrySize> elem_size_;
+  y_absl::InlinedVector<EntrySize, hpack_constants::kInitialTableEntries>
+      elem_size_;
 };
 
 }  // namespace grpc_core

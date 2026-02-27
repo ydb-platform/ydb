@@ -24,9 +24,12 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/status/status.h"
+#include "y_absl/types/optional.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/impl/connectivity_state.h>
@@ -54,7 +57,6 @@
 #include "src/core/lib/iomgr/iomgr_fwd.h"
 #include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/iomgr/resolved_address.h"
-#include "src/core/lib/promise/arena_promise.h"
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/transport/connectivity_state.h"
@@ -84,8 +86,6 @@ class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
   }
 
   size_t GetInitialCallSizeEstimate() const;
-
-  ArenaPromise<ServerMetadataHandle> MakeCallPromise(CallArgs call_args);
 
  private:
   grpc_channel_stack* channel_stack_;
@@ -122,9 +122,9 @@ class SubchannelCall {
   void SetAfterCallStackDestroy(grpc_closure* closure);
 
   // Interface of RefCounted<>.
-  GRPC_MUST_USE_RESULT RefCountedPtr<SubchannelCall> Ref();
-  GRPC_MUST_USE_RESULT RefCountedPtr<SubchannelCall> Ref(
-      const DebugLocation& location, const char* reason);
+  RefCountedPtr<SubchannelCall> Ref() GRPC_MUST_USE_RESULT;
+  RefCountedPtr<SubchannelCall> Ref(const DebugLocation& location,
+                                    const char* reason) GRPC_MUST_USE_RESULT;
   // When refcount drops to 0, destroys itself and the associated call stack,
   // but does NOT free the memory because it's in the call arena.
   void Unref();
@@ -176,14 +176,8 @@ class Subchannel : public DualRefCounted<Subchannel> {
     // Invoked whenever the subchannel's connectivity state changes.
     // There will be only one invocation of this method on a given watcher
     // instance at any given time.
-    // A ref to the watcher is passed in here so that the implementation
-    // can unref it in the appropriate synchronization context (e.g.,
-    // inside a WorkSerializer).
-    // TODO(roth): Figure out a cleaner way to guarantee that the ref is
-    // released in the right context.
-    virtual void OnConnectivityStateChange(
-        RefCountedPtr<ConnectivityStateWatcherInterface> self,
-        grpc_connectivity_state state, const y_absl::Status& status) = 0;
+    virtual void OnConnectivityStateChange(grpc_connectivity_state state,
+                                           const y_absl::Status& status) = 0;
 
     virtual grpc_pollset_set* interested_parties() = 0;
   };
@@ -221,8 +215,6 @@ class Subchannel : public DualRefCounted<Subchannel> {
 
   channelz::SubchannelNode* channelz_node();
 
-  const grpc_resolved_address& address() const { return key_.address(); }
-
   // Starts watching the subchannel's connectivity state.
   // The first callback to the watcher will be delivered ~immediately.
   // Subsequent callbacks will be delivered as the subchannel's state
@@ -230,13 +222,15 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // The watcher will be destroyed either when the subchannel is
   // destroyed or when CancelConnectivityStateWatch() is called.
   void WatchConnectivityState(
+      const y_absl::optional<TString>& health_check_service_name,
       RefCountedPtr<ConnectivityStateWatcherInterface> watcher)
       Y_ABSL_LOCKS_EXCLUDED(mu_);
 
   // Cancels a connectivity state watch.
   // If the watcher has already been destroyed, this is a no-op.
-  void CancelConnectivityStateWatch(ConnectivityStateWatcherInterface* watcher)
-      Y_ABSL_LOCKS_EXCLUDED(mu_);
+  void CancelConnectivityStateWatch(
+      const y_absl::optional<TString>& health_check_service_name,
+      ConnectivityStateWatcherInterface* watcher) Y_ABSL_LOCKS_EXCLUDED(mu_);
 
   RefCountedPtr<ConnectedSubchannel> connected_subchannel()
       Y_ABSL_LOCKS_EXCLUDED(mu_) {
@@ -272,10 +266,6 @@ class Subchannel : public DualRefCounted<Subchannel> {
   void RemoveDataProducer(DataProducerInterface* data_producer)
       Y_ABSL_LOCKS_EXCLUDED(mu_);
 
-  std::shared_ptr<grpc_event_engine::experimental::EventEngine> event_engine() {
-    return event_engine_;
-  }
-
  private:
   // A linked list of ConnectivityStateWatcherInterfaces that are monitoring
   // the subchannel's state.
@@ -305,6 +295,40 @@ class Subchannel : public DualRefCounted<Subchannel> {
     std::map<ConnectivityStateWatcherInterface*,
              RefCountedPtr<ConnectivityStateWatcherInterface>>
         watchers_;
+  };
+
+  // A map that tracks ConnectivityStateWatcherInterfaces using a particular
+  // health check service name.
+  //
+  // There is one entry in the map for each health check service name.
+  // Entries exist only as long as there are watchers using the
+  // corresponding service name.
+  //
+  // A health check client is maintained only while the subchannel is in
+  // state READY.
+  class HealthWatcherMap {
+   public:
+    void AddWatcherLocked(
+        WeakRefCountedPtr<Subchannel> subchannel,
+        const TString& health_check_service_name,
+        RefCountedPtr<ConnectivityStateWatcherInterface> watcher);
+    void RemoveWatcherLocked(const TString& health_check_service_name,
+                             ConnectivityStateWatcherInterface* watcher);
+
+    // Notifies the watcher when the subchannel's state changes.
+    void NotifyLocked(grpc_connectivity_state state, const y_absl::Status& status)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&Subchannel::mu_);
+
+    grpc_connectivity_state CheckConnectivityStateLocked(
+        Subchannel* subchannel, const TString& health_check_service_name)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&Subchannel::mu_);
+
+    void ShutdownLocked();
+
+   private:
+    class HealthWatcher;
+
+    std::map<TString, OrphanablePtr<HealthWatcher>> map_;
   };
 
   class ConnectedSubchannelStateWatcher;
@@ -359,8 +383,10 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // - TRANSIENT_FAILURE: connection attempt failed, retry timer pending
   grpc_connectivity_state state_ Y_ABSL_GUARDED_BY(mu_) = GRPC_CHANNEL_IDLE;
   y_absl::Status status_ Y_ABSL_GUARDED_BY(mu_);
-  // The list of connectivity state watchers.
+  // The list of watchers without a health check service name.
   ConnectivityStateWatcherList watcher_list_ Y_ABSL_GUARDED_BY(mu_);
+  // The map of watchers with health check service names.
+  HealthWatcherMap health_watcher_map_ Y_ABSL_GUARDED_BY(mu_);
   // Used for sending connectivity state notifications.
   WorkSerializer work_serializer_;
 

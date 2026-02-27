@@ -129,7 +129,7 @@ TEST_P(TConcurrentCacheTest, Stress)
         .Run());
     }
 
-    auto results = AllSucceeded(asyncResults).Get().Value();
+    auto results = AllSucceeded(asyncResults).BlockingGet().Value();
 
     EXPECT_LE(distinctElements, std::accumulate(results.begin(), results.end(), 0u));
     threadPool->Shutdown();

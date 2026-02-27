@@ -37,7 +37,7 @@ protected:
 TEST_F(TSuspendableInvokerTest, Simple)
 {
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    suspendableInvoker->Suspend().Get();
+    suspendableInvoker->Suspend().BlockingGet();
     suspendableInvoker->Resume();
 }
 
@@ -87,7 +87,7 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
         .AsyncVia(suspendableInvoker)
         .Run();
 
-    suspendableInvoker->Suspend().Get();
+    suspendableInvoker->Suspend().BlockingGet();
     EXPECT_FALSE(promise.ToFuture().IsSet());
     suspendableInvoker->Resume();
     promise.ToFuture().BlockingGet();
@@ -108,7 +108,7 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
 TEST_F(TSuspendableInvokerTest, EarlySuspend)
 {
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    suspendableInvoker->Suspend().Get();
+    suspendableInvoker->Suspend().BlockingGet();
 
     auto promise = NewPromise<void>();
 
@@ -278,7 +278,7 @@ TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
 
     suspendableInvoker->Suspend()
-        .Get();
+        .BlockingGet();
 
     const int totalActionCount = 100000;
 

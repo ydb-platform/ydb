@@ -143,7 +143,7 @@ TEST(TFederatedClientTest, Basic)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -158,7 +158,7 @@ TEST(TFederatedClientTest, Basic)
     // From `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -228,7 +228,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -240,7 +240,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `sas` because `vla` was marked as unhealthy after CheckClustersHealth.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -254,7 +254,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `vla` because it became ok again.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -308,7 +308,7 @@ TEST(TFederatedClientTest, Transactions)
     // Wait for the first check of clusters healths.
     Sleep(TDuration::Seconds(2));
 
-    auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+    auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).BlockingGet().Value();
 
     // Check mock transaction doesn't work with sticky proxy address.
     {
@@ -319,7 +319,7 @@ TEST(TFederatedClientTest, Transactions)
     // From `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -340,10 +340,10 @@ TEST(TFederatedClientTest, Transactions)
 
     // Creating next transaction in `sas`.
     {
-        transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+        transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).BlockingGet().Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -403,7 +403,7 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
     // Go to `vla`, getting error, retry via `sas` and getting response from `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -426,10 +426,10 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
 
     // Try to start transaction in `vla`, getting error, retry via `sas`, creating transaction and getting response from `sas`.
     {
-        auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+        auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).BlockingGet().Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = result.BlockingGet().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);

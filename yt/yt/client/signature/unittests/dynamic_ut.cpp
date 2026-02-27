@@ -26,7 +26,7 @@ TEST(TDynamicSignatureValidatorTest, SetUnderlying)
     auto dynamicValidator = New<TDynamicSignatureValidator>(CreateDummySignatureValidator());
     auto signature = New<TSignature>();
 
-    EXPECT_TRUE(dynamicValidator->Validate(signature).Get().Value());
+    EXPECT_TRUE(dynamicValidator->Validate(signature).BlockingGet().Value());
 
     dynamicValidator->SetUnderlying(CreateAlwaysThrowingSignatureValidator());
 

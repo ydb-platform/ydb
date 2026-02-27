@@ -31,7 +31,7 @@ TEST(TThreadPoolTest, Configure)
     }
 
     AllSucceeded(std::move(futures))
-        .Get();
+        .BlockingGet();
 
     // Thread pool doesn't contain less than one thread whatever you configured.
     threadPool->SetThreadCount(0);

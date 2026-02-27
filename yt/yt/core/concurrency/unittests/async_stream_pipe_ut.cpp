@@ -25,7 +25,7 @@ TEST(TAsyncStreamPipeTest, Simple)
         auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "FOO");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "FOO");
         EXPECT_TRUE(writeResult.IsSet());
         EXPECT_TRUE(writeResult.BlockingGet().IsOK());
     }
@@ -37,7 +37,7 @@ TEST(TAsyncStreamPipeTest, Simple)
         const auto readResult = pipe->Read();
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "BAR_BAZ");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "BAR_BAZ");
         EXPECT_TRUE(writeResult.IsSet());
         EXPECT_TRUE(writeResult.BlockingGet().IsOK());
 
@@ -52,7 +52,7 @@ TEST(TAsyncStreamPipeTest, Simple)
 
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "");
     }
 }
 
@@ -69,7 +69,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "FOO");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "FOO");
 
         EXPECT_TRUE(writeResult.IsSet());
         EXPECT_TRUE(writeResult.BlockingGet().IsOK());
@@ -83,7 +83,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         const auto readResult = pipe->Read();
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "BAR");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "BAR");
     }
 
     {
@@ -97,7 +97,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         const auto readResult1 = pipe->Read();
         EXPECT_TRUE(readResult1.IsSet());
         EXPECT_TRUE(readResult1.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult1.Get().Value()), "BAZ_1");
+        EXPECT_EQ(GetString(readResult1.BlockingGet().Value()), "BAZ_1");
 
         EXPECT_TRUE(writeResult2.IsSet());
         EXPECT_TRUE(writeResult2.BlockingGet().IsOK());
@@ -105,7 +105,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         const auto readResult2 = pipe->Read();
         EXPECT_TRUE(readResult2.IsSet());
         EXPECT_TRUE(readResult2.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult2.Get().Value()), "BAZ_2");
+        EXPECT_EQ(GetString(readResult2.BlockingGet().Value()), "BAZ_2");
     }
 
     {
@@ -125,11 +125,11 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
 
         EXPECT_TRUE(readResult1.IsSet());
         EXPECT_TRUE(readResult1.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult1.Get().Value()), "ABC_1");
+        EXPECT_EQ(GetString(readResult1.BlockingGet().Value()), "ABC_1");
 
         EXPECT_TRUE(readResult2.IsSet());
         EXPECT_TRUE(readResult2.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult2.Get().Value()), "ABC_2");
+        EXPECT_EQ(GetString(readResult2.BlockingGet().Value()), "ABC_2");
     }
 
     {
@@ -141,7 +141,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
 
         EXPECT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.BlockingGet().IsOK());
-        EXPECT_EQ(GetString(readResult.Get().Value()), "");
+        EXPECT_EQ(GetString(readResult.BlockingGet().Value()), "");
     }
 }
 
@@ -158,7 +158,7 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitRead)
 
     EXPECT_TRUE(readResult1.IsSet());
     EXPECT_TRUE(readResult1.BlockingGet().IsOK());
-    EXPECT_EQ(GetString(readResult1.Get().Value()), "FOO");
+    EXPECT_EQ(GetString(readResult1.BlockingGet().Value()), "FOO");
 
     const auto readResult2 = pipe->Read();
     EXPECT_FALSE(readResult2.IsSet());
@@ -183,7 +183,7 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
 
     EXPECT_TRUE(readResult1.IsSet());
     EXPECT_TRUE(readResult1.BlockingGet().IsOK());
-    EXPECT_EQ(GetString(readResult1.Get().Value()), "FOO");
+    EXPECT_EQ(GetString(readResult1.BlockingGet().Value()), "FOO");
 
     const auto writeResult2 = pipe->Write(TSharedRef::FromString("BAR"));
     EXPECT_TRUE(writeResult2.IsSet());

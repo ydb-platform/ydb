@@ -1000,7 +1000,7 @@ TEST(TAsyncSlruGhostCacheTest, Disable)
         auto value2 = cache->Lookup(2);
         ASSERT_TRUE(value2.IsSet());
         ASSERT_TRUE(value2.BlockingGet().IsOK());
-        ASSERT_EQ(value2.Get().Value()->Value, 57);
+        ASSERT_EQ(value2.BlockingGet().Value()->Value, 57);
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
         auto largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;

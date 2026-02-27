@@ -149,7 +149,6 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
-        , HasOlapTable(false)
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
@@ -157,6 +156,7 @@ public:
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
+        , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -210,8 +210,14 @@ public:
     }
 
 protected:
+    enum ETableResolveStatus {
+        ERROR,
+        CONTINUE,
+        WAIT_SHARDS,
+    };
+
     [[nodiscard]]
-    bool HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+    ETableResolveStatus HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpTableResolverId = {};
@@ -221,14 +227,99 @@ protected:
                 ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
             }
             ReplyErrorAndDie(reply.Status, reply.Issues);
-            return false;
+            return ERROR;
         }
 
         if (ExecuterStateSpan) {
             ExecuterStateSpan.EndOk();
         }
 
-        return true;
+        TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
+
+        // Prune partitions here outside of TasksGraph - in all possible cases.
+        for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
+            if (TxManager) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                    if (indexMeta.ShardKey) {
+                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
+                    }
+                }
+            }
+
+            // Don't prune sysview tables
+            if (stageInfo.Meta.IsSysView()) {
+                continue;
+            }
+
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+            // Scan tasks from source
+            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                const auto& source = stage.GetSources(0).GetReadRangesSource();
+                bool isFullScan = false;
+                stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->Prune(source, stageInfo, isFullScan));
+                for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
+                    shardIds.insert(shardId);
+                }
+
+                if (isFullScan && !source.HasItemsLimit()) {
+                    Counters->Counters->FullScansExecuted->Inc();
+                }
+            }
+            // Scan tasks from shards
+            else if (TasksGraph.GetMeta().IsScan || stageInfo.Meta.IsOlap()) {
+                for (const auto& op : stage.GetTableOps()) {
+                    bool isFullScan = false;
+                    stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->Prune(op, stageInfo, isFullScan));
+                    for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
+                        shardIds.insert(shardId);
+                    }
+
+                    // TODO: read settings once - and store the result somewhere to use in Tasks Graph later.
+                    auto readSettings = ExtractReadSettings(op, stageInfo, Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv);
+                    if (isFullScan && readSettings.ItemsLimit) {
+                        // TODO: is it correct condition - shouldn't be: `!readSettings.ItemsLimit` ?
+                        Counters->Counters->FullScansExecuted->Inc();
+                    }
+                }
+            }
+            // Write tasks to datashard (obsolete)
+            else if (!stageInfo.Meta.ShardOperations.empty() && stage.SinksSize() == 0) {
+                for (const auto& op : stage.GetTableOps()) {
+                    switch (op.GetTypeCase()) {
+                        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                        case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
+                            stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->PruneEffect(op, stageInfo));
+                        }
+                        default:
+                            break; // skip here - there will be an error when we will build tasks.
+                    }
+                }
+            } else {
+                // TODO: make sure we don't miss any shards
+                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
+                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
+            }
+        }
+
+        if (shardIds.size() > 0) {
+            KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
+                    (shard_ids_count, shardIds.size()),
+                    (trace_id, TraceId()));
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+
+            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
+
+            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
+            return WAIT_SHARDS;
+        }
+
+        TasksGraph.ResolveShards({});
+
+        return CONTINUE;
     }
 
     [[nodiscard]]
@@ -284,6 +375,7 @@ protected:
             KQP_STLOG_D(KQPEX, sb,
                 (trace_id, TraceId()));
         }
+
         return true;
     }
 
@@ -1642,7 +1734,7 @@ protected:
     const TGUCSettings::TPtr GUCSettings;
 
     TActorId BufferActorId;
-    IKqpTransactionManagerPtr TxManager;
+    IKqpTransactionManagerPtr TxManager; // used by Data executer
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NFormats::TFormatsSettings FormatsSettings;
@@ -1684,8 +1776,8 @@ protected:
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
-    bool HasOlapTable = false;
-    bool HasDatashardSourceScan = false;
+    bool HasOlapTable = false;              // used by Data executer
+    bool HasDatashardSourceScan = false;    // used by Data executer
     bool UnknownAffectedShardCount = false; // used by Data executer
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
@@ -1716,6 +1808,7 @@ protected:
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    THolder<TPartitionPruner> PartitionPruner;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

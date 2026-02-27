@@ -3,14 +3,9 @@
 #include "shard_key_ranges.h"
 #include <regex>
 
-#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
@@ -91,6 +86,9 @@ struct TStageInfoMeta {
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
+
+    // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps
+    std::vector<TShardIdToInfoMap> PrunedPartitions;
 
     struct TIndexMeta {
         TTableId TableId;
@@ -174,7 +172,7 @@ struct TStageInfoMeta {
 
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
-    bool IsScan = false;
+    bool IsScan = false; // indicates that ScanExecuter is in use.
     bool IsRestored = false;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
@@ -310,17 +308,10 @@ struct TTaskMeta {
 private:
     YDB_OPT(bool, EnableShardsSequentialScan);
 public:
-    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
-    ui64 NodeId = 0;  // only in case of scans over persistent snapshots
-    bool ScanTask = false;
-    TActorId ExecuterId;
-    ui32 Type = Unknown;
-
-    TActorId ResultChannelActorId;
-    bool Completed = false;
-    THashMap<TString, TString> TaskParams; // Params for sources/sinks
-    TVector<TString> ReadRanges; // Partitioning for sources
-    THashMap<TString, TString> SecureParams;
+    // For data executer (unresolved shards case):
+    // - ShardId is set in case we don't know NodeId, later we gather all ShardId tasks (without writes) into RemoteTasks,
+    //   set inside ScanTasksFromSource only.
+    // - NodeId is set if it's local node id, otherwise set ShardId
 
     enum TTaskType : ui32 {
         Unknown = 0,
@@ -328,6 +319,18 @@ public:
         Scan = 2,
         DataShard = 3,
     };
+
+    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
+    ui64 NodeId = 0;  // only in case of scans over persistent snapshots
+    bool ScanTask = false;
+    TActorId ExecuterId;
+    TTaskType Type = Unknown;
+
+    TActorId ResultChannelActorId;
+    bool Completed = false;
+    THashMap<TString, TString> TaskParams; // Params for sources/sinks
+    TVector<TString> ReadRanges;           // Partitioning for sources
+    THashMap<TString, TString> SecureParams;
 
     struct TColumn {
         ui32 Id = 0;
@@ -429,8 +432,6 @@ public:
     // TODO: public used by TKqpPlanner
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
-
-    void UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks);
 
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;

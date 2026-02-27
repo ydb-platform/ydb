@@ -189,7 +189,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 std::move(persistentBufferDDiskIds),
                 VolumeConfig.GetBlockSize(),
                 VolumeConfig.GetPartitions(0).GetBlockCount(),
-                3 // syncRequestsBatchSize
+                StorageConfig.GetSyncRequestsBatchSize()
             ));
             directBlockGroups[i]->EstablishConnections({});
         }

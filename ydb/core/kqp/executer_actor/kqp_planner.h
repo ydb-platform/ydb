@@ -113,7 +113,7 @@ private:
     const ui64 TxId;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
-    THashMap<ui64, TVector<ui64>> TasksPerNode;
+    THashMap<ui64 /* shardId */, TVector<ui64 /* taskId */>> TasksPerNode;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;

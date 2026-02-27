@@ -19,7 +19,6 @@ private:
 public:
     NKikimrSchemeOp::TDictionaryEncodingSettings SerializeToProto() const;
     bool DeserializeFromProto(const NKikimrSchemeOp::TDictionaryEncodingSettings& proto);
-    TConclusionStatus DeserializeFromRequestFeatures(NYql::TFeaturesExtractor& features);
     const std::optional<bool>& GetEnabled() const {
         return Enabled;
     }

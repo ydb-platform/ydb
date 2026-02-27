@@ -186,6 +186,9 @@ namespace NKqp {
             }
             str << ")";
         }
+        if (LowCardinalityFlag) {
+            str << " LOWCARDINALITY";
+        }
         return str;
     }
 

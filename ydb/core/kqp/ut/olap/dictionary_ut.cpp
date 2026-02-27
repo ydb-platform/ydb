@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk_int Uint64 NOT NULL,
-            data Utf8,
+            data Utf8 LOWCARDINALITY,
             PRIMARY KEY (pk_int)
         )
         PARTITION BY HASH(pk_int)
@@ -43,9 +43,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=data, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         %s
         ------
@@ -86,8 +83,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     TString scriptEmptyStringVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 Utf8,
+            Col1 Uint64 NOT NULL LOWCARDINALITY,
+            Col2 Utf8 LOWCARDINALITY,
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -95,12 +92,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u)
@@ -118,8 +109,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 Utf8,
+            Col1 Uint64 NOT NULL LOWCARDINALITY,
+            Col2 Utf8 LOWCARDINALITY,
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -130,12 +121,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, 'abc')
@@ -162,6 +147,110 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimpleStringVariants, scriptSimpleStringVariants) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    Y_UNIT_TEST(CreateWithLowCardinality) {
+        auto settings = TKikimrSettings()
+            .SetEnableCsLowCardinality(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema()
+            .SetName("key")
+            .SetType(NScheme::NTypeIds::Uint64)
+            .SetNullable(false)
+            .SetLowCardinality(true)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
+
+        testHelper.ReadDataExecQuery(R"(
+            SELECT COUNT(*) > 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
+            )", "[[%true]]");
+    }
+
+    Y_UNIT_TEST(CreateWithoutLowCardinality) {
+        auto settings = TKikimrSettings()
+            .SetEnableCsLowCardinality(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema()
+            .SetName("key")
+            .SetType(NScheme::NTypeIds::Uint64)
+            .SetNullable(false)
+            .SetLowCardinality(false)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
+
+        testHelper.ReadDataExecQuery(R"(
+            SELECT COUNT(*) == 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%DICTIONARY%";
+            )", "[[%true]]");
+    }
+
+    Y_UNIT_TEST(AlterAddLowCardinality) {
+        auto settings = TKikimrSettings()
+            .SetEnableCsLowCardinality(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema()
+            .SetName("key")
+            .SetType(NScheme::NTypeIds::Uint64)
+            .SetNullable(false)
+            .SetLowCardinality(false)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET LOWCARDINALITY;");
+
+        testHelper.ReadDataExecQuery(R"(
+            SELECT COUNT(*) > 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
+            )", "[[%true]]");
+    }
+
+    Y_UNIT_TEST(AlterDropLowCardinality) {
+        auto settings = TKikimrSettings()
+            .SetEnableCsLowCardinality(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema()
+            .SetName("key")
+            .SetType(NScheme::NTypeIds::Uint64)
+            .SetNullable(false)
+            .SetLowCardinality(true)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` DROP LOWCARDINALITY;");
+
+        testHelper.ReadDataExecQuery(R"(
+            $V1 = SELECT max(SchemaVersion) FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
+
+            $V2 = SELECT max(SchemaVersion) FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:PLAIN%";
+
+            SELECT $V1 < $V2;
+            )", "[[[%true]]]");
     }
 }
 

@@ -1438,6 +1438,12 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         }
         Stream << ')';
     }
+
+    if (olapColumnDesc.HasDictionaryEncoding()
+        && olapColumnDesc.GetDictionaryEncoding().HasEnabled()
+        && olapColumnDesc.GetDictionaryEncoding().GetEnabled()) {
+        Stream << " LOWCARDINALITY";
+    }
 }
 
 TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue) {
@@ -1700,14 +1706,6 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                 }
             }
         }
-    }
-
-    if (columnDesc.HasDictionaryEncoding()) {
-        paramsStr << del;
-        EscapeName("ENCODING.DICTIONARY.ENABLED", paramsStr);
-        paramsStr << "=";
-        EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
-        del = ", ";
     }
 
     TString params = paramsStr.Str();

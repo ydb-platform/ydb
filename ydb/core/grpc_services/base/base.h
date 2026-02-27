@@ -1169,6 +1169,9 @@ class TEvProxyRuntimeEvent
     , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
 {
 public:
+    TEvProxyRuntimeEvent() {
+        PrintBackTrace();
+    }
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }

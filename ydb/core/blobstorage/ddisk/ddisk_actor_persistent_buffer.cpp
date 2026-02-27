@@ -288,11 +288,10 @@ namespace NKikimr::NDDisk {
                             .Sectors = std::move(inflight.Sectors),
                             .PartsCount = 1,
                         };
-                        Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
 
+                        Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
-                        Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
 
                     } else {
                         Y_ABORT_UNLESS(pr.OffsetInBytes == inflight.OffsetInBytes);
@@ -383,21 +382,30 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(pr.Size == selector.Size);
 
         ui64 operationCookie = NextCookie++;
-        auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{.Span = std::move(span)});
+        auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{
+            .Sender = ev->Sender,
+            .Cookie = ev->Cookie,
+            .Session = ev->InterconnectSession,
+            .Span = std::move(span)
+        });
         Y_ABORT_UNLESS(inserted);
 
-        GetPersistentBufferRecordData(pr, [this, selector, operationCookie, ev = std::move(ev)](TRope data) {
+        GetPersistentBufferRecordData(pr, creds.TabletId, selector.VChunkIndex, lsn, [this, selector, operationCookie, ev = std::move(ev)](TRope data) {
             Counters.Interface.ReadPersistentBuffer.Reply(true, selector.Size);
             auto it = PersistentBufferDiskOperationInflight.find(operationCookie);
             Y_ABORT_UNLESS(it != PersistentBufferDiskOperationInflight.end());
             it->second.Span.End();
             PersistentBufferDiskOperationInflight.erase(it);
-            SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
-                std::nullopt, data));
+            if (data.size() != selector.Size) {
+                SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
+            } else {
+                SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
+                    std::nullopt, data));
+            }
         });
     }
 
-    void TDDiskActor::GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, std::function<void(TRope data)> callback) {
+    void TDDiskActor::GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, ui64 tabletId, ui64 vchunkIdx, ui64 lsn, std::function<void(TRope data)> callback) {
         if (!pr.DataParts.empty()) {
             Y_ABORT_UNLESS(pr.DataParts.size() == pr.PartsCount);
             callback(pr.JoinData(SectorSize));
@@ -415,15 +423,23 @@ namespace NKikimr::NDDisk {
                         pr.Sectors[first].ChunkIdx,
                         pr.Sectors[first].SectorIdx * SectorSize,
                         (pr.Sectors[sectorIdx - 1].SectorIdx - pr.Sectors[first].SectorIdx + 1) * SectorSize), 0, cookie);
-                    ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this, &pr, callback, partIdx = pr.PartsCount](NPDisk::TEvChunkReadRawResult& ev) {
+                    ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this, tabletId, vchunkIdx, lsn, callback, partIdx = pr.PartsCount](NPDisk::TEvChunkReadRawResult& ev) {
+                        auto it = PersistentBuffers.find({tabletId, vchunkIdx});
+                        if (it == PersistentBuffers.end()) {
+                            callback({});
+                        }
+                        auto recordIt = it->second.Records.find(lsn);
+                        if (recordIt == it->second.Records.end()) {
+                            callback({});
+                        }
+                        auto& pr = recordIt->second;
                         pr.DataParts.emplace(partIdx, std::move(ev.Data));
                         if (pr.DataParts.size() == pr.PartsCount) {
                             PersistentBufferInMemoryCacheSize += pr.Size;
-                            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
 
                             callback(pr.JoinData(SectorSize));
                             SanitizePersistentBufferInMemoryCache(pr);
-                            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
+                            Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
                         }
                     }});
                     pr.PartsCount++;
@@ -450,12 +466,11 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force) {
         if ((force || PersistentBufferInMemoryCacheSize > MaxPersistentBufferInMemoryCache)
             && record.PartsCount > 0 && record.DataParts.size() == record.PartsCount) {
-            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
+            Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
             PersistentBufferInMemoryCacheSize -= record.Size;
             record.DataParts.clear();
             record.PartsCount = 0;
-            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
         }
     }
 

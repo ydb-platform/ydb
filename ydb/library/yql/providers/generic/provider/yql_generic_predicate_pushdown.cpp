@@ -293,6 +293,8 @@ namespace NYql {
 
         bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
+        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto member = expression.Maybe<TCoMember>()) {
                 return SerializeMember(member.Cast(), proto, ctx);
@@ -365,6 +367,10 @@ namespace NYql {
                 return true;
             }
 
+            if (SerializePredicate(expression, proto->mutable_predicate(), ctx, depth + 1)) {
+                return true;
+            }
+
             ctx.Err << "unknown expression: " << expression.Raw()->Content();
             return false;
         }
@@ -404,8 +410,6 @@ namespace NYql {
         }
 
 #undef EXPR_NODE_TO_COMPARE_TYPE
-
-        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
 
         bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_if_();
@@ -833,6 +837,8 @@ namespace NYql {
                 return FormatMaxOf(expression.max_of());
             case TExpression::kCurrentUtcTimestamp:
                 return FormatCurrentUtcTimestamp(expression.current_utc_timestamp());
+            case TExpression::kPredicate:
+                return FormatPredicate(expression.predicate());
             default:
                 throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }

@@ -50,7 +50,7 @@ public:
         TOutputRowColumnOrder&& outputRowColumnOrder,
         TDqComputeActorWatermarks* watermarksTracker,
         const THashMap<TString, TString>& secureParams,
-        size_t maxFullscanRows = 1000)
+        size_t fullscanRowLimit = 1000)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -62,7 +62,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
-        , MaxFullscanRows(Min(maxFullscanRows, (size_t)Settings.GetCacheLimit()))
+        , FullscanRowLimit(Min(fullscanRowLimit, (size_t)Settings.GetCacheLimit()))
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)
@@ -197,9 +197,9 @@ private: //IDqComputeActorAsyncInput
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
             LookupSourceId = this->RegisterWithSameMailbox(lookupSourceActor);
             KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
-            MaxFullscanRows = Min(MaxFullscanRows, lookupSource->GetMaxSupportedFullscanRequest());
-            if (MaxFullscanRows > 0) {
-                FullscanRequest = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxFullscanRows, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+            FullscanRowLimit = Min(FullscanRowLimit, lookupSource->GetMaxSupportedFullscanRequest());
+            if (FullscanRowLimit > 0) {
+                FullscanRequest = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(FullscanRowLimit, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
                 FullscanExpireTime = std::chrono::steady_clock::now();
             } else {
                 FullscanRequested = true;
@@ -267,7 +267,7 @@ protected:
 protected:
     NActors::TActorId LookupSourceId;
     size_t MaxKeysInRequest;
-    size_t MaxFullscanRows;
+    size_t FullscanRowLimit;
     const TVector<size_t> LookupInputIndexes;
     const TVector<size_t> OtherInputIndexes;
     const NMiniKQL::TMultiType* const InputRowType;
@@ -486,10 +486,10 @@ private:
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     if (!FullscanRequested && now >= FullscanExpireTime) {
-                        Y_DEBUG_ABORT_UNLESS(MaxFullscanRows > 0);
+                        Y_DEBUG_ABORT_UNLESS(FullscanRowLimit > 0);
                         FullscanRequested = true;
                         FullscanRequest->erase(FullscanRequest->begin(), FullscanRequest->end()); // don't ->clear();, it's O(reserved) instead of O(size)
-                        Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(FullscanRequest, MaxFullscanRows));
+                        Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(FullscanRequest, FullscanRowLimit));
                     }
                     if (AwaitingQueue.empty()) {
                         // look ahead at most MaxDelayedRows after first missing

@@ -162,7 +162,7 @@ public:
     };
 
     enum ETimeoutTag {
-        TimeoutBSC,
+        TimeoutPipes,
         TimeoutFinal,
     };
 
@@ -271,7 +271,7 @@ public:
         TString State;
         ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
-        ui64 AllocationUnits = 0;
+        std::optional<ui64> AllocationUnits;
         float Usage = 0;
         ui64 Used = 0;
         ui64 Limit = 0;
@@ -921,7 +921,7 @@ public:
         TBase::Become(&TThis::StateWork);
         ProcessResponses(); // to process cached data
         if (WaitingForResponse()) {
-            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutBSC)); // 50% timeout (for bsc)
+            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutPipes)); // 50% timeout (for tables)
             Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
         } else {
             ReplyAndPassAway();
@@ -1228,8 +1228,8 @@ public:
         }
     }
 
-    void ApplyLimit() {
-        if (!NeedFilter && !NeedSort && !NeedGroup && NeedLimit) {
+    void ApplyLimitForced() {
+        if (NeedLimit) {
             if (Offset) {
                 GroupView.erase(GroupView.begin(), GroupView.begin() + std::min(*Offset, GroupView.size()));
                 GroupsByGroupId.clear();
@@ -1239,6 +1239,12 @@ public:
                 GroupsByGroupId.clear();
             }
             NeedLimit = false;
+        }
+    }
+
+    void ApplyLimit() {
+        if (!NeedFilter && !NeedSort && !NeedGroup) {
+            ApplyLimitForced();
         }
     }
 
@@ -1319,10 +1325,16 @@ public:
                (!GetPDisksResponse || GetPDisksResponseProcessed);
     }
 
+    bool AreHiveRequestsDone() const {
+        return HiveStorageStatsInFlight == 0;
+    }
+
+    bool WaitingForHive() const {
+        return HiveStorageStatsInFlight != 0 && (FieldsHive.test(+SortBy) || FieldsHive.test(+GroupBy));
+    }
+
     bool TimeToAskWhiteboard() const {
-        return AreBSControllerRequestsDone() &&
-               NavigateKeySetInFlight == 0 &&
-               HiveStorageStatsInFlight == 0;
+        return AreBSControllerRequestsDone() && NavigateKeySetInFlight == 0 && !WaitingForHive();
     }
 
     void ProcessResponses() {
@@ -1506,19 +1518,26 @@ public:
                 if (GroupsByGroupId.empty()) {
                     RebuildGroupsByGroupId();
                 }
+                int badHiveStorageStatsCount = 0;
                 for (auto& hiveStorageStats : HiveStorageStats) {
                     if (hiveStorageStats.second.IsOk()) {
                         for (const auto& pbPool : hiveStorageStats.second->Record.GetPools()) {
                             for (const auto& pbGroup : pbPool.GetGroups()) {
                                 auto itGroup = GroupsByGroupId.find(pbGroup.GetGroupID());
-                                if (itGroup != GroupsByGroupId.end()) {
-                                    itGroup->second->AllocationUnits += pbGroup.GetAcquiredUnits();
+                                if (itGroup != GroupsByGroupId.end() && pbGroup.HasAcquiredUnits()) {
+                                    itGroup->second->AllocationUnits = itGroup->second->AllocationUnits.value_or(0) + pbGroup.GetAcquiredUnits();
                                 }
                             }
                         }
+                    } else {
+                        ++badHiveStorageStatsCount;
                     }
                 }
-                FieldsAvailable |= FieldsHive;
+                if (badHiveStorageStatsCount == 0) {
+                    FieldsAvailable |= FieldsHive;
+                } else {
+                    AddProblem("hive-storage-stats-no-reliable-data");
+                }
                 ApplyEverything();
             }
             if (TimeToAskWhiteboard() && FieldsNeeded(FieldsWbDisks)) {
@@ -2012,10 +2031,21 @@ public:
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
-            case TimeoutBSC:
+            case TimeoutPipes:
                 if (!AreBSControllerRequestsDone()) {
                     AddProblem("bsc-timeout");
                     OnBscError("timeout");
+                }
+                if (!AreHiveRequestsDone()) {
+                    AddProblem("hive-timeout");
+                    for (auto& hiveStorageStats : HiveStorageStats) {
+                        if (hiveStorageStats.second.Error("timeout")) {
+                            AddProblem("hive-incomplete");
+                            --HiveStorageStatsInFlight;
+                            ProcessResponses();
+                            RequestDone();
+                        }
+                    }
                 }
                 break;
             case TimeoutFinal:
@@ -2112,6 +2142,7 @@ public:
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
+        ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));
         json.SetFieldsAvailable(FieldsAvailable.to_string());
@@ -2178,7 +2209,9 @@ public:
                     jsonGroup.SetErasureSpecies(group->Erasure);
                 }
                 if (FieldsAvailable.test(+EGroupFields::AllocationUnits) && FieldsRequested.test(+EGroupFields::AllocationUnits)) {
-                    jsonGroup.SetAllocationUnits(group->AllocationUnits);
+                    if (group->AllocationUnits) {
+                        jsonGroup.SetAllocationUnits(group->AllocationUnits.value());
+                    }
                 }
                 if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);

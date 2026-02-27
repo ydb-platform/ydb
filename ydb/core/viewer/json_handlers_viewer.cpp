@@ -282,8 +282,13 @@ void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
+<<<<<<< HEAD
     jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
     jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
+=======
+    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 11);
+    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 11);
+>>>>>>> e35ef137c06 (fix invalid groups on hive timeout (#34978))
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

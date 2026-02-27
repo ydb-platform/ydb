@@ -1600,8 +1600,8 @@ public:
         }
     }
 
-    void ApplyLimit() {
-        if (FilterDone() && !NeedSort && !NeedGroup && NeedLimit) {
+    void ApplyLimitForced() {
+        if (NeedLimit) {
             if (Offset) {
                 NodeView.erase(NodeView.begin(), NodeView.begin() + std::min(*Offset, NodeView.size()));
                 InvalidateNodes();
@@ -1612,6 +1612,12 @@ public:
             }
             NeedLimit = false;
             AddEvent("Limit Applied");
+        }
+    }
+
+    void ApplyLimit() {
+        if (FilterDone() && !NeedSort && !NeedGroup) {
+            ApplyLimitForced();
         }
     }
 
@@ -3166,6 +3172,7 @@ public:
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
+        ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TNodesInfo json;
         for (const auto& batch : OriginalNodeBatches) {
             auto* jsonBatch = json.AddOriginalNodeBatches();

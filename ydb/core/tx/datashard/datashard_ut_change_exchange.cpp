@@ -1485,7 +1485,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 payload.WriteKey("user").WriteString(userCtx->GetUserSID());
             }
             if (!userCtx->GetUserTraceId().empty()) {
-                payload.WriteKey("user_trace_id").WriteString(userCtx->GetUserTraceId());
+                payload.WriteKey("traceId").WriteString(userCtx->GetUserTraceId());
             }
         }
         payload.EndObject();
@@ -1668,13 +1668,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, {
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":10},"key":[1]})",
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":20},"key":[2]})",
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":30},"key":[3]})",
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
-            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
-            R"({"user_trace_id":"trace-id-value","erase":{},"key":[1],"oldImage":{"value":100}})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"traceId":"trace-id-value","erase":{},"key":[1],"oldImage":{"value":100}})",
         }, true, NACLib::TUserContextBuilder().WithUserTraceId("trace-id-value").Build());
     }
 

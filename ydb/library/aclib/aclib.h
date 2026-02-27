@@ -194,8 +194,8 @@ public:
     using TPtr = TIntrusivePtr<TUserContext>;
 
     TUserContext(const TString& userSID, const TString& userTraceId):
-        UserSID(userSID), 
-        UserTraceId(userTraceId) 
+        UserSID(userSID),
+        UserTraceId(userTraceId)
     {}
 
     const TString& GetUserSID() const {
@@ -206,7 +206,7 @@ public:
         return UserTraceId;
     }
 
-protected:    
+protected:
     TString UserSID;
     TString UserTraceId;
 };

@@ -333,7 +333,7 @@ protected:
                 json["user"] = userCtx->GetUserSID();
             }
             if (Opts.TraceIds && !userCtx->GetUserTraceId().empty()) {
-                json["user_trace_id"] = userCtx->GetUserTraceId();
+                json["traceId"] = userCtx->GetUserTraceId();
             }
         }
 
@@ -622,7 +622,7 @@ protected:
                 sourceJson["user"] = userCtx->GetUserSID();
             }
             if (Opts.TraceIds && !userCtx->GetUserTraceId().empty()) {
-                sourceJson["user_trace_id"] = userCtx->GetUserTraceId();
+                sourceJson["traceId"] = userCtx->GetUserTraceId();
             }
         }
     }

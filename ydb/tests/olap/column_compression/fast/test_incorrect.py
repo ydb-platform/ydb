@@ -92,6 +92,34 @@ class TestIncorrectCompression(object):
         except ydb.issues.Error as ex:
             assert error_text in ex.message
 
+    @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
+    def test_add_with_wrong_compression(self, suffix, compression_settings, error_text):
+        table_path = f"{self.test_dir}/add_{suffix}"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+                WITH (
+                    STORE = COLUMN
+                )
+            """
+        )
+
+        try:
+            self.ydb_client.query(
+                f"""
+                    ALTER TABLE `{table_path}`
+                        ADD COLUMN `vStr2` Utf8 COMPRESSION({compression_settings});
+                """
+            )
+            assert False, 'Should Fail'
+        except ydb.issues.Error as ex:
+            assert error_text in ex.message
+
     def test_create_row_based_table_with_column_compression(self):
         table_path = f"{self.test_dir}/create_row_table"
 

@@ -781,6 +781,12 @@ bool FillColumnCompression(
         }
 
         if (fromCompression.has_compression_level()) {
+            if (!fromCompression.has_algorithm()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Compression level specified without an algorithm";
+                return false;
+            }
+
             auto arrowCompression = toSerializer->MutableArrowCompression();
             arrowCompression->SetLevel(fromCompression.compression_level());
         }

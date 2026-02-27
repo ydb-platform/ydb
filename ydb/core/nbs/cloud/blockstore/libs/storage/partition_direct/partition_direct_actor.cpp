@@ -229,7 +229,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         auto ddiskIds = std::move(ids[i].DdiskIds);
-        auto persistentBufferDDiskIds = std::move(ids[i].PersistentBufferDDiskIds);
+        auto persistentBufferDDiskIds =
+            std::move(ids[i].PersistentBufferDDiskIds);
 
         directBlockGroups.emplace_back(
             std::make_shared<TDirectBlockGroup>(
@@ -240,9 +241,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 std::move(ddiskIds), std::move(persistentBufferDDiskIds),
                 VolumeConfig.GetBlockSize(),
                 VolumeConfig.GetPartitions(0).GetBlockCount(),
-                3   // syncRequestsBatchSize
-                ));
-        //directBlockGroups[i]->EstablishConnections({});
+                StorageConfig.GetSyncRequestsBatchSize()));
     }
 
     return directBlockGroups;

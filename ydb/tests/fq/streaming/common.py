@@ -115,3 +115,20 @@ class StreamingTestBase(TestYdsBase):
         result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
             {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
         return result if result is not None else 0
+
+    def get_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False) -> int:
+        sum = 0
+        found = False
+        for node_id in kikimr.cluster.nodes:
+            sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
+                {
+                    "path": path,
+                    "subsystem": "streaming_queries",
+                    "sensor": metric_name
+                }
+            )
+            if sensor is not None:
+                found = True
+                sum += sensor
+        assert found or not expect_counters_exist
+        return sum

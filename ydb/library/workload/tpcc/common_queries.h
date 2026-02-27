@@ -1,5 +1,7 @@
 #pragma once
 
+#include "constants.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/datetime/base.h>
@@ -10,7 +12,7 @@
 namespace NYdb::NTPCC {
 
 struct TCustomer {
-    int c_id = 0;
+    int c_id = C_INVALID_CUSTOMER_ID;
     TString c_first;
     TString c_middle;
     TString c_last;

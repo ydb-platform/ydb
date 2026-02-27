@@ -212,89 +212,89 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
         auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
-        NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
+            NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
-        NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
-        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
-        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
-        NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
-        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
+            NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
+            keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
+            keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
+            NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
+            outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
 
-        auto guard = Guard(*alloc.get());
-        auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
+            auto guard = Guard(*alloc.get());
+            auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
 
-        auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
-            connectorMock,
-            NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
-            caller,
-            nullptr,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSourceSettings),
-            keyTypeBuilder.Build(),
-            outputypeBuilder.Build(),
-            typeEnv,
-            holderFactory,
-            1'000'000,
-            {{"test_token", "{\"token\": \"token_value\"}"}},
-            MultiMatches);
+            auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
+                connectorMock,
+                NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
+                caller,
+                nullptr,
+                alloc,
+                keyTypeHelper,
+                std::move(lookupSourceSettings),
+                keyTypeBuilder.Build(),
+                outputypeBuilder.Build(),
+                typeEnv,
+                holderFactory,
+                1'000'000,
+                {{"test_token", "{\"token\": \"token_value\"}"}},
+                MultiMatches);
 
-        auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
-        for (size_t i = 0; i != 3; ++i) {
-            NYql::NUdf::TUnboxedValue* keyItems;
-            auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
-            keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
-            keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
-            request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
-        }
+            auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
+            for (size_t i = 0; i != 3; ++i) {
+                NYql::NUdf::TUnboxedValue* keyItems;
+                auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
+                keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
+                keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
+                request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
+            }
 
-        return std::pair { actor, std::move(request) };
+            return std::pair { actor, std::move(request) };
         };
         auto callback = [&](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
                 NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr& ev) {
-        connectorMock.reset();
-        auto guard2 = Guard(*alloc.get());
-        auto lookupResult = ev->Get()->Result.lock();
-        UNIT_ASSERT(lookupResult);
+            connectorMock.reset();
+            auto guard2 = Guard(*alloc.get());
+            auto lookupResult = ev->Get()->Result.lock();
+            UNIT_ASSERT(lookupResult);
 
-        UNIT_ASSERT_EQUAL(3, lookupResult->size());
-        if (!MultiMatches) {
-            return;
-        }
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {0, 100}));
-            UNIT_ASSERT(v);
-            UNIT_ASSERT_VALUES_EQUAL(v->GetListLength(), 1);
-            auto ptr = v->GetElements();
-            UNIT_ASSERT(ptr);
-            {
-                auto val = ptr->GetElement(0);
-                UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("a"));
-                ++ptr;
-            }
-        }
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {1, 101}));
-            UNIT_ASSERT(v);
-            UNIT_ASSERT_VALUES_EQUAL(v->GetListLength(), 2);
-            auto ptr = v->GetElements();
-            UNIT_ASSERT(ptr);
-            {
-                auto val = ptr->GetElement(0);
-                UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("b"));
-                ++ptr;
+            UNIT_ASSERT_EQUAL(3, lookupResult->size());
+            if (!MultiMatches) {
+                return;
             }
             {
-                auto val = ptr->GetElement(0);
-                UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("ba"));
-                ++ptr;
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {0, 100}));
+                UNIT_ASSERT(v);
+                UNIT_ASSERT_VALUES_EQUAL(v->GetListLength(), 1);
+                auto ptr = v->GetElements();
+                UNIT_ASSERT(ptr);
+                {
+                    auto val = ptr->GetElement(0);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("a"));
+                    ++ptr;
+                }
             }
-        }
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {2, 102}));
-            UNIT_ASSERT(v);
-            UNIT_ASSERT(!*v);
-        }
+            {
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {1, 101}));
+                UNIT_ASSERT(v);
+                UNIT_ASSERT_VALUES_EQUAL(v->GetListLength(), 2);
+                auto ptr = v->GetElements();
+                UNIT_ASSERT(ptr);
+                {
+                    auto val = ptr->GetElement(0);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("b"));
+                    ++ptr;
+                }
+                {
+                    auto val = ptr->GetElement(0);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(val.AsStringRef()), TStringBuf("ba"));
+                    ++ptr;
+                }
+            }
+            {
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {2, 102}));
+                UNIT_ASSERT(v);
+                UNIT_ASSERT(!*v);
+            }
         };
 
         auto callLookupActor = new TCallLookupActor(std::move(alloc), std::move(lookupActorFactory), std::move(callback), edge);
@@ -428,68 +428,68 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
         auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
-        NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
+            NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
-        NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
-        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
-        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
-        NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
-        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
+            NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
+            keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
+            keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
+            NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
+            outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
 
-        auto guard = Guard(*alloc.get());
-        auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
+            auto guard = Guard(*alloc.get());
+            auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
 
-        auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
-            connectorMock,
-            NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
-            caller,
-            nullptr,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSourceSettings),
-            keyTypeBuilder.Build(),
-            outputypeBuilder.Build(),
-            typeEnv,
-            holderFactory,
-            1'000'000,
-            {{"test_token", "{\"token\": \"token_value\"}"}});
+            auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
+                connectorMock,
+                NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
+                caller,
+                nullptr,
+                alloc,
+                keyTypeHelper,
+                std::move(lookupSourceSettings),
+                keyTypeBuilder.Build(),
+                outputypeBuilder.Build(),
+                typeEnv,
+                holderFactory,
+                1'000'000,
+                {{"test_token", "{\"token\": \"token_value\"}"}});
 
-        auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
-        for (size_t i = 0; i != 3; ++i) {
-            NYql::NUdf::TUnboxedValue* keyItems;
-            auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
-            keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
-            keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
-            request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
-        }
+            auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
+            for (size_t i = 0; i != 3; ++i) {
+                NYql::NUdf::TUnboxedValue* keyItems;
+                auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
+                keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
+                keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
+                request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
+            }
 
-        return std::pair { actor, std::move(request) };
+            return std::pair { actor, std::move(request) };
         };
         auto callback = [&](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
                 NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr& ev) {
-        connectorMock.reset();
-        auto guard2 = Guard(*alloc.get());
-        auto lookupResult = ev->Get()->Result.lock();
-        UNIT_ASSERT(lookupResult);
+            connectorMock.reset();
+            auto guard2 = Guard(*alloc.get());
+            auto lookupResult = ev->Get()->Result.lock();
+            UNIT_ASSERT(lookupResult);
 
-        UNIT_ASSERT_EQUAL(3, lookupResult->size());
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {0, 100}));
-            UNIT_ASSERT(v);
-            NYql::NUdf::TUnboxedValue val = v->GetElement(0);
-            UNIT_ASSERT(val.AsStringRef() == TStringBuf("a"));
-        }
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {1, 101}));
-            UNIT_ASSERT(v);
-            NYql::NUdf::TUnboxedValue val = v->GetElement(0);
-            UNIT_ASSERT(val.AsStringRef() == TStringBuf("b"));
-        }
-        {
-            const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {2, 102}));
-            UNIT_ASSERT(v);
-            UNIT_ASSERT(!*v);
-        }
+            UNIT_ASSERT_EQUAL(3, lookupResult->size());
+            {
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {0, 100}));
+                UNIT_ASSERT(v);
+                NYql::NUdf::TUnboxedValue val = v->GetElement(0);
+                UNIT_ASSERT(val.AsStringRef() == TStringBuf("a"));
+            }
+            {
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {1, 101}));
+                UNIT_ASSERT(v);
+                NYql::NUdf::TUnboxedValue val = v->GetElement(0);
+                UNIT_ASSERT(val.AsStringRef() == TStringBuf("b"));
+            }
+            {
+                const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {2, 102}));
+                UNIT_ASSERT(v);
+                UNIT_ASSERT(!*v);
+            }
         };
 
         auto callLookupActor = new TCallLookupActor(std::move(alloc), std::move(lookupActorFactory), std::move(callback), edge);

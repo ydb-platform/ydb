@@ -417,12 +417,6 @@ namespace NKikimr {
                             return false;
                         }
                         if (PendingWrites.size()) {
-                            if (HullCtx->VCtx->ActorSystem) {
-                                LOG_WARN_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                    HullCtx->VCtx->VDiskLogPrefix
-                                        << "Deferred items done, but still have writes to do"
-                                        << " pending_writes# " << PendingWrites.size());
-                            }
                             return false;
                         }
                         DeferredItems.Finish();

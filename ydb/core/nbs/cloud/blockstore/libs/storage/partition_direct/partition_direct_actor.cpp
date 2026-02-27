@@ -44,13 +44,13 @@ TString SerializeTabletInfo(
     tabletInfo.MutableVolumeConfig()->CopyFrom(volumeConfig);
 
     Y_ASSERT(ids.size() == TPartitionActor::NumDirectBlockGroups);
-    auto* connectionsInfo = tabletInfo.MutableConnectionsInfo();
+    auto* dbgConnectionsIds = tabletInfo.MutableDBGConnectionsIds();
 
     for (const auto& id: ids) {
-        auto* connectionInfo = connectionsInfo->Add();
+        auto* dbgConnectionIds = dbgConnectionsIds->Add();
         Y_ASSERT(id.DdiskIds.size() == id.PersistentBufferDDiskIds.size());
 
-        auto* connections = connectionInfo->MutableConnections();
+        auto* connections = dbgConnectionIds->MutableDDiskConnectionIds();
         for (size_t j = 0; j < id.DdiskIds.size(); ++j) {
             auto* connection = connections->Add();
 
@@ -62,7 +62,7 @@ TString SerializeTabletInfo(
         }
     }
     Y_ASSERT(
-        tabletInfo.GetConnectionsInfo().size() ==
+        tabletInfo.GetDBGConnectionsIds().size() ==
         TPartitionActor::NumDirectBlockGroups);
 
     TString serialized;
@@ -88,14 +88,14 @@ void DeserializeTabletInfo(
     volumeConfig.CopyFrom(tabletInfo.GetVolumeConfig());
 
     Y_ASSERT(
-        tabletInfo.GetConnectionsInfo().size() ==
+        tabletInfo.GetDBGConnectionsIds().size() ==
         TPartitionActor::NumDirectBlockGroups);
 
-    for (const auto& connectionInfo: tabletInfo.GetConnectionsInfo()) {
+    for (const auto& dbgConnectionIds: tabletInfo.GetDBGConnectionsIds()) {
         ids.push_back({});
         auto& ddiskIds = ids.back().DdiskIds;
         auto& persistentBufferDDiskIds = ids.back().PersistentBufferDDiskIds;
-        for (const auto& connection: connectionInfo.GetConnections()) {
+        for (const auto& connection: dbgConnectionIds.GetDDiskConnectionIds()) {
             ddiskIds.emplace_back(connection.GetDDiskId());
             persistentBufferDDiskIds.emplace_back(
                 connection.GetPersistentBufferDDiskId());

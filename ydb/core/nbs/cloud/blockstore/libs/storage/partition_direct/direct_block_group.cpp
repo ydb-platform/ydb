@@ -59,13 +59,8 @@ class TDirectBlockGroup::TDirtyMap
 private:
     // TODO позже удалить данные при flush'е
     THashMap<ui64, TBlockMeta> BlocksMeta;
-    const size_t NumberOfPersistentBuffers;
 
 public:
-    explicit TDirtyMap(size_t numberOfPersistentBuffers)
-        : NumberOfPersistentBuffers(numberOfPersistentBuffers)
-    {}
-
     ui64 GetLsnByPersistentBufferIndex(ui64 blockIndex,
                                        ui64 persistBufferIndex);
     void TryUpdateLsnByPersistentBufferIndex(ui64 blockIndex, ui64 persistBufferIndex,
@@ -77,7 +72,7 @@ public:
         const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta);
     void OnBlockFlushCompleted(ui64 blockIndex, ui64 persistBufferIndex,
                                ui64 lsn);
-    void Visit(
+    void VisitEachBlockMeta(
         std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)>
             callback) const;
 };
@@ -97,7 +92,7 @@ void TDirectBlockGroup::TDirtyMap::TryUpdateLsnByPersistentBufferIndex(
 {
     auto it = BlocksMeta.find(blockIndex);
     if (it == BlocksMeta.end()) {
-        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(TDirectBlockGroup::DDisksNumber)});
         Y_ASSERT(p.second);
         it = p.first;
     }
@@ -131,7 +126,7 @@ void TDirectBlockGroup::TDirtyMap::OnBlockWriteCompleted(
 {
     auto it = BlocksMeta.find(blockIndex);
     if (it == BlocksMeta.end()) {
-        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(TDirectBlockGroup::DDisksNumber)});
         Y_ASSERT(p.second);
         it = p.first;
     }
@@ -143,14 +138,14 @@ void TDirectBlockGroup::TDirtyMap::OnBlockFlushCompleted(
 {
     auto it = BlocksMeta.find(blockIndex);
     if (it == BlocksMeta.end()) {
-        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(NumberOfPersistentBuffers)});
+        auto p = BlocksMeta.insert({blockIndex, TBlockMeta(TDirectBlockGroup::DDisksNumber)});
         Y_ASSERT(p.second);
         it = p.first;
     }
     it->second.OnFlushCompleted(persistBufferIndex, lsn);
 }
 
-void TDirectBlockGroup::TDirtyMap::Visit(
+void TDirectBlockGroup::TDirtyMap::VisitEachBlockMeta(
     std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> callback) const
 {
     for (const auto& [blockIndex, blockMeta]: BlocksMeta) {
@@ -191,7 +186,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     Y_UNUSED(BlocksCount);
     Y_UNUSED(StorageRequestId);
 
-    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap(persistentBufferDDiskIds.size()));
+    Y_ASSERT(persistentBufferDDiskIds.size() == TDirectBlockGroup::DDisksNumber);
+    Y_ASSERT(ddisksIds.size() == TDirectBlockGroup::DDisksNumber);
+    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap());
 
     auto addDDiskConnections = [&](TVector<NBsController::TDDiskId> ddisksIds,
                                    TVector<TDDiskConnection>& ddiskConnections,
@@ -414,24 +411,27 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
     NWilson::TTraceId traceId,
     ui32 vChunkIndex)
 {
+    Y_UNUSED(traceId);
+    Y_UNUSED(vChunkIndex);
     LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                 "Restoring from persistent buffer finished");
 
     Initialized = true;
 
-    // TODO remove this redundant `if` after tests
-    if (false) {
-        LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
-                    "Starting to flush dirtyMap");
-        DirtyMap->Visit([this, &traceId, vChunkIndex](ui64 blockIndex, const TBlockMeta& blockMeta) {
-            if (blockMeta.ReadyToFlush()) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
-                    "Trying to flush block " << blockIndex);
+    // TODO uncomment it after unittests
+    /*
+    LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                "Starting to flush dirtyMap");
+    DirtyMap->VisitEachBlockMeta([this, &traceId, vChunkIndex](ui64 blockIndex, const TBlockMeta& blockMeta) {
+        if (blockMeta.ReadyToFlush()) {
+            LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
+                "Trying to flush block " << blockIndex);
 
-                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex, vChunkIndex);
-            }
-        });
-    }
+            RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex, vChunkIndex);
+        }
+    });
+
+    */
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(

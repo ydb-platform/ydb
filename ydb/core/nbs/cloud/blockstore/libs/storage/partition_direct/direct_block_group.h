@@ -80,6 +80,7 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    static constexpr ui32 DDisksNumber = 5;
 
     bool Initialized = false;
     ui32 SyncRequestsBatchSize;

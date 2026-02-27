@@ -288,8 +288,12 @@ namespace NKikimr::NDDisk {
                             .Sectors = std::move(inflight.Sectors),
                             .PartsCount = 1,
                         };
+                        Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
+
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
+                        Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
+
                     } else {
                         Y_ABORT_UNLESS(pr.OffsetInBytes == inflight.OffsetInBytes);
                         Y_ABORT_UNLESS(pr.Size == inflight.Size);
@@ -415,8 +419,11 @@ namespace NKikimr::NDDisk {
                         pr.DataParts.emplace(partIdx, std::move(ev.Data));
                         if (pr.DataParts.size() == pr.PartsCount) {
                             PersistentBufferInMemoryCacheSize += pr.Size;
+                            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
+
                             callback(pr.JoinData(SectorSize));
                             SanitizePersistentBufferInMemoryCache(pr);
+                            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
                         }
                     }});
                     pr.PartsCount++;
@@ -426,13 +433,29 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    ui64 TDDiskActor::CalcPersistentBufferInMemoryCacheSize() {
+        ui64 res = 0;
+        for (auto& [_, v] : PersistentBuffers) {
+            for (auto& [__, r] : v.Records) {
+                if (r.PartsCount == r.DataParts.size()) {
+                    for (auto& [___, d] : r.DataParts) {
+                        res += d.size();
+                    }
+                }
+            }
+        }
+        return res;
+    }
+
     void TDDiskActor::SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force) {
         if ((force || PersistentBufferInMemoryCacheSize > MaxPersistentBufferInMemoryCache)
-            && record.PartsCount > 0) {
+            && record.PartsCount > 0 && record.DataParts.size() == record.PartsCount) {
+            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
             PersistentBufferInMemoryCacheSize -= record.Size;
             record.DataParts.clear();
             record.PartsCount = 0;
+            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
         }
     }
 

@@ -463,6 +463,7 @@ namespace NKikimr::NDDisk {
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
 
+        ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
 
         void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);

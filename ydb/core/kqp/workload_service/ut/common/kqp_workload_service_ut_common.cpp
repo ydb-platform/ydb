@@ -315,6 +315,7 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE_REQ, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };

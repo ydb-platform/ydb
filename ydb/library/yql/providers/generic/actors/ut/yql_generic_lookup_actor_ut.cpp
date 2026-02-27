@@ -33,6 +33,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
     // Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
     class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
+        using TBase = TActorBootstrapped<TCallLookupActor>;
         using TLookupActorFactory = std::function<std::pair<NActors::IActor*, std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>>(const NActors::TActorId&, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&, NKikimr::NMiniKQL::TTypeEnvironment&)>;
         using TCallback = std::function<void(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&, NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr&)>;
     public:
@@ -78,9 +79,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             Send(LookupActor, new NActors::TEvents::TEvPoison());
             Send(Edge, new NActors::TEvents::TEvWakeup());
         }
-    public:
 
-        void PassAway() override {
+        void Free() {
             if (Alloc) {
                 auto guard = Guard(*Alloc);
                 Request.reset();
@@ -89,8 +89,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             Alloc.reset();
         }
 
+    public:
+        void PassAway() override {
+            Free();
+            TBase::PassAway();
+        }
+
         ~TCallLookupActor() {
-            PassAway();
+            Free();
         }
 
     private:

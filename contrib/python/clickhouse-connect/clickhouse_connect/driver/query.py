@@ -185,7 +185,7 @@ class QueryContext(BaseQueryContext):
             active_tz = self.server_tz
         else:
             active_tz = tzutil.local_tz
-        if active_tz == pytz.UTC and not self.utc_tz_aware:
+        if tzutil.is_utc_timezone(active_tz) and not self.utc_tz_aware:
             return None
         return active_tz
 

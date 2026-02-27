@@ -5,6 +5,7 @@
 #include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/validate_logical_type.h>
 
 #include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 
@@ -60,6 +61,7 @@ TString TranslateYson(const TPositionalYsonTranslator& translator, TStringBuf so
 
 #define EXPECT_TRIVIAL_TRANSLATION(sourceType, targetType, source) \
     do { \
+        EXPECT_NO_THROW(ValidateComplexLogicalType(source, sourceType)); \
         auto translator = CreatePositionalYsonTranslator(sourceType, targetType); \
         auto sourceValue = MakeUnversionedCompositeValue(source); \
         auto translated = translator(sourceValue); \
@@ -203,17 +205,17 @@ TEST(TPostionalTranslationTest, IncompatibleTypes)
     #undef EXPECT_COMPATIBLE
 }
 
-TEST(TTrivialTranslationTest, Basic)
+TEST(TTrivialTranslationTest, BasicTypes)
 {
     // No actual type checks are performed here, unversioned value is simply passed as is.
-    EXPECT_TRIVIAL_TRANSLATION(Int8(), Int32(), "1000");
+    EXPECT_TRIVIAL_TRANSLATION(Int16(), Int32(), "1000");
     EXPECT_TRIVIAL_TRANSLATION(Int32(), Int8(), "2000");
 
     EXPECT_TRIVIAL_TRANSLATION(Tagged("foo", Tagged("bar", Bool())), Bool(), "%true");
 
     EXPECT_TRIVIAL_TRANSLATION(Optional(String()), String(), "qwerty");
-    EXPECT_TRIVIAL_TRANSLATION(String(), Optional(String()), "I love YT");
-    EXPECT_TRIVIAL_TRANSLATION(Optional(String()), Optional(String()), "Some string");
+    EXPECT_TRIVIAL_TRANSLATION(String(), Optional(String()), R"("I love YT")");
+    EXPECT_TRIVIAL_TRANSLATION(Optional(String()), Optional(String()), R"("Some string")");
 
     // When conversion is trivial, no actual unwrapping of optionals is taking place.
     EXPECT_TRIVIAL_TRANSLATION(Optional(Optional(Int8())), Int8(), "[5]");
@@ -221,17 +223,188 @@ TEST(TTrivialTranslationTest, Basic)
     EXPECT_TRIVIAL_TRANSLATION(
         List(Tuple(Int32(), String())),
         List(Tuple(Int64(), Optional(String()))),
-        "[[54, qwerty], [42, dvorak]]");
+        "[[54;qwerty];[42;dvorak]]");
 
     EXPECT_TRIVIAL_TRANSLATION(
         Dict(String(), List(Dict(String(), Int8()))),
         Dict(String(), List(Dict(String(), Int8()))),
-        "[key1, [[foo, 5], [bar, 10]], [key2, [[baz, -1]]]]");
+        "[[key1;[[[foo;5];[bar;10]];[[foooo;55]]]];[key2;[[[baz;-1]]]]]");
 
     EXPECT_TRIVIAL_TRANSLATION(
         VariantTuple(String(), Int8(), Float()),
         VariantTuple(String(), Int8(), Float(), Double()),
-        "[2, 3.14]");
+        "[2;3.14]");
+}
+
+TEST(TTrivialTranslationTest, Structs)
+{
+    EXPECT_TRIVIAL_TRANSLATION(
+        Struct("name", String(), "age", Float()),
+        Struct("name", String(), "age", Double()),
+        R"(["vlad";30.54])");
+
+    // Nested in Optional.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Struct("name", String(), "age", Float()),
+        Optional(Struct("name", String(), "age", Double())),
+        R"(["vlad";30.54])");
+
+    // Field was appended, no need for non-trivial translation.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Struct("name", String(), "age", Float()),
+        Struct("name", String(), "age", Float(), "is_funny", Optional(Bool())),
+        R"(["sergey";23.5])");
+
+    // Field was renamed, no need for non-trivial translation.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Struct("breed", String(), "weight", Float()),
+        StructLogicalType(
+            {
+                {"breed", "breed", String()},
+                {"weight_kg", "weight", Double()},
+            },
+            /*removedFieldStableNames*/ {}),
+        R"(["Australian shepherd";20.93])");
+
+    // Nested in List.
+    EXPECT_TRIVIAL_TRANSLATION(
+        List(Struct("name", String(), "age", Float())),
+        List(Struct("name", String(), "age", Float(), "is_funny", Optional(Bool()))),
+        R"([["roman";49.3];["alex";12.4];["savva";30.0]])");
+
+    // Nested in Dict.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Dict(String(), Struct("name", String(), "age", Float())),
+        Dict(String(), Struct("name", String(), "age", Float(), "is_funny", Optional(Bool()))),
+        "["
+            R"(["k-roman";["roman";49.3]];)"
+            R"(["alex1234";["alex";12.4]];)"
+            R"(["partykiller";["savva";30.0]];)"
+        "]");
+
+    // Nested in Tuple.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Tuple(
+            Struct("name", String(), "age", Float()),
+            Struct("breed", String(), "weight", Float())),
+        Tuple(
+            Struct("name", String(), "age", Float(), "is_funny", Optional(Bool())),
+            StructLogicalType(
+            {
+                {"breed", "breed", String()},
+                {"weight_kg", "weight", Double()},
+            },
+            /*removedFieldStableNames*/ {})),
+        R"([["jovana";27.99];["Golden retriever";15.34]])");
+
+    // Nested struct.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Struct(
+            "owner",
+            Struct("name", String(), "age", Float()),
+            "animal",
+            Struct("breed", String(), "weight", Float())),
+        StructLogicalType(
+            {
+                {
+                    "owner_info",
+                    "owner",
+                    Struct("name", String(), "age", Float(), "is_funny", Optional(Bool())),
+                },
+                {
+                    "animal_info",
+                    "animal",
+                    StructLogicalType(
+                    {
+                        {"breed", "breed", String()},
+                        {"weight_kg", "weight", Double()},
+                    },
+                    /*removedFieldStableNames*/ {}),
+                },
+            },
+            /*removedFieldStableNames*/ {}),
+        R"([["jovana";27.99];["Golden retriever";15.34]])");
+}
+
+TEST(TTrivialTranslationTest, VariantStructs)
+{
+    EXPECT_TRIVIAL_TRANSLATION(
+        VariantStruct("duration_sec", Int32(), "duration_str", String()),
+        VariantStruct("duration_sec", Int64(), "duration_str", String()),
+        R"([1;"200ms"])");
+
+    // Nested in Optional.
+    EXPECT_TRIVIAL_TRANSLATION(
+        VariantStruct("duration_sec", Int32(), "duration_str", String()),
+        Optional(VariantStruct("duration_sec", Int64(), "duration_str", String())),
+        R"([1;"200ms"])");
+
+    // Field was appended, no need for non-trivial translation.
+    EXPECT_TRIVIAL_TRANSLATION(
+        VariantStruct("duration_sec", Int32(), "duration_str", String()),
+        VariantStruct("duration_sec", Int64(), "duration_str", String(), "duration_min", Int32()),
+        R"([0;10000])");
+
+    // Field was renamed, no need for non-trivial translation.
+    EXPECT_TRIVIAL_TRANSLATION(
+        VariantStruct("duration_sec", Int32(), "duration_str", String()),
+        VariantStructLogicalType({
+            {"duration_seconds", "duration_sec", Int64()},
+            {"duration_str", "duration_str", String()},
+        }),
+        R"([1;"200ms"])");
+
+    // Nested in List.
+    EXPECT_TRIVIAL_TRANSLATION(
+        List(VariantStruct("sec", Int32(), "duration_str", String())),
+        List(VariantStruct("sec", Int64(), "duration_str", String(), "min", Int32())),
+        R"([[0;10000];[1;"200h"];[0;3600]])");
+
+    // Nested in Dict.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Dict(String(), VariantStruct("sec", Int32(), "duration_str", String())),
+        Dict(String(), VariantStruct("sec", Int64(), "duration_str", String(), "min", Int32())),
+        R"([["first";[0;10000]];["second";[1;"200h"]];["third";[0;3600]]])");
+
+    // Nested in Tuple.
+    EXPECT_TRIVIAL_TRANSLATION(
+        Tuple(
+            VariantStruct("duration_sec", Int32(), "duration_str", String()),
+            VariantStruct("weight_kg", Float(), "weight_lbs", Int32())),
+        Tuple(
+            VariantStructLogicalType({
+                {"duration_seconds", "duration_sec", Int64()},
+                {"duration_str", "duration_str", String()},
+            }),
+            VariantStruct("weight_kg", Float(), "weight_lbs", Int32())),
+        R"([[1;"200ms"];[0;499.32]])");
+
+    // Nested variant struct.
+    EXPECT_TRIVIAL_TRANSLATION(
+        VariantStruct(
+            "oauth_token",
+            VariantStruct("value", String(), "value_b64", String()),
+            "usr_ticket",
+            VariantStruct("value", String(), "value_b64", String())),
+        VariantStructLogicalType({
+            {
+                "OAuth token",
+                "oauth_token",
+                VariantStructLogicalType({
+                    {"Value", "value", String()},
+                    {"Value base 64", "value_b64", String()},
+                }),
+            },
+            {
+                "User ticket",
+                "usr_ticket",
+                VariantStructLogicalType({
+                    {"Value", "value", String()},
+                    {"Value base 64", "value_b64", String()},
+                }),
+            },
+        }),
+        R"([1;[1;"SWYgeW91IGFyZSByZWFkaW5nIHRoaXMsIGhpIQ=="]])");
 }
 
 TEST(TStructTranslationTest, Basic)

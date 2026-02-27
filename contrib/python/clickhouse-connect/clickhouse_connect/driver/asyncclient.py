@@ -87,7 +87,7 @@ class AsyncClient:
         """
         return self.client.min_version(version_str)
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Subclass implementation to close the connection to the server/deallocate the client
         """
@@ -770,10 +770,10 @@ class AsyncClient:
         Insert a pandas DataFrame with PyArrow backend or a polars DataFrame into ClickHouse using Arrow format.
         This method is optimized for DataFrames that already use Arrow format, providing
         better performance than the standard insert_df method.
-        
+
         Validation is performed and an exception will be raised if this requirement is not met.
         Polars DataFrames are natively Arrow-based and don't require additional validation.
-        
+
         :param table: ClickHouse table name
         :param df: Pandas DataFrame with PyArrow dtype backend or Polars DataFrame
         :param database: Optional ClickHouse database name

@@ -137,6 +137,19 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
+### Включение диагностики инвалидации блокировок транзакций ([TLI](../../concepts/glossary.md#tli))
+
+Для диагностики ошибок `transaction locks invalidated` включите логирование компонента `TLI`:
+
+```yaml
+log_config:
+  entry:
+    - component: "TLI"
+      level: 6  # INFO
+```
+
+После включения сервер записывает структурированные логи при каждом конфликте блокировок, включая идентификаторы и тексты запросов-жертв и нарушителей. Подробнее о формате записей, корреляции событий и утилите `find_tli_chain` см. в разделе [{#T}](../../troubleshooting/performance/queries/tli-logging.md).
+
 ### Конфигурация семплирования
 
 ```yaml

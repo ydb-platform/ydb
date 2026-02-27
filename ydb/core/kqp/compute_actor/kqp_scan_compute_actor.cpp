@@ -182,6 +182,19 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     InFlightBytes = 0;
+    const int64_t seq = gComputeHandled.fetch_add(1);
+    if (seq % 100 == 0) {
+        const int64_t dispatched = gDispatchedToCompute.load();
+        Cerr << "COMPUTE_HANDLE: seq=" << seq
+             << " fetchers=" << Fetchers.size()
+             << " dispatched=" << dispatched
+             << " in_mailbox=" << (dispatched - seq)
+             << " stored_bytes=" << (ScanData ? ScanData->GetStoredBytes() : 0)
+             << " free_space=" << CalculateFreeSpace()
+             << " in_flight_bytes=" << InFlightBytes
+             << " self=" << SelfId()
+             << Endl;
+    }
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
 

@@ -15,6 +15,9 @@
 
 namespace NKikimr::NKqp::NScanPrivate {
 
+inline std::atomic<int64_t> gDispatchedToCompute{0};
+inline std::atomic<int64_t> gComputeHandled{0};
+
 struct TEvScanExchange {
 
     enum EEvents {

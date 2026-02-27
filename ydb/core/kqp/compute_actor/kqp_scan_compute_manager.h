@@ -209,6 +209,7 @@ public:
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "send_data_to_compute")("space", FreeSpace)("queue", DataQueue.size())(
                 "compute_actor_id", ActorId)("rows", DataQueue.size() ? DataQueue.front()->GetRowsCount() : 0);
             if (FreeSpace && DataQueue.size()) {
+                gDispatchedToCompute.fetch_add(1);
                 NActors::TActivationContext::AsActorContext().Send(ActorId, DataQueue.front()->ExtractEvent());
                 DataQueue.front()->Finish();
                 DataQueue.pop_front();

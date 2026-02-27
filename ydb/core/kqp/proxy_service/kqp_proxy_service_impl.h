@@ -468,7 +468,7 @@ public:
 
     TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
         TString resultPoolId;
-        i64 resultRank;
+        i64 resultRank = 0;
 
         const bool isSystemUser = userToken && userToken->IsSystemUser();
         TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);

@@ -16702,23 +16702,23 @@
     ],
     "test_sql_negative.test[select_yql-select_op_order_by_inner_first-]": [
         {
-            "checksum": "665cbf21ea1dacebd24b27ea7c98a5ae",
-            "size": 361,
-            "uri": "https://{canondata_backend}/1937429/8081274c9c36923295e15b83d5ffe8e9a7cda41c/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_first-_/err_file.out"
+            "checksum": "d56c4e8a90192e77a62ecad2fdffb226",
+            "size": 365,
+            "uri": "https://{canondata_backend}/1031349/927f8f52c09b52ab10e7e782622a018a6bef35af/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_first-_/err_file.out"
         }
     ],
     "test_sql_negative.test[select_yql-select_op_order_by_inner_last-]": [
         {
-            "checksum": "f85484478fc3b9aa7e65bf0d0fbb52d4",
-            "size": 435,
-            "uri": "https://{canondata_backend}/1937429/8081274c9c36923295e15b83d5ffe8e9a7cda41c/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_last-_/err_file.out"
+            "checksum": "a4925649c3fa6a7d4f94f5e350fe0794",
+            "size": 371,
+            "uri": "https://{canondata_backend}/1031349/927f8f52c09b52ab10e7e782622a018a6bef35af/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_last-_/err_file.out"
         }
     ],
     "test_sql_negative.test[select_yql-select_op_order_by_inner_middle-]": [
         {
-            "checksum": "665cbf21ea1dacebd24b27ea7c98a5ae",
-            "size": 361,
-            "uri": "https://{canondata_backend}/1937429/8081274c9c36923295e15b83d5ffe8e9a7cda41c/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_middle-_/err_file.out"
+            "checksum": "1bb44df0bff15141792980e7be0cc877",
+            "size": 346,
+            "uri": "https://{canondata_backend}/1031349/927f8f52c09b52ab10e7e782622a018a6bef35af/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_middle-_/err_file.out"
         }
     ],
     "test_sql_negative.test[simple_pg-missing-]": [

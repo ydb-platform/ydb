@@ -6295,11 +6295,54 @@ bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming
     return true;
 }
 
+std::expected<EYqlSelectMode, TString>
+ParseYqlSelectHint(const NSQLTranslation::TSQLHint& hint) {
+    if (auto size = hint.Values.size(); size != 1) {
+        return std::unexpected(TStringBuilder() << "expected 1 value, got " << size);
+    }
+
+    const TString value = to_lower(hint.Values.front());
+    if (value == "disable") {
+        return EYqlSelectMode::Disable;
+    }
+    if (value == "auto") {
+        return EYqlSelectMode::Auto;
+    }
+    if (value == "force") {
+        return EYqlSelectMode::Force;
+    }
+
+    return std::unexpected(
+        TStringBuilder()
+        << "expected value 'disable', 'auto' or 'force', "
+        << "but got '" << value << "'");
+}
+
 TNodePtr TSqlTranslation::YqlSelectOrLegacy(
     std::function<TNodeResult()> yqlSelect,
-    std::function<TNodePtr()> legacy)
+    std::function<TNodePtr()> legacy,
+    TMaybe<TPosition> position)
 {
-    const EYqlSelectMode mode = Ctx_.GetYqlSelectMode();
+    const EYqlSelectMode prevMode = Ctx_.GetYqlSelectMode();
+
+    EYqlSelectMode mode = prevMode;
+
+    if (position && Ctx_.IsBackwardCompatibleFeatureAvailable(YqlSelectLangVersion())) {
+        if (const auto hint = Ctx_.PullHintForToken(*position, "yqlselect")) {
+            if (auto result = ParseYqlSelectHint(*hint)) {
+                mode = *result;
+            } else if (
+                !Ctx_.Warning(hint->Pos, NYql::TIssuesIds::YQL_HINT_INVALID_PARAMETERS, [&](auto& out) {
+                    out << "Invalid '" << hint->Name << "' "
+                        << "parameters: " << result.error();
+                })) {
+                return nullptr;
+            }
+        } else if (hint.error()) {
+            return nullptr;
+        }
+    }
+
     if (mode == EYqlSelectMode::Disable) {
         return legacy();
     }
@@ -6310,7 +6353,16 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return nullptr;
     }
 
-    TNodeResult result = yqlSelect();
+    TNodeResult result = std::unexpected(ESQLError::Basic);
+    {
+        Ctx_.SetYqlSelectMode(mode);
+        Y_DEFER {
+            Ctx_.SetYqlSelectMode(prevMode);
+        };
+
+        result = yqlSelect();
+    }
+
     if (result) {
         return std::move(*result);
     }
@@ -6321,8 +6373,16 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         }
         case ESQLError::UnsupportedYqlSelect: {
             if (mode == EYqlSelectMode::Force) {
-                Error() << "Translation of the statement "
-                        << "to YqlSelect was forced, but unsupported";
+                TStringBuf message =
+                    "Translation of the statement "
+                    "to YqlSelect was forced, but unsupported";
+
+                if (position) {
+                    Ctx_.Error(*position) << message;
+                } else {
+                    Ctx_.Error() << message;
+                }
+
                 return nullptr;
             }
 

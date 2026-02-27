@@ -241,14 +241,61 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
 }
 
 TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
-    TVector<NSQLTranslation::TSQLHint> result;
-    auto it = SqlHints_.find(tokenPos);
-    if (it == SqlHints_.end()) {
-        return result;
+    return PullHintForToken(tokenPos, [](const auto&) { return true; });
+}
+
+std::expected<NSQLTranslation::TSQLHint, bool> TContext::PullHintForToken(NYql::TPosition tokenPos, TStringBuf name) {
+    const auto isSameName = [&](const NSQLTranslation::TSQLHint& hint) {
+        return to_lower(hint.Name) == name;
+    };
+
+    TVector<NSQLTranslation::TSQLHint> hints = PullHintForToken(tokenPos, isSameName);
+    if (hints.empty()) {
+        return std::unexpected(false);
     }
-    result = std::move(it->second);
-    SqlHints_.erase(it);
-    return result;
+
+    NSQLTranslation::TSQLHint back = std::move(hints.back());
+    hints.pop_back();
+
+    bool hasError = false;
+    for (const NSQLTranslation::TSQLHint& hint : hints) {
+        hasError |= !Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+            out << "Hint " << hint.Name << " will not be used";
+        });
+    }
+    if (hasError) {
+        return std::unexpected(true);
+    }
+
+    return back;
+}
+
+TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(
+    NYql::TPosition tokenPos,
+    std::function<bool(NSQLTranslation::TSQLHint)> pred)
+{
+    auto it = SqlHints_.find(tokenPos);
+    if (it == end(SqlHints_)) {
+        return {};
+    }
+
+    auto& hints = it->second;
+
+    // If two or more hints with the same name are
+    // specified in the set, the last one is used.
+    auto tail = std::ranges::stable_partition(hints, std::not_fn(pred));
+
+    TVector<NSQLTranslation::TSQLHint> pulled;
+    pulled.reserve(std::ranges::size(tail));
+
+    std::ranges::move(tail, std::back_inserter(pulled));
+    hints.erase(std::ranges::begin(tail), std::ranges::end(tail));
+
+    if (hints.empty()) {
+        SqlHints_.erase(it);
+    }
+
+    return pulled;
 }
 
 bool TContext::WarnUnusedHints() {

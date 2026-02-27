@@ -694,6 +694,10 @@ Terms related to the implementation of [distributed transactions](#transactions)
 
 As in many other database management systems, {{ ydb-short-name }} queries can put locks on certain pieces of data, like table rows, to ensure that concurrent access does not modify them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but during commit attempts. The former is called **pessimistic locking** (used in PostgreSQL, for example), while the latter is called **optimistic locking** (used in {{ ydb-short-name }}).
 
+#### Transaction lock invalidation {#tli}
+
+**Transaction lock invalidation** (TLI) is a situation where one transaction (the breaker) writes data and thereby breaks the [optimistic locks](#optimistic-locking) of another transaction (the victim). The victim detects this at commit time and receives a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+
 #### Prepare stage {#prepare-stage}
 
 The **prepare stage** is a phase of distributed transaction execution, during which the transaction body is registered on all participating shards.

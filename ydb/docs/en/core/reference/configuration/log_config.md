@@ -137,6 +137,19 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
+### Enabling transaction lock invalidation diagnostics ([TLI](../../concepts/glossary.md#tli))
+
+To diagnose `transaction locks invalidated` errors, enable logging for the `TLI` component:
+
+```yaml
+log_config:
+  entry:
+    - component: "TLI"
+      level: 6  # INFO
+```
+
+Once enabled, the server writes structured logs on every lock conflict, including identifiers and query texts for both victims and breakers. For details on the log entry format, event correlation, and the `find_tli_chain` utility, see [{#T}](../../troubleshooting/performance/queries/tli-logging.md).
+
 ### Sampling Configuration
 
 ```yaml

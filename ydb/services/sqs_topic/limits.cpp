@@ -3,12 +3,14 @@
 
 namespace NKikimr::NSqsTopic::V1 {
 
-    std::expected<void, std::string> ValidateQueueName(const TStringBuf name) {
+    std::expected<void, std::string> ValidateQueueName(const TStringBuf name, bool read) {
         if (name.empty()) {
             return std::unexpected("empty");
         }
+        const TStringBuf validCharacters = "-_."sv;
+        const TStringBuf extraCharacters = read ? "/"sv : ""sv; // allow to use '/' to access existing topic
         for (char c : name) {
-            if (!IsAsciiAlnum(c) && c != '-' && c != '_' && c != '.') {
+            if (!(IsAsciiAlnum(c) || validCharacters.contains(c) || extraCharacters.contains(c))) {
                 return std::unexpected("invalid character");
             }
         }

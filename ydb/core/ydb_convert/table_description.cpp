@@ -759,7 +759,7 @@ bool FillColumnCompression(
         const auto fromCompression = from.compression();
         auto toSerializer = to->MutableSerializer();
 
-        if (from.compression().algorithm()) {
+        if (fromCompression.has_algorithm()) {
             toSerializer->SetClassName("ARROW_SERIALIZER");
             auto arrowCompression = toSerializer->MutableArrowCompression();
             switch (fromCompression.algorithm()) {
@@ -775,12 +775,12 @@ bool FillColumnCompression(
 
                 default:
                     status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.algorithm() << " in compression settings";
                     return false;
             }
         }
 
-        if (from.compression().has_compression_level()) {
+        if (fromCompression.has_compression_level()) {
             auto arrowCompression = toSerializer->MutableArrowCompression();
             arrowCompression->SetLevel(fromCompression.compression_level());
         }
@@ -819,8 +819,8 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             }
         }
 
-        if (!column.Getfamily().empty()) {
-            columnDesc->SetColumnFamilyName(column.Getfamily());
+        if (!column.family().empty()) {
+            columnDesc->SetColumnFamilyName(column.family());
         }
 
         if (column.has_from_literal()) {

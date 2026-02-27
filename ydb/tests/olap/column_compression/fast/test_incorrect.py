@@ -133,7 +133,7 @@ class TestIncorrectCompression(object):
             assert "Column Compression is not supported in row tables" in ex.message
 
     def test_alter_row_based_table_add_column_with_compression(self):
-        table_path = f"{self.test_dir}/alter_row_table_alter_column"
+        table_path = f"{self.test_dir}/alter_row_table_add_column"
 
         self.ydb_client.query(
             f"""

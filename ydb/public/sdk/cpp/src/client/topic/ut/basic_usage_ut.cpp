@@ -380,15 +380,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(ReadWithRestartsAndLargeData) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        auto compressor = std::make_shared<TSyncExecutor>();
+        auto compressor = new TSyncExecutor();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
         TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup.GetConsumerName())
+        .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(setup.GetTopicPath())
+            .AppendTopics(TEST_TOPIC)
             // .DirectRead(EnableDirectRead)
             ;
 

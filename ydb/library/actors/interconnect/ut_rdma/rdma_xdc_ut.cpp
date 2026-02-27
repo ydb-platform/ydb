@@ -260,7 +260,7 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
-    ctr->SetPeerInfo(1, "peer", "1");
+    ctr->SetPeerInfo("peer", "1", "peer");
     auto callback = [](THolder<IEventBase>) {};
     TEventHolderPool pool(common, callback);
     TSessionParams p;

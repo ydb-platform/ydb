@@ -931,7 +931,10 @@ namespace NActors {
                 Params.PeerScopeId,
                 std::move(descr.TraceId));
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
-                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                Metrics->IncScopeErrors();
+                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
+                    " LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                    NodeId, Metrics->GetHumanFriendlyPeerHostName().data(),
                     ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
                 ev.reset();
             }

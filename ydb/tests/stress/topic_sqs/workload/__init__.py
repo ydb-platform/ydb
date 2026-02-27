@@ -25,7 +25,7 @@ class Workload:
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
-        self.working_dir = os.path.join(self.tempdir.name, "mixed_ydb_cli")
+        self.working_dir = os.path.join(self.tempdir.name, "topic_sqs_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
@@ -43,7 +43,7 @@ class Workload:
         print(f"End at {time.time()}")
         return r
 
-    def create_topic(self):
+    def create_topics(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(f"""
                     CREATE TOPIC `{self.dlq_topic_name}`;
@@ -60,6 +60,15 @@ class Workload:
                           dead_letter_queue = '{self.dlq_topic_name}'
                         )
                 ) """)
+
+    def drop_topics(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(f"""
+                    DROP TOPIC `{self.topic_name}`;
+                """)
+            session_pool.execute_with_retries(f"""
+                    DROP TOPIC `{self.dlq_topic_name}`;
+                """)
 
     def get_command(self, subcmds: list[str]) -> list[str]:
         return (
@@ -108,7 +117,7 @@ class Workload:
         return self.cmd_run(self.get_command(subcmds=subcmds))
 
     def loop(self):
-        self.create_topic()
+        self.create_topics()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             logging.info("Starting workload")
@@ -130,5 +139,6 @@ class Workload:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.drop_topics()
         self.driver.stop()
         self.tempdir.cleanup()

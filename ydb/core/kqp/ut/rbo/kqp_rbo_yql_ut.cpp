@@ -1541,6 +1541,83 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestQueryClient(ColumnStore);
     }
 
+    void TestLimit(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (true || columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id FROM `/Root/foo` order by id limit 1 + 2;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id FROM `/Root/foo` order by id limit 5;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[0];[1];[2]])",
+            R"([[0];[1];[2];[3];[4]])"
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+     Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
+        TestLimit(ColumnStore);
+    }
+
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;

@@ -19,6 +19,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -542,6 +543,7 @@ protected:
                 ; // ignore all other states.
         }
 
+        ProcessStreamingQueryCounters();
         return ack;
     }
 
@@ -1300,6 +1302,23 @@ protected:
         return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
+    void ProcessStreamingQueryCounters() {
+        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+            return;
+        }
+        if (!StreamingQueryCounters) {
+            StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+        }
+        auto now = TInstant::Now();
+        if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
+            TAggExecStat stats;
+            Stats->ExportAggExecStats(&stats);
+            StreamingQueryCounters->Update(stats);
+            LastStreamingQueryUpdateCounters = now;
+        }
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -1314,6 +1333,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
@@ -1379,6 +1399,7 @@ protected:
     THashSet<ui32> SentResultIndexes;
 
     TActorId CheckpointCoordinatorId;
+    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
 protected:
     TKqpTasksGraph TasksGraph;

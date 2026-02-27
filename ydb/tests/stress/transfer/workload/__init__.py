@@ -9,6 +9,7 @@ import uuid
 
 logger = logging.getLogger("YdbTransferWorkload")
 
+
 class Workload(unittest.TestCase):
     def __init__(self, endpoint, database, duration, mode, topic):
         self.database = database
@@ -116,9 +117,9 @@ class Workload(unittest.TestCase):
         logger.info(f"Writing to topic {self.topic_name}")
         self.write_to_topic()
 
-        logger.info(f"Waiting for transfer to finish")
+        logger.info("Waiting for transfer to finish")
         self.wait_transfer_finished()
-        logger.info(f"Finish")
+        logger.info("Finish")
 
     def __enter__(self):
         return self

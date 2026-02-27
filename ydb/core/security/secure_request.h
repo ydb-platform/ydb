@@ -72,14 +72,19 @@ public:
     template <typename... Args>
     TSecureRequestActor(Args&&... args)
         : TBase(std::forward<Args>(args)...)
-    {}
+    {
+        PrintBackTrace();
+    }
 
     void SetDatabase(const TString& database) {
         Database = database;
+        PrintBackTrace();
     }
 
     void SetSecurityToken(const TString& securityToken) {
+        Cerr << securityToken << ' ' << securityToken.IsDetached() << Endl;
         SecurityToken = securityToken;
+        PrintBackTrace();
     }
 
     // Set internal token

@@ -34,6 +34,75 @@ TString GetDDiskConnectionsFilePath(ui64 tabletId) {
     return res;
 }
 
+TString SerializeTabletInfo(
+    const TPartitionIds& ids,
+    const NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig)
+{
+    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
+    tabletInfo.MutableStorageConfig()->CopyFrom(storageConfig);
+    tabletInfo.MutableVolumeConfig()->CopyFrom(volumeConfig);
+
+    Y_ASSERT(ids.size() == TPartitionActor::NumDirectBlockGroups);
+    auto* connectionsInfo = tabletInfo.MutableConnectionsInfo();
+
+    for (const auto& id: ids) {
+        auto* connectionInfo = connectionsInfo->Add();
+        Y_ASSERT(id.DdiskIds.size() == id.PersistentBufferDDiskIds.size());
+
+        auto* connections = connectionInfo->MutableConnections();
+        for (size_t j = 0; j < id.DdiskIds.size(); ++j) {
+            auto* connection = connections->Add();
+
+            auto* ddiskId = connection->MutableDDiskId();
+            id.DdiskIds[j].Serialize(ddiskId);
+
+            auto* pbDDiskId = connection->MutablePersistentBufferDDiskId();
+            id.PersistentBufferDDiskIds[j].Serialize(pbDDiskId);
+        }
+    }
+    Y_ASSERT(
+        tabletInfo.GetConnectionsInfo().size() ==
+        TPartitionActor::NumDirectBlockGroups);
+
+    TString serialized;
+    if (!tabletInfo.SerializeToString(&serialized)) {
+        Y_ABORT_S("Failed to serialize protobuf ddisk connections");
+    }
+
+    return serialized;
+}
+
+void DeserializeTabletInfo(
+    const TString& serialized, TPartitionIds& ids,
+    NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig)
+{
+    ids.clear();
+    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
+    if (!tabletInfo.ParseFromString(serialized)) {
+        Y_ABORT_S("Failed to deserialize protobuf ddisk connections");
+    }
+
+    storageConfig.CopyFrom(tabletInfo.GetStorageConfig());
+    volumeConfig.CopyFrom(tabletInfo.GetVolumeConfig());
+
+    Y_ASSERT(
+        tabletInfo.GetConnectionsInfo().size() ==
+        TPartitionActor::NumDirectBlockGroups);
+
+    for (const auto& connectionInfo: tabletInfo.GetConnectionsInfo()) {
+        ids.push_back({});
+        auto& ddiskIds = ids.back().DdiskIds;
+        auto& persistentBufferDDiskIds = ids.back().PersistentBufferDDiskIds;
+        for (const auto& connection: connectionInfo.GetConnections()) {
+            ddiskIds.emplace_back(connection.GetDDiskId());
+            persistentBufferDDiskIds.emplace_back(
+                connection.GetPersistentBufferDDiskId());
+        }
+    }
+}
+
 } // namespace
 
 TPartitionActor::TPartitionActor(const TActorId& tablet,
@@ -183,33 +252,16 @@ void TPartitionActor::LoadTabletInfo(
     const NActors::TActorContext& ctx,
     TPartitionIds &ids)
 {
-    Y_UNUSED(ctx);
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
              "Trying to restore DDisks Ids");
 
-    ids.clear();
     TFileInput input(GetDDiskConnectionsFilePath(TabletID()));
     TString serialized = input.ReadAll();
 
-    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
-    if (!tabletInfo.ParseFromString(serialized)) {
-        Y_ABORT_S("Failed to deserialize protobuf ddisk connections");
-    }
+    LOG_DEBUG_S(ctx, NKikimrServices::NBS_PARTITION,
+        "TabletInfo serialized size on load: " << serialized.size());
 
-    StorageConfig.CopyFrom(tabletInfo.GetStorageConfig());
-    VolumeConfig.CopyFrom(tabletInfo.GetVolumeConfig());
-
-    Y_ASSERT(tabletInfo.GetConnectionsInfo().size() == NumDirectBlockGroups);
-    for (const auto& connectionInfo: tabletInfo.GetConnectionsInfo()) {
-        ids.push_back({});
-        auto& ddiskIds = ids.back().DdiskIds;
-        auto& persistentBufferDDiskIds = ids.back().PersistentBufferDDiskIds;
-        for (const auto& connection: connectionInfo.GetConnections()) {
-            ddiskIds.emplace_back(connection.GetDDiskId());
-            persistentBufferDDiskIds.emplace_back(
-                connection.GetPersistentBufferDDiskId());
-        }
-    }
+    DeserializeTabletInfo(serialized, ids, StorageConfig, VolumeConfig);
 
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
              "Restored %d DDisks Ids", ids[0].DdiskIds.size());
@@ -221,39 +273,44 @@ void TPartitionActor::StoreTabletInfo(
     const TPartitionIds& ids)
 {
     Y_UNUSED(ctx);
-    Y_ASSERT(ids.size() == NumDirectBlockGroups);
 
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
         "Trying to Store %d DDisks Ids", ids[0].DdiskIds.size());
 
-    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
-    tabletInfo.MutableStorageConfig()->CopyFrom(StorageConfig);
-    tabletInfo.MutableVolumeConfig()->CopyFrom(VolumeConfig);
-
-
-    auto* connectionsInfo = tabletInfo.MutableConnectionsInfo();
-    for (size_t i = 0; i < ids.size(); ++i) {
-        auto* connectionInfo = connectionsInfo->Add();
-        Y_ASSERT(ids[i].DdiskIds.size() == ids[i].PersistentBufferDDiskIds.size());
-
-        auto* connections = connectionInfo->MutableConnections();
-        for (size_t j = 0; j < ids[i].DdiskIds.size(); ++j) {
-            auto* connection = connections->Add();
-
-            auto* ddiskId = connection->MutableDDiskId();
-            ids[i].DdiskIds[j].Serialize(ddiskId);
-
-            auto* pbDDiskId = connection->MutablePersistentBufferDDiskId();
-            ids[i].PersistentBufferDDiskIds[j].Serialize(pbDDiskId);
-        }
-    }
+    TString serialized = SerializeTabletInfo(ids, StorageConfig, VolumeConfig);
+    LOG_DEBUG_S(ctx, NKikimrServices::NBS_PARTITION,
+        "TabletInfo serialized size on store: " << serialized.size());
 
     TFileOutput output(GetDDiskConnectionsFilePath(TabletID()));
-    TString serialized;
-    if (!tabletInfo.SerializeToString(&serialized)) {
-        Y_ABORT_S("Failed to serialize protobuf ddisk connections");
-    }
     output.Write(serialized);
+
+
+    // TODO вынести в юнит тест
+    {
+        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
+                 "Trying to test store/load code");
+        TPartitionIds helpIds;
+        DeserializeTabletInfo(serialized, helpIds, StorageConfig, VolumeConfig);
+
+        Y_ASSERT(helpIds.size() == ids.size());
+        for (size_t i = 0; i < helpIds.size(); ++i) {
+            const auto& d1 = helpIds[i].DdiskIds;
+            const auto& d2 = ids[i].DdiskIds;
+            Y_ASSERT(d1.size() == d2.size());
+            for (size_t j = 0; j < d1.size(); ++j) {
+                Y_ASSERT((d1[j] <=> d2[j]) == 0);
+            }
+
+            const auto& pb1 = helpIds[i].PersistentBufferDDiskIds;
+            const auto& pb2 = ids[i].PersistentBufferDDiskIds;
+            Y_ASSERT(pb1.size() == pb2.size());
+            for (size_t j = 0; j < pb1.size(); ++j) {
+                Y_ASSERT((pb1[j] <=> pb2[j]) == 0);
+            }
+        }
+        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
+                 "test store/load code was successful");
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -49,9 +49,9 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
-    static constexpr size_t NumDirectBlockGroups = 32;
 
 public:
+    static constexpr size_t NumDirectBlockGroups = 32;
     TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);
 
 private:

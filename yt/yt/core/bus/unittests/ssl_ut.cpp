@@ -357,7 +357,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        Cerr << sendFuture.Get().GetMessage() << Endl;
+        Cerr << sendFuture.BlockingGet().GetMessage() << Endl;
         EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
     }
 
@@ -541,7 +541,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithoutClientCertificate)
 
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        auto error = sendFuture.Get();
+        auto error = sendFuture.BlockingGet();
         EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
         EXPECT_THROW_MESSAGE_HAS_SUBSTR(
             error.ThrowOnError(),
@@ -591,7 +591,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
 
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        auto error = sendFuture.Get();
+        auto error = sendFuture.BlockingGet();
         if (ToString(error).Contains("Connection reset by peer")) {
             // This can happen if SSL_shutdown failed with EWOULDBLOCK.
             EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
@@ -632,7 +632,7 @@ TEST_F(TSslTest, ServerCipherList)
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-        Cerr << sendFuture.Get().GetMessage() << Endl;
+        Cerr << sendFuture.BlockingGet().GetMessage() << Endl;
         EXPECT_TRUE(sendFuture.BlockingGet().IsOK());
     }
 
@@ -739,7 +739,7 @@ TEST_F(TSslTest, ServerStop)
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    auto error = sendFuture.Get();
+    auto error = sendFuture.BlockingGet();
     EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
 
     auto errorMessage = ToString(error);
@@ -769,7 +769,7 @@ TEST_F(TSslTest, BlackHole)
 
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    auto error = sendFuture.Get();
+    auto error = sendFuture.BlockingGet();
     EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         error.ThrowOnError(),

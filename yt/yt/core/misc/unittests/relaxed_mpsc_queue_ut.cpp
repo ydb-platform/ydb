@@ -50,7 +50,7 @@ TEST(TRelaxedMpscQueueTest, SimpleMultiThreaded)
     auto barrier = NewPromise<void>();
 
     auto producer = [&] {
-        barrier.ToFuture().Get();
+        barrier.ToFuture().BlockingGet();
         for (int i = 0; i < N; ++i) {
             queue.Enqueue(std::make_unique<TIntNode>(i));
         }
@@ -58,7 +58,7 @@ TEST(TRelaxedMpscQueueTest, SimpleMultiThreaded)
 
     auto consumer = [&] {
         std::array<int, N> counts{};
-        barrier.ToFuture().Get();
+        barrier.ToFuture().BlockingGet();
         for (int i = 0; i < N * T; ++i) {
             while (true) {
                 if (auto item = queue.TryDequeue()) {

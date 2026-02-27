@@ -700,7 +700,7 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     .Via(serializedInvoker)
     .Run();
 
-    promise.ToFuture().Get();
+    promise.ToFuture().BlockingGet();
 
     auto result = BIND([&] () -> bool {
         return flag;
@@ -735,7 +735,7 @@ TEST_W(TSchedulerTest, CancelDelayedFuture)
     auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(10));
     future.Cancel(TError("Error"));
     EXPECT_TRUE(future.IsSet());
-    auto error = future.Get();
+    auto error = future.BlockingGet();
     EXPECT_EQ(NYT::EErrorCode::Canceled, error.GetCode());
     EXPECT_EQ(1, std::ssize(error.InnerErrors()));
     EXPECT_EQ(NYT::EErrorCode::Generic, error.InnerErrors()[0].GetCode());

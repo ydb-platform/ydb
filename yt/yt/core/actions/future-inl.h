@@ -2235,7 +2235,7 @@ public:
             TFutureCallbackCookie cookie;
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(future.Get());
+                OnFutureSet(future.BlockingGet());
             } else {
                 cookie = future.Subscribe(BIND_NO_PROPAGATE(&TAnyFutureCombiner::OnFutureSet, MakeStrong(this)));
             }
@@ -2324,7 +2324,7 @@ public:
         for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
-                OnFutureSet(index, future.Get());
+                OnFutureSet(index, future.BlockingGet());
             } else {
                 future.Subscribe(BIND_NO_PROPAGATE(&TAllFutureCombiner::OnFutureSet, MakeStrong(this), index));
             }
@@ -2422,7 +2422,7 @@ public:
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(index, future.Get());
+                OnFutureSet(index, future.BlockingGet());
             } else {
                 cookie = future.Subscribe(
                     BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
@@ -2739,7 +2739,7 @@ private:
                 break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.Get()));
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.BlockingGet()));
             if (!suggestedIndex) {
                 break;
             }
@@ -2859,7 +2859,7 @@ private:
                         break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.Get());
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.BlockingGet());
             if (!suggestedIndex) {
                 break;
             }

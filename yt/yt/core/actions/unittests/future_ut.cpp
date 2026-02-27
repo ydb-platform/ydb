@@ -2147,7 +2147,7 @@ TEST_F(TFutureTest, Get)
 
     promise.Set(42);
 
-    EXPECT_EQ(future.Get().Value(), 42);
+    EXPECT_EQ(future.BlockingGet().Value(), 42);
 }
 
 TEST_F(TFutureTest, GetOrCrashOnUnsetFuture)

@@ -314,7 +314,7 @@ TEST_W(TScheduledExecutorTest, Stop)
         .ThrowOnError();
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.BlockingGet().GetCode());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

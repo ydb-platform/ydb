@@ -6,7 +6,7 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
-enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
+enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal, NotEqual };
 
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, TExprContext& ctx, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -128,8 +128,8 @@ protected:
     double ComputeInequalitySelectivity(
         const NYql::NNodes::TExprBase& left,
         const NYql::NNodes::TExprBase& right,
-        EInequalityPredicateType predicate,
-        bool collectConstantMembers
+        bool collectConstantMembers,
+        EInequalityPredicateType predicate
     );
 
     double ComputeComparisonSelectivity(

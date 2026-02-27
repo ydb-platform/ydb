@@ -582,7 +582,7 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign], false);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
                 } else if (compSign == "neq") {

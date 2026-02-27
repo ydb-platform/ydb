@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 NLs::PathExist,
                 NLs::StreamVirtualTimestamps(vt),
                 NLs::StreamUserSIDs(userSIDs),
-                NLs::StreamUserSIDs(traceIds),
+                NLs::StreamTraceIds(traceIds),
             });
         });
     }

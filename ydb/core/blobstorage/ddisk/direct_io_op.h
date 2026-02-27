@@ -16,6 +16,7 @@ namespace NKikimr::NDDisk {
     struct TDDiskActor::TDirectIoOpBase : NPDisk::TUringOperation {
 
         TActorId DDiskId;
+        ui64 Cookie = 0;                    // original event cookie
         bool IsRead = false;
         ui32 Size = 0;
         ui64 DiskOffset = 0;
@@ -28,7 +29,7 @@ namespace NKikimr::NDDisk {
 
         TDirectIoOpBase(std::atomic<ui32>& inFlightCount, TCounters& counters);
 
-        virtual ~TDirectIoOpBase() = default;
+        virtual ~TDirectIoOpBase();
 
         // a poor error mapping
         static NKikimrBlobStorage::NDDisk::TReplyStatus::E UringErrorToStatus(i32 result, bool isRead) {
@@ -77,13 +78,11 @@ namespace NKikimr::NDDisk {
             }
 
             op->Reply(actorSystem, false);
-            op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
         }
 
         static void OnDirectIoDrop(NPDisk::TUringOperation* baseOp) noexcept {
             auto* op = static_cast<TDirectIoOpBase*>(baseOp);
             std::unique_ptr<TDirectIoOpBase> guard(op);
-            op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
         }
 
         virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) = 0;
@@ -93,7 +92,6 @@ namespace NKikimr::NDDisk {
 
     struct TDDiskActor::TSingleDirectIoOp : TDDiskActor::TDirectIoOpBase {
         TActorId Sender;                    // original requester
-        ui64 Cookie = 0;                    // original event cookie
         TActorId InterconnectSession;
 
         TSingleDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
@@ -111,12 +109,12 @@ namespace NKikimr::NDDisk {
         virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;
     };
 
-    struct TDDiskActor::TPersistentBufferPartIoOp : TDDiskActor::TSingleDirectIoOp {
+    struct TDDiskActor::TPersistentBufferPartIoOp : TDDiskActor::TDirectIoOpBase {
         ui64 PartCookie;
         bool IsErase = false;
 
         TPersistentBufferPartIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
-            : TSingleDirectIoOp(inFlightCount, counters)
+            : TDirectIoOpBase(inFlightCount, counters)
         {}
 
         virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;

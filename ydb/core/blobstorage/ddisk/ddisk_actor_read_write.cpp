@@ -237,7 +237,6 @@ namespace NKikimr::NDDisk {
         op->SetData(std::move(data));
         op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        InFlightCount.fetch_add(1, std::memory_order_relaxed);
         const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
         if (submitted) {
             op.release();
@@ -246,7 +245,6 @@ namespace NKikimr::NDDisk {
             UringRouter->Flush();
         } else {
             // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
-            InFlightCount.fetch_sub(1, std::memory_order_relaxed);
             op->Span.End();
             Counters.Interface.Write.Reply(false);
             SendReply(*ev, std::make_unique<TEvWriteResult>(
@@ -271,14 +269,12 @@ namespace NKikimr::NDDisk {
         op->AlignedDataHolder = TRcBuf::UninitializedPageAligned(selector.Size);
         op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        InFlightCount.fetch_add(1, std::memory_order_relaxed);
         const bool submitted = UringRouter->Read(op->AlignedDataHolder.GetDataMut(), op->Size, op->DiskOffset, op.get());
         if (submitted) {
             op.release();
             UringRouter->Flush();
         } else {
             // SQ ring full
-            InFlightCount.fetch_sub(1, std::memory_order_relaxed);
             op->Span.End();
             Counters.Interface.Read.Reply(false);
             SendReply(*ev, std::make_unique<TEvReadResult>(
@@ -311,7 +307,6 @@ namespace NKikimr::NDDisk {
             op.release();
             UringRouter->Flush();
         } else {
-            InFlightCount.fetch_sub(1, std::memory_order_relaxed);
             op->Reply(TActivationContext::ActorSystem(), true);
         }
     }

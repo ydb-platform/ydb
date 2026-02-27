@@ -30,6 +30,10 @@ TDDiskActor::TDirectIoOpBase::TDirectIoOpBase(std::atomic<ui32>& inFlightCount, 
 {
     OnComplete = &TDirectIoOpBase::OnDirectIoComplete;
     OnDrop = &TDirectIoOpBase::OnDirectIoDrop;
+    InFlightCount.fetch_add(1, std::memory_order_relaxed);
+}
+TDDiskActor::TDirectIoOpBase::~TDirectIoOpBase() {
+    InFlightCount.fetch_sub(1, std::memory_order_relaxed);
 }
 
 void TDDiskActor::TDDiskIoOp::Reply(NActors::TActorSystem* actorSystem, bool shortIoError) {
@@ -98,7 +102,6 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
     } else {
         reply = std::make_unique<TEvPrivate::TEvWritePersistentBufferPart>(Cookie, PartCookie, status, reason, IsErase);
     }
-    Y_ABORT_UNLESS(!InterconnectSession);
     actorSystem->Send(DDiskId, reply.release());
 }
 

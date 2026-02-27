@@ -27,15 +27,22 @@ monitoring_config:
 
 ||
 
-|| `require_healthcheck_authentication` | Режим обязательной [аутентификации](../../security/authentication.md) для всех форматов ответа страницы `/healthcheck`.
+|| `require_healthcheck_authentication` | Режим обязательной [аутентификации](../../security/authentication.md) на странице `/healthcheck`.
 
 - `true` — аутентификация на странице `/healthcheck` обязательна, запросы к ней обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Запросы проходят аутентификацию и проверку прав.
 
     Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в разделе [security_config](./security_config.md) файла конфигурации YDB.
 
-- `false` — аутентификация опциональна для ответа в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) страницы `/healthcheck` (CGI параметр `format=prometheus`); запросы к ней могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Для остальных форматов страницы `/healthcheck` аутентификация обязательна.
+- `false` — аутентификация на странице `/healthcheck` обязательна для всех форматов, кроме [формата Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (CGI параметр `format=prometheus`), для которого запросы могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
 
 Значение по умолчанию: `false`.
+
+{% note info %}
+
+Для форматов страницы `/healthcheck`, отличных от [формата Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/), аутентификация обязательна при включенном режиме обязательной [аутентификации](../../security/authentication.md) независимо от значения описываемого параметра `require_healthcheck_authentication`.
+
+{% endnote %}
+
 
 ||
 |#

@@ -149,14 +149,14 @@ namespace NYql::NDq {
                 return;
             }
             auto component = taskCounters->GetSubgroup("component", "LookupSrc");
-            Count = component->GetCounter("Reqs");
-            Fullscans = component->GetCounter("Fullscans");
-            Keys = component->GetCounter("Keys");
-            ResultChunks = component->GetCounter("Chunks");
-            ResultRows = component->GetCounter("Rows");
-            ResultBytes = component->GetCounter("Bytes");
-            AnswerTime = component->GetCounter("AnswerMs");
-            CpuTime = component->GetCounter("CpuUs");
+            Count = component->GetCounter("Reqs", true);
+            Fullscans = component->GetCounter("Fullscans", true);
+            Keys = component->GetCounter("Keys", true);
+            ResultChunks = component->GetCounter("Chunks", true);
+            ResultRows = component->GetCounter("Rows", true);
+            ResultBytes = component->GetCounter("Bytes", true);
+            AnswerTime = component->GetCounter("AnswerMs", true);
+            CpuTime = component->GetCounter("CpuUs", true);
             InFlight = component->GetCounter("InFlight");
         }
     public:

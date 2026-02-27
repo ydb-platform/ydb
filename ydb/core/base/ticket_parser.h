@@ -105,6 +105,7 @@ namespace NKikimr {
                 , PeerName(std::move(init.PeerName))
                 , Entries(std::move(init.Entries))
             {
+                PrintBackTrace();
             }
 
             TEvAuthorizeTicket(TInitializationFieldsWithSignature&& init)
@@ -113,33 +114,44 @@ namespace NKikimr {
                 , Entries(std::move(init.Entries))
                 , Signature(std::move(init.Signature))
             {
+                PrintBackTrace();
             }
 
             TEvAuthorizeTicket(const TString& ticket)
                 : Ticket(ticket)
-            {}
+            {
+                PrintBackTrace();
+            }
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
                 : Ticket(ticket)
                 , Entries({{ToPermissions(permissions), attributes}})
-            {}
+            {
+                PrintBackTrace();
+            }
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
                 : Ticket(ticket)
                 , Entries({{permissions, attributes}})
-            {}
+            {
+                PrintBackTrace();
+            }
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
                 : Ticket(ticket)
                 , PeerName(peerName)
                 , Entries(entries)
-            {}
+            {
+                PrintBackTrace();
+            }
 
             TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
                 : PeerName(peerName)
                 , Entries(entries)
                 , Signature(std::move(sign))
-            {}
+            {
+                PrintBackTrace();
+            }
 
         };
 

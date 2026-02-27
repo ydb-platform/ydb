@@ -609,6 +609,9 @@ private:
             }
             lastModified = GetCompileTime().ToRfc822String();
         }
+        if (type.empty()) {
+            type = "text/html";
+        }
         if (!blob.empty()) {
             if (name == "/index.html" || name == "/v2/index.html") { // we send root's index in such format that it could be embedded into existing web interface
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(static_cast<const char*>(blob.data()), blob.size())));

@@ -1,6 +1,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
+int processFlushResult(const NYdb::NTopic::TFlushResult& flushResult) {
+    if (flushResult.IsSuccess()) {
+        return 0;
+    }
+    if (flushResult.IsClosed()) {
+        return 1;
+    }
+
+    throw std::runtime_error("Flush finished with unexpected status");
+}
+
 int main() {
     const std::string ENDPOINT = "HOST:PORT";
     const std::string DATABASE = "DATABASE";
@@ -30,31 +41,29 @@ int main() {
     auto producer = topicClient.CreateProducer(producerSettings);
 
     auto messageData = std::string(1_KB, 'a');
-    NYdb::NTopic::TWriteMessage writeMessage(messageData);
-    writeMessage.Key("key1");
-
-    auto writeResult = producer->Write(std::move(writeMessage));
-    Y_ASSERT(writeResult.IsSuccess());
 
     for (int i = 0; i < 10; i++) {
-        while (true) {
-            auto writeResult = producer->Write(std::move(writeMessage));
-            if (writeResult.IsSuccess()) {
-                break;
-            }
+        NYdb::NTopic::TWriteMessage writeMessage(messageData);
+        writeMessage.Key("key" + ToString(i));
 
-            if (writeResult.IsClosed()) {
-                std::cerr << "Producer is closed in unexpected way" << std::endl;
-                return 1;
-            }
+        auto writeResult = producer->Write(std::move(writeMessage));
+        if (writeResult.IsSuccess()) {
+            break;
+        }
 
-            if (writeResult.IsError()) {
-                std::cerr << "Write failed with error: " << writeResult.ErrorMessage.value() << std::endl;
-                return 1;
-            }
+        if (writeResult.IsClosed()) {
+            std::cerr << "Producer is closed in unexpected way" << std::endl;
+            return 1;
+        }
 
-            if (writeResult.IsTimeout()) {
-                Y_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        if (writeResult.IsError()) {
+            std::cerr << "Write failed with error: " << writeResult.ErrorMessage.value() << std::endl;
+            return 1;
+        }
+
+        if (writeResult.IsTimeout()) {
+            if (auto res = processFlushResult(producer->Flush().GetValueSync()); res != 0) {
+                return res;
             }
         }
     }

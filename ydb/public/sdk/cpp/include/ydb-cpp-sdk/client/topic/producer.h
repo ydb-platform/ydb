@@ -71,7 +71,6 @@ enum class EWriteStatus {
 enum class EFlushStatus {
     Success = 0,
     ProducerClosed = 1,
-    Timeout = 2,
 };
 
 //! Result of write operation.
@@ -123,10 +122,6 @@ struct TFlushResult {
 
     bool IsClosed() const {
         return Status == EFlushStatus::ProducerClosed;
-    }
-
-    bool IsTimeout() const {
-        return Status == EFlushStatus::Timeout;
     }
 };
 

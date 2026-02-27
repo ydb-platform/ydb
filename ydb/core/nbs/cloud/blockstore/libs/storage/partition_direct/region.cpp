@@ -19,7 +19,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 {
     auto vChunkIndex = GetVChunkIndex(request->Range.Start);
     request->Range = TBlockRange64::WithLength(
-        request->Range.Start - vChunkIndex * VChunkBlocksCount,
+        GetVChunkOffset(request->Range.Start),
         request->Range.Size());
 
     return VChunks[vChunkIndex].ReadBlocksLocal(
@@ -35,7 +35,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
 {
     auto vChunkIndex = GetVChunkIndex(request->Range.Start);
     request->Range = TBlockRange64::WithLength(
-        request->Range.Start - vChunkIndex * VChunkBlocksCount,
+        GetVChunkOffset(request->Range.Start),
         request->Range.Size());
 
     return VChunks[vChunkIndex].WriteBlocksLocal(
@@ -49,7 +49,20 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
 size_t TRegion::GetVChunkIndex(ui64 blockIndex) const
 {
     // TODO: remove hardcode
-    return blockIndex * 4096 / (128 * 1024 * 1024);
+    // Basic striping by 512KB
+    size_t blocksPerStripe = 512 * 1024 / 4096;
+    return (blockIndex / blocksPerStripe) % VChunks.size();
+}
+
+size_t TRegion::GetVChunkOffset(ui64 blockIndex) const
+{
+    // TODO: remove hardcode
+    // Basic striping by 512KB
+    size_t blocksPerStripe = 512 * 1024 / 4096;
+    auto stripeIndex = blockIndex / blocksPerStripe;
+    auto stripeIndexInVChunk = stripeIndex / VChunks.size();
+    auto blockIndexInStripe = blockIndex % blocksPerStripe;
+    return stripeIndexInVChunk * blocksPerStripe + blockIndexInStripe;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

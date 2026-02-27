@@ -183,19 +183,6 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     const ui64 reserve = GetMemoryLimits().ChannelBufferSize;
     InFlightBytes = InFlightBytes > reserve ? InFlightBytes - reserve : 0;
-    const int64_t seq = gComputeHandled.fetch_add(1);
-    if (seq % 100 == 0) {
-        const int64_t dispatched = gDispatchedToCompute.load();
-        Cerr << "COMPUTE_HANDLE: seq=" << seq
-             << " fetchers=" << Fetchers.size()
-             << " dispatched=" << dispatched
-             << " in_mailbox=" << (dispatched - seq)
-             << " stored_bytes=" << (ScanData ? ScanData->GetStoredBytes() : 0)
-             << " free_space=" << CalculateFreeSpace()
-             << " in_flight_bytes=" << InFlightBytes
-             << " self=" << SelfId()
-             << Endl;
-    }
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
 
@@ -251,10 +238,6 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
         return;
     }
-    static std::atomic<ui64> pollSeq{0};
-    const ui64 pseq = pollSeq.fetch_add(1);
-    const ui64 infBefore = InFlightBytes;
-    ui32 acksSent = 0;
     for (auto&& i : Fetchers) {
         const ui64 freeSpace = CalculateFreeSpace();
         if (!freeSpace) {
@@ -262,18 +245,6 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         }
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
         InFlightBytes += GetMemoryLimits().ChannelBufferSize;
-        ++acksSent;
-    }
-    if (pseq % 100 == 0) {
-        Cerr << "POLL_SOURCES: pseq=" << pseq
-             << " acks=" << acksSent
-             << " fetchers=" << Fetchers.size()
-             << " inf_before=" << infBefore
-             << " inf_after=" << InFlightBytes
-             << " stored=" << ScanData->GetStoredBytes()
-             << " prev_fs=" << prevFreeSpace
-             << " self=" << SelfId()
-             << Endl;
     }
 }
 

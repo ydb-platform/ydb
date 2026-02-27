@@ -265,6 +265,7 @@ namespace NYql::NDq {
 
         void Handle(TEvReadSplitsPart::TPtr ev) {
             auto state = std::move(ev->Get()->State);
+            Y_DEBUG_ABORT_UNLESS(state->ReadSplitsIterator);
             ProcessReceivedData(ev->Get()->Response, state);
 #if 1 // Temporary workaround for not-yet-deployed YQ-5124
             if (state->FullscanLimit > 0 && state->ResultRows == state->FullscanLimit) {
@@ -495,6 +496,7 @@ namespace NYql::NDq {
         }
 
         void FinalizeRequest(TLookupState::TPtr state) {
+            state->ReadSplitsIterator.reset();
             if (LocalInFlight == 0) { // PassAway was called
                 return;
             }
@@ -518,6 +520,7 @@ namespace NYql::NDq {
         }
 
         static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, TLookupState::TPtr state) {
+            state->ReadSplitsIterator.reset();
             auto nextRetry = state->RetryState->GetNextRetryDelay(status);
             if (nextRetry) {
                 YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;

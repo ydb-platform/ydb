@@ -403,7 +403,7 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::move(signature), "", entries);
     } else {
         Cerr << "TBaseCloudAuthRequestProxy::Authorize " << IamToken_ << Endl;
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(IamToken_, "", entries);
+        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::string(IamToken_), "", entries);
     }
 
     AuthorizeRequestStartTimestamp_ = TActivationContext::Now();

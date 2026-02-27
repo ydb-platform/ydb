@@ -608,7 +608,7 @@ private:
     }
 
     void RequestTicketParser() {
-        Cerr << "ymq " << SecurityToken << Endl;
+        Cerr << "ymq " << SecurityToken_ << Endl;
         this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(std::string(SecurityToken_)));
     }
 

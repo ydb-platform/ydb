@@ -3915,6 +3915,8 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
 };
 // } // NForcedCompaction
 
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
+
 }
 
 }

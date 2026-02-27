@@ -104,6 +104,7 @@ TImportFromFsResponse::TImportFromFsResponse(TStatus&& status, Ydb::Operations::
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
     if (metadata.settings().no_acl()) {
         Metadata_.Settings.NoACL(metadata.settings().no_acl());
@@ -352,6 +353,8 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
     if (settings.SkipChecksumValidation_) {
         settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
+
+    settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
 
     for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
         settingsProto.add_exclude_regexps(excludeRegexp);

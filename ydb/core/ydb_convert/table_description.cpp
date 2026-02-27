@@ -822,6 +822,10 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             error = TStringBuilder() << "Default sequences are not supported in column tables";
             return false;
         }
+
+        if (column.Haslowcardinality()) {
+            columnDesc->MutableDictionaryEncoding()->SetEnabled(column.Getlowcardinality());
+        }
     }
 
     return true;
@@ -965,6 +969,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 if (!FillColumnCompression(alter, alterColumn, status, error)) {
                     return false;
                 }
+            }
+
+            if (alter.Haslowcardinality()) {
+                alterColumn->MutableDictionaryEncoding()->SetEnabled(alter.Getlowcardinality());
             }
         }
 

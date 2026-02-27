@@ -39,4 +39,5 @@ message TKqpColumnMetadataProto {
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
     optional TCompression Compression = 13;
+    optional bool LowCardinality = 14;
 };

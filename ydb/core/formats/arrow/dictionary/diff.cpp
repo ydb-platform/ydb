@@ -12,20 +12,6 @@ NKikimrSchemeOp::TDictionaryEncodingSettings TEncodingDiff::SerializeToProto() c
     return result;
 }
 
-TConclusionStatus TEncodingDiff::DeserializeFromRequestFeatures(NYql::TFeaturesExtractor& features) {
-    {
-        auto fValue = features.Extract("ENCODING.DICTIONARY.ENABLED");
-        if (fValue) {
-            bool enabled = false;
-            if (!TryFromString<bool>(*fValue, enabled)) {
-                return TConclusionStatus::Fail("cannot parse COMPRESSTION.DICTIONARY.ENABLED as boolean");
-            }
-            Enabled = enabled;
-        }
-    }
-    return TConclusionStatus::Success();
-}
-
 bool TEncodingDiff::DeserializeFromProto(const NKikimrSchemeOp::TDictionaryEncodingSettings& proto) {
     if (proto.HasEnabled()) {
         Enabled = proto.GetEnabled();

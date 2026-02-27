@@ -491,6 +491,8 @@ namespace {
             columnMeta.NotNull = true;
         } else if (constraint.Name().Value() == "not_null") {
             columnMeta.NotNull = true;
+        } else if (constraint.Name().Value() == "lowcardinality") {
+            columnMeta.LowCardinality = true;
         }
 
         return true;
@@ -1150,7 +1152,7 @@ private:
                     case TIndexDescription::EType::LocalBloomFilter: {
                         FillLocalBloomFilterSetting(
                             localBloomFilterDescription,
-                            name.StringValue(), value.StringValue(), error);   
+                            name.StringValue(), value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -1797,6 +1799,26 @@ private:
                                     << "\". Only algorithm and level settings supported for column COMPRESSION"));
                                 return TStatus::Error;
                             }
+                        }
+                    } else if (alterColumnAction == "changeLowCardinality") {
+                        auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                        if (constraintsList.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column constrains for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+
+                        auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                        if (constraint.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "changeLowCardinality can get exactly one token \\in {\"set_lowcardinality\", \"drop_lowcardinality\"}"));
+                            return TStatus::Error;
                         }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),

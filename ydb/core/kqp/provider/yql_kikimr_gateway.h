@@ -463,6 +463,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
+    bool LowCardinality = false;
 
     TKikimrColumnMetadata() = default;
 
@@ -508,6 +509,10 @@ struct TKikimrColumnMetadata {
             if (message->GetCompression().HasLevel()) {
                 Compression->Level = message->GetCompression().GetLevel();
             }
+        }
+
+        if (message->HasLowCardinality() && message->GetLowCardinality()) {
+            LowCardinality = true;
         }
     }
 
@@ -558,14 +563,14 @@ struct TKikimrColumnMetadata {
                 compression->SetLevel(*maybeLevel);
             }
         }
+
+        if (LowCardinality) {
+            message->SetLowCardinality(true);
+        }
     }
 
     bool IsSameScheme(const TKikimrColumnMetadata& other) const {
         return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
-    }
-
-    void SetNotNull() {
-        NotNull = true;
     }
 };
 

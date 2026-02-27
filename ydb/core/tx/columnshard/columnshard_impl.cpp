@@ -636,7 +636,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
 
     if (indexChangesList.empty()) {
-        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        LOG_S_DEBUG("Compaction not started:  cannot prepare compaction at tablet " << TabletID());
         return;
     }
 

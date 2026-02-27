@@ -699,6 +699,7 @@ message ColumnMeta {
         google.protobuf.NullValue empty_default = 7;
     }
     optional ColumnCompression compression = 8;
+    optional bool lowcardinality = 9;
 }
 
 message EvictionToExternalStorageSettings {

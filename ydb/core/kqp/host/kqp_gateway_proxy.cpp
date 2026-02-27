@@ -361,6 +361,11 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             error = "Column Compression is not supported in row tables";
             return false;
         }
+
+        if (columnIt->second.LowCardinality) {
+            error = "Low Cardinality is not supported in row tables";
+            return false;
+        }
     }
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
@@ -484,6 +489,10 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
+
+        if (columnIt->second.LowCardinality) {
+            columnDesc.MutableDictionaryEncoding()->SetEnabled(true);
+        }
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnIt->second.TypeInfo, columnIt->second.TypeMod);
         if (columnType.TypeInfo) {

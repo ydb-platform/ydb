@@ -25,12 +25,6 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
     }
     {
-        auto result = DictionaryEncodingDiff.DeserializeFromRequestFeatures(features);
-        if (result.IsFail()) {
-            return result;
-        }
-    }
-    {
         auto status = Serializer.DeserializeFromRequest(features);
         if (status.IsFail()) {
             return status;

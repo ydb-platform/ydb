@@ -1006,7 +1006,7 @@ WITH (
     }
 
     Y_UNIT_TEST(ShowCreateTableColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1018,9 +1018,9 @@ WITH (
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
                 Key1 Uint64 NOT NULL,
-                Key2 Utf8 NOT NULL COMPRESSION (),
+                Key2 Utf8 NOT NULL COMPRESSION () LOWCARDINALITY,
                 Key3 Int32 NOT NULL COMPRESSION (algorithm = off),
-                Value1 Utf8 COMPRESSION (algorithm = lz4),
+                Value1 Utf8 COMPRESSION (algorithm = lz4) LOWCARDINALITY,
                 Value2 Int16 COMPRESSION (algorithm = zstd),
                 Value3 String COMPRESSION (algorithm = zstd, level = 10),
                 PRIMARY KEY (Key1, Key2, Key3),
@@ -1037,9 +1037,9 @@ WITH (
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Key1` Uint64 NOT NULL,
-    `Key2` Utf8 NOT NULL,
+    `Key2` Utf8 NOT NULL LOWCARDINALITY,
     `Key3` Int32 NOT NULL COMPRESSION (algorithm = off),
-    `Value1` Utf8 COMPRESSION (algorithm = lz4),
+    `Value1` Utf8 COMPRESSION (algorithm = lz4) LOWCARDINALITY,
     `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
     `Value3` String COMPRESSION (algorithm = zstd, level = 10),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
@@ -1053,6 +1053,10 @@ WITH (
         INTERVAL('PT1H') DELETE
     ON Key1 AS SECONDS
 );
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Key2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Value1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
 )"
         );
     }
@@ -2012,7 +2016,7 @@ ALTER TABLE `test_show_create`
     }
 
     Y_UNIT_TEST(ShowCreateTableColumnAlterColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2031,12 +2035,12 @@ ALTER TABLE `test_show_create`
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN `Col1` SET LOWCARDINALITY;
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-    `Col1` Uint64 NOT NULL,
+    `Col1` Uint64 NOT NULL LOWCARDINALITY,
     `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
     `Col3` Uint32,
     PRIMARY KEY (`Col1`)
@@ -2047,7 +2051,9 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
 );
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
 )"
@@ -2147,7 +2153,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
     }
 
     Y_UNIT_TEST(ShowCreateTableColumnAlterObject) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2180,13 +2186,13 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
                     `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN `Col3` SET LOWCARDINALITY;
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
     `Col2` Uint32 NOT NULL,
-    `Col3` JsonDocument,
+    `Col3` JsonDocument LOWCARDINALITY,
     PRIMARY KEY (`Col1`)
 )
 PARTITION BY HASH (`Col1`)
@@ -2197,7 +2203,9 @@ WITH (
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
 

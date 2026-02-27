@@ -509,7 +509,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1978,6 +1978,17 @@ public:
 
                                     columnBuild->SetNotNull(true);
                                     hasNotNull = true;
+                                } else if (constraint.Name().Value() == "lowcardinality") {
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Low cardinality is disabled."));
+                                        return SyncError();
+                                    }
+                                    if (table.Metadata->Kind != EKikimrTableKind::Olap) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "Low cardinality is supported only in column tables"));
+                                        return SyncError();
+                                    }
+
+                                    add_column->set_lowcardinality(true);
                                 }
                             }
                         }
@@ -2032,7 +2043,7 @@ public:
                                 auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
                                 if (defaultExpr != "Null") {
                                     ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
-                                        TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                        TStringBuilder() << "Unsupported value to set default: " << defaultExpr));
                                     return SyncError();
                                 }
                                 alter_columns->set_empty_default(google::protobuf::NullValue());
@@ -2130,6 +2141,10 @@ public:
                             alter_columns->set_empty_default(google::protobuf::NullValue());
                         } else if (alterColumnAction == "changeCompression") {
                             if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
+                                return SyncError();
+                            }
+                        } else if (alterColumnAction == "changeLowCardinality") {
+                            if (!ParseLowCardinalitySettings(alterColumnList, alter_columns, ctx, table.Metadata->Kind)) {
                                 return SyncError();
                             }
                         } else {
@@ -3759,6 +3774,53 @@ private:
             ctx.AddError(std::move(i));
         }
         return success;
+    }
+
+    bool ParseLowCardinalitySettings(
+        const TExprList& alterColumnList,
+        Ydb::Table::ColumnMeta* alter_columns,
+        TExprContext& ctx,
+        EKikimrTableKind tableKind)
+    {
+        auto changeLowCardinalityList = alterColumnList.Item(1).Cast<TExprList>();
+
+        if (changeLowCardinalityList.Size() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
+                << "\". Several encodings for a single column are not yet supported"));
+            return false;
+        }
+
+        auto changeLowCardinality = changeLowCardinalityList.Item(0).Cast<TCoAtomList>();
+        if (changeLowCardinality.Size() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinality.Pos()), TStringBuilder()
+                << "changeLowCardinality can get exactly one token \\in {\"drop_lowcardinality\", \"set_lowcardinality\"}"));
+            return false;
+        }
+
+        auto value = changeLowCardinality.Item(0).Cast<TCoAtom>();
+        if (value == "drop_lowcardinality") {
+            alter_columns->set_lowcardinality(false);
+        } else if (value == "set_lowcardinality") {
+            if (tableKind != EKikimrTableKind::Olap) {
+                // TODO: tableKind == EKikimrTableKind::Unspecified here for ALTER TABLE ... ALTER COLUMN ... SET LOWCARDINALITY
+                // It is needed to get somehow what table is altered
+                // ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()), "Low cardinality is supported only in column tables"));
+                // return false;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
+                ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
+                    << "SET LOWCARDINALITY is disabled."));
+                return false;
+            } else {
+                alter_columns->set_lowcardinality(true);
+            }
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
+                << "Unknown operation in changeLowCardinality: " << static_cast<TStringBuf>(value)));
+            return false;
+        }
+
+        return true;
     }
 
 private:

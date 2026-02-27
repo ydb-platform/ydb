@@ -60,9 +60,11 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
             }
         }
     }
-    if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
-        errors.AddError("cannot parse dictionary encoding diff from proto");
-        return false;
+    if (columnSchema.HasDictionaryEncoding()) {
+        if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
+            errors.AddError("cannot parse dictionary encoding diff from proto");
+            return false;
+        }
     }
     return true;
 }
@@ -106,6 +108,28 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
             return false;
         }
         DictionaryEncoding = *settings;
+
+        if (columnSchema.GetDictionaryEncoding().GetEnabled()) {
+            AFL_VERIFY(!columnSchema.HasDataAccessorConstructor() || columnSchema.GetDataAccessorConstructor().GetClassName() == "DICTIONARY")
+                ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
+
+            NKikimrArrowAccessorProto::TConstructor dictConstructor;
+            dictConstructor.SetClassName("DICTIONARY");
+            NArrow::NAccessor::TConstructorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
+            AccessorConstructor = container;
+        } else {
+            if (columnSchema.HasDataAccessorConstructor()) {
+                AFL_VERIFY(columnSchema.GetDataAccessorConstructor().GetClassName() != "DICTIONARY")
+                        ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
+            } else {
+                NKikimrArrowAccessorProto::TConstructor plainConstructor;
+                plainConstructor.SetClassName("PLAIN");
+                NArrow::NAccessor::TConstructorContainer container;
+                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
+                AccessorConstructor = container;
+            }
+        }
     }
 
     if (columnSchema.HasTypeId()) {
@@ -194,6 +218,28 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
         Y_ABORT_UNLESS(settings.IsSuccess());
         DictionaryEncoding = *settings;
+
+        if (columnSchema.GetDictionaryEncoding().GetEnabled()) {
+            AFL_VERIFY(!columnSchema.HasDataAccessorConstructor() || columnSchema.GetDataAccessorConstructor().GetClassName() == "DICTIONARY")
+                ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
+
+            NKikimrArrowAccessorProto::TConstructor dictConstructor;
+            dictConstructor.SetClassName("DICTIONARY");
+            NArrow::NAccessor::TConstructorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
+            AccessorConstructor = container;
+        } else {
+            if (columnSchema.HasDataAccessorConstructor()) {
+                AFL_VERIFY(columnSchema.GetDataAccessorConstructor().GetClassName() != "DICTIONARY")
+                        ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
+            } else {
+                NKikimrArrowAccessorProto::TConstructor plainConstructor;
+                plainConstructor.SetClassName("PLAIN");
+                NArrow::NAccessor::TConstructorContainer container;
+                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
+                AccessorConstructor = container;
+            }
+        }
     }
     if (columnSchema.HasNotNull()) {
         NotNullFlag = columnSchema.GetNotNull();
@@ -242,6 +288,11 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
             return false;
         }
         AccessorConstructor = conclusion.DetachResult();
+        // TODO: fix VERIFY with dict encoding
+        // AFL_VERIFY((AccessorConstructor->GetClassName() == "DICTIONARY" && diffColumn.GetDictionaryEncoding().GetEnabled().value_or(false)) ||
+        //            (AccessorConstructor->GetClassName() != "DICTIONARY" && !diffColumn.GetDictionaryEncoding().GetEnabled().value_or(false)))
+        //            ("AccessorConstructor->GetClassName()", AccessorConstructor->GetClassName())
+        //            ("diffColumn.GetDictionaryEncoding().GetEnabled()", diffColumn.GetDictionaryEncoding().GetEnabled());
     }
     if (diffColumn.GetStorageId()) {
         StorageId = *diffColumn.GetStorageId();
@@ -264,6 +315,21 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         if (!result) {
             errors.AddError("Cannot merge dictionary encoding info: " + result.GetErrorMessage());
             return false;
+        }
+        if (diffColumn.GetDictionaryEncoding().GetEnabled().has_value()) {
+            if (diffColumn.GetDictionaryEncoding().GetEnabled().value()) {
+                NKikimrArrowAccessorProto::TConstructor dictConstructor;
+                dictConstructor.SetClassName("DICTIONARY");
+                NArrow::NAccessor::TConstructorContainer container;
+                AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
+                AccessorConstructor = container;
+            } else {
+                NKikimrArrowAccessorProto::TConstructor plainConstructor;
+                plainConstructor.SetClassName("PLAIN");
+                NArrow::NAccessor::TConstructorContainer container;
+                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
+                AccessorConstructor = container;
+            }
         }
     }
     return true;

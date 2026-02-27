@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -9,7 +10,7 @@ namespace NKikimr::NArrow::NDictionary {
 
 class TEncodingSettings {
 private:
-    bool Enabled = false;
+    YDB_ACCESSOR(bool, Enabled, true);
     TEncodingSettings() = default;
     friend class TEncodingDiff;
 public:

@@ -6,6 +6,8 @@
 #include "select_yql.h"
 #include "sql_select.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+
 #include <util/generic/overloaded.h>
 
 namespace NSQLTranslationV1 {
@@ -955,17 +957,6 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
-        }
-    }
-
-    const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& parenthesis) {
-        switch (parenthesis.GetAltCase()) {
-            case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
-                return parenthesis.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
-            case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
-                return parenthesis.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
-            case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }
     }

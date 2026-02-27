@@ -258,6 +258,16 @@ public:
     }
 
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
+
+    // `if ( ret.error()    ) an error issued`
+    // `if (!ret.error()    ) hint not found`
+    // `if ( ret.has_value()) hint is returned`
+    std::expected<NSQLTranslation::TSQLHint, bool> PullHintForToken(NYql::TPosition tokenPos, TStringBuf name);
+
+    TVector<NSQLTranslation::TSQLHint> PullHintForToken(
+        NYql::TPosition tokenPos,
+        std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
     bool WarnUnusedHints();
 
     TScopedStatePtr CreateScopedState() const;
@@ -273,14 +283,14 @@ public:
         }
     }
 
+    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
+
     bool EnsureBackwardCompatibleFeatureAvailable(
         TPosition position,
         TStringBuf feature,
         NYql::TLangVersion version);
 
 private:
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
-
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
         NYql::TIssueCode code,

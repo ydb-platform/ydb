@@ -46,7 +46,7 @@ void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string&
 TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& name, const std::string& consumer)
 {
     auto driver = MakeDriver();
-    Y_DEFER{
+    Y_DEFER {
         driver.Stop(true);
     };
     TTopicClient client(driver);
@@ -71,7 +71,7 @@ void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& mess
                                const std::optional<std::string> producer,
                                std::optional<std::uint64_t> seqNo) {
     auto driver = MakeDriver();
-    Y_DEFER{
+    Y_DEFER {
         driver.Stop(true);
     };
     TTopicClient client(driver);
@@ -95,7 +95,7 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
     std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
     std::optional<size_t> partition, const TDuration timeout, bool autoPartitioningSupport) {
     auto driver = MakeDriver();
-    Y_DEFER{
+    Y_DEFER {
         driver.Stop(true);
     };
     TTopicClient client(driver);
@@ -159,7 +159,7 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
 
 TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {
     auto driver = MakeDriver();
-    Y_DEFER{
+    Y_DEFER {
         driver.Stop(true);
     };
     TTopicClient client(driver);

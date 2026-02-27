@@ -16,6 +16,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     object_distribution_ut.cpp
     scale_recommender_policy_ut.cpp

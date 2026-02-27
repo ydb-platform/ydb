@@ -33,6 +33,8 @@ PY3TEST()
         ydb/tests/olap/common
         ydb/tests/olap/lib
     )
+REQUIREMENTS(ram:32 cpu:4)
+
 END()
 
 RECURSE(

@@ -27,6 +27,7 @@ IF (YDB_ENABLE_PDISK_SHRED)
     )
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp

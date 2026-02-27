@@ -10,6 +10,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     GLOBAL blobs_sharing_ut.cpp
     GLOBAL kqp_olap_ut.cpp

@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
 )
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_analyze_datashard.cpp
     ut_analyze_columnshard.cpp

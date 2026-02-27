@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     dq_pq_rd_read_actor_ut.cpp
     dq_pq_read_actor_ut.cpp

@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     cancel_tx_ut.cpp
     flat_ut.cpp

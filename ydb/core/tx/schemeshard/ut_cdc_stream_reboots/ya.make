@@ -17,6 +17,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_cdc_stream_reboots.cpp
 )

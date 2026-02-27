@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
 )
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_basic_statistics.cpp
     ut_column_statistics.cpp

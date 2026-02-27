@@ -42,4 +42,6 @@ DEPENDS(
     yql/essentials/udfs/common/python/python3_small
 )
 
+REQUIREMENTS(ram:32 cpu:4)
+
 END()

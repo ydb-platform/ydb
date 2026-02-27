@@ -23,6 +23,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
 )
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_index_build_reboots.cpp
 )

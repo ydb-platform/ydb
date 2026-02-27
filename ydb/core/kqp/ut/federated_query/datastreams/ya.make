@@ -5,6 +5,7 @@ SPLIT_FACTOR(50)
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     datastreams_ut.cpp
 )

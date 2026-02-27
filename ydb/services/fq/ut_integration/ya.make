@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_utils.cpp
     fq_ut.cpp

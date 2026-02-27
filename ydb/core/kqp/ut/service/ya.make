@@ -10,6 +10,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     kqp_document_api_ut.cpp
     kqp_qs_queries_ut.cpp

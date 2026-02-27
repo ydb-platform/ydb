@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher/format_handler)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     format_handler_ut.cpp
     topic_filter_ut.cpp

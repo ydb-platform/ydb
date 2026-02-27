@@ -57,8 +57,9 @@ private:
     STFUNC(StateWork);
 
     void OnDetach(const NActors::TActorContext& ctx) override;
-    void OnTabletDead(NKikimr::TEvTablet::TEvTabletDead::TPtr& ev,
-                      const NActors::TActorContext& ctx) override;
+    void OnTabletDead(
+        NKikimr::TEvTablet::TEvTabletDead::TPtr& ev,
+        const NActors::TActorContext& ctx) override;
     void OnActivateExecutor(const NActors::TActorContext& ctx) override;
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 

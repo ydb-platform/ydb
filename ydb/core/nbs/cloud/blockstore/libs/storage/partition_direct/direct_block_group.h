@@ -55,8 +55,9 @@ private:
         NKikimr::NBsController::TDDiskId DDiskId;
         NKikimr::NDDisk::TQueryCredentials Credentials;
 
-        TDDiskConnection(const NKikimr::NBsController::TDDiskId& ddiskId,
-                         const NKikimr::NDDisk::TQueryCredentials& credentials)
+        TDDiskConnection(
+            const NKikimr::NBsController::TDDiskId& ddiskId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
             : DDiskId(ddiskId)
             , Credentials(credentials)
         {}
@@ -64,7 +65,9 @@ private:
         [[nodiscard]] NActors::TActorId GetServiceId() const
         {
             return NKikimr::MakeBlobStorageDDiskId(
-                DDiskId.NodeId, DDiskId.PDiskId, DDiskId.DDiskSlotId);
+                DDiskId.NodeId,
+                DDiskId.PDiskId,
+                DDiskId.DDiskSlotId);
         }
     };
 
@@ -120,7 +123,8 @@ public:
 
 private:
     void DoEstablishPersistentBufferConnection(
-        size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler);
+        size_t i,
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void HandlePersistentBufferConnected(
         size_t index,
@@ -159,8 +163,10 @@ private:
     void DoReadBlocksLocal(std::shared_ptr<TReadRequestHandler> requestHandler);
 
     template <typename TEvent>
-    void HandleReadResult(std::shared_ptr<TReadRequestHandler> requestHandler,
-                          ui64 storageRequestId, const TEvent& result);
+    void HandleReadResult(
+        std::shared_ptr<TReadRequestHandler> requestHandler,
+        ui64 storageRequestId,
+        const TEvent& result);
 
     void HandleSyncWithPersistentBufferResult(
         std::shared_ptr<TSyncRequestHandler> requestHandler,

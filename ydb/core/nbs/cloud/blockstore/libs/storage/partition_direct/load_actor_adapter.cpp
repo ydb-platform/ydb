@@ -74,19 +74,26 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(
-        MakeIntrusive<TCallContext>(), std::move(request));
+        MakeIntrusive<TCallContext>(),
+        std::move(request));
 
     future.Subscribe(
         [actorSystem = NActors::TActivationContext::ActorSystem(),
-         sender = ev->Sender, selfId = ctx.SelfID, cookie = ev->Cookie,
+         sender = ev->Sender,
+         selfId = ctx.SelfID,
+         cookie = ev->Cookie,
          data](const NThreading::TFuture<TWriteBlocksLocalResponse>& f)
         {
             auto response =
                 std::make_unique<TEvService::TEvWriteBlocksResponse>(
                     f.GetValue().Error);
 
-            actorSystem->Send(new IEventHandle(sender, selfId,
-                                               response.release(), 0, cookie));
+            actorSystem->Send(new IEventHandle(
+                sender,
+                selfId,
+                response.release(),
+                0,
+                cookie));
         });
 }
 
@@ -103,16 +110,21 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(
         TRequestHeaders{},
-        TBlockRange64::WithLength(msg->Record.GetStartIndex(),
-                                  msg->Record.GetBlocksCount()));
+        TBlockRange64::WithLength(
+            msg->Record.GetStartIndex(),
+            msg->Record.GetBlocksCount()));
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->ReadBlocksLocal(
-        MakeIntrusive<TCallContext>(), request);
+        MakeIntrusive<TCallContext>(),
+        request);
 
     future.Subscribe(
         [actorSystem = NActors::TActivationContext::ActorSystem(),
-         sender = ev->Sender, selfId = ctx.SelfID, cookie = ev->Cookie, request,
+         sender = ev->Sender,
+         selfId = ctx.SelfID,
+         cookie = ev->Cookie,
+         request,
          data](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
         {
             auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
@@ -121,15 +133,20 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
             if (auto guard = request->Sglist.Acquire()) {
                 const auto& sglist = guard.Get();
                 for (const auto& block: sglist) {
-                    response->Record.MutableBlocks()->AddBuffers(block.Data(),
-                                                                 block.Size());
+                    response->Record.MutableBlocks()->AddBuffers(
+                        block.Data(),
+                        block.Size());
                 }
             } else {
                 Y_ABORT_UNLESS(false);
             }
 
-            actorSystem->Send(new IEventHandle(sender, selfId,
-                                               response.release(), 0, cookie));
+            actorSystem->Send(new IEventHandle(
+                sender,
+                selfId,
+                response.release(),
+                0,
+                cookie));
         });
 }
 
@@ -137,10 +154,12 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 
 STFUNC(TLoadActorAdapter::StateWork)
 {
-    LOG_DEBUG(NActors::TActivationContext::AsActorContext(),
-              NKikimrServices::NBS_PARTITION,
-              "Processing event: %s from sender: %lu", ev->GetTypeName().data(),
-              ev->Sender.LocalId());
+    LOG_DEBUG(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "Processing event: %s from sender: %lu",
+        ev->GetTypeName().data(),
+        ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
@@ -168,7 +187,9 @@ TActorId CreateLoadActorAdapter(
         std::make_unique<TLoadActorAdapter>(std::move(fastPathService));
 
     return NActors::TActivationContext::Register(
-        actor.release(), owner, NActors::TMailboxType::ReadAsFilled,
+        actor.release(),
+        owner,
+        NActors::TMailboxType::ReadAsFilled,
         NKikimr::AppData()->SystemPoolId);
 }
 

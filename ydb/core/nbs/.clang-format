@@ -1,6 +1,7 @@
 ---
 Language:        Cpp
 AccessModifierOffset: -4
+VanillaContinuationIndenter: true
 AlignAfterOpenBracket: AlwaysBreak
 AlignArrayOfStructures: None
 AlignConsecutiveAssignments:

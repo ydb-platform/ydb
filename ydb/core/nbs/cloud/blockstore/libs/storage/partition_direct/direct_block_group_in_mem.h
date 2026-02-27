@@ -24,10 +24,12 @@ private:
 
 public:
     TInMemoryDirectBlockGroup(
-        ui64 tabletId, ui32 generation,
+        ui64 tabletId,
+        ui32 generation,
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
-        ui32 blockSize, ui64 blocksCount);
+        ui32 blockSize,
+        ui64 blocksCount);
 
     ~TInMemoryDirectBlockGroup() override = default;
 

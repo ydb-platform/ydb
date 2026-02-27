@@ -42,8 +42,9 @@ void TBaseRequestHandler::ChildSpanEndOk(ui64 requestId)
     ChildSpanByRequestId.erase(requestId);
 }
 
-void TBaseRequestHandler::ChildSpanEndError(ui64 requestId,
-                                            const TString& errorMessage)
+void TBaseRequestHandler::ChildSpanEndError(
+    ui64 requestId,
+    const TString& errorMessage)
 {
     auto& span = ChildSpanByRequestId.at(requestId);
     span.EndError(errorMessage);
@@ -88,25 +89,32 @@ TWriteRequestHandler::TWriteRequestHandler(
 {
     Future = NThreading::NewPromise<TWriteBlocksLocalResponse>();
 
-    Span = NWilson::TSpan(TWilsonNbs::NbsTopLevel, std::move(traceId),
-                          "NbsPartition.WriteBlocks", NWilson::EFlags::NONE,
-                          GetActorSystem());
+    Span = NWilson::TSpan(
+        TWilsonNbs::NbsTopLevel,
+        std::move(traceId),
+        "NbsPartition.WriteBlocks",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
     Span.Attribute("vChunkIndex", static_cast<i64>(vChunkIndex));
     Span.Attribute("startIndex", static_cast<i64>(Request->Range.Start));
     Span.Attribute("size", static_cast<i64>(GetSize()));
 }
 
-NWilson::TSpan& TWriteRequestHandler::GetChildSpan(ui64 requestId,
-                                                   ui8 persistentBufferIndex)
+NWilson::TSpan& TWriteRequestHandler::GetChildSpan(
+    ui64 requestId,
+    ui8 persistentBufferIndex)
 {
-    auto childSpan = NWilson::TSpan(NKikimr::TWilsonNbs::NbsBasic,
-                                    std::move(Span.GetTraceId()),
-                                    "NbsPartition.WriteBlocks.PBWrite",
-                                    NWilson::EFlags::NONE, GetActorSystem());
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.WriteBlocks.PBWrite",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     childSpan.Attribute("RequestId", static_cast<i64>(requestId));
-    childSpan.Attribute("PersistentBufferIndex",
-                        static_cast<i64>(persistentBufferIndex));
+    childSpan.Attribute(
+        "PersistentBufferIndex",
+        static_cast<i64>(persistentBufferIndex));
     childSpan.Event("Send_TEvWritePersistentBuffer");
 
     ChildSpanByRequestId[requestId] = std::move(childSpan);
@@ -130,11 +138,14 @@ bool TWriteRequestHandler::IsCompleted(ui64 requestId)
     return false;
 }
 
-void TWriteRequestHandler::OnWriteRequested(ui64 requestId,
-                                            ui8 persistentBufferIndex, ui64 lsn)
+void TWriteRequestHandler::OnWriteRequested(
+    ui64 requestId,
+    ui8 persistentBufferIndex,
+    ui64 lsn)
 {
     WriteMetaByRequestId.emplace(
-        requestId, TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
+        requestId,
+        TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
 }
 
 TVector<TWriteRequestHandler::TPersistentBufferWriteMeta>
@@ -334,22 +345,28 @@ TReadRequestHandler::TReadRequestHandler(
     Y_UNUSED(tabletId);
     Future = NThreading::NewPromise<TReadBlocksLocalResponse>();
 
-    Span = NWilson::TSpan(NKikimr::TWilsonNbs::NbsTopLevel, std::move(traceId),
-                          "NbsPartition.ReadBlocks", NWilson::EFlags::NONE,
-                          GetActorSystem());
+    Span = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsTopLevel,
+        std::move(traceId),
+        "NbsPartition.ReadBlocks",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
     Span.Attribute("vChunkIndex", static_cast<i64>(0));
     Span.Attribute("startIndex", static_cast<i64>(GetStartIndex()));
     Span.Attribute("blocksCount", static_cast<i64>(GetSize()));
 }
 
-NWilson::TSpan& TReadRequestHandler::GetChildSpan(ui64 requestId,
-                                                  bool isReadPersistentBuffer)
+NWilson::TSpan& TReadRequestHandler::GetChildSpan(
+    ui64 requestId,
+    bool isReadPersistentBuffer)
 {
-    auto childSpan = NWilson::TSpan(NKikimr::TWilsonNbs::NbsBasic,
-                                    std::move(Span.GetTraceId()),
-                                    "NbsPartition.ReadBlocks.Read",
-                                    NWilson::EFlags::NONE, GetActorSystem());
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.ReadBlocks.Read",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     childSpan.Attribute("RequestId", static_cast<i64>(requestId));
 
     if (isReadPersistentBuffer) {
@@ -401,17 +418,25 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {
-    Span = NWilson::TSpan(NKikimr::TWilsonNbs::NbsTopLevel, std::move(traceId),
-                          Name, NWilson::EFlags::NONE, GetActorSystem());
+    Span = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsTopLevel,
+        std::move(traceId),
+        Name,
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
 }
 
-NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(ui64 requestId,
-                                                       TString eventName)
+NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(
+    ui64 requestId,
+    TString eventName)
 {
-    auto childSpan = NWilson::TSpan(NKikimr::TWilsonNbs::NbsBasic,
-                                    std::move(Span.GetTraceId()), Name,
-                                    NWilson::EFlags::NONE, GetActorSystem());
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        Name,
+        NWilson::EFlags::NONE,
+        GetActorSystem());
     childSpan.Attribute("RequestId", static_cast<i64>(requestId));
     childSpan.Event(eventName);
 

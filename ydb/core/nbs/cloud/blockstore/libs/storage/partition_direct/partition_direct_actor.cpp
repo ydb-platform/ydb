@@ -120,8 +120,9 @@ void TPartitionActor::OnDetach(const TActorContext& ctx)
     Die(ctx);
 }
 
-void TPartitionActor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev,
-                                   const TActorContext& ctx)
+void TPartitionActor::OnTabletDead(
+    TEvTablet::TEvTabletDead::TPtr& ev,
+    const TActorContext& ctx)
 {
     Y_UNUSED(ev);
     Die(ctx);
@@ -170,19 +171,24 @@ void TPartitionActor::ReportTabletState(const TActorContext& ctx)
 
     auto request = std::make_unique<
         NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(), STATE_WORK);
+        TabletID(),
+        STATE_WORK);
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }
 
 void TPartitionActor::HandleServerConnected(
-    const TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
+    const TEvTabletPipe::TEvServerConnected::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
-              "Pipe client %s server %s connected to volume",
-              ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Pipe client %s server %s connected to volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TPartitionActor::HandleServerDisconnected(
@@ -191,19 +197,26 @@ void TPartitionActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
-              "Pipe client %s server %s disconnected from volume",
-              ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Pipe client %s server %s disconnected from volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TPartitionActor::HandleServerDestroyed(
-    const TEvTabletPipe::TEvServerDestroyed::TPtr& ev, const TActorContext& ctx)
+    const TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "Pipe client %s server %s got destroyed for volume",
-             ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Pipe client %s server %s got destroyed for volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -424,7 +437,8 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "HandleControllerAllocateDDiskBlockGroupResult finished with "
-            "error: %d, reason: %s", msg->Record.GetStatus(),
+            "error: %d, reason: %s",
+            msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
 
@@ -511,19 +525,24 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
 STFUNC(TPartitionActor::StateWork)
 {
-    LOG_DEBUG(TActivationContext::AsActorContext(),
-              NKikimrServices::NBS_PARTITION,
-              "Processing event: %s from sender: %lu", ev->GetTypeName().data(),
-              ev->Sender.LocalId());
+    LOG_DEBUG(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "Processing event: %s from sender: %lu",
+        ev->GetTypeName().data(),
+        ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
-        HFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
-              HandleControllerAllocateDDiskBlockGroupResult);
-        HFunc(TEvService::TEvGetLoadActorAdapterActorIdRequest,
-              HandleGetLoadActorAdapterActorId);
-        HFunc(NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
-              HandleUpdateVolumeConfig);
+        HFunc(
+            TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
+            HandleControllerAllocateDDiskBlockGroupResult);
+        HFunc(
+            TEvService::TEvGetLoadActorAdapterActorIdRequest,
+            HandleGetLoadActorAdapterActorId);
+        HFunc(
+            NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
+            HandleUpdateVolumeConfig);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

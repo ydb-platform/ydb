@@ -20,7 +20,8 @@ constexpr size_t BlockSize = 4096;
 ////////////////////////////////////////////////////////////////////////////////
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
-    NMonitoring::TDynamicCounterPtr counters, const TString& ddiskPool,
+    NMonitoring::TDynamicCounterPtr counters,
+    const TString& ddiskPool,
     ui64 tabletId)
 {
     if (!counters) {
@@ -50,8 +51,10 @@ TFastPathService::TFastPathService(
     , Region(std::move(region))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
-    , Counters(MakeCountersChain(std::move(counters),
-                                 storageConfig.GetDDiskPoolName(), tabletId))
+    , Counters(MakeCountersChain(
+          std::move(counters),
+          storageConfig.GetDDiskPoolName(),
+          tabletId))
 {
     Y_UNUSED(generation);
     Y_UNUSED(ActorSystem);
@@ -75,8 +78,9 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     with_lock (Lock) {
         auto traceId = SpanTrace();
 
-        Counters.RequestStarted(EBlockStoreRequest::ReadBlocks,
-                                request->Range.Size() * BlockSize);
+        Counters.RequestStarted(
+            EBlockStoreRequest::ReadBlocks,
+            request->Range.Size() * BlockSize);
 
         auto result = Region->ReadBlocksLocal(
             std::move(callContext),
@@ -112,8 +116,9 @@ TFastPathService::WriteBlocksLocal(
             TraceSamplePeriod             // 100ms between samples
         );
 
-        Counters.RequestStarted(EBlockStoreRequest::WriteBlocks,
-                                request->Range.Size() * BlockSize);
+        Counters.RequestStarted(
+            EBlockStoreRequest::WriteBlocks,
+            request->Range.Size() * BlockSize);
 
         auto result = Region->WriteBlocksLocal(
             std::move(callContext),

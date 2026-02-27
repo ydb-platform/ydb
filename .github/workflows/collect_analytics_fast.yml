@@ -27,6 +27,9 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect testowners
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/upload_testowners.py
     - name: Upload new test history to fast table
       continue-on-error: true
       run: python3 .github/scripts/analytics/test_history_fast.py

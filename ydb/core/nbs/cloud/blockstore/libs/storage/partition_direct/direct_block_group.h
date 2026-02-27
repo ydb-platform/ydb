@@ -25,7 +25,7 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
-    virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
+    virtual void EstablishConnections(NWilson::TTraceId traceId, ui32 vChunkIndex) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -105,7 +105,8 @@ public:
 
     ~TDirectBlockGroup() override;
 
-    void EstablishConnections(NWilson::TTraceId traceId) override;
+    void EstablishConnections(NWilson::TTraceId traceId,
+                              ui32 vChunkIndex) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -170,7 +171,8 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
-    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId);
+    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId,
+                                     ui32 vChunkIndex);
     void DoRestoreFromPersistentBuffer(
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
     void HandleListPersistentBufferResultOnRestore(
@@ -178,7 +180,7 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
-    void RestoreFromPersistentBufferFinised(NWilson::TTraceId traceId);
+    void RestoreFromPersistentBufferFinised(NWilson::TTraceId traceId, ui32 vChunkIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

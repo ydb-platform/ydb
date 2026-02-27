@@ -225,14 +225,15 @@ TDirectBlockGroup::~TDirectBlockGroup()
     }
 }
 
-
-void TDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
+void TDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId,
+                                             ui32 vChunkIndex)
 {
     auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
         ActorSystem,
         std::move(traceId),
         "NbsPartition.EstablishConnections",
         TabletId,
+        vChunkIndex,
         PersistentBufferConnections.size());
     for (size_t i = 0; i < PersistentBufferConnections.size(); i++) {
         Executor->ExecuteSimple(
@@ -305,11 +306,11 @@ void TDirectBlockGroup::HandlePersistentBufferConnected(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "Connecting to persistent buffers has been finished");
-        RestoreFromPersistentBuffer(requestHandler->Span.GetTraceId());
+        RestoreFromPersistentBuffer(requestHandler->Span.GetTraceId(), requestHandler->GetVChunkIndex());
     }
 }
 
-void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
+void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId, ui32 vChunkIndex)
 {
     LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                "Restoring from persistent buffer started");
@@ -318,6 +319,7 @@ void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
         std::move(traceId),
         "NbsPartition.RestoreFromPersistentBuffer",
         TabletId,
+        vChunkIndex,
         PersistentBufferConnections.size()
     );
 
@@ -401,12 +403,15 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     }
 
     if (requestHandler->IsCompleted()) {
-        RestoreFromPersistentBufferFinised(requestHandler->Span.GetTraceId()); // finish actor bootstrap
+        RestoreFromPersistentBufferFinised(
+            requestHandler->Span.GetTraceId(),
+            requestHandler->GetVChunkIndex());   // finish actor bootstrap
     }
 }
 
 void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
-    NWilson::TTraceId traceId)
+    NWilson::TTraceId traceId,
+    ui32 vChunkIndex)
 {
     LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                 "Restoring from persistent buffer finished");
@@ -417,12 +422,12 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
     if (false) {
         LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Starting to flush dirtyMap");
-        DirtyMap->Iterate([this, &traceId](ui64 blockIndex, const TBlockMeta& blockMeta) {
+        DirtyMap->Iterate([this, &traceId, vChunkIndex](ui64 blockIndex, const TBlockMeta& blockMeta) {
             if (blockMeta.ReadyToFlush()) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Trying to flush block " << blockIndex);
-                // TODO обсудить, что должно тут быть в vChunkIndex
-                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex, 0);
+
+                RequestBlockFlush(NWilson::TTraceId(traceId), blockIndex, vChunkIndex);
             }
         });
     }

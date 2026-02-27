@@ -201,6 +201,7 @@ public:
         NWilson::TTraceId traceId,
         TString name,
         ui64 tabletId,
+        ui32 vChunkIndex,
         ui8 requiredAckCount);
 
     ~TOverallAckRequestHandler() override = default;

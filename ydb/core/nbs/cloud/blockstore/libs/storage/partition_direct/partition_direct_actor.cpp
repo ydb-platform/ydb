@@ -242,7 +242,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 VolumeConfig.GetPartitions(0).GetBlockCount(),
                 3   // syncRequestsBatchSize
                 ));
-        directBlockGroups[i]->EstablishConnections({});
+        //directBlockGroups[i]->EstablishConnections({});
     }
 
     return directBlockGroups;

@@ -404,7 +404,6 @@ private:
     void AddDatashardFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
         ui64 datashardCpuTimeUs);
-    
 };
 
 struct TTableStat {

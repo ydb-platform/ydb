@@ -18,12 +18,20 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const std::string& testCaseName, const NK
     });
 
     Server_.StartServer(true, GetDatabase());
+    Driver = std::make_unique<TDriver>(MakeDriverConfig());
 
     Log_ << "TTopicSdkTestSetup started";
 
     if (createTopic) {
         CreateTopic();
         Log_ << "Topic created";
+    }
+}
+
+TTopicSdkTestSetup::~TTopicSdkTestSetup() {
+    if (Driver) {
+        Driver->Stop(true);
+        Driver = nullptr;
     }
 }
 
@@ -45,11 +53,7 @@ void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string&
 
 TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& name, const std::string& consumer)
 {
-    auto driver = MakeDriver();
-    Y_DEFER {
-        driver.Stop(true);
-    };
-    TTopicClient client(driver);
+    TTopicClient client(*Driver);
 
     TDescribeConsumerSettings settings;
     settings.IncludeStats(true);
@@ -70,11 +74,7 @@ void TTopicSdkTestSetup::Write(const std::string& message, std::uint32_t partiti
 void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& message, std::uint32_t partitionId,
                                const std::optional<std::string> producer,
                                std::optional<std::uint64_t> seqNo) {
-    auto driver = MakeDriver();
-    Y_DEFER {
-        driver.Stop(true);
-    };
-    TTopicClient client(driver);
+    TTopicClient client(*Driver);
 
     TWriteSessionSettings settings;
     settings.Path(topic);
@@ -91,22 +91,22 @@ void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& mess
     session->Close();
 }
 
-TTopicSdkTestSetup::TReadResult::TReadResult(TDriver driver)
-    : Driver(driver)
-    , Client(driver)
+TTopicSdkTestSetup::TReadResult::TReadResult(TDriver& driver)
+    : Client(driver)
 {
 }
 
 TTopicSdkTestSetup::TReadResult::~TReadResult()
 {
-    Driver.Stop(true);
+    Reader->Close();
+    Reader.reset();
 }
 
 TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,
     std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
     std::optional<size_t> partition, const TDuration timeout, bool autoPartitioningSupport) {
 
-    TReadResult result(MakeDriver());
+    TReadResult result(*Driver);
 
     auto topicSettings = TTopicReadSettings(topic);
     if (partition) {
@@ -165,11 +165,7 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
 }
 
 TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {
-    auto driver = MakeDriver();
-    Y_DEFER {
-        driver.Stop(true);
-    };
-    TTopicClient client(driver);
+    TTopicClient client(*Driver);
 
     TCommitOffsetSettings commitSettings {.ReadSessionId_ = sessionId};
     return client.CommitOffset(path, partitionId, consumerName, offset, commitSettings).GetValueSync();
@@ -247,12 +243,12 @@ NKikimr::Tests::TServerSettings TTopicSdkTestSetup::MakeServerSettings()
 
 TTopicClient TTopicSdkTestSetup::MakeClient() const
 {
-    return TTopicClient(MakeDriver());
+    return TTopicClient(*Driver);
 }
 
 NYdb::NTable::TTableClient TTopicSdkTestSetup::MakeTableClient() const
 {
-    return NYdb::NTable::TTableClient(MakeDriver(), NYdb::NTable::TClientSettings()
+    return NYdb::NTable::TTableClient(*Driver, NYdb::NTable::TClientSettings()
             .UseQueryCache(false));
 }
 

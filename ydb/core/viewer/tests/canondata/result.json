@@ -610,7 +610,6 @@
         "FoundGroups": 5,
         "StorageGroups": [
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -702,7 +701,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -796,7 +794,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",

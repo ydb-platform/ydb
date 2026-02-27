@@ -39,9 +39,9 @@ public:
     }
 
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
-        auto value = BaseRequest_->GetPeerMetaValues(TString{key});
-        if (value) {
-            return {std::move(*value)};
+        CachedValue_ = BaseRequest_->GetPeerMetaValues(TString{key});
+        if (CachedValue_) {
+            return {*CachedValue_};
         }
         return {};
     }
@@ -104,6 +104,7 @@ private:
 
     NYql::TIssueManager IssueManager_;
     google::protobuf::Arena Arena_;
+    mutable TMaybe<TString> CachedValue_; // XXX DIRTY HACK
 };
 
 template<typename TReq, typename TResp>

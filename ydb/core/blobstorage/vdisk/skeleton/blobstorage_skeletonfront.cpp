@@ -493,6 +493,7 @@ namespace NKikimr {
 
             // refresh statistics for window-based counters
             void UpdateCounters() {
+                IdleLight.Update();
                 SkeletonFrontMaxInFlightCount.Update();
             }
         };

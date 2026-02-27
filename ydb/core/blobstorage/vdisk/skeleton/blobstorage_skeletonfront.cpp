@@ -19,6 +19,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
+#include <ydb/core/util/max_tracker.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
@@ -179,6 +180,7 @@ namespace NKikimr {
 
         private:
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCount;
+            TMaxTracker SkeletonFrontMaxInFlightCount;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCost;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightBytes;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedCount;
@@ -218,7 +220,9 @@ namespace NKikimr {
                 , SkeletonFrontDelayedCount(MakeCounter(skeletonFrontGroup, "DelayedCount", false, true))
                 , SkeletonFrontDelayedBytes(MakeCounter(skeletonFrontGroup, "DelayedBytes", false, true))
                 , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
-            {}
+            {
+                SkeletonFrontMaxInFlightCount.Init(MakeCounter(skeletonFrontGroup, "MaxInFlightCount", false, false));
+            }
 
             ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
                 if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskCounters()) {
@@ -245,6 +249,7 @@ namespace NKikimr {
                     InFlightBytes += recByteSize;
 
                     ++*SkeletonFrontInFlightCount;
+                    SkeletonFrontMaxInFlightCount.Collect(*SkeletonFrontInFlightCount);
                     *SkeletonFrontInFlightCost += cost;
                     *SkeletonFrontInFlightBytes += recByteSize;
 
@@ -305,6 +310,7 @@ namespace NKikimr {
                             InFlightBytes += recByteSize;
 
                             ++*SkeletonFrontInFlightCount;
+                            SkeletonFrontMaxInFlightCount.Collect(*SkeletonFrontInFlightCount);
                             *SkeletonFrontInFlightCost += cost;
                             *SkeletonFrontInFlightBytes += recByteSize;
 
@@ -469,6 +475,11 @@ namespace NKikimr {
                 }
                 str << "\n";
                 return str.Str();
+            }
+
+            // refresh statistics for window-based counters
+            void UpdateCounters() {
+                SkeletonFrontMaxInFlightCount.Update();
             }
         };
 
@@ -822,7 +833,7 @@ namespace NKikimr {
             ExtQueueAsyncBlobPuts.SetVDiskLogPrefix(VCtx->VDiskLogPrefix);
             ExtQueueUserDataPuts.SetVDiskLogPrefix(VCtx->VDiskLogPrefix);
 
-            UpdateWhiteboard(ctx);
+            UpdateStats(ctx);
 
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
@@ -1118,11 +1129,24 @@ namespace NKikimr {
             return str.Str();
         }
 
+        void UpdateStats(const TActorContext &ctx) {
+            UpdateWhiteboard(ctx);
+
+            // Update internal queue counters that are dependant on external ticker
+            for (auto queue : {IntQueueAsyncGets.get(), IntQueueFastGets.get(), IntQueueDiscover.get(),
+                               IntQueueLowGets.get(), IntQueueLogPuts.get(), IntQueueHugePutsForeground.get(),
+                               IntQueueHugePutsBackground.get()}) {
+                queue->UpdateCounters();
+            }
+
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats);
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // WHITEBOARD SECTOR
         // Update Whiteboard with the current status
         ////////////////////////////////////////////////////////////////////////
-        void UpdateWhiteboard(const TActorContext &ctx, bool schedule = true) {
+        void UpdateWhiteboard(const TActorContext &ctx) {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             // skeleton state
@@ -1165,10 +1189,6 @@ namespace NKikimr {
                          outOfSpaceFlags,
                          std::nullopt,
                          std::nullopt));
-            // repeat later
-            if (schedule) {
-                ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);
-            }
         }
 
         template <class TEventPtr>
@@ -1854,7 +1874,7 @@ namespace NKikimr {
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
             HasUnreadableBlobs = ev->Get()->HasUnreadableBlobs;
-            UpdateWhiteboard(ctx, false);
+            UpdateWhiteboard(ctx);
         }
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
@@ -1898,7 +1918,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -1945,7 +1965,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -1989,7 +2009,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -2159,7 +2179,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)

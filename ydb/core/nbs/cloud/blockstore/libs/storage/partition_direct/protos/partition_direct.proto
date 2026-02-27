@@ -4,8 +4,6 @@ import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blockstore_config.proto";
 import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
 
-option cc_enable_arenas = true;
-
 package NYdb.NBS.PartitionDirect.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
 

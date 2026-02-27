@@ -58,7 +58,7 @@ class TDirectBlockGroup::TDirtyMap
 {
 private:
     // TODO позже удалить данные при flush'е
-    TMap<ui64, TBlockMeta> BlocksMeta;
+    THashMap<ui64, TBlockMeta> BlocksMeta;
     const size_t NumberOfPersistentBuffers;
 
 public:
@@ -77,7 +77,9 @@ public:
         const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta);
     void OnBlockFlushCompleted(ui64 blockIndex, ui64 persistBufferIndex,
                                ui64 lsn);
-    void Iterate(std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> cb) const;
+    void Visit(
+        std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)>
+            callback) const;
 };
 
 ui64 TDirectBlockGroup::TDirtyMap::GetLsnByPersistentBufferIndex(
@@ -100,8 +102,8 @@ void TDirectBlockGroup::TDirtyMap::TryUpdateLsnByPersistentBufferIndex(
         it = p.first;
     }
 
-    auto &curLsn = it->second.LsnByPersistentBufferIndex[persistBufferIndex];
-    curLsn = std::max(curLsn, lsn);
+    auto &currentLsn = it->second.LsnByPersistentBufferIndex[persistBufferIndex];
+    currentLsn = std::max(currentLsn, lsn);
 }
 
 bool TDirectBlockGroup::TDirtyMap::IsBlockWritten(ui64 blockIndex) const
@@ -148,11 +150,11 @@ void TDirectBlockGroup::TDirtyMap::OnBlockFlushCompleted(
     it->second.OnFlushCompleted(persistBufferIndex, lsn);
 }
 
-void TDirectBlockGroup::TDirtyMap::Iterate(
-    std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> cb) const
+void TDirectBlockGroup::TDirtyMap::Visit(
+    std::function<void(ui64 blockIndex, const TBlockMeta& blockMeta)> callback) const
 {
     for (const auto& [blockIndex, blockMeta]: BlocksMeta) {
-        cb(blockIndex, blockMeta);
+        callback(blockIndex, blockMeta);
     }
 }
 
@@ -173,7 +175,6 @@ TDirectBlockGroup::TDirectBlockGroup(
     , Generation(generation)
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
-    , TEMP_NumberOfCommitedPB(3)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , SyncRequestsByDDiskId(ddisksIds.size(), nullptr)
     , StorageTransport(
@@ -422,7 +423,7 @@ void TDirectBlockGroup::RestoreFromPersistentBufferFinised(
     if (false) {
         LOG_INFO_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Starting to flush dirtyMap");
-        DirtyMap->Iterate([this, &traceId, vChunkIndex](ui64 blockIndex, const TBlockMeta& blockMeta) {
+        DirtyMap->Visit([this, &traceId, vChunkIndex](ui64 blockIndex, const TBlockMeta& blockMeta) {
             if (blockMeta.ReadyToFlush()) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::NBS_PARTITION,
                     "Trying to flush block " << blockIndex);
@@ -513,10 +514,10 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
     TVector<TEvWritePersistentBufferResultFuture> futures;
     TVector<ui64> storageRequestIds;
-    futures.reserve(TEMP_NumberOfCommitedPB);
-    storageRequestIds.reserve(TEMP_NumberOfCommitedPB);
+    futures.reserve(3);
+    storageRequestIds.reserve(3);
 
-    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
+    for (size_t i = 0; i < 3; i++) {
         execSpan.Event("PB request start");
         const ui64 storageRequestId = ++StorageRequestId;
         const auto& ddiskConnection = PersistentBufferConnections[i];
@@ -544,7 +545,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
     execSpan.EndOk();
 
-    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
+    for (size_t i = 0; i < 3; i++) {
         const auto& resultOrError =
             Executor->ResultOrError(std::move(futures[i]));
 
@@ -618,7 +619,7 @@ void TDirectBlockGroup::RequestBlockFlush(const NWilson::TTraceId& parentTrace,
                                           ui64 blockIndex, ui32 vChunkIndex)
 {
     // TODO handle case with different lsn in block's persistent buffers
-    for (size_t i = 0; i < TEMP_NumberOfCommitedPB; i++) {
+    for (size_t i = 0; i < 3; i++) {
         if (SyncRequestsByDDiskId[i] == nullptr) {
             SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
                 ActorSystem,

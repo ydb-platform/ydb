@@ -127,7 +127,7 @@ void TPartitionActor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TAc
 void TPartitionActor::OnActivateExecutor(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 
-    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
         "Started NBS partition: actor id %s", SelfId().ToString().data());
 
     // Initialize StorageConfig from NBS service
@@ -135,14 +135,14 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx) {
         const auto& nbsConfig = nbsService->GetConfig();
         if (nbsConfig.has_nbsstorageconfig()) {
             StorageConfig.CopyFrom(nbsConfig.nbsstorageconfig());
-            LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+            LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
                 "Initialized StorageConfig from NBS service config");
         }
     }
 
     if (HaveStoredTabletInfo()) {
         DdiskBlockGroupAllocated = true;
-        LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
                 "DDisks connection info has been found");
 
         TPartitionIds ids;
@@ -349,7 +349,7 @@ void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TPartitionIds ids)
 {
-    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
                 "starting partition_direct");
 
     TVector<IDirectBlockGroupPtr> directBlockGroups = CreateDirectBlockGroups(std::move(ids));

@@ -137,7 +137,7 @@ namespace NKikimr {
 namespace NKqp {
 
 TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
-    Y_ENSURE(ctx, "Creating an expression will null context");
+    Y_ENSURE(ctx, "Creating an expression with null context");
 
     if (node->IsLambda()) {
         Node = node;

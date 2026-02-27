@@ -1061,6 +1061,31 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, const TStructExprT
     }
 }
 
+TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprContext& ctx, bool pgSyntax, TPositionHandle pos) {
+    if (limit->ChildrenSize() < 2 || pgSyntax) {
+        return input;
+    }
+
+    auto count = limit->ChildPtr(1);
+    if (count->IsCallable("Just")) {
+        count = count->ChildPtr(0);
+    }
+
+    // clang-format off
+    count = Build<TCoConvert>(ctx, pos)
+        .Input(count)
+        .Type<TCoAtom>()
+            .Value("Uint64")
+        .Build()
+    .Done().Ptr();
+
+    return Build<TKqpOpLimit>(ctx, pos)
+        .Input(input)
+        .Count(count)
+    .Done().Ptr();
+    // clang-format on
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -1704,6 +1729,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(column).Done());
     }
     auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
+
+    auto limit = GetSetting(node->Head(), "limit");
+    if (limit) {
+        opResult = BuildLimit(opResult, limit, ctx, pgSyntax, node->Pos());
+    }
 
     // clang-format off
     auto opRoot = Build<TKqpOpRoot>(ctx, node->Pos())

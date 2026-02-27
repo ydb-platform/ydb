@@ -64,6 +64,9 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
             return;
         }
 
+        TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
+        AuthDatabasePath = IsDomainLoginOnlyEnabled(AppData()->AuthConfig) ? domainName : DatabasePath;
+
         SendDescribeRequest();
         Become(&TKafkaSaslAuthActor::StateResolveDatabase);
     } else if (CurrentStateFunc() == &TThis::StateSaslScramLogin) {
@@ -98,7 +101,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
     case NKikimrIssues::TIssuesIds::SUCCESS: {
         Ticket = "Login " + token;
 
-        AuditLogLogin(Address, DatabasePath, ClientAuthData.UserName, Ydb::StatusIds::SUCCESS, /* reason */ "",
+        AuditLogLogin(Address, AuthDatabasePath, ClientAuthData.UserName, Ydb::StatusIds::SUCCESS, /* reason */ "",
             /* errorDetails */ "", TString(sanitizedToken), isAdmin);
         SendTicketParserRequest();
         return;
@@ -149,7 +152,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
     }
 
     if (ClientAuthData.UserName) {
-        AuditLogLogin(Address, DatabasePath, ClientAuthData.UserName, status, errorMessage, errorDetails,
+        AuditLogLogin(Address, AuthDatabasePath, ClientAuthData.UserName, status, errorMessage, errorDetails,
             /* sanitizedToken */ "");
     }
 
@@ -201,7 +204,7 @@ void TKafkaSaslAuthActor::HandleTimeout(const NActors::TActorContext& ctx) {
 void TKafkaSaslAuthActor::SendTicketParserRequest() {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
-        .Database = DatabasePath,
+        .Database = AuthDatabasePath,
         .PeerName = TStringBuilder() << Address,
         .Entries = TicketParserEntries,
     }));
@@ -297,10 +300,10 @@ void TKafkaSaslAuthActor::SendPlainLoginRequest(const NActors::TActorContext& ct
     if (IsUsernameFromLdapAuthDomain(ClientAuthData.UserName, AppData()->AuthConfig)) {
         const TString ldapUsername = PrepareLdapUsername(ClientAuthData.UserName, AppData()->AuthConfig);
         const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ldapUsername, ClientAuthData.Password);
-        authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
+        authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, AuthDatabasePath, authMsg, Address->ToString());
     } else {
         const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ClientAuthData.UserName, ClientAuthData.Password);
-        authActor = CreatePlainAuthActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
+        authActor = CreatePlainAuthActor(ctx.SelfID, AuthDatabasePath, authMsg, Address->ToString());
     }
 
     Register(authActor.release());
@@ -310,7 +313,7 @@ void TKafkaSaslAuthActor::SendPlainLoginRequest(const NActors::TActorContext& ct
 void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ctx) {
     std::string authMsg = AuthRequest;
     if (!ScramAuthActor) {
-        auto authActor = CreateScramAuthActor(ctx.SelfID, DatabasePath, NLoginProto::EHashType::ScramSha256, authMsg, Address->ToString());
+        auto authActor = CreateScramAuthActor(ctx.SelfID, AuthDatabasePath, NLoginProto::EHashType::ScramSha256, authMsg, Address->ToString());
         ScramAuthActor = Register(authActor.release());
         Become(&TKafkaSaslAuthActor::StateSaslScramLogin, Timeout, new TEvents::TEvWakeup());
     } else {

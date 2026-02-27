@@ -117,9 +117,9 @@ TEST_W(TPeriodicTest, ParallelStart)
 
     auto callback = BIND([&] {
         ++countStarted;
-        threadStartBarrier.ToFuture().Get();
+        threadStartBarrier.ToFuture().BlockingGet();
         callbackStartBarrier.Set();
-        callbackEndBarrier.ToFuture().Get();
+        callbackEndBarrier.ToFuture().BlockingGet();
         ++countFinished;
     });
 
@@ -147,7 +147,7 @@ TEST_W(TPeriodicTest, ParallelStart)
     // Check that start futures are set correctly in all threads
     // after the first execution, but before the second one.
 
-    callbackStartBarrier.ToFuture().Get();
+    callbackStartBarrier.ToFuture().BlockingGet();
     EXPECT_THAT(
         futures,
         Each(
@@ -357,9 +357,9 @@ TEST_W(TPeriodicTest, Stop)
         .ThrowOnError();
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.BlockingGet().GetCode());
     EXPECT_FALSE(startFuture.BlockingGet().IsOK());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, startFuture.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, startFuture.BlockingGet().GetCode());
 
     startFuture = executor->StartAndGetFirstExecutedEvent();
     Sleep(TDuration::MilliSeconds(200));

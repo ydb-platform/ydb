@@ -333,7 +333,7 @@ TEST(TAsyncSlruCacheTest, LookupBetweenBeginAndEndInsert)
 
     EXPECT_TRUE(future.IsSet());
     EXPECT_TRUE(future.BlockingGet().IsOK());
-    EXPECT_EQ(value, future.Get().Value());
+    EXPECT_EQ(value, future.BlockingGet().Value());
 }
 
 TEST(TAsyncSlruCacheTest, UpdateWeight)
@@ -1152,7 +1152,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
 
                 if (valueFuture.IsSet()) {
                     ASSERT_TRUE(valueFuture.BlockingGet().IsOK());
-                    const auto& value = valueFuture.Get().Value();
+                    const auto& value = valueFuture.BlockingGet().Value();
                     ASSERT_EQ(lastInsertedValues[key].Lock(), value);
                 } else {
                     // The value insertion is in progress, so lastInsertedValues must contain nullptr
@@ -1183,7 +1183,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
                         ASSERT_TRUE(valueFuture.BlockingGet().IsOK());
-                        const auto& value = valueFuture.Get().Value();
+                        const auto& value = valueFuture.BlockingGet().Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {
                         // The value insertion is in progress, so lastInsertedValues must contain nullptr

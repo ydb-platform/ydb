@@ -287,7 +287,7 @@ TEST_F(TSuspendableActionQueueTest, StressTest2)
     }
 
     for (auto& future : futures) {
-        future.Get();
+        future.BlockingGet();
     }
 
     EXPECT_EQ(x, 100'000);

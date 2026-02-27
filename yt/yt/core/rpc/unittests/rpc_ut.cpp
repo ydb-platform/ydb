@@ -1338,7 +1338,7 @@ TEST_F(TAttachmentsInputStreamTest, Timeout)
 {
     auto stream = CreateStream(TDuration::MilliSeconds(100));
     auto future = stream->Read();
-    auto error = future.Get();
+    auto error = future.BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(NYT::EErrorCode::Timeout, error.GetCode());
 }
@@ -1572,7 +1572,7 @@ TEST_F(TAttachmentsOutputStreamTest, CloseTimeout)
 
     auto future = stream->Close();
     EXPECT_FALSE(future.IsSet());
-    auto error = future.Get();
+    auto error = future.BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(NYT::EErrorCode::Timeout, error.GetCode());
 }

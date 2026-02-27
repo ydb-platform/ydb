@@ -90,9 +90,9 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
     suspendableInvoker->Suspend().Get();
     EXPECT_FALSE(promise.ToFuture().IsSet());
     suspendableInvoker->Resume();
-    promise.ToFuture().Get();
+    promise.ToFuture().BlockingGet();
 
-    setFlagFuture.Get();
+    setFlagFuture.BlockingGet();
 
     auto flagValue = BIND([&] () -> bool {
         return flag;
@@ -121,7 +121,7 @@ TEST_F(TSuspendableInvokerTest, EarlySuspend)
     // Sleep(SleepQuantum);
     EXPECT_FALSE(promise.IsSet());
     suspendableInvoker->Resume();
-    promise.ToFuture().Get();
+    promise.ToFuture().BlockingGet();
     EXPECT_TRUE(promise.IsSet());
 }
 
@@ -172,7 +172,7 @@ TEST_F(TSuspendableInvokerTest, AllowSuspendOnContextSwitch)
 
     suspendableInvoker->Resume();
     promise.Set();
-    setFlagFuture.Get();
+    setFlagFuture.BlockingGet();
     EXPECT_TRUE(flag);
 }
 
@@ -186,7 +186,7 @@ TEST_F(TSuspendableInvokerTest, UnsetSuspendFutureCancelingOnResume)
         .Run();
     auto suspendFuture = suspendableInvoker->Suspend();
     suspendableInvoker->Resume();
-    auto error = suspendFuture.Get();
+    auto error = suspendFuture.BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_TRUE(error.GetCode() == NYT::EErrorCode::Canceled);
     EXPECT_TRUE(error.GetMessage() == "Invoker resumed before suspension completed");
@@ -217,7 +217,7 @@ TEST_F(TSuspendableInvokerTest, SuspendResumeOnFinishedRace)
             ++hits;
         }
         suspendableInvoker->Resume();
-        auto error = future.Get();
+        auto error = future.BlockingGet();
         if (!error.IsOK()) {
             EXPECT_FALSE(flag);
             YT_VERIFY(error.GetCode() == NYT::EErrorCode::Canceled);

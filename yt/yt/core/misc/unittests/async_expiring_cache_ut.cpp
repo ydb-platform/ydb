@@ -297,7 +297,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache1)
         auto future = cache->Get(0);
         EXPECT_EQ(i + 1, cache->GetCount());
         Sleep(TDuration::MilliSeconds(100));
-        auto valueOrError = future.Get();
+        auto valueOrError = future.BlockingGet();
         EXPECT_TRUE(valueOrError.IsOK());
         EXPECT_EQ(i + 1, valueOrError.Value());
         Sleep(TDuration::MilliSeconds(100));
@@ -320,7 +320,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache2)
     }
 
     for (const auto& future : futures) {
-        auto result = future.Get();
+        auto result = future.BlockingGet();
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(1, result.Value());
     }

@@ -179,7 +179,7 @@ void TSolomonExporter::TransferSensors()
     std::vector<TIntrusivePtr<TRemoteProcess>> deadProcesses;
     for (const auto& [dumpFuture, process] : remoteFutures) {
         // Use blocking Get(), because we want to lock current thread while data structure is updating.
-        auto result = dumpFuture.Get();
+        auto result = dumpFuture.BlockingGet();
 
         if (result.IsOK()) {
             try {

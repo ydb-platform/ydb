@@ -30,7 +30,7 @@ TEST_F(TProcFSTest, ThreadCountIncreasedOnThreadSpawning)
     auto promise = NewPromise<void>();
 
     std::thread thread([future = promise.ToFuture()] {
-        future.Get();
+        future.BlockingGet();
     });
 
     int newThreadCount = GetThreadCount();

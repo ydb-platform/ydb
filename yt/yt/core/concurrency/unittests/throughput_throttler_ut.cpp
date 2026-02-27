@@ -145,7 +145,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Cancel)
     throttler->Throttle(5).BlockingGet().ThrowOnError();
     auto future = throttler->Throttle(1);
     future.Cancel(TError("Error"));
-    auto result = future.Get();
+    auto result = future.BlockingGet();
 
     EXPECT_FALSE(result.IsOK());
     EXPECT_TRUE(result.GetCode() == NYT::EErrorCode::Canceled);

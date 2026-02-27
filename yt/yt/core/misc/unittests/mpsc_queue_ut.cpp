@@ -70,7 +70,7 @@ TEST(TMpscQueueTest, MultiThreaded)
     auto barrier = NewPromise<void>();
 
     auto producer = [&] {
-        barrier.ToFuture().Get();
+        barrier.ToFuture().BlockingGet();
         for (int i = 0; i < N; ++i) {
             queue.Enqueue(i);
         }
@@ -78,7 +78,7 @@ TEST(TMpscQueueTest, MultiThreaded)
 
     auto consumer = [&] {
         std::array<int, N> counts{};
-        barrier.ToFuture().Get();
+        barrier.ToFuture().BlockingGet();
         for (int i = 0; i < N * T; ++i) {
             int item;
             while (!queue.TryDequeue(&item));

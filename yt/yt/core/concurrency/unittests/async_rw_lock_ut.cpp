@@ -105,7 +105,7 @@ TEST_F(TAsyncReaderWriterLockTest, CreateWriterGuard)
     auto guardFuture = TAsyncLockWriterGuard::Acquire(&lock);
     EXPECT_TRUE(guardFuture.IsSet());
 
-    auto guard = guardFuture.Get().Value();
+    auto guard = guardFuture.BlockingGet().Value();
 
     auto future = lock.AcquireWriter();
     EXPECT_FALSE(future.IsSet());

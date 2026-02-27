@@ -591,7 +591,7 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
                 bool smallInserted = shard->SmallGhost.BeginInsert(key, cookieWeight);
                 bool largeInserted = shard->LargeGhost.BeginInsert(key, cookieWeight);
                 if (smallInserted || largeInserted) {
-                    const auto& value = valueFuture.Get().Value();
+                    const auto& value = valueFuture.BlockingGet().Value();
                     i64 weight = GetWeight(value);
                     if (smallInserted) {
                         shard->SmallGhost.EndInsert(value, weight);

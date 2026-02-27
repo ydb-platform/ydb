@@ -5905,6 +5905,115 @@ Y_UNIT_TEST_TWIN(FullTextReadResultStatusRetryL2, LimitRowsPerRequest) {
     Cerr << "L2 three-word test completed, errors injected: " << errorsInjected << Endl;
 }
 
+Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    TKikimrRunner kikimr(settings);
+
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/test_table` (
+                `id` Uint64,
+                `col_a` Utf8,
+                `col_b` Utf8,
+                `col_c` Utf8,
+                `col_d` Utf8,
+                `body` Utf8,
+                `embedding` String,
+                `meta` JsonDocument,
+                INDEX `ft_idx` GLOBAL USING fulltext_relevance
+                    ON (`body`)
+                    WITH (tokenizer = standard, language = russian, use_filter_lowercase = TRUE, use_filter_snowball = TRUE),
+                INDEX `vec_idx` GLOBAL USING vector_kmeans_tree
+                    ON (`embedding`)
+                    WITH (distance = cosine, vector_type = 'float', vector_dimension = 256, clusters = 300, levels = 2),
+                PRIMARY KEY (`id`)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    TString hybridQuery = R"sql(
+        $K = 10;
+        $KVec = 50;
+        $KFt  = 50;
+        $Bm25Boost = 0.20;
+        $QueryText = "hello world";
+
+        $TargetEmbedding = (
+            SELECT embedding
+            FROM `/Root/test_table`
+            WHERE id = 42
+            LIMIT 1
+        );
+
+        $VecTop = (
+            SELECT id, Knn::CosineDistance(embedding, $TargetEmbedding) AS cosine
+            FROM `/Root/test_table` VIEW vec_idx
+            ORDER BY cosine
+            LIMIT $KVec
+        );
+
+        $FtTop = (
+            SELECT
+                id,
+                FullTextScore(body, $QueryText, "And" as Mode) AS bm25
+            FROM `/Root/test_table` VIEW ft_idx
+            WHERE FullTextScore(body, $QueryText, "And" as Mode) > 0
+            ORDER BY bm25 DESC
+            LIMIT $KFt
+        );
+
+        $Merged = (
+            SELECT
+                id,
+                COALESCE(MAX(cosine), 0.0) AS cosine,
+                COALESCE(MAX(bm25), 0.0) AS bm25
+            FROM (
+                SELECT id, cosine, CAST(NULL AS Double) AS bm25 FROM $VecTop
+                UNION ALL
+                SELECT id, CAST(NULL AS Double) AS cosine, bm25 FROM $FtTop
+            )
+            GROUP BY id
+        );
+
+        SELECT
+            a.id,
+            a.body,
+            m.bm25 AS bm25,
+            (m.cosine - $Bm25Boost * m.bm25 / 10) AS score
+        FROM $Merged AS m
+        JOIN `/Root/test_table` AS a USING (id)
+        ORDER BY score
+        LIMIT $K;
+    )sql";
+
+    auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+        .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+    auto result = db.ExecuteQuery(hybridQuery, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    UNIT_ASSERT(result.GetStats());
+    auto planOpt = result.GetStats()->GetPlan();
+    UNIT_ASSERT(planOpt.has_value());
+    Cerr << *planOpt << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*planOpt, &plan, true);
+
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT_C(readFullTextIndex.IsDefined(), "ReadFullTextIndex node not found in plan");
+
+    auto itemsLimit = FindPlanNodeByKv(readFullTextIndex, "ItemsLimit", "\"50\"");
+    UNIT_ASSERT_C(itemsLimit.IsDefined(), "Pushed limit (ItemsLimit) not found on ReadFullTextIndex node");
+}
+
 }
 
 } // namespace NKikimr::NKqp

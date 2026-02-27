@@ -1693,7 +1693,20 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
     }
 
     auto topSort = node.Maybe<TCoTopBase>().Cast();
-    auto read = topSort.Input().Maybe<TKqlReadTableFullTextIndex>();
+    auto maybeFlatMap = topSort.Input().Maybe<TCoFlatMapBase>();
+    TExprNode::TPtr structNode;
+    THashMap<TString, TString> renameMap;
+    if (maybeFlatMap) {
+        if (!maybeFlatMap.Cast().Input().Maybe<TKqlReadTableFullTextIndex>()) {
+            return node;
+        }
+
+        if (!IsRenameFlatMapWithMapping(maybeFlatMap.Cast(), structNode, renameMap)) {
+            return node;
+        }
+    }
+
+    auto read = maybeFlatMap ? maybeFlatMap.Cast().Input().Maybe<TKqlReadTableFullTextIndex>() : topSort.Input().Maybe<TKqlReadTableFullTextIndex>();
     if (!read) {
         return node;
     }
@@ -1705,18 +1718,26 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
 
     auto directions = GetSortDirection(topSort.SortDirections());
     auto sortingKeys = ExtractSortingKeys(topSort.KeySelectorLambda());
+
     if (directions != ESortDirection::Reverse || sortingKeys.size() != 1) {
         return node;
     }
 
     if (sortingKeys.front() != NTableIndex::NFulltext::FullTextRelevanceColumn) {
-        return node;
+        auto it = renameMap.find(sortingKeys.front());
+        if (it == renameMap.end() || it->second != NTableIndex::NFulltext::FullTextRelevanceColumn) {
+            return node;
+        }
     }
 
     settings.SetItemsLimit(topSort.Count().Ptr());
 
     auto input = ctx.ChangeChild(
         read.Cast().Ref(), TKqlReadTableFullTextIndex::idx_Settings, settings.BuildNode(ctx, node.Pos()).Ptr());
+
+    if (maybeFlatMap) {
+        input = ctx.ChangeChild(topSort.Input().Ref(), TCoFlatMap::idx_Input, std::move(input));
+    }
 
     return ctx.ChangeChild(
         node.Ref(), TCoTopSort::idx_Input, std::move(input));

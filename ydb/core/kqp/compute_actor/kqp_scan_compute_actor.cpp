@@ -248,7 +248,7 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
         InFlightBytes += GetMemoryLimits().ChannelBufferSize;
     }
-    A_LOG_D("POLL_SOURCES:FINISH");
+    CA_LOG_D("POLL_SOURCES:FINISH");
 }
 
 void TKqpScanComputeActor::DoBootstrap() {

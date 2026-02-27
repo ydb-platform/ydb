@@ -48,6 +48,10 @@ public:
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     void RemoveWorker(ui64 id) override;
 
+protected:
+    TTargetWithStreamStats* GetStatsImpl() override;
+    TTargetWithStreamCounters* GetCountersImpl() override;
+
 private:
     std::unique_ptr<TTransferStats> Stats;
     std::unique_ptr<TTransferCounters> Counters;

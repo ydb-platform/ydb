@@ -148,10 +148,7 @@ public:
     TInstant LastWorkerStartTime = TInstant::Zero();
 };
 
-class TTransferCounters: public TTragetWithStreamCounters {
-private:
-    NMonitoring::TDynamicCounterPtr AggeregatedCounters;
-
+class TTransferCounters: public TTargetWithStreamCounters {
 public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingCpuTime;
@@ -160,7 +157,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr Restarts;
 
     TTransferCounters(NMonitoring::TDynamicCounterPtr counters, const NKikimrReplication::TReplicationLocationConfig& location)
-        : TTragetWithStreamCounters()
+        : TTargetWithStreamCounters()
     {
         CountersGroup = counters
             ->GetSubgroup("counters", "transfer")
@@ -184,7 +181,7 @@ public:
     }
 
     bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) override {
-        if (TTragetWithStreamCounters::UpdateWithSingleStatsItem(workerId, key, value)) {
+        if (TTargetWithStreamCounters::UpdateWithSingleStatsItem(workerId, key, value)) {
             return true;
         }
 
@@ -384,5 +381,12 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
     }
 }
 
+TTargetWithStreamStats* TTargetTransfer::GetStatsImpl() {
+    return Stats.get();
+}
+
+TTargetWithStreamCounters* TTargetTransfer::GetCountersImpl() {
+    return Counters.get();
+}
 
 } // namespace NKikimr::NReplication::NController

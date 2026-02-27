@@ -137,14 +137,11 @@ TTargetWithStreamStats::TTargetWithStreamStats(TInstant startTime)
 {
 }
 
-void TTargetWithStreamStats::RemoveWorker(ui64 workerId) {
-    Y_UNUSED(workerId);
+void TTargetWithStreamStats::RemoveWorker(ui64) {
     // nop
 }
 
-bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) {
-    Y_UNUSED(workerId);
-
+bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
     const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
     switch (eKey) {
         case NKikimrReplication::TWorkerStats::READ_BYTES:
@@ -184,7 +181,7 @@ void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicatio
 }
 
 
-bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
+bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
     if (!CountersGroup) {
         return false;
     }
@@ -265,29 +262,39 @@ void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
 }
 
 void TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
-    if (!Stats && !Counters) {
+    auto* stats = GetStatsImpl();
+    auto* counters = GetCountersImpl();
+    if (!stats && !counters) {
         return;
     }
 
     if (!HasWorker(workerId)) {
-        if (Stats) {
-            Stats->RemoveWorker(workerId);
+        if (stats) {
+            stats->RemoveWorker(workerId);
         }
         return;
     }
 
     for (const auto& item : newStats.GetValues()) {
-        if (Stats) {
-            Stats->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
+        if (stats) {
+            stats->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
         }
-        if (Counters) {
-            Counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
+        if (counters) {
+            counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
         }
     }
 }
 
-const TReplication::ITargetStats* TTargetWithStream::GetStats() const {
+const TReplication::ITargetStats* TTargetWithStream::GetStats() {
+    return GetStatsImpl();
+}
+
+TTargetWithStreamStats* TTargetWithStream::GetStatsImpl() {
     return Stats.get();
+}
+
+TTargetWithStreamCounters* TTargetWithStream::GetCountersImpl() {
+    return Counters.get();
 }
 
 IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const {

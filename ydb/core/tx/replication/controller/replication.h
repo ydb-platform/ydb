@@ -111,7 +111,7 @@ public:
 
         virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
-        virtual const ITargetStats* GetStats() const = 0;
+        virtual const ITargetStats* GetStats() = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;

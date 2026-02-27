@@ -52,11 +52,11 @@ public:
     TInstant CollectionStartTime;
 };
 
-class TTragetWithStreamCounters {
-public:
-
+class TTargetWithStreamCounters {
+protected:
     NMonitoring::TDynamicCounterPtr CountersGroup;
 
+public:
     NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
     NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
     NMonitoring::TDynamicCounters::TCounterPtr DecompressionCpuTime;
@@ -65,7 +65,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
 
     virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value);
-    virtual ~TTragetWithStreamCounters() = default;
+    virtual ~TTargetWithStreamCounters() = default;
 };
 
 class TTargetWithStream: public TTargetBase {
@@ -84,7 +84,7 @@ public:
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 
-    const TReplication::ITargetStats* GetStats() const override;
+    const TReplication::ITargetStats* GetStats() override;
 
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
 
@@ -93,10 +93,12 @@ public:
 
 protected:
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;
+    virtual TTargetWithStreamStats* GetStatsImpl();
+    virtual TTargetWithStreamCounters* GetCountersImpl();
 
 private:
     std::unique_ptr<TTargetWithStreamStats> Stats;
-    std::unique_ptr<TTragetWithStreamCounters> Counters;
+    std::unique_ptr<TTargetWithStreamCounters> Counters;
 
     bool NameAssignmentInProcess = false;
     TActorId StreamCreator;

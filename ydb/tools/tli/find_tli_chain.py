@@ -72,7 +72,8 @@ def unescape_and_format_query_text(s: Optional[str]) -> str:
         return ""
     try:
         s2 = s.encode("utf-8").decode("unicode_escape")
-    except Exception:
+    except (UnicodeDecodeError, UnicodeError) as e:
+        print(f"Warning: unicode_escape failed for query text: {e}", file=sys.stderr)
         s2 = s.replace(r"\n", "\n").replace(r"\t", " ").replace(r"\"", "\"")
     s2 = s2.replace("\t", " ")
     s2 = "\n".join(line.rstrip() for line in s2.splitlines()).strip()
@@ -109,6 +110,10 @@ RE_TX_ITEM = re.compile(
 
 # ==================== Timestamp Parsing ====================
 
+# Unix epoch as ordinal (days since Jan 1, year 1)
+_UNIX_EPOCH_ORDINAL = datetime(1970, 1, 1).toordinal()
+
+
 class FastTimeParser:
     """Fast ISO timestamp parser with date caching."""
 
@@ -117,14 +122,15 @@ class FastTimeParser:
         self._cached_day_base: int = 0
 
     def parse(self, line: str) -> Optional[float]:
-        """Parse ISO timestamp from line, return seconds since epoch."""
+        """Parse ISO timestamp from line, return seconds since Unix epoch."""
         m = RE_ISO.search(line)
         if not m:
             return None
         date_s, hh, mm, ss, frac = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
         if date_s != self._cached_date:
             d = datetime.strptime(date_s, "%Y-%m-%d").date()
-            self._cached_day_base = d.toordinal() * 86400
+            days_since_epoch = d.toordinal() - _UNIX_EPOCH_ORDINAL
+            self._cached_day_base = days_since_epoch * 86400
             self._cached_date = date_s
         t = self._cached_day_base + int(hh) * 3600 + int(mm) * 60 + int(ss)
         if frac:

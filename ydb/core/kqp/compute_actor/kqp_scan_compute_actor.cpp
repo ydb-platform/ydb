@@ -211,8 +211,10 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     const ui64 freeSpace = CalculateFreeSpace();
-    Send(ev->Sender, new TEvScanExchange::TEvAckData(freeSpace));
-    InFlightBytes += freeSpace;
+    if (freeSpace) {
+        Send(ev->Sender, new TEvScanExchange::TEvAckData(freeSpace));
+        InFlightBytes += freeSpace;
+    }
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
@@ -235,15 +237,15 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
         return;
     }
-    const ui64 freeSpace = CalculateFreeSpace();
-    if (!freeSpace) {
-        return;
-    }
-    CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
+    CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size());
     for (auto&& i : Fetchers) {
+        const ui64 freeSpace = CalculateFreeSpace();
+        if (!freeSpace) {
+            break;
+        }
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
+        InFlightBytes += freeSpace;
     }
-    InFlightBytes += freeSpace;
     CA_LOG_D("POLL_SOURCES:FINISH");
 }
 

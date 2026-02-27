@@ -534,8 +534,7 @@ public:
 
         TNodePtr equiJoin(Y("EquiJoin"));
         bool ordered = false;
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (const auto& source : Sources_) {
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;

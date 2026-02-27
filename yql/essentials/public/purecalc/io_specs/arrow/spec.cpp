@@ -464,8 +464,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     const TVector<IArrowIStream*>& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
+    for (auto* stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(stream));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -481,8 +481,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     TVector<THolder<IArrowIStream>>&& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
+    for (auto& stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(stream)));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -498,8 +498,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     const TVector<IArrowIStream*>& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
+    for (auto* stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(stream));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -515,8 +515,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     TVector<THolder<IArrowIStream>>&& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
+    for (auto& stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(stream)));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }

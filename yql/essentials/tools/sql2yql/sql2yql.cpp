@@ -90,14 +90,14 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
     const Reflection* ref = node.GetReflection();
     ref->ListFields(node, &fields);
 
-    for (auto it = fields.begin(); it != fields.end(); ++it) {
-        if ((*it)->is_repeated()) {
-            const ui32 fieldSize = ref->FieldSize(node, *it);
+    for (auto& field : fields) {
+        if (field->is_repeated()) {
+            const ui32 fieldSize = ref->FieldSize(node, field);
             for (ui32 i = 0; i < fieldSize; ++i) {
-                VisitField(out, **it, ref->GetRepeatedMessage(node, *it, i));
+                VisitField(out, *field, ref->GetRepeatedMessage(node, field, i));
             }
         } else {
-            VisitField(out, **it, ref->GetMessage(node, *it));
+            VisitField(out, *field, ref->GetMessage(node, field));
         }
     }
 }

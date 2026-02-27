@@ -97,8 +97,8 @@ const TTypeAnnotationNode* TPartOfConstraintBase::GetSubTypeByPath(const TPathTy
 
 bool TPartOfConstraintBase::HasDuplicates(const TSetOfSetsType& sets) {
     for (auto ot = sets.cbegin(); sets.cend() != ot; ++ot) {
-        for (auto it = sets.cbegin(); sets.cend() != it; ++it) {
-            if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TPathType& path) { return it->contains(path); })) {
+        for (const auto& set : sets) {
+            if (ot->size() < set.size() && std::all_of(ot->cbegin(), ot->cend(), [&set](const TPathType& path) { return set.contains(path); })) {
                 return true;
             }
         }
@@ -475,10 +475,10 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
     }
 
     std::optional<TContainerType> content;
-    for (size_t i = 0U; i < constraints.size(); ++i) {
-        if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+    for (const auto* constraint : constraints) {
+        if (constraint->GetConstraint<TEmptyConstraintNode>()) {
             ; // just ignore this input with any other constraints
-        } else if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
+        } else if (const auto sort = constraint->GetConstraint<TSortedConstraintNode>()) {
             const auto& nextContent = sort->GetContent();
             if (content) {
                 const auto size = std::min(content->size(), nextContent.size());
@@ -1785,8 +1785,8 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeCommon(const std::vector<con
 
     bool first = true;
     TMapType mapping;
-    for (size_t i = 0; i < constraints.size(); ++i) {
-        const auto part = constraints[i]->GetConstraint<TPartOfConstraintNode>();
+    for (const auto* constraint : constraints) {
+        const auto part = constraint->GetConstraint<TPartOfConstraintNode>();
         if (!part) {
             return nullptr;
         }
@@ -2133,8 +2133,8 @@ const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const std::ve
     }
 
     TVarIndexConstraintNode::TMapType mapping;
-    for (size_t i = 0; i < constraints.size(); ++i) {
-        if (auto varIndex = constraints[i]->GetConstraint<TVarIndexConstraintNode>()) {
+    for (const auto* constraint : constraints) {
+        if (auto varIndex = constraint->GetConstraint<TVarIndexConstraintNode>()) {
             mapping.insert(varIndex->GetIndexMapping().begin(), varIndex->GetIndexMapping().end());
         }
     }

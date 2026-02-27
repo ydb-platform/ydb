@@ -490,14 +490,14 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
         for (auto d : dirs) {
             TDirIterator dir(d, TDirIterator::TOptions(FTS_LOGICAL).SetMaxLevel(10));
 
-            for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
+            for (const auto& file : dir) {
                 // skip entries with empty name, and all non-files
                 // all valid symlinks are already dereferenced, provided by FTS_LOGICAL
-                if (file->fts_pathlen == file->fts_namelen || file->fts_info != FTS_F) {
+                if (file.fts_pathlen == file.fts_namelen || file.fts_info != FTS_F) {
                     continue;
                 }
 
-                TString path(file->fts_path);
+                TString path(file.fts_path);
                 TString fileName = GetBaseName(path);
 
                 // skip non shared libraries

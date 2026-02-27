@@ -145,8 +145,8 @@ public:
             apply = L(apply, "extractor");
         } else {
             // make several extractors from main that returns a tuple
-            for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
-                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
+            for (ui32 index : columnIndices) {
+                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(index))));
                 apply = L(apply, partial);
             }
         }
@@ -676,8 +676,8 @@ public:
             ctx.Error(Pos_) << "CombineMembers requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            Args_[i] = Q(Y(Q(""), Args_[i])); // flatten without prefix
+        for (auto& arg : Args_) {
+            arg = Q(Y(Q(""), arg)); // flatten without prefix
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -698,15 +698,15 @@ public:
             ctx.Error(Pos_) << OpName_ << " requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            if (!Args_[i]->Init(ctx, src)) {
+        for (auto& arg : Args_) {
+            if (!arg->Init(ctx, src)) {
                 return false;
             }
-            if (Args_[i]->GetTupleSize() == 2) {
+            if (arg->GetTupleSize() == 2) {
                 // flatten with prefix
-                Args_[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args_[i]->GetTupleElement(0)).Build(),
-                    Args_[i]->GetTupleElement(1)
+                arg = Q(Y(
+                    MakeAtomFromExpression(ctx, arg->GetTupleElement(0)).Build(),
+                    arg->GetTupleElement(1)
                 ));
             } else {
                 ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";

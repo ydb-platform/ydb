@@ -9,6 +9,8 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
+#include <ranges>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -444,8 +446,8 @@ TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& pred
                     auto expanded = ExpandAndOverOr(orTerm, ctx, types);
                     if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
                         // Update orTermsToProcess with terms after expansion and repeat
-                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
-                            orTermsToProcess.push_front(std::move(*it));
+                        for (auto& it : std::ranges::reverse_view(expanded)) {
+                            orTermsToProcess.push_front(std::move(it));
                             // joinInputs update is not needed
                             // as innerAndTerm can't be newly constructed node
                         }

@@ -868,6 +868,11 @@
                 "ColumnId": 15,
                 "ColumnName": "DDiskNumVChunksClaimed",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PersistentBufferRefs",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -888,7 +893,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

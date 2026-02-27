@@ -403,7 +403,8 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0));
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0),
+                    slot.GetValueOrDefault<T::PersistentBufferRefs>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }

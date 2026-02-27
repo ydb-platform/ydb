@@ -148,6 +148,7 @@ struct Schema : NIceDb::Schema {
         struct LastGotReplicating : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct ReplicationTime : Column<14, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
         struct DDiskNumVChunksClaimed : Column<15, NScheme::NTypeIds::Uint32> {};
+        struct PersistentBufferRefs : Column<16, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<NodeID, PDiskID, VSlotID>; // order is important
         using TColumns = TableColumns<
@@ -165,7 +166,8 @@ struct Schema : NIceDb::Schema {
             LastSeenReady,
             LastGotReplicating,
             ReplicationTime,
-            DDiskNumVChunksClaimed>;
+            DDiskNumVChunksClaimed,
+            PersistentBufferRefs>;
     };
 
     struct VDiskMetrics : Table<6> {

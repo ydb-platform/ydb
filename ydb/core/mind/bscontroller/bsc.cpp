@@ -40,7 +40,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
         Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood, TGroupInfo *group,
         TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime,
-        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed)
+        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed, Table::PersistentBufferRefs::Type persistentBufferRefs)
     : VSlotId(vSlotId)
     , PDisk(pdisk)
     , GroupId(groupId)
@@ -54,6 +54,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , LastSeenReady(lastSeenReady)
     , ReplicationTime(replicationTime)
     , DDiskNumVChunksClaimed(ddiskNumVChunksClaimed)
+    , PersistentBufferRefs(persistentBufferRefs)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
     Y_ABORT_UNLESS(pdisk);

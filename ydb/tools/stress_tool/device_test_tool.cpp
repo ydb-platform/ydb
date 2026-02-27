@@ -2,6 +2,11 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <util/string/printf.h>
+#include <util/system/info.h>
+
+#ifdef _linux_
+#include <sched.h>
+#endif
 
 #include "device_test_tool.h"
 #include "device_test_tool_aio_test.h"
@@ -40,11 +45,36 @@ R"__(
 
 )__";
 
+#ifdef _linux_
+static size_t NumberOfMyCpus() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+        return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    int count = 0;
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set))
+            count++;
+    }
+
+    return count;
+}
+#else
+static size_t NumberOfMyCpus() {
+    return NSystemInfo::CachedNumberOfCpus();
+}
+#endif
+
 int main(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
     bool disablePDiskDataEncryption = false;
-    opts.AddLongOption("path", "path to device").RequiredArgument("FILE");
+    TVector<TString> paths;
+    opts.AddLongOption("path", "path to device (can be specified multiple times for multi-device tests)")
+        .RequiredArgument("FILE")
+        .AppendTo(&paths);
     opts.AddLongOption("cfg", "path to config file").RequiredArgument().DefaultValue("cfg.txt");
     opts.AddLongOption("name", "device name").DefaultValue("Name");
     opts.AddLongOption("type", "device type  - ROT|SSD|NVME").DefaultValue("ROT");
@@ -58,15 +88,25 @@ int main(int argc, char **argv) {
     opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&disablePDiskDataEncryption);
     TOptsParseResult res(&opts, argc, argv);
 
+    if (paths.empty()) {
+        Cerr << "Error: at least one --path must be specified" << Endl;
+        return 1;
+    }
+
     if (!res.Has("no-logo") && res.Get("output-format") != TString("json")) {
         Cout << ydb_logo << Flush;
     }
 
-    NKikimr::TPerfTestConfig config(res.Get("path"), res.Get("name"), res.Get("type"),
+    NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
+
+#ifndef NDEBUG
+    Cerr << "Warning: you're running stress tool built without NDEBUG defined, results will be much worse than expected"
+        << Endl;
+#endif
 
     // When run-count > 1, only one test is allowed in the config
     if (config.RunCount > 1) {
@@ -118,6 +158,34 @@ int main(int argc, char **argv) {
                     return 1;
                 }
             }
+        }
+    }
+
+    // Multi-device is only supported for PDisk/DDisk/UringRouter/PersistentBuffer tests
+    if (config.NumDevices() > 1) {
+        if (protoTests.AioTestListSize() > 0) {
+            Cerr << "Error: multiple --path is not supported for AioTest" << Endl;
+            return 1;
+        }
+        if (protoTests.TrimTestListSize() > 0) {
+            Cerr << "Error: multiple --path is not supported for TrimTest" << Endl;
+            return 1;
+        }
+        if (protoTests.HasDriveEstimatorTest()) {
+            Cerr << "Error: multiple --path is not supported for DriveEstimatorTest" << Endl;
+            return 1;
+        }
+
+        // 1 pdisk actor thread + 1 load actor thread per device, plus ~4 for nameservice/coordinator/IO/scheduler
+        static constexpr size_t CpuCoresPerDevice = 2;
+        static constexpr size_t CpuCoresOverhead = 4;
+
+        const size_t cpus = NumberOfMyCpus();
+        const size_t recommended = config.NumDevices() * CpuCoresPerDevice + CpuCoresOverhead;
+        if (cpus < recommended) {
+            Cerr << "Warning: " << config.NumDevices() << " devices but only " << cpus
+                 << " CPUs available (recommended at least " << recommended
+                 << "), performance results may be unreliable" << Endl;
         }
     }
 

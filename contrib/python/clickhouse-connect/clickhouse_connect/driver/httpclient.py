@@ -34,6 +34,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
 ex_header = 'X-ClickHouse-Exception-Code'
+ex_tag_header = 'X-ClickHouse-Exception-Tag'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -79,6 +80,7 @@ class HttpClient(Client):
                  utc_tz_aware: Optional[bool] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
+                 autogenerate_query_id: Optional[bool] = None,
                  tls_mode: Optional[str] = None,
                  proxy_path: str = '',
                  form_encode_query_params: bool = False,
@@ -161,6 +163,11 @@ class HttpClient(Client):
         elif 'session_id' not in ch_settings and _autogenerate_session_id:
             ch_settings['session_id'] = str(uuid.uuid4())
 
+        # allow to override the global autogenerate_query_id setting via the constructor params
+        self._autogenerate_query_id = common.get_setting('autogenerate_query_id') \
+            if autogenerate_query_id is None \
+            else autogenerate_query_id
+
         if coerce_bool(compress):
             compression = ','.join(available_compression)
             self.write_compression = available_compression[0]
@@ -181,6 +188,10 @@ class HttpClient(Client):
                          utc_tz_aware=utc_tz_aware,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
+        cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")
+        if cancel_setting.is_writable and not cancel_setting.is_set and \
+                "cancel_http_readonly_queries_on_client_close" not in (settings or {}):
+            self.params["cancel_http_readonly_queries_on_client_close"] = "1"
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
         if comp_setting.is_set or comp_setting.is_writable:
@@ -293,7 +304,8 @@ class HttpClient(Client):
                                      retries=self.query_retries,
                                      fields=fields,
                                      server_wait=not context.streaming)
-        byte_source = RespBuffCls(ResponseSource(response))  # pylint: disable=not-callable
+        exception_tag = response.headers.get(ex_tag_header)
+        byte_source = RespBuffCls(ResponseSource(response, exception_tag=exception_tag))  # pylint: disable=not-callable
         context.set_response_tz(self._check_tz_change(response.headers.get('X-ClickHouse-Timezone')))
         query_result = self._transform.parse_response(byte_source, context)
         query_result.summary = self._summary(response)
@@ -327,10 +339,12 @@ class HttpClient(Client):
             params['database'] = self.database
         params.update(self._validate_settings(context.settings))
         headers = dict_copy(headers, context.transport_settings)
-        response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
-        logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
-        context.data = None
-        return QuerySummary(self._summary(response))
+        try:
+            response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
+            logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
+            return QuerySummary(self._summary(response))
+        finally:
+            context.data = None
 
     def raw_insert(self, table: str = None,
                    column_names: Optional[Sequence[str]] = None,
@@ -495,6 +509,10 @@ class HttpClient(Client):
             final_params['http_headers_progress_interval_ms'] = self._progress_interval
         final_params = dict_copy(self.params, final_params)
         final_params = dict_copy(final_params, params)
+
+        if self._autogenerate_query_id and "query_id" not in final_params:
+            final_params["query_id"] = str(uuid.uuid4())
+
         url = f'{self.url}?{urlencode(final_params)}'
         kwargs = {
             'headers': headers,

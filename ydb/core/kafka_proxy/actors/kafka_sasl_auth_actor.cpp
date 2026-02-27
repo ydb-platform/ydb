@@ -199,6 +199,7 @@ void TKafkaSaslAuthActor::HandleTimeout(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaSaslAuthActor::SendTicketParserRequest() {
+    Cerr << "TKafkaSaslAuthActor " << Ticket << Endl;
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
         .Database = DatabasePath,

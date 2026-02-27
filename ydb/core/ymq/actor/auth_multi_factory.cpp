@@ -402,6 +402,7 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.SignedAt = AccessKeySignature_->SignedAt;
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::move(signature), "", entries);
     } else {
+        Cerr << "TBaseCloudAuthRequestProxy::Authorize " << IamToken_ << Endl;
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(IamToken_, "", entries);
     }
 

@@ -608,7 +608,8 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
+        Cerr << "ymq " << SecurityToken << Endl;
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(std::string(SecurityToken_)));
     }
 
     bool IsACLProtectedAccount(const TString& accountName) const {

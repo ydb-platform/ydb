@@ -261,6 +261,7 @@ public:
             return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
         }
 
+        Cerr << "login_page " << Login << " " << ydbSessionId << Endl;
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = TString("Login ") + ydbSessionId,
             .Database = TString(),

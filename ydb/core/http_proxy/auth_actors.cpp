@@ -182,8 +182,9 @@ namespace NKikimr::NHttpProxy {
                                                                                                      .PeerName = "",
                                                                                                      .Entries = entries}));
                 } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
-                                                                                                     .Database = DatabasePath,
+                    Cerr << "http_proxy " << IamToken << Endl;
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = std::string(IamToken),
+                                                                                                     .Database = std::string(DatabasePath),
                                                                                                      .PeerName = "",
                                                                                                      .Entries = entries}));
                 }

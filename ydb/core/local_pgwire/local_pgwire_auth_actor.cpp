@@ -82,6 +82,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvTokenReady::TPtr& ev) {
+        Cerr << "pgwire TokenReady" << ev->Get()->LoginResult.token() << Endl;
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = ev->Get()->LoginResult.token(),
             .Database = PgWireAuthData.DatabasePath,
@@ -152,6 +153,7 @@ private:
     void SendApiKeyRequest() {
         auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
 
+        Cerr << "pgwire SendapiKeyRequest" << "ApiKey " << PgWireAuthData.Password << Endl;
         Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = "ApiKey " + PgWireAuthData.Password,
             .Database = PgWireAuthData.DatabasePath,

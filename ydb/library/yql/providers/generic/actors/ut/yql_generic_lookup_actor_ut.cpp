@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
-        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+        auto lookupActorFactory = [&holderFactory, connectorMock = std::move(connectorMock), lookupSourceSettings = std::move(lookupSourceSettings)](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) mutable {
             NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
             NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
 
             auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
-                connectorMock,
+                std::move(connectorMock),
                 NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
                 caller,
                 nullptr,
@@ -250,9 +250,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
             return std::pair { actor, std::move(request) };
         };
-        auto callback = [&](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
+        auto callback = [&holderFactory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
                 NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr& ev) {
-            connectorMock.reset();
             auto guard2 = Guard(*alloc.get());
             auto lookupResult = ev->Get()->Result.lock();
             UNIT_ASSERT(lookupResult);
@@ -427,7 +426,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
-        auto lookupActorFactory = [&](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+        auto lookupActorFactory = [&holderFactory, connectorMock = std::move(connectorMock), lookupSourceSettings = std::move(lookupSourceSettings)](const NActors::TActorId& caller, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) mutable {
             NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
 
             NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
@@ -440,7 +439,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
 
             auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
-                connectorMock,
+                std::move(connectorMock),
                 NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
                 caller,
                 nullptr,
@@ -465,9 +464,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
             return std::pair { actor, std::move(request) };
         };
-        auto callback = [&](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
+        auto callback = [&holderFactory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>& alloc,
                 NYql::NDq::IDqAsyncLookupSource::TEvLookupResult::TPtr& ev) {
-            connectorMock.reset();
             auto guard2 = Guard(*alloc.get());
             auto lookupResult = ev->Get()->Result.lock();
             UNIT_ASSERT(lookupResult);

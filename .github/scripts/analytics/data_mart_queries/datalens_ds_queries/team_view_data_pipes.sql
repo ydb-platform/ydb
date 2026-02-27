@@ -1,5 +1,5 @@
 -- Last update time per step in 3 chains. Version without CTE (inline subqueries). Source: analytics/query_statistics.
--- Chain 1: muted_tests (testowners -> ... -> tests_monitor -> github_issue_mapping -> muted_tests_daily_by_team). Chain 2: area_to_owner. Chain 3: github_issues (github_issues_export -> github_issue_mapping -> github_issues_timeline -> github_issues_bugs_count_by_period).
+-- Chain 1: muted_tests (flaky_tests_window -> all_tests_with_owner_and_mute -> tests_monitor -> github_issue_mapping -> muted_tests_daily_by_team). Chain 2: area_to_owner. Chain 3: github_issues (github_issues_export -> github_issue_mapping -> github_issues_timeline -> github_issues_bugs_count_by_period).
 
 SELECT
     c.chain_order AS chain_order,
@@ -11,12 +11,11 @@ SELECT
     s.last_script_name AS last_script_name,
     s.last_workflow AS last_workflow
 FROM (
-    SELECT 1 AS chain_order, "muted_tests" AS chain_name, "testowners" AS step_name, 1 AS step_order
-    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "flaky_tests_window" AS step_name, 2 AS step_order
-    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "all_tests_with_owner_and_mute" AS step_name, 3 AS step_order
-    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "tests_monitor" AS step_name, 4 AS step_order
-    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "github_issue_mapping" AS step_name, 5 AS step_order
-    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "muted_tests_daily_by_team" AS step_name, 6 AS step_order
+    SELECT 1 AS chain_order, "muted_tests" AS chain_name, "flaky_tests_window" AS step_name, 1 AS step_order
+    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "all_tests_with_owner_and_mute" AS step_name, 2 AS step_order
+    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "tests_monitor" AS step_name, 3 AS step_order
+    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "github_issue_mapping" AS step_name, 4 AS step_order
+    UNION ALL SELECT 1 AS chain_order, "muted_tests" AS chain_name, "muted_tests_daily_by_team" AS step_name, 5 AS step_order
     UNION ALL SELECT 2 AS chain_order, "area_to_owner" AS chain_name, "area_to_owner_mapping" AS step_name, 1 AS step_order
     UNION ALL SELECT 3 AS chain_order, "github_issues" AS chain_name, "github_issues_export" AS step_name, 1 AS step_order
     UNION ALL SELECT 3 AS chain_order, "github_issues" AS chain_name, "github_issue_mapping" AS step_name, 2 AS step_order

@@ -42,7 +42,7 @@ $agg = (
         COUNT(DISTINCT CASE WHEN base.is_muted = 1 THEN base.full_name ELSE NULL END) AS muted_count,
         COUNT(
             DISTINCT CASE
-                WHEN base.is_muted = 1 AND base.days_in_mute_state >= $muted_sla_days
+                WHEN base.is_muted = 1 AND base.days_in_mute_state > $muted_sla_days
                 THEN base.full_name
                 ELSE NULL
             END

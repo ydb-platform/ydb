@@ -118,6 +118,7 @@ public:
         TInstant LastGotReplicating;
         TDuration ReplicationTime;
         Table::DDiskNumVChunksClaimed::Type DDiskNumVChunksClaimed;
+        Table::PersistentBufferRefs::Type PersistentBufferRefs;
 
         // volatile state
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
@@ -228,7 +229,8 @@ public:
                     Table::LastSeenReady,
                     Table::LastGotReplicating,
                     Table::ReplicationTime,
-                    Table::DDiskNumVChunksClaimed
+                    Table::DDiskNumVChunksClaimed,
+                    Table::PersistentBufferRefs
                 > adapter(
                     &TVSlotInfo::Kind,
                     &TVSlotInfo::GroupId,
@@ -241,7 +243,8 @@ public:
                     &TVSlotInfo::LastSeenReady,
                     &TVSlotInfo::LastGotReplicating,
                     &TVSlotInfo::ReplicationTime,
-                    &TVSlotInfo::DDiskNumVChunksClaimed
+                    &TVSlotInfo::DDiskNumVChunksClaimed,
+                    &TVSlotInfo::PersistentBufferRefs
                 );
             callback(&adapter);
         }
@@ -252,7 +255,8 @@ public:
                 Table::GroupGeneration::Type groupGeneration, Table::Category::Type kind, Table::RingIdx::Type ringIdx,
                 Table::FailDomainIdx::Type failDomainIdx, Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood,
                 TGroupInfo *group, TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady,
-                TDuration replicationTime, Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed); // implemented in bsc.cpp
+                TDuration replicationTime, Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed,
+                Table::PersistentBufferRefs::Type persistentBufferRefs); // implemented in bsc.cpp
 
         // is the slot being deleted (marked as deleted)
         bool IsBeingDeleted() const {

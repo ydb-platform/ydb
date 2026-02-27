@@ -17,8 +17,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TWorker
-    : public TAtomicRefCount<TWorker>
+class TWorker: public TAtomicRefCount<TWorker>
 {
 private:
     ITaskPtr Task;
@@ -49,8 +48,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDispatcher
-    : public TAtomicRefCount<TDispatcher>
+class TDispatcher: public TAtomicRefCount<TDispatcher>
 {
 private:
     TContLockFreeQueue<ITask*> Queue;
@@ -82,7 +80,8 @@ private:
         try {
             DoDispatch(c);
         } catch (...) {
-            Cerr << "Unhandled error in Dispatch: " << CurrentExceptionMessage();
+            Cerr << "Unhandled error in Dispatch: "
+                 << CurrentExceptionMessage();
         }
     }
 
@@ -112,8 +111,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TExecutor::TThread
-    : public ISimpleThread
+struct TExecutor::TThread: public ISimpleThread
 {
 private:
     const TString Name;
@@ -191,10 +189,8 @@ TContExecutor* TExecutor::GetContExecutor()
     return Thread->Executor.get();
 }
 
-TExecutorPtr TExecutor::Create(
-    TString name,
-    TAffinity affinity,
-    size_t contStackSize)
+TExecutorPtr
+TExecutor::Create(TString name, TAffinity affinity, size_t contStackSize)
 {
     return std::shared_ptr<TExecutor>(
         new TExecutor(std::move(name), std::move(affinity), contStackSize));

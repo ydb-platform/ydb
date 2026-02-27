@@ -190,7 +190,8 @@ TICStorageTransport::SyncWithPersistentBuffer(
 TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
 TICStorageTransport::ListPersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials, const ui64 requestId)
+    const NKikimr::NDDisk::TQueryCredentials credentials,
+    const ui64 requestId)
 {
     auto promise =
         NewPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>();
@@ -199,7 +200,10 @@ TICStorageTransport::ListPersistentBuffer(
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvListPersistentBuffer(
-            serviceId, credentials, requestId, std::move(promise)));
+            serviceId,
+            credentials,
+            requestId,
+            std::move(promise)));
 
     return future;
 }
@@ -297,15 +301,14 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         Y_ABORT_UNLESS(false);
     }
 
-    ctx.Send(
-        MakeHolder<IEventHandle>(
-            it->second.ServiceId,
-            ctx.SelfID,
-            request.release(),
-            0,           // flags
-            requestId,   // cookie
-            nullptr,
-            std::move(it->second.TraceId)));
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleWritePersistentBufferResult(
@@ -353,20 +356,20 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         "Sent TEvErasePersistentBuffer with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<TEvBatchErasePersistentBuffer>(it->second.Credentials);
+    auto request =
+        std::make_unique<TEvBatchErasePersistentBuffer>(it->second.Credentials);
     for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
         request->AddErase(it->second.Selectors[i], it->second.Lsns[i]);
     }
 
-    ctx.Send(
-        MakeHolder<IEventHandle>(
-            it->second.ServiceId,
-            ctx.SelfID,
-            request.release(),
-            0,           // flags
-            requestId,   // cookie
-            nullptr,
-            std::move(it->second.TraceId)));
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleErasePersistentBufferResult(
@@ -421,15 +424,14 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         it->second.Lsn,
         it->second.Instruction);
 
-    ctx.Send(
-        MakeHolder<IEventHandle>(
-            it->second.ServiceId,
-            ctx.SelfID,
-            request.release(),
-            0,           // flags
-            requestId,   // cookie
-            nullptr,
-            std::move(it->second.TraceId)));
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleReadPersistentBufferResult(
@@ -490,15 +492,14 @@ void TICStorageTransportActor::HandleRead(
         it->second.Selector,
         it->second.Instruction);
 
-    ctx.Send(
-        MakeHolder<IEventHandle>(
-            it->second.ServiceId,
-            ctx.SelfID,
-            request.release(),
-            0,           // flags
-            requestId,   // cookie
-            nullptr,
-            std::move(it->second.TraceId)));
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleReadResult(
@@ -560,15 +561,14 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         request->AddSegment(it->second.Selectors[i], it->second.Lsns[i]);
     }
 
-    ctx.Send(
-        MakeHolder<IEventHandle>(
-            it->second.ServiceId,
-            ctx.SelfID,
-            request.release(),
-            0,   // flags
-            requestId,
-            nullptr,
-            std::move(it->second.TraceId)));
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,   // flags
+        requestId,
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
@@ -608,11 +608,12 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
     ctx.Send(
         msg->ServiceId,
         request.release(),
-        0, // flags
-        msg->RequestId
-    );
+        0,   // flags
+        msg->RequestId);
 
-    ListPersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    ListPersistentBufferEventsByRequestId.emplace(
+        msg->RequestId,
+        std::move(*msg));
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferResult(
@@ -675,8 +676,12 @@ STFUNC(TICStorageTransportActor::StateWork)
             NKikimr::NDDisk::TEvSyncWithPersistentBufferResult,
             HandleSyncWithPersistentBufferResult);
 
-        HFunc(TEvICStorageTransportPrivate::TEvListPersistentBuffer, HandleListPersistentBuffer);
-        HFunc(NKikimr::NDDisk::TEvListPersistentBufferResult, HandleListPersistentBufferResult);
+        HFunc(
+            TEvICStorageTransportPrivate::TEvListPersistentBuffer,
+            HandleListPersistentBuffer);
+        HFunc(
+            NKikimr::NDDisk::TEvListPersistentBufferResult,
+            HandleListPersistentBufferResult);
 
         default:
             LOG_DEBUG_S(

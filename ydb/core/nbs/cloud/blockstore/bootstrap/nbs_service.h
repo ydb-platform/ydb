@@ -28,7 +28,7 @@ struct TNbsService: public IStartable
 
     void Start() override;
     void Stop() override;
-    
+
     const NKikimrConfig::TNbsConfig& GetConfig() const;
 };
 

@@ -733,7 +733,9 @@ void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
         RequestBlockErase(std::move(requestHandler));
     } else {
         // TODO: add error handling
-        requestHandler->ChildSpanEndError(storageRequestId, "HandleSyncResult failed");
+        requestHandler->ChildSpanEndError(
+            storageRequestId,
+            "HandleSyncResult failed");
         requestHandler->Span.EndError("HandleSyncResult failed");
     }
 
@@ -743,9 +745,8 @@ void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
 void TDirectBlockGroup::RequestBlockErase(
     std::shared_ptr<TSyncRequestHandler> requestHandler)
 {
-    auto eraseRequestHandler = std::make_shared<TEraseRequestHandler>(
-        ActorSystem,
-        requestHandler);
+    auto eraseRequestHandler =
+        std::make_shared<TEraseRequestHandler>(ActorSystem, requestHandler);
 
     auto execSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
@@ -757,9 +758,11 @@ void TDirectBlockGroup::RequestBlockErase(
     const ui64 storageRequestId = ++StorageRequestId;
     auto& childSpan = eraseRequestHandler->GetChildSpan(storageRequestId);
     auto future = StorageTransport->ErasePersistentBuffer(
-        PersistentBufferConnections[eraseRequestHandler->GetPersistentBufferIndex()]
+        PersistentBufferConnections[eraseRequestHandler
+                                        ->GetPersistentBufferIndex()]
             .GetServiceId(),
-        PersistentBufferConnections[eraseRequestHandler->GetPersistentBufferIndex()]
+        PersistentBufferConnections[eraseRequestHandler
+                                        ->GetPersistentBufferIndex()]
             .Credentials,
         eraseRequestHandler->GetBlockSelectors(),
         eraseRequestHandler->GetLsns(),
@@ -794,7 +797,9 @@ void TDirectBlockGroup::HandleErasePersistentBufferResult(
         requestHandler->Span.EndOk();
     } else {
         // TODO: add error handling
-        requestHandler->ChildSpanEndError(storageRequestId, "HandleEraseResult failed");
+        requestHandler->ChildSpanEndError(
+            storageRequestId,
+            "HandleEraseResult failed");
         requestHandler->Span.EndError("HandleEraseResult failed");
     }
 

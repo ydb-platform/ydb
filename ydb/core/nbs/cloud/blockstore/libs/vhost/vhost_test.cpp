@@ -22,8 +22,13 @@ private:
     TPromise<EResult> Promise;
 
 public:
-    TTestVhostRequest(TPromise<EResult> promise, EBlockStoreRequest type,
-                      ui64 from, ui64 length, TSgList sgList, void* cookie)
+    TTestVhostRequest(
+        TPromise<EResult> promise,
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList,
+        void* cookie)
         : TVhostRequest(type, from, length, std::move(sgList), cookie)
         , Promise(std::move(promise))
     {}
@@ -103,9 +108,11 @@ public:
         }
     }
 
-    TFuture<TVhostRequest::EResult> SendTestRequest(EBlockStoreRequest type,
-                                                    ui64 from, ui64 length,
-                                                    TSgList sgList) override
+    TFuture<TVhostRequest::EResult> SendTestRequest(
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList) override
     {
         auto promise = NewPromise<TVhostRequest::EResult>();
         auto future = promise.GetFuture();
@@ -119,7 +126,12 @@ public:
         }
 
         auto request = std::make_unique<TTestVhostRequest>(
-            std::move(promise), type, from, length, std::move(sgList), Cookie);
+            std::move(promise),
+            type,
+            from,
+            length,
+            std::move(sgList),
+            Cookie);
         Requests.Enqueue(request.release());
         return future;
     }
@@ -191,11 +203,16 @@ public:
         Y_ABORT_UNLESS(wasRun || State.load() == Broken);
     }
 
-    IVhostDevicePtr CreateDevice(TString socketPath, TString deviceName,
-                                 ui32 blockSize, ui64 blocksCount,
-                                 ui32 queuesCount, bool discardEnabled,
-                                 ui32 optimalIoSize, void* cookie,
-                                 const TVhostCallbacks& callbacks) override
+    IVhostDevicePtr CreateDevice(
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        ui32 queuesCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        void* cookie,
+        const TVhostCallbacks& callbacks) override
     {
         Y_UNUSED(deviceName);
         Y_UNUSED(blockSize);
@@ -205,7 +222,9 @@ public:
         Y_UNUSED(callbacks);
 
         auto vhostDevice = std::make_shared<TTestVhostDevice>(
-            std::move(socketPath), cookie, optimalIoSize);
+            std::move(socketPath),
+            cookie,
+            optimalIoSize);
 
         with_lock (Lock) {
             Devices.push_back(vhostDevice);

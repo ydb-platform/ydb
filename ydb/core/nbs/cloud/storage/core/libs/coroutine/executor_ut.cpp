@@ -14,7 +14,10 @@ using namespace NThreading;
 
 constexpr TDuration WaitTimeout = TDuration::Seconds(5);
 
-struct TTestRequest {};
+struct TTestRequest
+{
+};
+
 using TTestResponse = TResultOrError<int>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,9 +29,7 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         auto executor = TExecutor::Create("TEST");
         executor->Start();
 
-        auto future = executor->Execute([] {
-            return 42;
-        });
+        auto future = executor->Execute([] { return 42; });
 
         auto result = future.GetValue(WaitTimeout);
         UNIT_ASSERT(result == 42);
@@ -44,17 +45,19 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         auto request = NewPromise<TTestRequest>();
         auto response = NewPromise<TTestResponse>();
 
-        auto future = executor->Execute([=] () mutable {
-            request.SetValue({});
+        auto future = executor->Execute(
+            [=]() mutable
+            {
+                request.SetValue({});
 
-            auto resp = executor->ExtractResponse(response.GetFuture());
-            UNIT_ASSERT(!HasError(resp));
+                auto resp = executor->ExtractResponse(response.GetFuture());
+                UNIT_ASSERT(!HasError(resp));
 
-            return resp.GetResult();
-        });
+                return resp.GetResult();
+            });
 
         request.GetFuture().GetValue(WaitTimeout);
-        response.SetValue({ 42 });
+        response.SetValue({42});
 
         auto result = future.GetValue(WaitTimeout);
         UNIT_ASSERT(result == 42);
@@ -70,17 +73,19 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         auto request = NewPromise<TTestRequest>();
         auto response = NewPromise<TTestResponse>();
 
-        auto future = executor->Execute([=] () mutable {
-            request.SetValue({});
+        auto future = executor->Execute(
+            [=]() mutable
+            {
+                request.SetValue({});
 
-            auto resp = executor->ExtractResponse(response.GetFuture());
-            UNIT_ASSERT(!HasError(resp));
+                auto resp = executor->ExtractResponse(response.GetFuture());
+                UNIT_ASSERT(!HasError(resp));
 
-            return resp.GetResult();
-        });
+                return resp.GetResult();
+            });
 
         request.GetFuture().GetValue(WaitTimeout);
-        response.SetValue({ 42 });
+        response.SetValue({42});
 
         auto result = future.GetValue(WaitTimeout);
         UNIT_ASSERT(result == 42);
@@ -96,17 +101,19 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         auto request = NewPromise<TTestRequest>();
         auto response = NewPromise<int>();
 
-        auto future = executor->Execute([=] () mutable {
-            request.SetValue({});
+        auto future = executor->Execute(
+            [=]() mutable
+            {
+                request.SetValue({});
 
-            auto resp = executor->ResultOrError(response.GetFuture());
-            UNIT_ASSERT(!HasError(resp));
+                auto resp = executor->ResultOrError(response.GetFuture());
+                UNIT_ASSERT(!HasError(resp));
 
-            return resp.GetResult();
-        });
+                return resp.GetResult();
+            });
 
         request.GetFuture().GetValue(WaitTimeout);
-        response.SetValue({ 42 });
+        response.SetValue({42});
 
         auto result = future.GetValue(WaitTimeout);
         UNIT_ASSERT(result == 42);

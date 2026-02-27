@@ -74,7 +74,9 @@ public:
         const ui64 ddiskInstanceGuid,
         NWilson::TSpan& span) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> ListPersistentBuffer(
+    NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
+    ListPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const ui64 requestId) override;

@@ -347,8 +347,8 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
 
-        // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1 vchunk
-        // since disk size will be 128MB.
+        // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1
+        // vchunk since disk size will be 128MB.
         query->SetTargetNumVChunks(1);
     }
 

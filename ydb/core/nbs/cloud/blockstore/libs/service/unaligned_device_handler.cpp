@@ -474,10 +474,9 @@ TZeroRequest::TResponseFuture TZeroRequest::ModifyAndWrite()
 TUnalignedDeviceHandler::TUnalignedDeviceHandler(
     TDeviceHandlerParams params,
     ui32 maxSubRequestSize)
-    : Backend(
-          std::make_shared<TAlignedDeviceHandler>(
-              std::move(params),
-              maxSubRequestSize))
+    : Backend(std::make_shared<TAlignedDeviceHandler>(
+          std::move(params),
+          maxSubRequestSize))
     , BlockSize(Backend->GetBlockSize())
     , MaxUnalignedBlockCount(MaxUnalignedRequestSize / BlockSize)
 {}

@@ -158,32 +158,60 @@ def in_window(t: float, start: float, end: float) -> bool:
 
 # ==================== Query Text Parsing ====================
 
-def count_queries_in_list(line: str, list_field: str) -> int:
-    """Count number of queries in a QueryTexts list field."""
+def _extract_list_payload(line: str, list_field: str) -> Optional[str]:
+    """
+    Extract the payload inside the brackets for a given list field.
+
+    Looks for 'list_field: [' and then finds the matching closing ']' for that '[',
+    correctly handling nested brackets. Returns the substring between the brackets,
+    or None if not found or malformed.
+    """
     marker = f"{list_field}: ["
     start = line.find(marker)
     if start < 0:
+        return None
+
+    # Index of the opening '[' corresponding to this list_field
+    open_idx = start + len(marker) - 1
+    if open_idx >= len(line) or line[open_idx] != "[":
+        return None
+
+    depth = 0
+    end_idx = -1
+    for i in range(open_idx, len(line)):
+        ch = line[i]
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            if depth == 0:
+                # Unbalanced closing bracket before opening; treat as malformed.
+                return None
+            depth -= 1
+            if depth == 0:
+                end_idx = i
+                break
+
+    if end_idx <= open_idx:
+        return None
+
+    return line[open_idx + 1:end_idx]
+
+
+def count_queries_in_list(line: str, list_field: str) -> int:
+    """Count number of queries in a QueryTexts list field."""
+    payload = _extract_list_payload(line, list_field)
+    if payload is None:
         return 0
-    start += len(marker)
-    end = line.rfind("]")
-    if end < start:
-        return 0
-    payload = line[start:end]
     # Count occurrences of "QuerySpanId=" which marks each query
     return payload.count("QuerySpanId=")
 
 
 def parse_query_texts_list(line: str, list_field: str) -> List[Tuple[str, str]]:
     """Parse QueryTexts list field into (QuerySpanId, QueryText) pairs."""
-    marker = f"{list_field}: ["
-    start = line.find(marker)
-    if start < 0:
+    payload = _extract_list_payload(line, list_field)
+    if payload is None:
         return []
-    start += len(marker)
-    end = line.rfind("]")
-    if end < start:
-        return []
-    payload = line[start:end].strip()
+    payload = payload.strip()
 
     out: List[Tuple[str, str]] = []
     for m in RE_TX_ITEM.finditer(payload):
@@ -240,26 +268,31 @@ def main():
     # Since logs may be unsorted, we need to scan the entire file
     relevant_lines: List[Tuple[float, str]] = []
 
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            # Quick filter to skip irrelevant lines
-            if not (
-                (victim_id in line) or
-                ("was a victim of broken locks" in line) or
-                ("broke other locks" in line) or
-                ("had broken other locks" in line)
-            ):
-                continue
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                # Quick filter to skip irrelevant lines
+                if not (
+                    (victim_id in line) or
+                    ("was a victim of broken locks" in line) or
+                    ("broke other locks" in line) or
+                    ("had broken other locks" in line)
+                ):
+                    continue
 
-            t = tp.parse(line)
-            if t is None:
-                continue
+                t = tp.parse(line)
+                if t is None:
+                    continue
 
-            # Find anchor: first line containing victim_id
-            if anchor_t is None and (victim_id in line):
-                anchor_t = t
+                # Find anchor: first line containing victim_id
+                if anchor_t is None and (victim_id in line):
+                    anchor_t = t
 
-            relevant_lines.append((t, line))
+                relevant_lines.append((t, line))
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        err_msg = f"Failed to open log file '{path}': {e}"
+        print(style(err_msg, color=ANSI_RED, bold=True, enable=use_color), file=sys.stderr)
+        sys.exit(1)
 
     if anchor_t is None:
         print(f"Error: VictimQuerySpanId {victim_id} not found in log file.", file=sys.stderr)

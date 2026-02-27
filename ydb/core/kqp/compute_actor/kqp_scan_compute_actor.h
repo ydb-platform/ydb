@@ -26,8 +26,7 @@ private:
 
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
-    ui32 ScanDataInFlight = 0;
-    static constexpr ui32 MaxScanDataInFlight = 1;
+    bool ScanDataInFlight = false;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {

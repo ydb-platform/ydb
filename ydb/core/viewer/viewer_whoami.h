@@ -47,9 +47,6 @@ public:
                 }
             }
         }
-        if (userToken.HasOriginalUserToken()) {
-            json["OriginalUserToken"] = userToken.GetOriginalUserToken();
-        }
         if (userToken.HasAuthType()) {
             json["AuthType"] = userToken.GetAuthType();
         }

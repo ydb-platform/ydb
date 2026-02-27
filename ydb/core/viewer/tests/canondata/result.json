@@ -13610,7 +13610,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "monitoring"
     },
     "test.TestViewer.test_whoami_root": {
@@ -13631,7 +13630,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "root"
     },
     "test.TestViewer.test_whoami_viewer": {
@@ -13645,7 +13643,6 @@
         "IsMonitoringAllowed": false,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "viewer"
     }
 }

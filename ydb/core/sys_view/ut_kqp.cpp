@@ -3799,53 +3799,29 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(0); // IndexSize
     }
 
-    Y_UNIT_TEST_TWIN(Describe, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(Describe) {
+        TTestEnv env;
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            if (EnableRealSystemViewPaths) {
-                auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-                const auto& systemView = result.GetSystemViewDescription();
+            const auto& systemView = result.GetSystemViewDescription();
 
-                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
-                const auto& columns = systemView.GetTableColumns();
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
-                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+            const auto& columns = systemView.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
+            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+            UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-                const auto& keyColumns = systemView.GetPrimaryKeyColumns();
-                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
-            } else {
-                auto settings = TDescribeTableSettings()
-                    .WithKeyShardBoundary(true)
-                    .WithTableStatistics(true)
-                    .WithPartitionStatistics(true);
-
-                auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-                const auto& table = result.GetTableDescription();
-                const auto& columns = table.GetTableColumns();
-                const auto& keyColumns = table.GetPrimaryKeyColumns();
-
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
-                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
-
-                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
-
-                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
-            }
+            const auto& keyColumns = systemView.GetPrimaryKeyColumns();
+            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+            UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
         }
 
         TSchemeClient schemeClient(env.GetDriver());
@@ -3855,12 +3831,7 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys/partition_stats").GetValueSync();
@@ -3868,16 +3839,12 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
     }
 
-    Y_UNIT_TEST_TWIN(SystemViewFailOps, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(SystemViewFailOps) {
+        TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
         // Make AdministrationAllowedSIDs non-empty to deny any user cluster admin privilege.
@@ -3956,13 +3923,8 @@ R"(CREATE TABLE `test_show_create` (
         auto userSchemeClient = TSchemeClient(driver);
         {
             auto result = userSchemeClient.MakeDirectory("/Root/.sys").GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                    "path exist", result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path exist", result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -3977,27 +3939,19 @@ R"(CREATE TABLE `test_show_create` (
         }
         {
             auto result = userSchemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
             auto result = userSchemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
         }
     }
 
-    Y_UNIT_TEST_TWIN(DescribeSystemFolder, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(DescribeSystemFolder) {
+        TTestEnv env;
         CreateTenantsAndTables(env, true);
 
         TSchemeClient schemeClient(env.GetDriver());
@@ -4046,11 +4000,7 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                if (EnableRealSystemViewPaths) {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
@@ -4069,11 +4019,7 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                if (EnableRealSystemViewPaths) {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }

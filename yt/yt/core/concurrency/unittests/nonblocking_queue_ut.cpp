@@ -19,12 +19,12 @@ TEST(TNonblockingQueueTest, DequeueFirst)
     queue.Enqueue(1);
 
     EXPECT_TRUE(result1.IsSet());
-    EXPECT_EQ(1, result1.Get().Value());
+    EXPECT_EQ(1, result1.BlockingGet().Value());
 
     queue.Enqueue(2);
 
     EXPECT_TRUE(result2.IsSet());
-    EXPECT_EQ(2, result2.Get().Value());
+    EXPECT_EQ(2, result2.BlockingGet().Value());
 }
 
 TEST(TNonblockingQueueTest, EnqueueFirst)
@@ -35,11 +35,11 @@ TEST(TNonblockingQueueTest, EnqueueFirst)
 
     auto result1 = queue.Dequeue();
     EXPECT_TRUE(result1.IsSet());
-    EXPECT_EQ(1, result1.Get().Value());
+    EXPECT_EQ(1, result1.BlockingGet().Value());
 
     auto result2 = queue.Dequeue();
     EXPECT_TRUE(result2.IsSet());
-    EXPECT_EQ(2, result2.Get().Value());
+    EXPECT_EQ(2, result2.BlockingGet().Value());
 }
 
 TEST(TNonblockingQueueTest, Mixed)
@@ -49,14 +49,14 @@ TEST(TNonblockingQueueTest, Mixed)
 
     auto result1 = queue.Dequeue();
     EXPECT_TRUE(result1.IsSet());
-    EXPECT_EQ(1, result1.Get().Value());
+    EXPECT_EQ(1, result1.BlockingGet().Value());
 
     auto result2 = queue.Dequeue();
     EXPECT_FALSE(result2.IsSet());
 
     queue.Enqueue(2);
     EXPECT_TRUE(result2.IsSet());
-    EXPECT_EQ(2, result2.Get().Value());
+    EXPECT_EQ(2, result2.BlockingGet().Value());
 }
 
 TEST(TNonblockingQueueTest, DequeueFirstAsync)
@@ -71,7 +71,7 @@ TEST(TNonblockingQueueTest, DequeueFirstAsync)
 
     promise.Set(1);
     EXPECT_TRUE(result.IsSet());
-    EXPECT_EQ(result.Get().Value(), 1);
+    EXPECT_EQ(result.BlockingGet().Value(), 1);
 }
 
 TEST(TNonblockingQueueTest, EnqueueFirstAsync)
@@ -87,12 +87,12 @@ TEST(TNonblockingQueueTest, EnqueueFirstAsync)
 
     promise1.Set(1);
     EXPECT_TRUE(result1.IsSet());
-    EXPECT_EQ(result1.Get().Value(), 1);
+    EXPECT_EQ(result1.BlockingGet().Value(), 1);
 
     promise2.Set(2);
     auto result2 = queue.Dequeue();
     EXPECT_TRUE(result2.IsSet());
-    EXPECT_EQ(result2.Get().Value(), 2);
+    EXPECT_EQ(result2.BlockingGet().Value(), 2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -110,13 +110,13 @@ TEST(TBoundedNonblockingQueueTest, DequeueFirst)
     EXPECT_TRUE(resultEnqueue1.IsSet());
 
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(1, resultDequeue1.Get().Value());
+    EXPECT_EQ(1, resultDequeue1.BlockingGet().Value());
 
     auto resultEnqueue2 = queue.Enqueue(2);
     EXPECT_TRUE(resultEnqueue2.IsSet());
 
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(2, resultDequeue2.Get().Value());
+    EXPECT_EQ(2, resultDequeue2.BlockingGet().Value());
 }
 
 TEST(TBoundedNonblockingQueueTest, EnqueueFirst)
@@ -130,13 +130,13 @@ TEST(TBoundedNonblockingQueueTest, EnqueueFirst)
 
     auto resultDequeue1 = queue.Dequeue();
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(1, resultDequeue1.Get().Value());
+    EXPECT_EQ(1, resultDequeue1.BlockingGet().Value());
 
     EXPECT_TRUE(resultEnqueue2.IsSet());
 
     auto resultDequeue2 = queue.Dequeue();
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(2, resultDequeue2.Get().Value());
+    EXPECT_EQ(2, resultDequeue2.BlockingGet().Value());
 }
 
 TEST(TBoundedNonblockingQueueTest, MixedEnqueueFirst)
@@ -147,7 +147,7 @@ TEST(TBoundedNonblockingQueueTest, MixedEnqueueFirst)
 
     auto resultDequeue1 = queue.Dequeue();
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(1, resultDequeue1.Get().Value());
+    EXPECT_EQ(1, resultDequeue1.BlockingGet().Value());
 
     auto resultDequeue2 = queue.Dequeue();
     EXPECT_FALSE(resultDequeue2.IsSet());
@@ -156,7 +156,7 @@ TEST(TBoundedNonblockingQueueTest, MixedEnqueueFirst)
     EXPECT_TRUE(resultEnqueue2.IsSet());
 
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(2, resultDequeue2.Get().Value());
+    EXPECT_EQ(2, resultDequeue2.BlockingGet().Value());
 }
 
 TEST(TBoundedNonblockingQueueTest, MixedDequeueFirst)
@@ -169,14 +169,14 @@ TEST(TBoundedNonblockingQueueTest, MixedDequeueFirst)
     auto resultEnqueue1 = queue.Enqueue(1);
     EXPECT_TRUE(resultEnqueue1.IsSet());
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(1, resultDequeue1.Get().Value());
+    EXPECT_EQ(1, resultDequeue1.BlockingGet().Value());
 
     auto resultEnqueue2 = queue.Enqueue(2);
     EXPECT_TRUE(resultEnqueue2.IsSet());
 
     auto resultDequeue2 = queue.Dequeue();
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(2, resultDequeue2.Get().Value());
+    EXPECT_EQ(2, resultDequeue2.BlockingGet().Value());
 }
 
 TEST(TBoundedNonblockingQueueTest, DequeueFirstAsync)
@@ -192,7 +192,7 @@ TEST(TBoundedNonblockingQueueTest, DequeueFirstAsync)
 
     promise.Set(1);
     EXPECT_TRUE(resultDequeue.IsSet());
-    EXPECT_EQ(resultDequeue.Get().Value(), 1);
+    EXPECT_EQ(resultDequeue.BlockingGet().Value(), 1);
 }
 
 TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync)
@@ -211,12 +211,12 @@ TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync)
 
     promise1.Set(1);
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(resultDequeue1.Get().Value(), 1);
+    EXPECT_EQ(resultDequeue1.BlockingGet().Value(), 1);
 
     promise2.Set(2);
     auto resultDequeue2 = queue.Dequeue();
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(resultDequeue2.Get().Value(), 2);
+    EXPECT_EQ(resultDequeue2.BlockingGet().Value(), 2);
 }
 
 TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync2)
@@ -239,11 +239,11 @@ TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync2)
 
     promise1.Set(1);
     EXPECT_TRUE(resultDequeue1.IsSet());
-    EXPECT_EQ(resultDequeue1.Get().Value(), 1);
+    EXPECT_EQ(resultDequeue1.BlockingGet().Value(), 1);
 
     promise2.Set(2);
     EXPECT_TRUE(resultDequeue2.IsSet());
-    EXPECT_EQ(resultDequeue2.Get().Value(), 2);
+    EXPECT_EQ(resultDequeue2.BlockingGet().Value(), 2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -120,7 +120,7 @@ TEST_F(TAsyncReaderWriterLockTest, ReleaseInDestructor)
 {
     TFuture<void> future;
     {
-        auto writeGuard = TAsyncLockWriterGuard::Acquire(&lock).Get().Value();
+        auto writeGuard = TAsyncLockWriterGuard::Acquire(&lock).BlockingGet().Value();
         future = lock.AcquireReader();
         EXPECT_FALSE(future.IsSet());
     }
@@ -132,9 +132,9 @@ void DoTestCancelWriter(TAsyncReaderWriterLock& lock)
 {
     auto guard = std::invoke([&] {
         if constexpr (DuringWrite) {
-            return TAsyncLockWriterGuard::Acquire(&lock).Get().Value();
+            return TAsyncLockWriterGuard::Acquire(&lock).BlockingGet().Value();
         } else {
-            return TAsyncLockReaderGuard::Acquire(&lock).Get().Value();
+            return TAsyncLockReaderGuard::Acquire(&lock).BlockingGet().Value();
         }
     });
 

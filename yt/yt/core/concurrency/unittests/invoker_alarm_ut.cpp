@@ -26,7 +26,7 @@ protected:
         BIND(func)
             .AsyncVia(ActionQueue_->GetInvoker())
             .Run()
-            .Get();
+            .BlockingGet();
     }
 };
 
@@ -73,7 +73,7 @@ TEST_F(TInvokerAlarmTest, CheckInvokesCallback)
     Do([&] {
         auto invoked = std::make_shared<std::atomic<bool>>();
         Alarm_->Arm(BIND([=] { *invoked = true; }), TDuration::MilliSeconds(100));
-        Invoker_->Suspend().Get();
+        Invoker_->Suspend().BlockingGet();
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         EXPECT_FALSE(*invoked);
         EXPECT_TRUE(Alarm_->Check());

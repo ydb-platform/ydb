@@ -231,7 +231,7 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
@@ -252,7 +252,7 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
@@ -325,7 +325,7 @@ TEST_F(TSslTest, CAVerificationModeFailure)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 
@@ -526,7 +526,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithoutClientCertificate)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
 
     if (!error.IsOK()) {
         // Client should get error after BUS handshake and avoid TLS handshake.
@@ -577,7 +577,7 @@ TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
     if (!error.IsOK()) {
         // Connection could be terminated on TLS handshake.
         EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
@@ -667,7 +667,7 @@ TEST_F(TSslTest, DifferentCipherLists)
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    auto error = bus->GetReadyFuture().Get();
+    auto error = bus->GetReadyFuture().BlockingGet();
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
 

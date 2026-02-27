@@ -338,7 +338,7 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
 
     auto cache = New<TDelayedExpiringCache>(config, TDuration::MilliSeconds(100));
     {
-        auto result = cache->Get(0).Get();
+        auto result = cache->Get(0).BlockingGet();
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(1, result.Value());
     }
@@ -346,7 +346,7 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
     cache->Set(0, 2);
     EXPECT_EQ(1, cache->GetCount());
     {
-        auto result = cache->Get(0).Get();
+        auto result = cache->Get(0).BlockingGet();
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(2, result.Value());
     }
@@ -521,22 +521,22 @@ TEST(TAsyncExpiringCacheTest, ForceUpdate)
     auto cache = New<TRevisionCache>(config);
 
     auto rev0 = cache->Get(0);
-    ASSERT_EQ(rev0.Get().Value(), 0);
+    ASSERT_EQ(rev0.BlockingGet().Value(), 0);
 
     Sleep(TDuration::MilliSeconds(500));
 
     rev0 = cache->Get(0);
-    ASSERT_EQ(rev0.Get().Value(), 0);
+    ASSERT_EQ(rev0.BlockingGet().Value(), 0);
     ASSERT_GE(cache->PeriodicUpdateCount.load(), 0);
 
     cache->ForceRefresh(0, 0);
     auto rev1 = cache->Get(0);
-    ASSERT_EQ(rev1.Get().Value(), 1);
+    ASSERT_EQ(rev1.BlockingGet().Value(), 1);
     ASSERT_EQ(cache->ForcedUpdateCount.load(), 1);
 
     cache->ForceRefresh(0, 0);
     rev1 = cache->Get(0);
-    ASSERT_EQ(rev1.Get().Value(), 1);
+    ASSERT_EQ(rev1.BlockingGet().Value(), 1);
     ASSERT_EQ(cache->ForcedUpdateCount.load(), 1);
 }
 

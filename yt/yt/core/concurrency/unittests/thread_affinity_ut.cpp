@@ -43,57 +43,57 @@ void SingleThreadedAccess(TMyObject* object)
 {
     PROLOGUE();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().BlockingGet();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().BlockingGet();
 }
 
 void UntangledThreadAccess(TMyObject* object)
 {
     PROLOGUE();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
 }
 
 void UntangledThreadAccessToSharedSlot(TMyObject* object)
 {
     PROLOGUE();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
-    BIND(&TMyObject::C, object).AsyncVia(invoker1).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
+    BIND(&TMyObject::C, object).AsyncVia(invoker1).Run().BlockingGet();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
-    BIND(&TMyObject::C, object).AsyncVia(invoker1).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
+    BIND(&TMyObject::C, object).AsyncVia(invoker1).Run().BlockingGet();
 }
 
 [[maybe_unused]] void TangledThreadAccess1(TMyObject* object)
 {
     PROLOGUE();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker1).Run().BlockingGet();
 }
 
 [[maybe_unused]] void TangledThreadAccess2(TMyObject* object)
 {
     PROLOGUE();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker1).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
 
-    BIND(&TMyObject::A, object).AsyncVia(invoker2).Run().Get();
-    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().Get();
+    BIND(&TMyObject::A, object).AsyncVia(invoker2).Run().BlockingGet();
+    BIND(&TMyObject::B, object).AsyncVia(invoker2).Run().BlockingGet();
 }
 
 #undef PROLOGUE

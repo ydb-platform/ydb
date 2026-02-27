@@ -381,7 +381,7 @@ TEST_F(TSchedulerTest, CurrentInvokerInActionQueue)
         EXPECT_EQ(invoker, GetCurrentInvoker());
     })
     .AsyncVia(invoker).Run()
-    .Get();
+    .BlockingGet();
 }
 
 TEST_F(TSchedulerTest, Intercept)
@@ -404,7 +404,7 @@ TEST_F(TSchedulerTest, Intercept)
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
     .AsyncVia(invoker).Run()
-    .Get();
+    .BlockingGet();
     EXPECT_EQ(counter1, 1);
     EXPECT_EQ(counter2, 1);
 }
@@ -433,7 +433,7 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
     .AsyncVia(invoker).Run()
-    .Get();
+    .BlockingGet();
     EXPECT_EQ(counter1, 3);
     EXPECT_EQ(counter2, 3);
     EXPECT_EQ(counter3, 1);
@@ -453,8 +453,8 @@ TEST_F(TSchedulerTest, CurrentInvokerConcurrent)
         EXPECT_EQ(invoker2, GetCurrentInvoker());
     }).AsyncVia(invoker2).Run();
 
-    result1.Get();
-    result2.Get();
+    result1.BlockingGet();
+    result2.BlockingGet();
 }
 
 TEST_W(TSchedulerTest, WaitForAsyncVia)
@@ -578,7 +578,7 @@ TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
     EXPECT_TRUE(asyncResult1.BlockingGet().IsOK());
     Sleep(SleepQuantum);
     EXPECT_TRUE(asyncResult2.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult2.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult2.BlockingGet().GetCode());
 }
 
 TEST_F(TSchedulerTest, CancelCurrentFiber)
@@ -588,9 +588,9 @@ TEST_F(TSchedulerTest, CancelCurrentFiber)
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
         SwitchTo(invoker);
     }).AsyncVia(invoker).Run();
-    asyncResult.Get();
+    asyncResult.BlockingGet();
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult.BlockingGet().GetCode());
 }
 
 TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
@@ -602,13 +602,13 @@ TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
     auto asyncResult = BIND([=] () mutable {
         BIND([=] {
             NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-        }).AsyncVia(invoker2).Run().Get();
+        }).AsyncVia(invoker2).Run().BlockingGet();
         WaitFor(promise.ToFuture(), invoker2)
             .ThrowOnError();
     }).AsyncVia(invoker1).Run();
 
     promise.Set();
-    asyncResult.Get();
+    asyncResult.BlockingGet();
 
     EXPECT_TRUE(asyncResult.IsSet());
     EXPECT_TRUE(asyncResult.BlockingGet().IsOK());
@@ -621,7 +621,7 @@ TEST_F(TSchedulerTest, JustYield1)
         for (int i = 0; i < 10; ++i) {
             Yield();
         }
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
     EXPECT_TRUE(asyncResult.IsOK());
 }
 
@@ -642,7 +642,7 @@ TEST_F(TSchedulerTest, JustYield2)
     // This callback must complete before the first.
     auto errorOrValue = BIND([&] {
         return flag;
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
 
     EXPECT_TRUE(errorOrValue.IsOK());
     EXPECT_FALSE(errorOrValue.Value());
@@ -654,10 +654,10 @@ TEST_F(TSchedulerTest, CancelInAdjacentCallback)
     auto invoker = Queue1->GetInvoker();
     auto asyncResult1 = BIND([=] {
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
     auto asyncResult2 = BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());
 }
@@ -668,11 +668,11 @@ TEST_F(TSchedulerTest, CancelInAdjacentThread)
     auto invoker = Queue1->GetInvoker();
     auto asyncResult1 = BIND([=, &closure] {
         closure = NYT::NConcurrency::GetCurrentFiberCanceler();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
     closure.Run(TError("Error")); // *evil laugh*
     auto asyncResult2 = BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run().BlockingGet();
     closure.Reset(); // *evil smile*
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());

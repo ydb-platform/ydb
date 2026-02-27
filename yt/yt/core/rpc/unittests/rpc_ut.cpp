@@ -846,7 +846,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
     }
     ReleaseLatchedCalls();
 
-    for(auto results = AllSet(std::move(futures)).Get().Value(); const auto& res : results) {
+    for(auto results = AllSet(std::move(futures)).BlockingGet().Value(); const auto& res : results) {
         EXPECT_TRUE(res.IsOK());
     }
 

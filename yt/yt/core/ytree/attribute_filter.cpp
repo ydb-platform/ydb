@@ -164,7 +164,7 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
                     THROW_ERROR_EXCEPTION("Unexpected unset future in synchronous attribute filtering");
                 }
 
-                auto&& filteredYsonOrError = asyncFilteredYson.Get();
+                auto&& filteredYsonOrError = asyncFilteredYson.BlockingGet();
                 filteredYsonOrError.ThrowOnError();
 
                 auto filteredYson = std::move(filteredYsonOrError.Value());

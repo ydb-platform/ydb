@@ -689,7 +689,7 @@ TEST_P(TPrefetchingStressTest, Stress)
 
         for (auto& reply : replies) {
             if (parameters.ErrorProbability > 0.0) {
-                reply.Get();
+                reply.BlockingGet();
             } else {
                 EXPECT_TRUE(reply.BlockingGet().IsOK());
             }

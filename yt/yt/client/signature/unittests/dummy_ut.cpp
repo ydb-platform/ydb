@@ -37,7 +37,7 @@ TEST(TDummySignatureValidatorTest, GenerateValidate)
     auto generator = CreateDummySignatureGenerator();
     auto validator = CreateDummySignatureValidator();
     auto signature = generator->Sign("payload");
-    EXPECT_TRUE(validator->Validate(signature).Get().Value());
+    EXPECT_TRUE(validator->Validate(signature).BlockingGet().Value());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

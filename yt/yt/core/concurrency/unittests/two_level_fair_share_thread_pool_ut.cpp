@@ -31,7 +31,7 @@ TEST(TTwoLevelFairShareThreadPoolTest, Configure)
     }
 
     AllSucceeded(std::move(futures))
-        .Get();
+        .BlockingGet();
 
     threadPool->Shutdown();
     EXPECT_EQ(N, counter->load());

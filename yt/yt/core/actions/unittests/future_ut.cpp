@@ -614,8 +614,8 @@ TEST_F(TFutureTest, CascadedApply)
     EXPECT_FALSE(left.IsSet());  EXPECT_FALSE(leftPrime.IsSet());
     EXPECT_TRUE(right.IsSet());  EXPECT_TRUE(rightPrime.IsSet());
     EXPECT_EQ( 5, accumulator);
-    EXPECT_EQ( 1, right.Get().Value());
-    EXPECT_EQ( 5, rightPrime.Get().Value());
+    EXPECT_EQ( 1, right.BlockingGet().Value());
+    EXPECT_EQ( 5, rightPrime.BlockingGet().Value());
 
     // This will sleep for a while until left branch will be evaluated.
     thread.Join();
@@ -623,8 +623,8 @@ TEST_F(TFutureTest, CascadedApply)
     EXPECT_TRUE(left.IsSet());   EXPECT_TRUE(leftPrime.IsSet());
     EXPECT_TRUE(right.IsSet());  EXPECT_TRUE(rightPrime.IsSet());
     EXPECT_EQ(55, accumulator);
-    EXPECT_EQ(42, left.Get().Value());
-    EXPECT_EQ(50, leftPrime.Get().Value());
+    EXPECT_EQ(42, left.BlockingGet().Value());
+    EXPECT_EQ(50, leftPrime.BlockingGet().Value());
 }
 
 TEST_F(TFutureTest, ApplyVoidToVoid)

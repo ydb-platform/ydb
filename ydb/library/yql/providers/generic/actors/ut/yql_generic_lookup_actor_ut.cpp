@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             std::tie(actor, Request) = LookupActorFactory(SelfId(), Alloc, *TypeEnv);
             LookupActorFactory = {};
             LookupActor = RegisterWithSameMailbox(actor);
-            auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(std::move(Request));
+            auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(Request);
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
         }
 

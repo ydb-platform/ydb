@@ -91,14 +91,22 @@ void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& mess
     session->Close();
 }
 
+TTopicSdkTestSetup::TReadResult::TReadResult(TDriver driver)
+    : Driver(driver)
+    , Client(driver)
+{
+}
+
+TTopicSdkTestSetup::TReadResult::~TReadResult()
+{
+    Driver.Stop(true);
+}
+
 TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,
     std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
     std::optional<size_t> partition, const TDuration timeout, bool autoPartitioningSupport) {
-    auto driver = MakeDriver();
-    Y_DEFER {
-        driver.Stop(true);
-    };
-    TTopicClient client(driver);
+
+    TReadResult result(MakeDriver());
 
     auto topicSettings = TTopicReadSettings(topic);
     if (partition) {
@@ -110,11 +118,10 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
         .AppendTopics(topicSettings)
         .ConsumerName(consumer);
 
-    auto reader = client.CreateReadSession(settings);
+    auto reader = result.Client.CreateReadSession(settings);
 
     TInstant deadlineTime = TInstant::Now() + timeout;
 
-    TReadResult result;
     result.Reader = reader;
 
     bool continueFlag = true;

@@ -37,6 +37,11 @@ public:
                std::optional<std::uint64_t> seqNo = std::nullopt);
 
     struct TReadResult {
+        TReadResult(TDriver driver);
+        ~TReadResult();
+
+        TDriver Driver;
+        TTopicClient Client;
         std::shared_ptr<IReadSession> Reader;
         bool Timeout;
 

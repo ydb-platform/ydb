@@ -98,8 +98,10 @@ TTopicSdkTestSetup::TReadResult::TReadResult(TDriver& driver)
 
 TTopicSdkTestSetup::TReadResult::~TReadResult()
 {
-    Reader->Close();
-    Reader.reset();
+    if (Reader) {
+        Reader->Close();
+        Reader.reset();
+    }
 }
 
 TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,

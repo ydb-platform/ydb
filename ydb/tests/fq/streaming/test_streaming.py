@@ -116,7 +116,14 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name1, source_name=source_name, input_topic=self.input_topic, output_topic=self.output_topic))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, source_name=source_name, input_topic=self.input_topic, output_topic=self.output_topic))
         path1 = f"/Root/{query_name1}"
+        path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
+
+        # Check that streaming.query.tasks.count metric exists for both queries
+        tasks_count1 = self.get_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expect_counters_exist=True)
+        tasks_count2 = self.get_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expect_counters_exist=True)
+        assert tasks_count1 > 0, f"Expected tasks count > 0 for {query_name1}, got {tasks_count1}"
+        assert tasks_count2 > 0, f"Expected tasks count > 0 for {query_name2}, got {tasks_count2}"
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']

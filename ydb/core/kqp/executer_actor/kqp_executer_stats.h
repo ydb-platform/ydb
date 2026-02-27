@@ -298,6 +298,48 @@ struct TIngressExternalPartitionStat {
     TIngressExternalPartitionStat(const TString& name) : Name(name) {}
 };
 
+<<<<<<< HEAD
+=======
+struct TStorageTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+    ui64 AffectedPartitions = 0;
+};
+
+struct TQueryTableStats {
+
+    TQueryTableStats() = default;
+    TQueryTableStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    TSumStats ReadRows;
+    TSumStats ReadBytes;
+    TSumStats WriteRows;
+    TSumStats WriteBytes;
+    TSumStats EraseRows;
+    TSumStats EraseBytes;
+    TSumStats AffectedPartitions;
+    TStorageTableStats StorageStats;
+    ui64 AffectedPartitionsUniqueCount = 0;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TAggExecStat {
+    ui64 CpuTimeMs = 0;
+    ui64 DurationSeconds = 0;
+    ui64 MemoryUsageBytes = 0;
+    ui64 TasksCount = 0;
+    ui64 InputBytes = 0;
+    ui64 OutputBytes = 0;
+};
+
+>>>>>>> a2b3f4d3d4d (YQ-5137 Streaming query metrics (#34959))
 struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
@@ -380,6 +422,7 @@ public:
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
+<<<<<<< HEAD
     void Finish();
 
 private:
@@ -394,6 +437,9 @@ private:
     void AddDatashardFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
         ui64 datashardCpuTimeUs);
+=======
+    void ExportAggExecStats(TAggExecStat* metrics);
+>>>>>>> a2b3f4d3d4d (YQ-5137 Streaming query metrics (#34959))
 };
 
 struct TTableStat {

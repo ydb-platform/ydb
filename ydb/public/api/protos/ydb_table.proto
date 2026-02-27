@@ -118,86 +118,6 @@ message GlobalVectorKMeansTreeIndex {
 }
 
 message FulltextIndexSettings {
-    // Specifies the layout strategy for storing and updating the full-text index
-    enum Layout {
-        LAYOUT_UNSPECIFIED = 0;
-
-        // Simplest possible layout without support for relevance.
-        // Uses a single flat inverted index table (indexImplTable).
-        // Supports a single column only.
-        // Example source table:
-        //     ┌────┬────────────────────────────┐
-        //     │ id │ text                       │
-        //     ├────┼────────────────────────────┤
-        //     │ 1  │ "The quick brown fox"      │
-        //     │ 2  │ "The quick blue hare"      │
-        //     └────┴────────────────────────────┘
-        // Example inverted index table (indexImplTable):
-        //     ┌──────────────┬────┐
-        //     │ __ydb_token  │ id │
-        //     ├──────────────┼────┤
-        //     │ "The"        │ 1  │
-        //     │ "The"        │ 2  │
-        //     │ "blue"       │ 2  │
-        //     │ "brown"      │ 1  │
-        //     │ "fox"        │ 1  │
-        //     │ "hare"       │ 2  │
-        //     │ "quick"      │ 1  │
-        //     │ "quick"      │ 2  │
-        //     └──────────────┴────┘
-        FLAT = 1;
-
-        // Simple layout like FLAT, but with support for relevance.
-        // Uses multiple index tables. Supports a single column only.
-        // Example source table:
-        //     ┌────┬───────────────────────────────────────┐
-        //     │ id │ text                                  │
-        //     ├────┼───────────────────────────────────────┤
-        //     │ 1  │ "A quick fox catches quick hare"      │
-        //     │ 2  │ "The quick blue hare"                 │
-        //     └────┴───────────────────────────────────────┘
-        // Example inverted index table with term frequencies (indexImplTable):
-        //     ┌──────────────┬────┬────────────┐
-        //     │ __ydb_token  │ id │ __ydb_freq │
-        //     ├──────────────┼────┼────────────┤
-        //     │ "A"          │ 1  │ 1          │
-        //     │ "The"        │ 2  │ 1          │
-        //     │ "blue"       │ 2  │ 1          │
-        //     │ "catches"    │ 1  │ 1          │
-        //     │ "fox"        │ 1  │ 1          │
-        //     │ "hare"       │ 1  │ 1          │
-        //     │ "hare"       │ 2  │ 1          │
-        //     │ "quick"      │ 1  │ 2          │
-        //     │ "quick"      │ 2  │ 1          │
-        //     └──────────────┴────┴────────────┘
-        // Term dictionary table (indexImplDictTable):
-        //     ┌──────────────┬────────────┐
-        //     │ __ydb_token  │ __ydb_freq │
-        //     ├──────────────┼────────────┤
-        //     │ "A"          │ 1          │
-        //     │ "The"        │ 1          │
-        //     │ "blue"       │ 1          │
-        //     │ "catches"    │ 1          │
-        //     │ "fox"        │ 1          │
-        //     │ "hare"       │ 2          │
-        //     │ "quick"      │ 2          │
-        //     └──────────────┴────────────┘
-        // Document statistics table (indexImplDocsTable):
-        //     ┌────┬──────────────┐
-        //     │ id │ __ydb_length │
-        //     ├────┼──────────────┤
-        //     │ 1  │ 6            │
-        //     │ 2  │ 4            │
-        //     └────┴──────────────┘
-        // Global statistics table (indexImplStatsTable):
-        //     ┌──────────┬─────────────────┬────────────────────┐
-        //     │ __ydb_id │ __ydb_doc_count │ __ydb_total_length │
-        //     ├──────────┼─────────────────┼────────────────────┤
-        //     │ 1        │ 2               │ 10                 │
-        //     └──────────┴─────────────────┴────────────────────┘
-        FLAT_RELEVANCE = 2;
-    }
-
     // Specifies how text is tokenized during indexing
     enum Tokenizer {
         TOKENIZER_UNSPECIFIED = 0;
@@ -302,8 +222,8 @@ message FulltextIndexSettings {
         Analyzers analyzers = 2;
     }
 
-    // See Layout enum
-    optional Layout layout = 1;
+    // Removed Layout field
+    reserved 1;
 
     // List of columns and their fulltext settings
     // Currently, this list should contain a single entry with specified analyzers
@@ -312,11 +232,82 @@ message FulltextIndexSettings {
     repeated ColumnAnalyzers columns = 2;
 }
 
+// Simplest possible layout without support for relevance.
+// Uses a single flat inverted index table (indexImplTable).
+// Supports a single column only.
+// Example source table:
+//     ┌────┬────────────────────────────┐
+//     │ id │ text                       │
+//     ├────┼────────────────────────────┤
+//     │ 1  │ "The quick brown fox"      │
+//     │ 2  │ "The quick blue hare"      │
+//     └────┴────────────────────────────┘
+// Example inverted index table (indexImplTable):
+//     ┌──────────────┬────┐
+//     │ __ydb_token  │ id │
+//     ├──────────────┼────┤
+//     │ "The"        │ 1  │
+//     │ "The"        │ 2  │
+//     │ "blue"       │ 2  │
+//     │ "brown"      │ 1  │
+//     │ "fox"        │ 1  │
+//     │ "hare"       │ 2  │
+//     │ "quick"      │ 1  │
+//     │ "quick"      │ 2  │
+//     └──────────────┴────┘
 message GlobalFulltextPlainIndex {
     GlobalIndexSettings settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
 }
 
+// Simple layout like Plain, but with support for relevance.
+// Uses multiple index tables. Supports a single column only.
+// Example source table:
+//     ┌────┬───────────────────────────────────────┐
+//     │ id │ text                                  │
+//     ├────┼───────────────────────────────────────┤
+//     │ 1  │ "A quick fox catches quick hare"      │
+//     │ 2  │ "The quick blue hare"                 │
+//     └────┴───────────────────────────────────────┘
+// Example inverted index table with term frequencies (indexImplTable):
+//     ┌──────────────┬────┬────────────┐
+//     │ __ydb_token  │ id │ __ydb_freq │
+//     ├──────────────┼────┼────────────┤
+//     │ "A"          │ 1  │ 1          │
+//     │ "The"        │ 2  │ 1          │
+//     │ "blue"       │ 2  │ 1          │
+//     │ "catches"    │ 1  │ 1          │
+//     │ "fox"        │ 1  │ 1          │
+//     │ "hare"       │ 1  │ 1          │
+//     │ "hare"       │ 2  │ 1          │
+//     │ "quick"      │ 1  │ 2          │
+//     │ "quick"      │ 2  │ 1          │
+//     └──────────────┴────┴────────────┘
+// Term dictionary table (indexImplDictTable):
+//     ┌──────────────┬────────────┐
+//     │ __ydb_token  │ __ydb_freq │
+//     ├──────────────┼────────────┤
+//     │ "A"          │ 1          │
+//     │ "The"        │ 1          │
+//     │ "blue"       │ 1          │
+//     │ "catches"    │ 1          │
+//     │ "fox"        │ 1          │
+//     │ "hare"       │ 2          │
+//     │ "quick"      │ 2          │
+//     └──────────────┴────────────┘
+// Document statistics table (indexImplDocsTable):
+//     ┌────┬──────────────┐
+//     │ id │ __ydb_length │
+//     ├────┼──────────────┤
+//     │ 1  │ 6            │
+//     │ 2  │ 4            │
+//     └────┴──────────────┘
+// Global statistics table (indexImplStatsTable):
+//     ┌──────────┬─────────────────┬────────────────────┐
+//     │ __ydb_id │ __ydb_doc_count │ __ydb_total_length │
+//     ├──────────┼─────────────────┼────────────────────┤
+//     │ 1        │ 2               │ 10                 │
+//     └──────────┴─────────────────┴────────────────────┘
 message GlobalFulltextRelevanceIndex {
     GlobalIndexSettings posting_table_settings = 1;
     FulltextIndexSettings fulltext_settings = 2;

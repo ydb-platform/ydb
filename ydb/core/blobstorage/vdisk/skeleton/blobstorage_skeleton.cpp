@@ -117,7 +117,7 @@ namespace NKikimr {
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
             // repeat later
-            ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats());
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1966,6 +1966,8 @@ namespace NKikimr {
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON LOCAL RECOVERY SUCCEEDED"
                     << " Marker# BSVS29");
 
+            bool writeMetadata = (ev->Get()->HasMetadata || AppData(ctx)->FeatureFlags.GetEnableTinyDisks());
+
             // run logger forwarder
             auto logWriter = CreateRecoveryLogWriter(PDiskCtx->PDiskId, Db->SkeletonID,
                     PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, Db->LsnMngr->GetStartLsn(),
@@ -1980,13 +1982,13 @@ namespace NKikimr {
 
             // run LogCutter in the same mailbox
             TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
-                    (TActorId)(Db->LoggerID)};
+                    (TActorId)(Db->LoggerID), writeMetadata};
             Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run metadata actor
             auto logCtx = MakeIntrusive<TVDiskLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
-                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID));
+                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID), writeMetadata);
             auto metadataActor = CreateMetadataActor(logCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
@@ -2886,7 +2888,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvLocalRecoveryDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -2939,7 +2941,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3012,7 +3014,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3046,7 +3048,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)

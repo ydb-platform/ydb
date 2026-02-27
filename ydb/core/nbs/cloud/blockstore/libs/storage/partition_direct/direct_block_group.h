@@ -28,11 +28,13 @@ public:
     virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
@@ -78,10 +80,11 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    ui32 SyncRequestsBatchSize;
 
     class TDirtyMap;
     std::unique_ptr<TDirtyMap> DirtyMap;
-    TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
+    TVector<std::shared_ptr<TSyncRequestHandler>> SyncRequestsByDDiskId;
 
     std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
@@ -90,21 +93,25 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
+        ui32 index,
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
-        ui64 blocksCount);
+        ui64 blocksCount,
+        ui32 syncRequestsBatchSize);
 
     ~TDirectBlockGroup() override;
 
     void EstablishConnections(NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
@@ -134,12 +141,13 @@ private:
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
 
-    void ProcessSyncQueue();
+    void ProcessSyncQueue(size_t ddiskId);
 
-    void RequestBlockErase(const TSyncRequestHandler& requestHandler);
+    void RequestBlockErase(std::shared_ptr<TSyncRequestHandler> requestHandler);
 
     void HandleErasePersistentBufferResult(
         std::shared_ptr<TEraseRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);
 
@@ -153,6 +161,7 @@ private:
 
     void HandleSyncWithPersistentBufferResult(
         std::shared_ptr<TSyncRequestHandler> requestHandler,
+        ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 

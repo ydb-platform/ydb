@@ -208,6 +208,7 @@ namespace NKikimr::NTestShard {
             STLOG(PRI_ERROR, TEST_SHARD, TS26, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
                 (Status, record.GetStatus()), (ErrorReason, record.GetErrorReason()));
             if (const auto it = WritesInFlight.find(record.GetCookie()); it != WritesInFlight.end()) {
+                WriteCounters.RecordFail(it->second.KeysInQuery.size());
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
@@ -217,6 +218,7 @@ namespace NKikimr::NTestShard {
                 WritesInFlight.erase(it);
             }
             if (auto nh = PatchesInFlight.extract(record.GetCookie())) {
+                PatchCounters.RecordFail();
                 const TString& key = nh.mapped();
                 const auto it = Keys.find(key);
                 Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
@@ -224,6 +226,7 @@ namespace NKikimr::NTestShard {
                 RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
             }
             if (const auto it = DeletesInFlight.find(record.GetCookie()); it != DeletesInFlight.end()) {
+                DeleteCounters.RecordFail(it->second.KeysInQuery.size());
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
@@ -234,6 +237,7 @@ namespace NKikimr::NTestShard {
                 DeletesInFlight.erase(it);
             }
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
+                ReadCounters.RecordFail();
                 const auto& [key, timestamp, payloadInResponse, items] = it->second;
                 const auto jt = KeysBeingRead.find(key);
                 Y_ABORT_UNLESS(jt != KeysBeingRead.end() && jt->second);

@@ -1,0 +1,26 @@
+generic:
+  access_service_type: "yandex_v2"
+
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    token_file: ydb/mvp/oidc_proxy/examples/token_file.pb.txt
+
+oidc:
+  client_id: "client-id"
+  secret_name: "secret-name"
+  session_service_endpoint: "grpcs://session-service.cloud.yandex.net:8655"
+  session_service_token_name: "service-account-jwt"
+  authorization_server_address: "https://auth.cloud.yandex.net"
+  allowed_proxy_hosts:
+    - "*.host.net"
+    - "*.host-team.ru"

@@ -283,19 +283,12 @@ std::span<const std::string_view> GetImplTables(
                 return PrefixedGlobalKMeansTreeImplTables;
             }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
+            return GlobalFulltextPlainImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+            return GlobalFulltextWithRelevanceImplTables;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
-}
-
-std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
-    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-        return GlobalFulltextWithRelevanceImplTables;
-    }
-    return GlobalFulltextPlainImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {

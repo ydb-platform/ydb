@@ -5,6 +5,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -42,12 +43,6 @@ static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
-
-void SegmentationFaultHandler(int) {
-    Cerr << "segmentation fault call stack:" << Endl;
-    FormatBackTrace(&Cerr);
-    abort();
-}
 
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
@@ -112,7 +107,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
     {}
 
     void Start() {
-        signal(SIGSEGV, &SegmentationFaultHandler);
+        NTestUtils::SetupSignalHandlers();
         SetDispatchTimeout(TDuration::Seconds(20));
         InitNodes();
         SetLogBackend(NActors::CreateStderrBackend());

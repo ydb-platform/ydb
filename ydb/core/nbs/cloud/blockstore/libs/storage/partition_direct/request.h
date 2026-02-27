@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
+#include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -14,20 +15,16 @@ class TBaseRequestHandler
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
-    const TBlockRange64 Range;
+    ui32 VChunkIndex;
 
 public:
     TBaseRequestHandler(
         NActors::TActorSystem* actorSystem,
-        TBlockRange64 range);
+        ui32 vChunkIndex);
 
     virtual ~TBaseRequestHandler() = default;
 
     [[nodiscard]] NActors::TActorSystem* GetActorSystem() const;
-
-    [[nodiscard]] ui64 GetStartIndex() const;
-    [[nodiscard]] ui64 GetStartOffset() const;
-    [[nodiscard]] ui64 GetSize() const;
 
     virtual bool IsCompleted(ui64 requestId) = 0;
 
@@ -35,11 +32,31 @@ public:
 
     void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
 
+    [[nodiscard]] ui32 GetVChunkIndex() const;
+
     NWilson::TSpan Span;
     std::unordered_map<ui64, NWilson::TSpan> ChildSpanByRequestId;
 };
 
-class TWriteRequestHandler: public TBaseRequestHandler
+class TIORequestsHandler: public TBaseRequestHandler
+{
+private:
+    const TBlockRange64 Range;
+
+public:
+    TIORequestsHandler(
+        NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
+        TBlockRange64 range);
+
+    virtual ~TIORequestsHandler() = default;
+
+    [[nodiscard]] ui64 GetStartIndex() const;
+    [[nodiscard]] ui64 GetStartOffset() const;
+    [[nodiscard]] ui64 GetSize() const;
+};
+
+class TWriteRequestHandler: public TIORequestsHandler
 {
 public:
     struct TPersistentBufferWriteMeta
@@ -55,6 +72,7 @@ public:
 
     TWriteRequestHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
         ui64 tabletId);
@@ -88,56 +106,71 @@ private:
 class TSyncRequestHandler: public TBaseRequestHandler
 {
 public:
+    struct TSyncRequest
+    {
+        ui64 StartIndex;
+        ui64 Lsn;
+    };
+
     TSyncRequestHandler(
         NActors::TActorSystem* actorSystem,
-        ui64 startIndex,
+        ui32 vChunkIndex,
         ui8 persistentBufferIndex,
-        ui64 lsn,
         NWilson::TTraceId traceId,
         ui64 tabletId);
 
     ~TSyncRequestHandler() override = default;
 
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
+    NWilson::TSpan& GetChildSpan(ui64 requestId);
 
-    [[nodiscard]] ui64 GetLsn() const;
+    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
+    [[nodiscard]] ui64 OnSyncRequested(ui64 startIndex, ui64 lsn);
+
+    [[nodiscard]] const TVector<TSyncRequest>& GetSyncRequests() const;
+
+    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
+    [[nodiscard]] TVector<ui64> GetLsns() const;
+
 private:
     ui8 PersistentBufferIndex;
-    ui64 Lsn;
+    TVector<TSyncRequest> SyncRequests;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TEraseRequestHandler: public TBaseRequestHandler
 {
 public:
     TEraseRequestHandler(
         NActors::TActorSystem* actorSystem,
-        ui64 startIndex,
-        ui8 persistentBufferIndex,
-        ui64 lsn,
-        NWilson::TTraceId traceId,
-        ui64 tabletId);
+        std::shared_ptr<TSyncRequestHandler> syncRequestHandler);
 
     ~TEraseRequestHandler() override = default;
 
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
+    NWilson::TSpan& GetChildSpan(ui64 requestId);
 
-    [[nodiscard]] ui64 GetLsn() const;
+    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
+    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
+    [[nodiscard]] TVector<ui64> GetLsns() const;
+
 private:
-    ui8 PersistentBufferIndex;
-    ui64 Lsn;
+    std::shared_ptr<TSyncRequestHandler> SyncRequestHandler;
 };
 
-class TReadRequestHandler: public TBaseRequestHandler
+////////////////////////////////////////////////////////////////////////////////
+
+class TReadRequestHandler: public TIORequestsHandler
 {
 public:
     TReadRequestHandler(
         NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
         ui64 tabletId);

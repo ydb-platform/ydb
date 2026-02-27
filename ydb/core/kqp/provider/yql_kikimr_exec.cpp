@@ -2448,8 +2448,6 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
-                            // Set layout based on index type
-                            add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_plain_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
@@ -2458,8 +2456,6 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                            // Set layout based on index type
-                            add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));

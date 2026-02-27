@@ -33,6 +33,9 @@ namespace NLongTxService {
             EvSubscribeLock,
             EvLockStatus,
             EvUnsubscribeLock,
+            EvWaitingLockAdd,
+            EvWaitingLockRemove,
+            EvWaitingLockDeadlock,
             EvEnd,
         };
 
@@ -262,6 +265,45 @@ namespace NLongTxService {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
             }
+        };
+
+        struct TEvWaitingLockAdd
+            : TEventLocal<TEvWaitingLockAdd, EvWaitingLockAdd>
+        {
+            struct TLockInfo {
+                ui64 LockId;
+                ui32 LockNodeId;
+            };
+
+            TEvWaitingLockAdd(ui64 requestId, TLockInfo lock, TLockInfo otherLock)
+                : RequestId(requestId)
+                , Lock(lock)
+                , OtherLock(otherLock)
+            {}
+
+            ui64 RequestId;
+            TLockInfo Lock;
+            TLockInfo OtherLock;
+        };
+
+        struct TEvWaitingLockRemove
+            : TEventLocal<TEvWaitingLockRemove, EvWaitingLockRemove>
+        {
+            TEvWaitingLockRemove(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            ui64 RequestId;
+        };
+
+        struct TEvWaitingLockDeadlock
+            : TEventLocal<TEvWaitingLockDeadlock, EvWaitingLockDeadlock>
+        {
+            TEvWaitingLockDeadlock(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            ui64 RequestId;
         };
     };
 

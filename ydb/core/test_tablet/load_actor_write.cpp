@@ -128,6 +128,7 @@ namespace NKikimr::NTestShard {
                 (Latency, latency));
             WriteLatency.Add(TActivationContext::Monotonic(), latency);
             Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            WriteCounters.RecordOk(info.KeysInQuery.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 const auto& res = results[i];
                 Y_VERIFY_S(res.GetStatus() == NKikimrProto::OK, "TabletId# " << TabletId << " CmdWrite failed Status# "
@@ -150,6 +151,7 @@ namespace NKikimr::NTestShard {
             const auto& res = results[0];
             Y_VERIFY_S(res.GetStatus() == NKikimrProto::OK, "TabletId# " << TabletId << " CmdPatch failed Status# "
                 << NKikimrProto::EReplyStatus_Name(NKikimrProto::EReplyStatus(res.GetStatus())));
+            PatchCounters.RecordOk();
             const TString& key = nh.mapped();
             const auto it = Keys.find(key);
             Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");

@@ -7,6 +7,8 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
+#include <ydb/library/actors/async/event.h>
+
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/list.h>
@@ -293,14 +295,6 @@ struct TLockInfoBrokenPersistentListTag {};
 struct TLockInfoExpireListTag {};
 struct TLockInfoRangesListTag {};
 
-class TLockCallback : public TIntrusiveListItem<TLockCallback> {
-public:
-    virtual void Run() = 0;
-
-protected:
-    ~TLockCallback() = default;
-};
-
 /// Aggregates shard, point and range locks
 class TLockInfo
     : public TSimpleRefCount<TLockInfo>
@@ -448,10 +442,6 @@ public:
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
-    void AddOnRemovedCallback(TLockCallback& callback) {
-        OnRemovedCallbacks.PushBack(&callback);
-    }
-
 private:
     void MakeShardLock();
     bool AddShardLock(const TPathId& pathId);
@@ -498,7 +488,8 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
 
-    TIntrusiveList<TLockCallback> OnRemovedCallbacks;
+public:
+    TAsyncEvent OnRemovedEvent;
 };
 
 struct TTableLocksReadListTag {};
@@ -650,11 +641,12 @@ public:
         TRuntimeLockHolder(TRuntimeLockHolder&& rhs) noexcept
             : Self(rhs.Self)
             , Key(rhs.Key)
-            , ActivationCallbacks(std::move(rhs.ActivationCallbacks))
+            , Lock(std::move(rhs.Lock))
         {
             LinkBefore(&rhs);
             rhs.Unlink();
             rhs.Self = nullptr;
+            rhs.Lock = nullptr;
         }
 
         TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
@@ -662,10 +654,11 @@ public:
                 Reset();
                 Self = rhs.Self;
                 Key = rhs.Key;
-                ActivationCallbacks = std::move(rhs.ActivationCallbacks);
+                Lock = std::move(rhs.Lock);
                 LinkBefore(&rhs);
                 rhs.Unlink();
                 rhs.Self = nullptr;
+                rhs.Lock = nullptr;
             }
             return *this;
         }
@@ -688,36 +681,35 @@ public:
                 Self->RemoveRuntimeLock(Key, this);
             }
             Self = nullptr;
-            while (!ActivationCallbacks.Empty()) {
-                ActivationCallbacks.PopFront();
-            }
         }
 
-        void AddActivationCallback(TLockCallback& callback) {
-            ActivationCallbacks.PushBack(&callback);
+        const TRuntimeLockHolder& Predecessor() const {
+            Y_ENSURE(IsValid());
+            Y_ENSURE(!IsOwner());
+            return *Prev()->Node();
         }
 
-    private:
-        void Activate() {
-            while (!ActivationCallbacks.Empty()) {
-                auto* callback = ActivationCallbacks.PopFront();
-                callback->Run();
-            }
+        const TLockInfo::TPtr& GetLock() const {
+            return Lock;
         }
 
     private:
-        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key)
+        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key, TLockInfo::TPtr lock)
             : Self(self)
             , Key(key)
+            , Lock(std::move(lock))
         {}
 
     private:
         TTableLocks* Self;
         TRuntimeLocks::iterator Key;
-        TIntrusiveList<TLockCallback> ActivationCallbacks;
+        TLockInfo::TPtr Lock;
+
+    public:
+        TAsyncEvent OnChangedEvent;
     };
 
-    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key);
+    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock);
 
 private:
     void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
@@ -923,6 +915,7 @@ struct TLocksUpdate {
     // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
+    bool PreserveEmptyLock = false;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
@@ -1084,7 +1077,7 @@ public:
 
     void ResetUpdate() {
         if (Y_LIKELY(Update)) {
-            if (Update->Lock && Update->Lock->Empty()) {
+            if (Update->Lock && Update->Lock->Empty() && !Update->PreserveEmptyLock) {
                 Locker.RemoveLock(Update->LockTxId, nullptr);
             }
             Update = nullptr;

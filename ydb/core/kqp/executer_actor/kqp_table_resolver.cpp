@@ -105,7 +105,7 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
-                    auto& stage = stageMeta.GetStage(stageId);
+                    const auto& stage = stageMeta.GetStage(stageId);
                     AFL_ENSURE(stage.GetSinks().size() == 1);
                     const auto& sink = stage.GetSinks(0);
 

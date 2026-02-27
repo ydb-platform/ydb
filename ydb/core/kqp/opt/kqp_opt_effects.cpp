@@ -13,7 +13,7 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-const TTypeAnnotationNode* BuildReturningType(const TCoAtomList& returningColumns, const TKikimrTableDescription& tableDescription, TExprContext& ctx) {
+std::pair<const TTypeAnnotationNode*, TCoAtomList> BuildReturningType(const TCoAtomList& returningColumns, const TKikimrTableDescription& tableDescription, TExprContext& ctx) {
     TVector<const TItemExprType*> rowItems;
     rowItems.reserve(returningColumns.Size());
 
@@ -21,7 +21,19 @@ const TTypeAnnotationNode* BuildReturningType(const TCoAtomList& returningColumn
         const auto* columnType = tableDescription.GetColumnType(column.StringValue());
         rowItems.emplace_back(ctx.MakeType<TItemExprType>(column.StringValue(), columnType));
     }
-    return ctx.MakeType<TStructExprType>(rowItems);
+    auto resultStructType = ctx.MakeType<TStructExprType>(rowItems);
+
+    TVector<TCoAtom> returningList;
+    for (const auto& item : resultStructType->GetItems()) {
+        returningList.emplace_back(Build<TCoAtom>(ctx, returningColumns.Pos()).Value(item->GetName()).Done());
+    }
+
+    return {
+        static_cast<const TTypeAnnotationNode*>(resultStructType),
+        Build<TCoAtomList>(ctx, returningColumns.Pos())
+            .Add(returningList)
+            .Done()
+    };
 }
 
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
@@ -85,6 +97,8 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
         .Add(settings)
         .Done();
 
+    auto [returningType, returningList] = BuildReturningType(returningColumns, tableDescription, ctx);
+
     auto stage = Build<TDqStage>(ctx, expr.Pos())
         .Inputs()
             .Build()
@@ -104,7 +118,7 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
                 .Type<TCoAtom>()
                     .Build("ReturningSink")
                 .InputType(ExpandType(expr.Pos(), GetSeqItemType(*expr.Ref().GetTypeAnn()), ctx))
-                .OutputType(ExpandType(expr.Pos(), *BuildReturningType(returningColumns, tableDescription, ctx), ctx))
+                .OutputType(ExpandType(expr.Pos(), *returningType, ctx))
                 .Settings<TKqpTableSinkSettings>()
                     .Table(table)
                     .InconsistentWrite(allowInconsistentWrites
@@ -122,7 +136,7 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
                     .DefaultColumns(defaultColumns)
-                    .ReturningColumns(returningColumns)
+                    .ReturningColumns(returningList)
                     .Settings(settingsNode)
                     .Build()
                 .Build()
@@ -342,6 +356,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
     if (sinkEffect) {
+        auto [returningType, returningList] = BuildReturningType(node.ReturningColumns(), table, ctx);
         auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
             .Table(node.Table())
             .InconsistentWrite(settings.AllowInconsistentWrites
@@ -357,11 +372,11 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 ? ctx.NewAtom(node.Pos(), "true")
                 : ctx.NewAtom(node.Pos(), "false"))
             .DefaultColumns(node.DefaultColumns())
-            .ReturningColumns(node.ReturningColumns())
+            .ReturningColumns(returningList)
             .Settings()
                 .Build()
             .Done();
-        auto sink = [&ctx, &node, &sinkSettings, &table](bool needOutputTransform) {
+        auto sink = [&ctx, &node, &sinkSettings, &returningType](bool needOutputTransform) {
             if (!needOutputTransform) {
                 return Build<TDqSink>(ctx, node.Pos())
                     .DataSink<TKqpTableSink>()
@@ -381,7 +396,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                     .Type<TCoAtom>()
                         .Build("ReturningSink")
                     .InputType(ExpandType(node.Pos(), GetSeqItemType(*node.Input().Ref().GetTypeAnn()), ctx))
-                    .OutputType(ExpandType(node.Pos(), *BuildReturningType(node.ReturningColumns(), table, ctx), ctx))
+                    .OutputType(ExpandType(node.Pos(), *returningType, ctx))
                     .Settings(sinkSettings)
                     .Done().Ptr();
             }
@@ -537,6 +552,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
     if (sinkEffect) {
+        auto [returningType, returningList] = BuildReturningType(node.ReturningColumns(), table, ctx);
         auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
             .Table(node.Table())
             .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
@@ -550,11 +566,11 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
             .DefaultColumns<TCoAtomList>().Build()
-            .ReturningColumns(node.ReturningColumns())
+            .ReturningColumns(returningList)
             .Settings()
                 .Build()
             .Done();
-        auto sink = [&ctx, &node, &sinkSettings, &table](bool needOutputTransform) {
+        auto sink = [&ctx, &node, &sinkSettings, &returningType](bool needOutputTransform) {
             if (!needOutputTransform) {
                 return Build<TDqSink>(ctx, node.Pos())
                     .DataSink<TKqpTableSink>()
@@ -574,7 +590,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                     .Type<TCoAtom>()
                         .Build("ReturningSink")
                     .InputType(ExpandType(node.Pos(), GetSeqItemType(*node.Input().Ref().GetTypeAnn()), ctx))
-                    .OutputType(ExpandType(node.Pos(), *BuildReturningType(node.ReturningColumns(), table, ctx), ctx))
+                    .OutputType(ExpandType(node.Pos(), *returningType, ctx))
                     .Settings(sinkSettings)
                     .Done().Ptr();
             }

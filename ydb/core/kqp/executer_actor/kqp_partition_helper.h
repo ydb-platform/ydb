@@ -9,30 +9,6 @@
 
 namespace NKikimr::NKqp {
 
-struct TShardInfo {
-    struct TColumnWriteInfo {
-        ui32 MaxValueSizeBytes = 0;
-    };
-
-    TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
-    TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
-    THashMap<TString, TColumnWriteInfo> ColumnWrites;
-
-    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
-};
-
-using TShardIdToInfoMap = THashMap<ui64 /* shardId */, TShardInfo>;
-
-class TShardInfoWithId: public TShardInfo {
-public:
-    ui64 ShardId;
-    TShardInfoWithId(const ui64 shardId, TShardInfo&& base)
-        : TShardInfo(std::move(base))
-        , ShardId(shardId) {
-
-    }
-};
-
 struct TPhysicalShardReadSettings: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     ui64 ItemsLimit = 0;
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
@@ -48,18 +24,17 @@ public:
 
     TShardIdToInfoMap Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan);
 
-    const TShardIdToInfoMap& Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
+    TShardIdToInfoMap Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
     TShardIdToInfoMap PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
 
-    std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo);
+    // Places all ranges from all partitions under shard id of the first or last extracted range from source.
+    std::pair<ui64 /* shardId */, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo);
 
 private:
     const NMiniKQL::THolderFactory* HolderFactory;
     const NMiniKQL::TTypeEnvironment* TypeEnv;
     const TPartitionPrunerConfig Config;
-
-    THashMap<NYql::NDq::TStageId, std::pair<TShardIdToInfoMap, bool /* isFullScan*/ >> SourceScanStageIdToParititions;
 };
 
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,

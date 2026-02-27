@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-VERSION(v1.9.1)
+VERSION(v1.10.2)
 
 SRCS(
     active_help.go

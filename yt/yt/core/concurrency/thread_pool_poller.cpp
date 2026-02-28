@@ -13,7 +13,7 @@
 
 #include <library/cpp/yt/threading/notification_handle.h>
 
-#include <library/cpp/yt/memory/ref_tracked.h>
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
 #include <util/system/thread.h>
 
@@ -35,6 +35,7 @@ static constexpr int MaxEventsPerPoll = 1024;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TThreadPoolPollerImpl;
+using TThreadPoolPollerImplPtr = TIntrusivePtr<TThreadPoolPollerImpl>;
 
 namespace {
 
@@ -123,12 +124,12 @@ struct TPollableCookie
     , public TCookieState
 {
     const TPromise<void> UnregisterPromise = NewPromise<void>();
+    const TThreadPoolPollerImplPtr PollerThread;
 
-    TIntrusivePtr<TThreadPoolPollerImpl> PollerThread;
-    IInvokerPtr Invoker;
+    TAtomicIntrusivePtr<IInvoker> Invoker;
 
-    explicit TPollableCookie(TThreadPoolPollerImpl* pollerThread)
-        : PollerThread(pollerThread)
+    explicit TPollableCookie(TThreadPoolPollerImplPtr pollerThread)
+        : PollerThread(std::move(pollerThread))
     { }
 
     static TPollableCookie* TryFromPollable(IPollable* pollable)
@@ -229,10 +230,9 @@ public:
         }
 
         auto cookie = New<TPollableCookie>(this);
-        cookie->Invoker = FairShareThreadPool_->GetInvoker(
-            poolName,
-            Format("%v", pollable.Get()));
         pollable->SetCookie(std::move(cookie));
+        SetPollableInvoker(pollable, poolName);
+
         RegisterQueue_.Enqueue(pollable);
 
         YT_LOG_DEBUG("Pollable registered (%v)",
@@ -243,10 +243,7 @@ public:
 
     void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
     {
-        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
-        cookie->Invoker = FairShareThreadPool_->GetInvoker(
-            poolName,
-            Format("%v", pollable.Get()));
+        SetPollableInvoker(pollable, poolName);
     }
 
     // TODO(lukyan): Method OnShutdown in the interface and returned future are redundant.
@@ -356,7 +353,7 @@ private:
                     DoShutdownPollable(cookie, pollable);
                     break;
                 case EFinishResult::Repeat:
-                    cookie->Invoker->Invoke(BIND(TRunEventGuard(pollable)));
+                    InvokeEventHandler(pollable, cookie);
                     break;
                 case EFinishResult::None:
                     break;
@@ -385,13 +382,25 @@ private:
 
     std::array<TPollerImpl::TEvent, MaxEventsPerPoll> PooledImplEvents_;
 
+    static void InvokeEventHandler(IPollable* pollable, TPollableCookie* cookie)
+    {
+        cookie->Invoker.Acquire()->Invoke(BIND(TRunEventGuard(pollable)));
+    }
+
+    void SetPollableInvoker(const IPollablePtr& pollable, const std::string& poolName)
+    {
+        auto invoker = FairShareThreadPool_->GetInvoker(poolName, Format("%v", pollable.Get()));
+        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
+        cookie->Invoker.Store(std::move(invoker));
+    }
+
     // TODO(lukyan): Move static functions in Cookie?
     static void ScheduleEvent(const IPollablePtr& pollable, EPollControl control)
     {
-        // Can safely dereference pollable because even unregistered pollables are hold in Pollables_.
+        // Can safely dereference pollable because even unregistered pollables are held in Pollables_.
         auto* cookie = TPollableCookie::FromPollable(pollable.Get());
         if (cookie->AquireControl(ToUnderlying(control))) {
-            cookie->Invoker->Invoke(BIND(TRunEventGuard(pollable.Get())));
+            InvokeEventHandler(pollable.Get(), cookie);
         }
     }
 
@@ -405,6 +414,7 @@ private:
 
         cookie->UnregisterPromise.Set();
         cookie->Invoker.Reset();
+
         auto pollerThread = std::move(cookie->PollerThread);
         pollerThread->UnregisterQueue_.Enqueue(pollable);
         pollerThread->WakeupHandle_.Raise();
@@ -591,7 +601,7 @@ public:
     }
 
 private:
-    TIntrusivePtr<TThreadPoolPollerImpl> Poller_;
+    const TThreadPoolPollerImplPtr Poller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

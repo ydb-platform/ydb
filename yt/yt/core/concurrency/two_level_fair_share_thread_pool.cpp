@@ -293,7 +293,7 @@ bool operator<(const TExecutionPool& lhs, const TExecutionPool& rhs)
     return lhs.ExcessTime < rhs.ExcessTime;
 }
 
-using TExecutionPoolPtr = ::NYT::TIntrusivePtr<TExecutionPool>;
+using TExecutionPoolPtr = TIntrusivePtr<TExecutionPool>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -427,10 +427,10 @@ public:
 
         auto [bucketIt, bucketInserted] = BucketMapping_.emplace(std::pair(poolName, bucketName), nullptr);
 
-        auto bucket = bucketIt->second ? DangerousGetPtr(bucketIt->second) : nullptr;
+        auto bucket = bucketIt->second.Lock();
         if (!bucket) {
             bucket = New<TBucket>(bucketName, poolName, MakeStrong(this));
-            bucketIt->second = bucket.Get();
+            bucketIt->second = bucket;
             bucket->Pool = GetOrRegisterPool(bucket->PoolName);
         }
 
@@ -441,9 +441,9 @@ public:
     void RemoveBucket(TBucket* bucket)
     {
         auto guard = Guard(MappingLock_);
-        auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
 
-        if (bucketIt != BucketMapping_.end() && bucketIt->second == bucket) {
+        auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
+        if (bucketIt != BucketMapping_.end() && bucketIt->second.Get() == bucket) {
             BucketMapping_.erase(bucketIt);
         }
 
@@ -564,7 +564,7 @@ private:
     const TDuration PoolRetentionTime_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MappingLock_);
-    THashMap<std::pair<std::string, std::string>, TBucket*> BucketMapping_;
+    THashMap<std::pair<std::string, std::string>, TWeakPtr<TBucket>> BucketMapping_;
     THashMap<std::string, TExecutionPool*> PoolMapping_;
 
     TPoolQueue RetainPoolQueue_;

@@ -8,6 +8,7 @@
 #include "flat_page_blobs.h"
 #include "flat_page_frames.h"
 #include "flat_page_bloom.h"
+#include "flat_bloom_hash.h"
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
@@ -89,7 +90,7 @@ namespace NTable {
             TIntrusiveConstPtr<TPartScheme> Scheme;
             TIndexPages IndexPages;
             TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
-            TIntrusiveConstPtr<NPage::TBloom> ByKey;
+            TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> ByKeyPrefixes;
             TIntrusiveConstPtr<NPage::TFrames> Large;
             TIntrusiveConstPtr<NPage::TFrames> Small;
             size_t IndexesRawSize;
@@ -116,7 +117,7 @@ namespace NTable {
             , Large(std::move(params.Large))
             , Small(std::move(params.Small))
             , IndexPages(std::move(params.IndexPages))
-            , ByKey(std::move(params.ByKey))
+            , ByKeyPrefixes(std::move(params.ByKeyPrefixes))
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
@@ -141,9 +142,17 @@ namespace NTable {
                 << Stat.Coded << "b " << Stat.Rows << "r}";
         }
 
-        bool MightHaveKey(TStringBuf serializedKey) const
+        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
         {
-            return ByKey ? ByKey->MightHave(serializedKey) : true;
+            for (const auto& [prefixLen, bloom] : ByKeyPrefixes) {
+                if (!bloom || prefixLen == 0) {
+                    continue;
+                }
+                if (!bloom->MightHave(prefix.Get(Min<ui32>(prefixLen, Scheme->Groups[0].KeyTypes.size())))) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /**
@@ -169,7 +178,7 @@ namespace NTable {
             , Large(src.Large)
             , Small(src.Small)
             , IndexPages(src.IndexPages)
-            , ByKey(src.ByKey)
+            , ByKeyPrefixes(src.ByKeyPrefixes)
             , GarbageStats(src.GarbageStats)
             , Stat(src.Stat)
             , GroupsCount(src.GroupsCount)
@@ -187,7 +196,7 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TFrames> Large;
         const TIntrusiveConstPtr<NPage::TFrames> Small;
         const TIndexPages IndexPages;
-        const TIntrusiveConstPtr<NPage::TBloom> ByKey;
+        const TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> ByKeyPrefixes;
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
         const TStat Stat;

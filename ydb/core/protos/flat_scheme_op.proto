@@ -208,6 +208,7 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
+    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
 }
 
 message TSplitBoundary {

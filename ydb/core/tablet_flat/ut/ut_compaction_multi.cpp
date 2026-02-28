@@ -106,15 +106,15 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                     .Is(EReady::Gone);
 
                 // Verify bloom filter correctness
-                if (conf.ByKeyFilter) {
+                if (!conf.ByKeyFilterPrefixes.empty()) {
                     TRowTool tool(*born.Scheme);
                     for (auto it : xrange(size)) {
                         const auto key = tool.KeyCells(rows[it]);
                         const NBloom::TPrefix prefix(key);
                         auto* part = born.At(it >= split ? 1 : 0).Get();
-                        UNIT_ASSERT_C(part->ByKey, "Part is missing a bloom filter");
+                        UNIT_ASSERT_C(!part->ByKeyPrefixes.empty(), "Part is missing a bloom filter");
                         UNIT_ASSERT_C(
-                            part->MightHaveKey(prefix.Get(key.size())),
+                            part->MightHaveKeyPrefix(prefix),
                             "Part's bloom filter is missing key for row "
                             << tool.Describe(rows[it]));
                     }
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
-        initialConf.ByKeyFilter = true;
+        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = mass.Saved.Size();
 
         RunMainEdgeTest(mass.Model->Scheme, mass.Saved, initialConf, false, 2);
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
-        initialConf.ByKeyFilter = true;
+        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = mass.Saved.Size();
 
         auto initial =
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilter = true;
+        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = rows.Size();
 
         RunMainEdgeTest(lay.RowScheme(), rows, initialConf);
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilter = true;
+        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = rows.Size();
         initialConf.SmallEdge = 13;
 
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilter = true;
+        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = rows.Size();
         initialConf.LargeEdge = 13;
 

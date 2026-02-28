@@ -1182,11 +1182,10 @@ private:
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
 
-            if ((indexType == TIndexDescription::EType::LocalBloomFilter ||
-                 indexType == TIndexDescription::EType::LocalBloomNgramFilter) &&
+            if (indexType == TIndexDescription::EType::LocalBloomNgramFilter &&
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                    "Local bloom indexes are supported only for column tables"));
+                    "Local bloom ngram indexes are supported only for column tables"));
                 return TStatus::Error;
             }
 
@@ -1297,10 +1296,39 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
-                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                    if (!dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Local bloom index requires exactly one index column and does not support data columns"));
+                            "Local bloom index does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
+                    }
+                    if (meta->StoreType == EStoreType::Column) {
+                        // Column-store: keep existing restriction of exactly 1 column
+                        if (indexColums.size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index on column tables requires exactly one index column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        // Row-store: columns must be a left-prefix of PK
+                        if (indexColums.empty()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index requires at least one PK prefix column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (indexColums.size() > meta->KeyColumnNames.size()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Bloom filter prefix columns exceed the number of primary key columns"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (size_t i = 0; i < indexColums.size(); ++i) {
+                            if (indexColums[i] != meta->KeyColumnNames[i]) {
+                                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                                    << "Bloom filter column '" << indexColums[i]
+                                    << "' does not match PK column '" << meta->KeyColumnNames[i]
+                                    << "' at position " << i));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
                     }
 
                     specializedIndexDescription = std::move(localBloomFilterDescription);

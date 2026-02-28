@@ -148,8 +148,33 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &tableInfo = *Table(table);
 
         if (delta.HasByKeyFilter()) {
-            bool enabled = delta.GetByKeyFilter();
-            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilter, enabled);
+            // Legacy: convert ByKeyFilter bool to a prefix entry for full key
+            ui32 keyCount = tableInfo.KeyColumns.size();
+            TVector<ui32> prefixes = tableInfo.ByKeyFilterPrefixes;
+            if (delta.GetByKeyFilter()) {
+                if (std::find(prefixes.begin(), prefixes.end(), keyCount) == prefixes.end()) {
+                    prefixes.push_back(keyCount);
+                    Sort(prefixes);
+                }
+            } else {
+                auto it = std::find(prefixes.begin(), prefixes.end(), keyCount);
+                if (it != prefixes.end()) {
+                    prefixes.erase(it);
+                }
+            }
+            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilterPrefixes, prefixes);
+        }
+
+        if (delta.ByKeyFilterPrefixesSize() > 0) {
+            TVector<ui32> prefixes;
+            for (auto p : delta.GetByKeyFilterPrefixes()) {
+                if (p > 0) {
+                    prefixes.push_back(p);
+                }
+            }
+            SortUnique(prefixes);
+            // A single 0 entry means "clear all", resulting in empty vector
+            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilterPrefixes, prefixes);
         }
 
         if (delta.HasEraseCacheEnabled()) {

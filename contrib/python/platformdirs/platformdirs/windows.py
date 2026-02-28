@@ -63,7 +63,7 @@ class Windows(PlatformDirsABC):
 
     @property
     def site_config_dir(self) -> str:
-        """:return: config directory shared by the users, same as `site_data_dir`"""
+        """:return: config directory shared by users, same as `site_data_dir`"""
         return self.site_data_dir
 
     @property
@@ -216,53 +216,85 @@ def get_win_folder_from_registry(csidl_name: str) -> str:
     return str(directory)
 
 
+_KNOWN_FOLDER_GUIDS: dict[str, str] = {
+    "CSIDL_APPDATA": "{3EB685DB-65F9-4CF6-A03A-E3EF65729F3D}",
+    "CSIDL_COMMON_APPDATA": "{62AB5D82-FDC1-4DC3-A9DD-070D1D495D97}",
+    "CSIDL_LOCAL_APPDATA": "{F1B32785-6FBA-4FCF-9D55-7B8E7F157091}",
+    "CSIDL_PERSONAL": "{FDD39AD0-238F-46AF-ADB4-6C85480369C7}",
+    "CSIDL_MYPICTURES": "{33E28130-4E1E-4676-835A-98395C3BC3BB}",
+    "CSIDL_MYVIDEO": "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
+    "CSIDL_MYMUSIC": "{4BD8D571-6D19-48D3-BE97-422220080E43}",
+    "CSIDL_DOWNLOADS": "{374DE290-123F-4565-9164-39C4925E467B}",
+    "CSIDL_DESKTOPDIRECTORY": "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
+}
+
+
 def get_win_folder_via_ctypes(csidl_name: str) -> str:
-    """Get folder with ctypes."""
-    # There is no 'CSIDL_DOWNLOADS'.
-    # Use 'CSIDL_PROFILE' (40) and append the default folder 'Downloads' instead.
-    # https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+    """
+    Get folder via :func:`SHGetKnownFolderPath`.
 
-    import ctypes  # noqa: PLC0415
+    See https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath.
 
-    csidl_const = {
-        "CSIDL_APPDATA": 26,
-        "CSIDL_COMMON_APPDATA": 35,
-        "CSIDL_LOCAL_APPDATA": 28,
-        "CSIDL_PERSONAL": 5,
-        "CSIDL_MYPICTURES": 39,
-        "CSIDL_MYVIDEO": 14,
-        "CSIDL_MYMUSIC": 13,
-        "CSIDL_DOWNLOADS": 40,
-        "CSIDL_DESKTOPDIRECTORY": 16,
-    }.get(csidl_name)
-    if csidl_const is None:
+    """
+    if sys.platform != "win32":  # only needed for type checker to know that this code runs only on Windows
+        raise NotImplementedError
+    from ctypes import HRESULT, POINTER, Structure, WinDLL, byref, create_unicode_buffer, wintypes  # noqa: PLC0415
+
+    class _GUID(Structure):
+        _fields_ = [
+            ("Data1", wintypes.DWORD),
+            ("Data2", wintypes.WORD),
+            ("Data3", wintypes.WORD),
+            ("Data4", wintypes.BYTE * 8),
+        ]
+
+    ole32 = WinDLL("ole32")
+    ole32.CLSIDFromString.restype = HRESULT
+    ole32.CLSIDFromString.argtypes = [wintypes.LPCOLESTR, POINTER(_GUID)]
+    ole32.CoTaskMemFree.restype = None
+    ole32.CoTaskMemFree.argtypes = [wintypes.LPVOID]
+
+    shell32 = WinDLL("shell32")
+    shell32.SHGetKnownFolderPath.restype = HRESULT
+    shell32.SHGetKnownFolderPath.argtypes = [POINTER(_GUID), wintypes.DWORD, wintypes.HANDLE, POINTER(wintypes.LPWSTR)]
+
+    kernel32 = WinDLL("kernel32")
+    kernel32.GetShortPathNameW.restype = wintypes.DWORD
+    kernel32.GetShortPathNameW.argtypes = [wintypes.LPWSTR, wintypes.LPWSTR, wintypes.DWORD]
+
+    folder_guid = _KNOWN_FOLDER_GUIDS.get(csidl_name)
+    if folder_guid is None:
         msg = f"Unknown CSIDL name: {csidl_name}"
         raise ValueError(msg)
 
-    buf = ctypes.create_unicode_buffer(1024)
-    windll = getattr(ctypes, "windll")  # noqa: B009 # using getattr to avoid false positive with mypy type checker
-    windll.shell32.SHGetFolderPathW(None, csidl_const, None, 0, buf)
+    guid = _GUID()
+    ole32.CLSIDFromString(folder_guid, byref(guid))
 
-    # Downgrade to short path name if it has high-bit chars.
-    if any(ord(c) > 255 for c in buf):  # noqa: PLR2004
-        buf2 = ctypes.create_unicode_buffer(1024)
-        if windll.kernel32.GetShortPathNameW(buf.value, buf2, 1024):
-            buf = buf2
+    path_ptr = wintypes.LPWSTR()
+    shell32.SHGetKnownFolderPath(byref(guid), 0, None, byref(path_ptr))
+    result = path_ptr.value
+    ole32.CoTaskMemFree(path_ptr)
 
-    if csidl_name == "CSIDL_DOWNLOADS":
-        return os.path.join(buf.value, "Downloads")  # noqa: PTH118
+    if result is None:
+        msg = f"SHGetKnownFolderPath returned NULL for {csidl_name}"
+        raise ValueError(msg)
 
-    return buf.value
+    if any(ord(c) > 255 for c in result):  # noqa: PLR2004
+        buf = create_unicode_buffer(1024)
+        if kernel32.GetShortPathNameW(result, buf, 1024):
+            result = buf.value
+
+    return result
 
 
 def _pick_get_win_folder() -> Callable[[str], str]:
+    """Select the best method to resolve Windows folder paths: ctypes, then registry, then environment variables."""
     try:
-        import ctypes  # noqa: PLC0415
+        import ctypes  # noqa: PLC0415, F401
     except ImportError:
         pass
     else:
-        if hasattr(ctypes, "windll"):
-            return get_win_folder_via_ctypes
+        return get_win_folder_via_ctypes
     try:
         import winreg  # noqa: PLC0415, F401
     except ImportError:

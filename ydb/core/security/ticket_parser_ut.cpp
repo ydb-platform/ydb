@@ -15,6 +15,7 @@
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include "ticket_parser_impl.h"
 #include "ticket_parser.h"
 
 namespace NKikimr {
@@ -72,6 +73,49 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     memcpy(request->Pos(), data.data(), size);
     request->Advance(size);
 }
+
+// Parser with a custom GetExpireTime that returns a shorter TTL.
+// Used to verify that the parser correctly uses the overridden expire time
+// from a subclass (e.g. for TVM tokens with their own TTL from the TVM service).
+class TTicketParserWithCustomExpireTime : public TTicketParserImpl<TTicketParserWithCustomExpireTime> {
+    using TBase = TTicketParserImpl<TTicketParserWithCustomExpireTime>;
+    using TBase::TBase;
+    friend TBase;
+
+public:
+    enum class ETokenType {
+        Unknown,
+        Unsupported,
+        AccessService,
+        NebiusAccessService,
+        Builtin,
+        Login,
+        ApiKey,
+        Certificate,
+    };
+
+    using TTokenRecord = TBase::TTokenRecordBase;
+
+    bool* GetExpireTimeCalled;
+
+    TTicketParserWithCustomExpireTime(const TTicketParserSettings& settings, bool* flag)
+        : TBase(settings)
+        , GetExpireTimeCalled(flag)
+    {}
+
+    template <typename TRecord>
+    TInstant GetExpireTime(const TRecord& /*record*/, TInstant now) const {
+        *GetExpireTimeCalled = true;
+        return now + TDuration::Hours(1);
+    }
+
+private:
+    THashMap<TString, TTokenRecord> UserTokens;
+
+    THashMap<TString, TTokenRecord>& GetUserTokens() {
+        return UserTokens;
+    }
+};
 
 } // namespace
 
@@ -2316,6 +2360,51 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAuthorizationModify) {
         AuthorizationModify<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(CustomExpireTimeFromSubclassIsUsed) {
+        // Regression test: token expire time must come from the parser subclass override,
+        // not from the base class default. This matters for parsers that derive TTL from
+        // the auth service response (e.g. TVM tokens carry their own expiry from TVM service).
+        using namespace Tests;
+
+        bool expireTimeCalledFlag = false;
+
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(false);
+
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = [&expireTimeCalledFlag](const TTicketParserSettings& s) -> IActor* {
+            return new TTicketParserWithCustomExpireTime(s, &expireTimeCalledFlag);
+        };
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
+            new TEvTicketParser::TEvAuthorizeTicket("user@builtin")), 0);
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result =
+            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT(result->Token != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user@builtin");
+
+        UNIT_ASSERT_C(expireTimeCalledFlag,
+            "Token expire time was not taken from the parser subclass override");
     }
 }
 

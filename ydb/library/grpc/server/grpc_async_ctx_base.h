@@ -58,14 +58,14 @@ public:
         return keys;
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const {
+    TVector<TString> GetPeerMetaValues(TStringBuf key) const {
         const auto& clientMetadata = Context.client_metadata();
         const auto range = clientMetadata.equal_range(grpc::string_ref{key.data(), key.size()});
         if (range.first == range.second) {
             return {};
         }
 
-        TVector<TStringBuf> values;
+        TVector<TString> values;
         values.reserve(std::distance(range.first, range.second));
 
         for (auto it = range.first; it != range.second; ++it) {

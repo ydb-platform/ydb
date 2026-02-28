@@ -168,25 +168,25 @@ public:
         return PeerName;
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+    TVector<TString> GetPeerMetaValues(TStringBuf key) const override {
         if (key == NYdb::YDB_DATABASE_HEADER) {
-            return {TStringBuf(Database)};
+            return {Database};
         }
         if (key == NYdb::YDB_AUTH_TICKET_HEADER) {
-            return Token ? TVector{TStringBuf(*Token)} : TVector<TStringBuf>();
+            return Token ? TVector{*Token} : TVector<TString>();
         }
         if (key == NYdb::YDB_REQUEST_TYPE_HEADER) {
-            return RequestType ? TVector{TStringBuf(*RequestType)} : TVector<TStringBuf>();
+            return RequestType ? TVector{*RequestType} : TVector<TString>();
         }
         if (key == NYdb::YDB_TRACE_ID_HEADER) {
-            return TraceId ? TVector{TStringBuf(TraceId)} : TVector<TStringBuf>();
+            return TraceId ? TVector{TraceId} : TVector<TString>();
         }
         if (key == NYdb::OTEL_TRACE_HEADER) {
-            return ParentTraceId ? TVector{TStringBuf(ParentTraceId)} : TVector<TStringBuf>();
+            return ParentTraceId ? TVector{ParentTraceId} : TVector<TString>();
         }
 
         const auto it = PeerMeta.find(TString(key));
-        return it != PeerMeta.end() ? TVector{TStringBuf(it->second)} : TVector<TStringBuf>();
+        return it != PeerMeta.end() ? TVector{it->second} : TVector<TString>();
     }
 
     void PutPeerMeta(const TString& key, const TString& value) {

@@ -793,21 +793,21 @@ private:
     NYql::TIssueManager IssueManager_;
 };
 
-inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
+inline TMaybe<TString> ToMaybe(const TVector<TString>& vec) {
     if (vec.empty()) {
         return {};
     }
     return TString{vec[0]};
 }
 
-inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
+inline const TMaybe<TString> ExtractYdbToken(const TVector<TString>& authHeadValues) {
     if (authHeadValues.empty()) {
         return {};
     }
     return TString{authHeadValues[0]};
 }
 
-inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
+inline const TMaybe<TString> ExtractDatabaseName(const TVector<TString>& dbHeaderValues) {
     if (dbHeaderValues.empty()) {
         return {};
     }

@@ -75,7 +75,7 @@ public:
 
     virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
     virtual TString GetPeerName() const = 0;
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
+    virtual TVector<TString> GetPeerMetaValues(TStringBuf key) const = 0;
     virtual grpc_compression_level GetCompressionLevel() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
     virtual TString GetRpcMethodName() const = 0;
@@ -656,7 +656,7 @@ private:
             return Self->GetPeer();
         }
 
-        TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        TVector<TString> GetPeerMetaValues(TStringBuf key) const override {
             return Self->GetPeerMetaValues(key);
         }
 

@@ -31,7 +31,7 @@ public:
     virtual void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details);
     virtual TInstant Deadline() const;
     virtual TSet<TStringBuf> GetPeerMetaKeys() const;
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const;
+    virtual TVector<TString> GetPeerMetaValues(TStringBuf key) const;
     virtual TVector<TStringBuf> FindClientCert() const {return {};}
     virtual grpc_compression_level GetCompressionLevel() const { return GRPC_COMPRESS_LEVEL_NONE; }
     virtual TString GetEndpointId() const;

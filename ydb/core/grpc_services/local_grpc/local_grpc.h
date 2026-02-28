@@ -38,7 +38,7 @@ public:
         return {};
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+    TVector<TString> GetPeerMetaValues(TStringBuf key) const override {
         auto value = BaseRequest_->GetPeerMetaValues(TString{key});
         if (value) {
             return {std::move(*value)};

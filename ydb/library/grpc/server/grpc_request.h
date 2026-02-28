@@ -180,7 +180,7 @@ public:
         return TBaseAsyncContext<TService>::GetPeerMetaKeys();
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+    TVector<TString> GetPeerMetaValues(TStringBuf key) const override {
         return TBaseAsyncContext<TService>::GetPeerMetaValues(key);
     }
 

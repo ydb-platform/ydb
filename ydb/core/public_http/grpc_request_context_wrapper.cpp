@@ -56,7 +56,7 @@ namespace NKikimr::NPublicHttp {
         return {};
     }
 
-    TVector<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
+    TVector<TString> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
         if (key == "x-ydb-database"sv) {
             return { RequestContext.GetDb() };
         }

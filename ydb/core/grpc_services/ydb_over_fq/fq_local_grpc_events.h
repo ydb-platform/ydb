@@ -20,7 +20,7 @@ public:
         , Scope_{"yandexcloud:/" + TBase::GetBaseRequest().GetDatabaseName().GetOrElse("/")}
     {}
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+    TVector<TString> GetPeerMetaValues(TStringBuf key) const override {
         if (key == "x-ydb-fq-project") {
             return {Scope_};
         }

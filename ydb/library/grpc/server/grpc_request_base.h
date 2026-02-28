@@ -84,7 +84,7 @@ public:
     virtual TSet<TStringBuf> GetPeerMetaKeys() const = 0;
 
     //! Returns peer optional metavalue
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
+    virtual TVector<TString> GetPeerMetaValues(TStringBuf key) const = 0;
 
     virtual TVector<TStringBuf> FindClientCert() const = 0;
 

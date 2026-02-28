@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/kqp/workload_service/actors
     ydb/core/testlib
+    ydb/core/util
     ydb/library/aclib
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/services/persqueue_v1

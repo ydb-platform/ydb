@@ -87,7 +87,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         auto channel = this->CreateChannel(outerHost->GetAddress());
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
-        auto error = req->Invoke().Get();
+        auto error = req->Invoke().BlockingGet();
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));
@@ -106,7 +106,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
 
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
-        auto error = req->Invoke().Get();
+        auto error = req->Invoke().BlockingGet();
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));
@@ -127,7 +127,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         req->set_redirection_address(innerHost->GetAddress());
-        auto error = req->Invoke().Get();
+        auto error = req->Invoke().BlockingGet();
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));
         ASSERT_TRUE(IsChannelFailureErrorHandled(error));

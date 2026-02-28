@@ -97,7 +97,7 @@ TEST_F(TTlsTest, SimplePingPong)
     auto buffer = TSharedRef::FromString(TString("ping"));
     auto outputBuffer = TSharedMutableRef::Allocate(4);
 
-    auto result = firstSide->Write(buffer).Get();
+    auto result = firstSide->Write(buffer).BlockingGet();
     ASSERT_EQ(secondSide->Read(outputBuffer).BlockingGet().ValueOrThrow(), 4u);
     result.ThrowOnError();
     ASSERT_EQ(ToString(outputBuffer), ToString(buffer));

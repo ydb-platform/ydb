@@ -64,7 +64,7 @@ TEST_F(TNetTest, TransferFourBytes)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    a->Write(TSharedRef::FromString("ping")).Get();
+    a->Write(TSharedRef::FromString("ping")).BlockingGet();
 
     auto buffer = TSharedMutableRef::Allocate(10);
     ASSERT_EQ(4u, b->Read(buffer).BlockingGet().ValueOrThrow());

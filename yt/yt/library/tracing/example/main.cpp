@@ -134,7 +134,7 @@ int main(int argc, char* argv[])
             DelayedSamplingExample(endpoint);
         }
 
-        jaeger->WaitFlush().Get();
+        jaeger->WaitFlush().BlockingGet();
     } catch (const std::exception& ex) {
         Cerr << ex.what() << Endl;
         return 1;

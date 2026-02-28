@@ -31,7 +31,7 @@ TEST(TDynamicSignatureValidatorTest, SetUnderlying)
     dynamicValidator->SetUnderlying(CreateAlwaysThrowingSignatureValidator());
 
     EXPECT_THROW_WITH_SUBSTRING(
-        dynamicValidator->Validate(signature).Get(),
+        dynamicValidator->Validate(signature).BlockingGet(),
         "unsupported");
 }
 

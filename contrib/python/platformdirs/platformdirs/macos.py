@@ -6,22 +6,20 @@ import os.path
 import sys
 from typing import TYPE_CHECKING
 
+from ._xdg import XDGMixin
 from .api import PlatformDirsABC
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class MacOS(PlatformDirsABC):
+class _MacOSDefaults(PlatformDirsABC):
     """
-    Platform directories for the macOS operating system.
+    Default platform directories for macOS without XDG environment variable overrides.
 
     Follows the guidance from
-    `Apple documentation <https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html>`_.
-    Makes use of the `appname <platformdirs.api.PlatformDirsABC.appname>`,
-    `version <platformdirs.api.PlatformDirsABC.version>`,
-    `ensure_exists <platformdirs.api.PlatformDirsABC.ensure_exists>`.
-
+    `Apple's File System Programming Guide <https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html>`_.
+    The XDG env var handling is in :class:`~platformdirs._xdg.XDGMixin`.
     """
 
     @property
@@ -30,22 +28,12 @@ class MacOS(PlatformDirsABC):
         return self._append_app_name_and_version(os.path.expanduser("~/Library/Application Support"))  # noqa: PTH111
 
     @property
-    def site_data_dir(self) -> str:
-        """
-        :return: data directory shared by users, e.g. ``/Library/Application Support/$appname/$version``.
-          If we're using a Python binary managed by `Homebrew <https://brew.sh>`_, the directory
-          will be under the Homebrew prefix, e.g. ``$homebrew_prefix/share/$appname/$version``.
-          If `multipath <platformdirs.api.PlatformDirsABC.multipath>` is enabled, and we're in Homebrew,
-          the response is a multi-path string separated by ":", e.g.
-          ``$homebrew_prefix/share/$appname/$version:/Library/Application Support/$appname/$version``
-        """
+    def _site_data_dirs(self) -> list[str]:
         is_homebrew = "/opt/python" in sys.prefix
         homebrew_prefix = sys.prefix.split("/opt/python")[0] if is_homebrew else ""
         path_list = [self._append_app_name_and_version(f"{homebrew_prefix}/share")] if is_homebrew else []
         path_list.append(self._append_app_name_and_version("/Library/Application Support"))
-        if self.multipath:
-            return os.pathsep.join(path_list)
-        return path_list[0]
+        return path_list
 
     @property
     def site_data_path(self) -> Path:
@@ -58,9 +46,8 @@ class MacOS(PlatformDirsABC):
         return self.user_data_dir
 
     @property
-    def site_config_dir(self) -> str:
-        """:return: config directory shared by the users, same as `site_data_dir`"""
-        return self.site_data_dir
+    def _site_config_dirs(self) -> list[str]:
+        return self._site_data_dirs
 
     @property
     def user_cache_dir(self) -> str:
@@ -139,6 +126,21 @@ class MacOS(PlatformDirsABC):
     def site_runtime_dir(self) -> str:
         """:return: runtime directory shared by users, same as `user_runtime_dir`"""
         return self.user_runtime_dir
+
+
+class MacOS(XDGMixin, _MacOSDefaults):
+    """
+    Platform directories for the macOS operating system.
+
+    Follows the guidance from
+    `Apple documentation <https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html>`_.
+    Makes use of the `appname <platformdirs.api.PlatformDirsABC.appname>`,
+    `version <platformdirs.api.PlatformDirsABC.version>`,
+    `ensure_exists <platformdirs.api.PlatformDirsABC.ensure_exists>`.
+
+    XDG environment variables (e.g. ``$XDG_DATA_HOME``) are supported and take precedence over macOS defaults.
+
+    """
 
 
 __all__ = [

@@ -13,7 +13,15 @@ if TYPE_CHECKING:
 
 
 class PlatformDirsABC(ABC):  # noqa: PLR0904
-    """Abstract base class for platform directories."""
+    """
+    Abstract base class defining all platform directory properties, their :class:`~pathlib.Path` variants, and
+    iterators.
+
+    Platform-specific subclasses (e.g. :class:`~platformdirs.windows.Windows`,
+    :class:`~platformdirs.macos.MacOS`, :class:`~platformdirs.unix.Unix`) implement the abstract
+    properties to return the appropriate paths for each operating system.
+
+    """
 
     def __init__(  # noqa: PLR0913, PLR0917
         self,
@@ -37,7 +45,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         :param ensure_exists: See `ensure_exists`.
 
         """
-        self.appname = appname  #: The name of application.
+        self.appname = appname  #: The name of the application.
         self.appauthor = appauthor
         """
         The name of the app author or distributing body for this application.
@@ -66,10 +74,18 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         """
         An optional parameter which indicates that the entire list of data dirs should be returned.
 
-        By default, the first item would only be returned.
+        By default, the first item would only be returned. Only affects ``site_data_dir`` and ``site_config_dir`` on
+        Unix and macOS.
 
         """
-        self.opinion = opinion  #: A flag to indicating to use opinionated values.
+        self.opinion = opinion
+        """
+        Whether to use opinionated values.
+
+        When enabled, appends an additional subdirectory for certain directories: e.g. ``Cache`` for cache and ``Logs``
+        for logs on Windows, ``log`` for logs on Unix.
+
+        """
         self.ensure_exists = ensure_exists
         """
         Optionally create the directory (and any missing parents) upon access if it does not exist.
@@ -116,7 +132,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     @property
     @abstractmethod
     def site_config_dir(self) -> str:
-        """:return: config directory shared by the users"""
+        """:return: config directory shared by users"""
 
     @property
     @abstractmethod
@@ -195,7 +211,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
 
     @property
     def site_config_path(self) -> Path:
-        """:return: config path shared by the users"""
+        """:return: config path shared by users"""
         return Path(self.site_config_dir)
 
     @property
@@ -220,7 +236,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
 
     @property
     def user_documents_path(self) -> Path:
-        """:return: documents a path tied to the user"""
+        """:return: documents path tied to the user"""
         return Path(self.user_documents_dir)
 
     @property

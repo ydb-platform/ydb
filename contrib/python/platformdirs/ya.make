@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.5.1)
+VERSION(4.7.0)
 
 LICENSE(MIT)
 
@@ -12,6 +12,7 @@ PY_SRCS(
     TOP_LEVEL
     platformdirs/__init__.py
     platformdirs/__main__.py
+    platformdirs/_xdg.py
     platformdirs/android.py
     platformdirs/api.py
     platformdirs/macos.py

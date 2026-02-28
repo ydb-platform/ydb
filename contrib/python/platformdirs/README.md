@@ -1,33 +1,3 @@
-Metadata-Version: 2.4
-Name: platformdirs
-Version: 4.7.0
-Summary: A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`.
-Project-URL: Changelog, https://platformdirs.readthedocs.io/en/latest/changelog.html
-Project-URL: Documentation, https://platformdirs.readthedocs.io
-Project-URL: Homepage, https://github.com/tox-dev/platformdirs
-Project-URL: Source, https://github.com/tox-dev/platformdirs
-Project-URL: Tracker, https://github.com/tox-dev/platformdirs/issues
-Maintainer-email: Bernát Gábor <gaborjbernat@gmail.com>, Julian Berman <Julian@GrayVines.com>, Ofek Lev <oss@ofek.dev>, Ronny Pfannschmidt <opensource@ronnypfannschmidt.de>
-License-Expression: MIT
-License-File: LICENSE
-Keywords: appdirs,application,cache,directory,log,user
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
-Classifier: Programming Language :: Python :: 3.12
-Classifier: Programming Language :: Python :: 3.13
-Classifier: Programming Language :: Python :: 3.14
-Classifier: Programming Language :: Python :: Implementation :: CPython
-Classifier: Programming Language :: Python :: Implementation :: PyPy
-Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.10
-Description-Content-Type: text/markdown
-
 # platformdirs
 
 [![PyPI version](https://badge.fury.io/py/platformdirs.svg)](https://badge.fury.io/py/platformdirs)

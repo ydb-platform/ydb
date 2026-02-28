@@ -59,9 +59,8 @@ private:
 //! If write was not successful because of error, returns Error.
 enum class EWriteStatus {
     Queued = 0,
-    ProducerClosed = 1,
-    Timeout = 2,
-    Error = 3,
+    Timeout = 1,
+    Error = 2,
 };
 
 //! Flush status.
@@ -85,13 +84,12 @@ struct TWriteResult {
     //! Error message.
     //! Value is empty if the write was successful.
     std::optional<std::string> ErrorMessage = std::nullopt;
+    //! Description why session was closed.
+    //! Value is std::nullopt if the session is not closed.
+    std::optional<TCloseDescription> ClosedDescription;
 
     bool IsSuccess() const {
         return Status == EWriteStatus::Queued;
-    }
-
-    bool IsClosed() const {
-        return Status == EWriteStatus::ProducerClosed;
     }
 
     bool IsTimeout() const {

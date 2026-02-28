@@ -1245,6 +1245,46 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
     }
 
+    Y_UNIT_TEST(Producer_WriteToClosedProducer) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        auto client = setup.MakeClient();
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.MaxBlock(TDuration::Seconds(30));
+
+        auto producer = client.CreateProducer(writeSettings);
+
+        const ui64 count = 10;
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            std::string payload = "data";
+            TWriteMessage msg(payload);
+            msg.SeqNo(i);
+            msg.Key(key);
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        }
+
+        UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        std::string payload = "data";
+        TWriteMessage msg(payload);
+        msg.SeqNo(count + 1);
+        msg.Key(CreateGuidAsString());
+        auto writeResult = producer->Write(std::move(msg));
+        UNIT_ASSERT_C(writeResult.IsError(), "Failed to write message");
+        UNIT_ASSERT_C(writeResult.ErrorMessage == "producer is closed", "Error message is not correct");
+        UNIT_ASSERT_C(writeResult.ClosedDescription->GetStatus() == EStatus::SUCCESS, "Status is not SUCCESS");
+    }
+
     Y_UNIT_TEST(Producer_MultiThreadedWrite_Acks) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);

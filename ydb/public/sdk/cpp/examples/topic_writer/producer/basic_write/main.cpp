@@ -1,15 +1,79 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
-int processFlushResult(const NYdb::NTopic::TFlushResult& flushResult) {
-    if (flushResult.IsSuccess()) {
-        return 0;
-    }
-    if (flushResult.IsClosed()) {
-        return 1;
-    }
+#include <util/generic/serialized_enum.h>
 
-    throw std::runtime_error("Flush finished with unexpected status");
+std::shared_ptr<NYdb::NTopic::IProducer> CreateProducer(const std::string& topic, NYdb::NTopic::TTopicClient& topicClient) {
+    NYdb::NTopic::TProducerSettings producerSettings;
+    producerSettings.Path(topic);
+    producerSettings.Codec(NYdb::NTopic::ECodec::RAW);
+    producerSettings.ProducerIdPrefix("producer_basic");
+    producerSettings.PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound);
+    producerSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+    producerSettings.MaxBlock(TDuration::Seconds(30));
+    producerSettings.MaxMemoryUsage(1_KB);
+    return topicClient.CreateProducer(producerSettings);
+}
+
+std::string GetWriteResultStatus(const NYdb::NTopic::TWriteResult& writeResult) {
+    return std::string(NEnumSerializationRuntime::ToStringBuf(writeResult.Status));
+}
+
+std::string GetFlushResultStatus(const NYdb::NTopic::TFlushResult& flushResult) {
+    return std::string(NEnumSerializationRuntime::ToStringBuf(flushResult.Status));
+}
+
+template<typename T>
+std::string GetErrorMessage(const T& result) {
+    std::string errorMessage = "error occurred while writing message";
+    if constexpr (std::is_same_v<T, NYdb::NTopic::TWriteResult>) {
+        errorMessage += ", write status: " + GetWriteResultStatus(result);
+        if (result.ErrorMessage) {
+            errorMessage += ", reason: ";
+            errorMessage += result.ErrorMessage.value();
+        }
+    }
+    if constexpr (std::is_same_v<T, NYdb::NTopic::TFlushResult>) {
+        errorMessage += ", flush status: " + GetFlushResultStatus(result);
+        errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
+    }
+    if (result.ClosedDescription) {
+        errorMessage += ", producer is closed: ";
+        errorMessage += result.ClosedDescription.value().DebugString();
+    }
+    return errorMessage;
+}
+
+void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, NYdb::NTopic::TWriteMessage&& writeMessage) {
+    static constexpr size_t MAX_RETRIES = 10;
+
+    for (size_t retries = 0; retries < MAX_RETRIES; retries++) {
+        auto writeResult = producer->Write(std::move(writeMessage));
+        if (writeResult.IsSuccess()) {
+            return;
+        }
+
+        if (writeResult.IsError()) {
+            // this means that some non retryable error occurred, so we are unable to send messages
+            throw std::runtime_error(GetErrorMessage(writeResult));
+        }
+
+        if (writeResult.IsTimeout()) {
+            try {
+                auto flushResult = producer->Flush().GetValue(TDuration::Seconds(1));
+                if (flushResult.IsSuccess()) {
+                    break;
+                }
+                if (flushResult.IsClosed()) {
+                    // this means producer is closed due to non retryable error, so we are unable to send messages
+                    throw std::runtime_error(GetErrorMessage(flushResult));
+                }
+            } catch (const std::exception& error) {
+                // do some work while waiting for buffer is free
+                Sleep(TDuration::Seconds(10));
+            }
+        }
+    }
 }
 
 int main() {
@@ -26,46 +90,15 @@ int main() {
     auto getSessionResult = queryClient.GetSession().GetValueSync();
     NYdb::NStatusHelpers::ThrowOnError(getSessionResult);
     auto session = getSessionResult.GetSession();
-
     NYdb::NTopic::TTopicClient topicClient(driver);
 
-    NYdb::NTopic::TProducerSettings producerSettings;
-    producerSettings.Path(TOPIC);
-    producerSettings.Codec(NYdb::NTopic::ECodec::RAW);
-    producerSettings.ProducerIdPrefix("producer_basic");
-    producerSettings.PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound);
-    producerSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-    producerSettings.MaxBlock(TDuration::Seconds(30));
-    producerSettings.MaxMemoryUsage(1_KB);
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-
+    auto producer = CreateProducer(TOPIC, topicClient);
     auto messageData = std::string(1_KB, 'a');
 
     for (int i = 0; i < 10; i++) {
         NYdb::NTopic::TWriteMessage writeMessage(messageData);
         writeMessage.Key("key" + ToString(i));
-
-        auto writeResult = producer->Write(std::move(writeMessage));
-        if (writeResult.IsSuccess()) {
-            break;
-        }
-
-        if (writeResult.IsClosed()) {
-            std::cerr << "Producer is closed in unexpected way" << std::endl;
-            return 1;
-        }
-
-        if (writeResult.IsError()) {
-            std::cerr << "Write failed with error: " << writeResult.ErrorMessage.value() << std::endl;
-            return 1;
-        }
-
-        if (writeResult.IsTimeout()) {
-            if (auto res = processFlushResult(producer->Flush().GetValueSync()); res != 0) {
-                return res;
-            }
-        }
+        WriteWithHandlingResult(producer, std::move(writeMessage));
     }
     return 0;
 }

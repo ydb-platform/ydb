@@ -1712,8 +1712,11 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         std::lock_guard lock(GlobalLock);
         Metrics.IncIncomingMessages();
         if (Closed.load()) {
+            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
             return TWriteResult{
-                .Status = EWriteStatus::ProducerClosed,
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "producer is closed",
+                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
             };
         }
 
@@ -1769,8 +1772,11 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
         if (Closed.load()) {
+            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
             return TWriteResult{
-                .Status = EWriteStatus::ProducerClosed,
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "producer is closed",
+                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
             };
         }
 

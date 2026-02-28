@@ -40,10 +40,6 @@ YQL_LAST_ABI_VERSION()
 SIZE(LARGE)
 TAG(ya:fat)
 
-FORK_TESTS()
+FORK_SUBTESTS()
 
 END()
-
-RECURSE(
-   proto
-)

@@ -38,7 +38,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
-FORK_TESTS()
+FORK_SUBTESTS()
 
 YQL_LAST_ABI_VERSION()
 

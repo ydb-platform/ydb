@@ -11,4 +11,3 @@ RECURSE(
     part9
     part10
 )
-REQUIREMENTS(cpu:2)

@@ -1,4 +1,4 @@
-# Известные ограничения
+# Limitations
 
 This section collects important features of {{ydb-short-name}} that must be considered when designing applications and writing queries. For each feature, the current behavior and possible workarounds are described.
 

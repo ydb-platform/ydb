@@ -170,4 +170,28 @@ generic:
 )",
             "auth.tokens.access_service_type must match access_service_type");
     }
+
+    Y_UNIT_TEST(SecretInfoWithSecretAndSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+  Secret: "inline-secret"
+  SecretFile: "/tmp/secret.txt"
+}
+)pb",
+            "mvp_validation_secret_and_secret_file",
+            "must not set both secret and secret_file");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithoutSecretAndSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+}
+)pb",
+            "mvp_validation_secret_missing",
+            "requires either secret or secret_file");
+    }
 }

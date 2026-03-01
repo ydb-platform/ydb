@@ -1,4 +1,4 @@
-# Bridge mode internals
+# Bridge mode
 
 {% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
 

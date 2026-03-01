@@ -303,6 +303,7 @@ When creating row-oriented tables, it is possible to specify:
 
 * [A secondary index](secondary_index.md).
 * [A vector index](vector_index.md).
+* [A fulltext index](fulltext_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).

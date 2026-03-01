@@ -24,6 +24,8 @@ items:
   href: secondary_indexes.md
 - name: Vector search
   href: vector_search.md
+- name: Fulltext search
+  href: fulltext_search.md
 - name: Spilling
   href: spilling.md
 - name: Change Data Capture (CDC)

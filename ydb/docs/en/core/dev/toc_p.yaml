@@ -20,6 +20,8 @@ items:
   href: secondary-indexes.md
 - name: Vector indexes
   href: vector-indexes.md
+- name: Fulltext indexes
+  href: fulltext-indexes.md
 - name: Query plans optimization
   href: query-plans-optimization.md
 - name: Resource consumption management

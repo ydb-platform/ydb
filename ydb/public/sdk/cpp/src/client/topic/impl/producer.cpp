@@ -74,24 +74,7 @@ TWriteMessage TProducer::TMessageInfo::BuildMessage() const {
 TProducer::TWriteSessionWrapper::TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition)
     : Session(std::move(session))
     , Partition(partition)
-    , QueueSize(0)
 {}
-
-bool TProducer::TWriteSessionWrapper::IsQueueEmpty() const {
-    return QueueSize == 0;
-}
-
-bool TProducer::TWriteSessionWrapper::AddToQueue(std::uint64_t delta) {
-    bool idle = QueueSize == 0;
-    QueueSize += delta;
-    return idle;
-}
-
-bool TProducer::TWriteSessionWrapper::RemoveFromQueue(std::uint64_t delta) {
-    Y_ABORT_UNLESS(QueueSize >= delta, "RemoveFromQueue: underflow");
-    QueueSize -= delta;
-    return QueueSize == 0;
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TIdleSession
@@ -390,7 +373,7 @@ bool TProducer::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSessio
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            Producer->SessionsWorker->OnReadFromSession(wrappedSession, acksEvent->Acks.size());
+            // Producer->SessionsWorker->OnReadFromSession(wrappedSession, acksEvent->Acks.size());
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
         }
@@ -742,13 +725,12 @@ TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession
     return writeSession;
 }
 
-void TProducer::TSessionsWorker::DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout, bool mustBeEmpty) {
+void TProducer::TSessionsWorker::DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout) {
     if (it == SessionsIndex.end() || !it->second) {
         return;
     }
 
-    auto closeResult = it->second->Session->Close(closeTimeout);
-    Y_ABORT_UNLESS(!mustBeEmpty || closeResult, "There are still messages in flight");
+    it->second->Session->Close(closeTimeout);
     const auto partition = it->second->Partition;
     if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
         SessionsToRemove.push_back(it->second);
@@ -765,26 +747,37 @@ size_t TProducer::TSessionsWorker::GetIdleSessionsCount() const {
     return IdlerSessions.size();
 }
 
-void TProducer::TSessionsWorker::OnReadFromSession(WrappedWriteSessionPtr wrappedSession, size_t delta) {
-    if (wrappedSession->RemoveFromQueue(delta)) {
-        Y_ABORT_UNLESS(!wrappedSession->IdleSession, "IdleSession is already set");
-        auto idleSessionPtr = std::make_shared<TIdleSession>(wrappedSession.get(), TInstant::Now(), Producer->Settings.SubSessionIdleTimeout_);
-        auto [itIdle, inserted] = IdlerSessions.insert(idleSessionPtr);
-        Y_ABORT_UNLESS(inserted, "Duplicate idle session for partition");
-        IdlerSessionsIndex[wrappedSession->Partition] = itIdle;
-        wrappedSession->IdleSession = idleSessionPtr;
+void TProducer::TSessionsWorker::AddIdleSession(std::uint32_t partition) {
+    auto wrappedSession = SessionsIndex.find(partition);
+    if (wrappedSession == SessionsIndex.end()) {
+        return;
     }
+
+    if (wrappedSession->second->IdleSession) {
+        return;
+    }
+
+    auto idleSessionPtr = std::make_shared<TIdleSession>(wrappedSession->second.get(), TInstant::Now(), Producer->Settings.SubSessionIdleTimeout_);
+    auto [itIdle, inserted] = IdlerSessions.insert(idleSessionPtr);
+    Y_ABORT_UNLESS(inserted, "Duplicate idle session for partition");
+    IdlerSessionsIndex[partition] = itIdle;
+    wrappedSession->second->IdleSession = idleSessionPtr;
 }
 
-void TProducer::TSessionsWorker::OnWriteToSession(WrappedWriteSessionPtr wrappedSession) {
-    if (wrappedSession->AddToQueue(1) && wrappedSession->IdleSession) {
-        auto itIdle = IdlerSessionsIndex.find(wrappedSession->Partition);
-        if (itIdle != IdlerSessionsIndex.end()) {
-            IdlerSessions.erase(itIdle->second);
-            IdlerSessionsIndex.erase(itIdle);
-        }
-        wrappedSession->IdleSession.reset();
+void TProducer::TSessionsWorker::RemoveIdleSession(std::uint32_t partition) {
+    auto itIdle = IdlerSessionsIndex.find(partition);
+    if (itIdle == IdlerSessionsIndex.end()) {
+        return;
     }
+
+    auto wrappedSession = SessionsIndex.find(partition);
+    if (wrappedSession == SessionsIndex.end()) {
+        return;
+    }
+
+    IdlerSessions.erase(itIdle->second);
+    IdlerSessionsIndex.erase(itIdle);
+    wrappedSession->second->IdleSession.reset();
 }
 
 void TProducer::TSessionsWorker::DoWork() {
@@ -817,7 +810,7 @@ void TProducer::TSessionsWorker::DoWork() {
         auto sessionIter = SessionsIndex.find(partition);
         if (sessionIter != SessionsIndex.end()) {
             sessionIter->second->IdleSession.reset();
-            DestroyWriteSession(sessionIter, TDuration::Zero(), !Producer->SplittedPartitionWorkers.contains(partition));
+            DestroyWriteSession(sessionIter, TDuration::Zero());
         }
     }
 }
@@ -860,7 +853,7 @@ void TProducer::TMessagesWorker::DoWork() {
 
                 Producer->Metrics.AddWriteLag((TInstant::Now() - head->CreateTimestamp.value_or(TInstant::Now())).MilliSeconds());
                 head->Sent = true;
-                sessionsWorker->OnWriteToSession(wrappedSession);
+                // sessionsWorker->OnWriteToSession(wrappedSession);
                 messages.pop_front();
             }
 
@@ -908,11 +901,15 @@ bool TProducer::TMessagesWorker::SendMessage(WrappedWriteSessionPtr wrappedSessi
 
 void TProducer::TMessagesWorker::PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message) {
     auto iter = InFlightMessages.insert(InFlightMessages.end(), std::move(message));
-    auto [inFlightMessagesIndexIt, _] = InFlightMessagesIndex.try_emplace(partition);
+    auto [inFlightMessagesIndexIt, wasInserted] = InFlightMessagesIndex.try_emplace(partition);
     inFlightMessagesIndexIt->second.push_back(iter);
 
     auto [pendingMessagesIndexIt, __] = PendingMessagesIndex.try_emplace(partition);
     pendingMessagesIndexIt->second.push_back(iter);
+
+    if (wasInserted) {
+        Producer->SessionsWorker->RemoveIdleSession(partition);
+    }
 }
 
 void TProducer::TMessagesWorker::HandleAck() {
@@ -935,6 +932,7 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
         }
         if (list.empty()) {
             InFlightMessagesIndex.erase(mapIt);
+            Producer->SessionsWorker->AddIdleSession(partition);
         }
     }
 
@@ -1082,6 +1080,7 @@ void TProducer::TMessagesWorker::ScheduleResendMessages(std::uint32_t partition,
     }
 
     InFlightMessagesIndex.erase(partition);
+    Producer->SessionsWorker->AddIdleSession(partition);
 }
 
 void TProducer::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t partition) {

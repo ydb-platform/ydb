@@ -62,14 +62,9 @@ private:
     struct TWriteSessionWrapper {
         WriteSessionPtr Session;
         const std::uint32_t Partition;
-        std::uint64_t QueueSize = 0;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
 
         TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition);
-
-        bool IsQueueEmpty() const;
-        bool AddToQueue(std::uint64_t delta);
-        bool RemoveFromQueue(std::uint64_t delta);
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<TWriteSessionWrapper>;
@@ -124,19 +119,17 @@ private:
     struct TSessionsWorker {
         TSessionsWorker(TProducer* producer);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
-        void OnReadFromSession(WrappedWriteSessionPtr wrappedSession, size_t delta);
-        void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
+        void AddIdleSession(std::uint32_t partition);
+        void RemoveIdleSession(std::uint32_t partition);
         void DoWork();
         size_t GetSessionsCount() const;
         size_t GetIdleSessionsCount() const;
     
     private:
-        void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
-        void RemoveIdleSession(std::uint32_t partition);
         WrappedWriteSessionPtr CreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         
         using TSessionsIndexIterator = std::unordered_map<std::uint32_t, WrappedWriteSessionPtr>::iterator;
-        void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout, bool mustBeEmpty = true);
+        void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout);
 
         std::string GetProducerId(std::uint32_t partitionId);
 

@@ -11,12 +11,83 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/ptr.h>
+#include <util/generic/typetraits.h>
+
 #include <condition_variable>
 #include <mutex>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
+Y_HAS_MEMBER(GetBucket, Bucket); // Generates a helper class THasBucket
+
 class TS3ExternalStorage: public IExternalStorageOperator {
+public:
+    struct TS3CountersRoot;
+
+    struct TS3RequestCounters : public TAtomicRefCount<TS3RequestCounters> {
+        TS3RequestCounters(const TS3CountersRoot* parent, NMonitoring::TDynamicCounterPtr requestGroup)
+            : Parent(parent)
+            , RequestGroup(std::move(requestGroup))
+        {
+        }
+
+        NMonitoring::THistogramCounter* GetLatency();
+        NMonitoring::TCounterForPtr* GetBytesWritten();
+        NMonitoring::TCounterForPtr* GetBytesRead();
+        NMonitoring::TCounterForPtr* GetCodeCounter(const TString& code);
+
+    private:
+        const TS3CountersRoot* Parent = nullptr;
+        NMonitoring::TDynamicCounterPtr RequestGroup;
+        NMonitoring::THistogramPtr LatencyHist;
+        NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+        NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+        NMonitoring::TDynamicCounters::TCounterPtr CodeOk;
+    };
+
+    struct TS3CountersRoot {
+        TS3CountersRoot() = default;
+
+        TS3CountersRoot(NMonitoring::TDynamicCounterPtr root)
+            : Root(std::move(root))
+        {
+        }
+
+        template <typename TEvRequest>
+        TIntrusivePtr<TS3RequestCounters> GetRequestCounters(const TString& bucket) const {
+            if (!Root) {
+                return nullptr;
+            }
+
+            TString requestName(TEvRequest::RequestName);
+            std::lock_guard<std::mutex> g(Mutex);
+            if (auto it = Cache.find(requestName); it != Cache.end()) {
+                return it->second;
+            }
+
+            NMonitoring::TDynamicCounterPtr reqRoot;
+            if (Root) {
+                reqRoot = Root->GetSubgroup("request", requestName);
+                constexpr bool requestHasBucket = THasBucket<typename TEvRequest::TRequest>::value;
+                if constexpr (requestHasBucket) {
+                    reqRoot = reqRoot->GetSubgroup("bucket", bucket);
+                }
+            }
+
+            TIntrusivePtr<TS3RequestCounters> counters = new TS3RequestCounters(this, std::move(reqRoot));
+            Cache.emplace(std::move(requestName), counters);
+            return counters;
+        }
+
+        NMonitoring::TDynamicCounterPtr Root;
+        mutable std::mutex Mutex;
+        mutable THashMap<TString, TIntrusivePtr<TS3RequestCounters>> Cache;
+    };
+
 private:
     THolder<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;
@@ -24,7 +95,7 @@ private:
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
     bool Verbose = true;
-    NMonitoring::TDynamicCounterPtr Counters;
+    TS3CountersRoot Counters;
 
     mutable std::mutex RunningQueriesMutex;
     mutable std::condition_variable RunningQueriesNotifier;
@@ -36,13 +107,17 @@ private:
     template <typename TRequest, typename TOutcome>
     using TFunc = std::function<void(const Aws::S3::S3Client*, const TRequest&, THandler<TRequest, TOutcome>, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&)>;
 
+    template <typename TEvRequest>
+    TIntrusivePtr<TS3RequestCounters> GetRequestCounters() const {
+        return Counters.GetRequestCounters<TEvRequest>(Bucket);
+    }
+
     template <typename TEvRequest, typename TEvResponse, template <typename...> typename TContext>
     void Call(typename TEvRequest::TPtr& ev, TFunc<typename TEvRequest::TRequest, typename TEvResponse::TOutcome> func) const {
         using TCtx = TContext<TEvRequest, TEvResponse>;
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
-        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter);
-        ctx->InitCounters(Counters.Get(), ev->Get()->GetRequest());
+        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter, GetRequestCounters<TEvRequest>());
         auto callback = [this](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,

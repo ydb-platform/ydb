@@ -8,9 +8,6 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <util/generic/typetraits.h>
 #include <util/string/cast.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -27,22 +24,26 @@ namespace {
 
 static const TString OkCode = "OK";
 
-Y_HAS_MEMBER(GetBucket, Bucket); // Generates a helper class THasBucket
+NMonitoring::IHistogramCollectorPtr GetLatencyCollector() {
+    return NMonitoring::ExplicitHistogram({
+        5, 10, 25, 50, 100, 500, 1000, 2500, 5000,
+        10'000, 30'000, 60'000, 120'000, 180'000, 300'000, 600'000});
+}
 
 template <typename TEvRequest, typename TEvResponse>
 class TContextBase: public AsyncCallerContext {
 public:
-    static constexpr bool RequestHasBucket = THasBucket<typename TEvRequest::TRequest>::value;
-
     explicit TContextBase(
             const TActorSystem* sys,
             const TActorId& sender,
             IRequestContext::TPtr requestContext,
             const Aws::S3::Model::StorageClass storageClass,
-            const TReplyAdapterContainer& replyAdapter)
+            const TReplyAdapterContainer& replyAdapter,
+            TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> counters)
         : AsyncCallerContext()
         , ActorSystem(sys)
         , Sender(sender)
+        , Counters(std::move(counters))
         , RequestContext(requestContext)
         , StorageClass(storageClass)
         , ReplyAdapter(replyAdapter)
@@ -55,16 +56,6 @@ public:
 
     virtual const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
         return ev->Get()->GetRequest();
-    }
-
-    void InitCounters(NMonitoring::TDynamicCounters* serviceCounters, const typename TEvRequest::TRequest& req) {
-        if (!serviceCounters) {
-            return;
-        }
-        Counters = serviceCounters->GetSubgroup("request", TString(TEvRequest::RequestName));
-        if constexpr (RequestHasBucket) {
-            Counters = Counters->GetSubgroup("bucket", TString(req.GetBucket()));
-        }
     }
 
 protected:
@@ -88,18 +79,25 @@ protected:
         } else {
             errCode = TString(outcome.GetError().GetExceptionName());
         }
-        ++*Counters->GetNamedCounter("code", errCode, true);
+        if (auto* code = Counters->GetCodeCounter(errCode)) {
+            ++*code;
+        }
 
         // Latency
-        auto histogram = NMonitoring::ExplicitHistogram({5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10'000, 30'000, 60'000, 120'000, 180'000, 300'000, 600'000});
-        Counters->GetHistogram("LatencyMs", std::move(histogram))->Collect((TInstant::Now() - Start).MilliSeconds());
+        if (auto* hist = Counters->GetLatency()) {
+            hist->Collect((TInstant::Now() - Start).MilliSeconds());
+        }
 
         if (BytesWritten) {
-            *Counters->GetCounter("BytesWritten") += *BytesWritten;
+            if (auto* bw = Counters->GetBytesWritten()) {
+                *bw += *BytesWritten;
+            }
         }
 
         if (BytesRead) {
-            *Counters->GetCounter("BytesRead") += *BytesRead;
+            if (auto* br = Counters->GetBytesRead()) {
+                *br += *BytesRead;
+            }
         }
     }
 
@@ -110,7 +108,7 @@ private:
 protected:
     const TInstant Start = TInstant::Now();
     std::optional<size_t> BytesWritten, BytesRead; // Metrics for some special methods
-    NMonitoring::TDynamicCounterPtr Counters;
+    TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> Counters;
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
     const Aws::S3::Model::StorageClass StorageClass;
@@ -278,6 +276,64 @@ public:
 };
 
 } // anonymous
+
+NMonitoring::THistogramCounter* TS3ExternalStorage::TS3RequestCounters::GetLatency() {
+    if (LatencyHist) {
+        return LatencyHist.Get();
+    }
+
+    Y_ABORT_UNLESS(Parent);
+    std::lock_guard<std::mutex> g(Parent->Mutex);
+    if (!LatencyHist && RequestGroup) {
+        LatencyHist = RequestGroup->GetHistogram("LatencyMs", GetLatencyCollector());
+    }
+    return LatencyHist.Get();
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesWritten() {
+    if (BytesWritten) {
+        return BytesWritten.Get();
+    }
+
+    Y_ABORT_UNLESS(Parent);
+    std::lock_guard<std::mutex> g(Parent->Mutex);
+    if (!BytesWritten && RequestGroup) {
+        BytesWritten = RequestGroup->GetCounter("BytesWritten");
+    }
+    return BytesWritten.Get();
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesRead() {
+    if (BytesRead) {
+        return BytesRead.Get();
+    }
+
+    Y_ABORT_UNLESS(Parent);
+    std::lock_guard<std::mutex> g(Parent->Mutex);
+    if (!BytesRead && RequestGroup) {
+        BytesRead = RequestGroup->GetCounter("BytesRead");
+    }
+    return BytesRead.Get();
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetCodeCounter(const TString& code) {
+    if (code == OkCode && CodeOk) {
+        return CodeOk.Get();
+    }
+
+    Y_ABORT_UNLESS(Parent);
+    std::lock_guard<std::mutex> g(Parent->Mutex);
+    if (!RequestGroup) {
+        return nullptr;
+    }
+    if (code == OkCode) {
+        if (!CodeOk) {
+            CodeOk = RequestGroup->GetNamedCounter("code", code, true);
+        }
+        return CodeOk.Get();
+    }
+    return RequestGroup->GetNamedCounter("code", code, true).Get();
+}
 
 TS3ExternalStorage::~TS3ExternalStorage() {
     if (Client) {

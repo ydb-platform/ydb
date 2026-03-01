@@ -364,7 +364,7 @@ public:
 
     bool CheckAffinity(const IInvokerPtr& invoker) const override
     {
-        return invoker.Get() == this;
+        return invoker == this;
     }
 
     void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
@@ -443,7 +443,7 @@ public:
         auto guard = Guard(MappingLock_);
 
         auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
-        if (bucketIt != BucketMapping_.end() && bucketIt->second.Get() == bucket) {
+        if (bucketIt != BucketMapping_.end() && bucketIt->second == bucket) {
             BucketMapping_.erase(bucketIt);
         }
 

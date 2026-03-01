@@ -1732,6 +1732,8 @@ TServiceBase::TServiceBase(
     });
 }
 
+TServiceBase::~TServiceBase() = default;
+
 const TServiceId& TServiceBase::GetServiceId() const
 {
     return ServiceId_;
@@ -2194,10 +2196,10 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakbus, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    if (auto bus = busWeak.Lock()) {
+    if (auto bus = weakbus.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
         auto it = bucket->ReplyBusToData.find(bus);
@@ -2205,9 +2207,8 @@ void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& bu
             return;
         }
 
-        for (auto* rawContext : it->second.Contexts) {
-            auto context = DangerousGetPtr(rawContext);
-            if (context) {
+        for (const auto& weakContext : it->second.Contexts) {
+            if (auto context = weakContext.Lock()) {
                 contexts.push_back(context);
             }
         }
@@ -2244,7 +2245,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
         auto* bucket = GetRequestBucket(requestId);
         auto guard = Guard(bucket->Lock);
         // NB: We're OK with duplicate request ids.
-        bucket->RequestIdToContext.emplace(requestId, context);
+        bucket->RequestIdToContext.emplace(requestId, MakeWeak(context));
     }
 
     const auto& replyBus = context->GetReplyBus();
@@ -2253,7 +2254,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
         auto guard = Guard(bucket->Lock);
         auto [it, inserted] = bucket->ReplyBusToData.try_emplace(replyBus);
         auto& replyBusData = it->second;
-        replyBusData.Contexts.insert(context);
+        replyBusData.Contexts.insert(MakeWeak(context));
         if (inserted) {
             replyBusData.BusTerminationHandler =
                 BIND_NO_PROPAGATE(
@@ -2290,14 +2291,16 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToData.find(replyBus);
+        auto dataIt = bucket->ReplyBusToData.find(replyBus);
         // Missing replyBus in ReplyBusToData is OK; see OnReplyBusTerminated.
-        if (it != bucket->ReplyBusToData.end()) {
-            auto& replyBusData = it->second;
-            replyBusData.Contexts.erase(context);
-            if (replyBusData.Contexts.empty()) {
-                replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
-                bucket->ReplyBusToData.erase(it);
+        if (dataIt != bucket->ReplyBusToData.end()) {
+            auto& replyBusData = dataIt->second;
+            if (auto contextIt = replyBusData.Contexts.find(context); contextIt != replyBusData.Contexts.end()) {
+                replyBusData.Contexts.erase(contextIt);
+                if (replyBusData.Contexts.empty()) {
+                    replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
+                    bucket->ReplyBusToData.erase(dataIt);
+                }
             }
         }
     }
@@ -2313,7 +2316,7 @@ TServiceBase::TServiceContextPtr TServiceBase::FindRequest(TRequestId requestId)
 TServiceBase::TServiceContextPtr TServiceBase::DoFindRequest(TRequestBucket* bucket, TRequestId requestId)
 {
     auto it = bucket->RequestIdToContext.find(requestId);
-    return it == bucket->RequestIdToContext.end() ? nullptr : DangerousGetPtr(it->second);
+    return it == bucket->RequestIdToContext.end() ? nullptr : it->second.Lock();
 }
 
 void TServiceBase::RegisterQueuedReply(TRequestId requestId, TFuture<void> reply)

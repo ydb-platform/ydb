@@ -434,8 +434,8 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::GetAll()
         const auto& shard = Shards_[shardIndex];
 
         auto readerGuard = ReaderGuard(shard.SpinLock);
-        for (const auto& [key, rawValue] : shard.ValueMap) {
-            if (auto value = DangerousGetPtr<TValue>(rawValue)) {
+        for (const auto& [key, weakValue] : shard.ValueMap) {
+            if (auto value = weakValue.Lock()) {
                 result.push_back(std::move(value));
             }
         }
@@ -524,7 +524,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const TKey& ke
         return {};
     }
 
-    auto value = DangerousGetPtr(valueIt->second);
+    auto value = valueIt->second.Lock();
     if (!value) {
         return {};
     }
@@ -693,7 +693,7 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
             return insertCookie;
         }
 
-        if (auto value = DangerousGetPtr(valueIt->second)) {
+        if (auto value = valueIt->second.Lock()) {
             auto* item = new TItem(value);
             value->Item_ = item;
 
@@ -917,7 +917,9 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::DoTryRemove(
     }
 
     if (forbidResurrection || !IsResurrectionSupported()) {
-        valueIt->second->ResetCache();
+        if (auto value = valueIt->second.Lock()) {
+            value->ResetCache();
+        }
         valueMap.erase(valueIt);
     }
 

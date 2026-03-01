@@ -65,7 +65,12 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
         0, // partitionSessionId
         consumer.GetGeneration(),
         0, // step
-        TActorId{} // pipeClient
+        TActorId{}, // pipeClient
+        TEvPQ::TEvSetClientInfo::ESetClientInfoType::ESCI_OFFSET,
+        0, // readRuleGeneration
+        false, // strict
+        std::nullopt, // committedMetadata
+        true // mlpRequest
     );
 }
 

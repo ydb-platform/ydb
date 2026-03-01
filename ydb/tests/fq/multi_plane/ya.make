@@ -12,6 +12,7 @@ PEERDIR(
 DEPENDS(
     ydb/tests/tools/pq_read
 )
+REQUIREMENTS(ram:32 cpu:1)
 
 TEST_SRCS(
     test_cp_ic.py

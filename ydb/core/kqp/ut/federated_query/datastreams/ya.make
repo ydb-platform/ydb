@@ -9,6 +9,8 @@ SRCS(
     datastreams_ut.cpp
 )
 
+REQUIREMENTS(cpu:2)
+
 PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor

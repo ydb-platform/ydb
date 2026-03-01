@@ -19,8 +19,10 @@ PY3TEST()
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
         TAG(ya:fat)
+        REQUIREMENTS(ram:16 cpu:4)
     ELSE()
         SIZE(MEDIUM)
+        REQUIREMENTS(ram:16 cpu:4)
     ENDIF()
 
     DEPENDS(

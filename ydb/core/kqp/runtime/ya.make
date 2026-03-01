@@ -35,6 +35,8 @@ SRCS(
     scheduler/tree/snapshot.cpp
 )
 
+REQUIREMENTS(cpu:4)
+
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/threading/hot_swap

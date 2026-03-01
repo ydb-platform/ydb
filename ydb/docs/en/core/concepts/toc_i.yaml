@@ -40,6 +40,8 @@ items:
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
+- name: Bridge mode
+  href: bridge.md
 - name: Data transfer
   href: transfer.md
   when: feature_transfer

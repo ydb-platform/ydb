@@ -249,9 +249,10 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestNoWrite) {
+    Y_UNIT_TEST_TWIN(TestNoWrite, EnableIndexStreamWrite) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

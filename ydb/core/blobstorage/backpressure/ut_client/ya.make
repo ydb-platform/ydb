@@ -22,4 +22,5 @@ SRCS(
     skeleton_front_mock.h
 )
 
+REQUIREMENTS(cpu:1)
 END()

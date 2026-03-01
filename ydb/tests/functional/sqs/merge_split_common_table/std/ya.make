@@ -8,7 +8,7 @@ TEST_SRCS(
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:32 cpu:4)
+    REQUIREMENTS(ram:32 cpu:1)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

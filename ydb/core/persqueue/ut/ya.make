@@ -66,4 +66,5 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_labeled.json counters_labeled.json
 )
 
+REQUIREMENTS(cpu:1)
 END()

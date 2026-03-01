@@ -25,4 +25,5 @@ SRCS(
     ut_topic_splitmerge.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

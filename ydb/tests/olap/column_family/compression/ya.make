@@ -21,5 +21,6 @@ PEERDIR(
 DEPENDS(
 )
 
+REQUIREMENTS(cpu:1)
 END()
 

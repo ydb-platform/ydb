@@ -26,4 +26,5 @@ SRCS(
     ydb_checkpoint_storage_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

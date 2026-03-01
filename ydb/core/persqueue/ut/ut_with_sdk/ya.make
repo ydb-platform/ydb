@@ -38,4 +38,5 @@ SRCS(
     topic_ut.cpp
 )
 
+REQUIREMENTS(cpu:4)
 END()

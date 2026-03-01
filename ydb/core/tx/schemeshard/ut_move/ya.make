@@ -25,4 +25,5 @@ SRCS(
     ut_move.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -33,4 +33,5 @@ FORK_SUBTESTS()
 # to 15-20 seconds.
 SPLIT_FACTOR(60)
 
+REQUIREMENTS(cpu:4)
 END()

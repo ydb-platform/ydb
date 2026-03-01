@@ -26,4 +26,5 @@ SRCS(
     keyvalue_storage_read_request_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

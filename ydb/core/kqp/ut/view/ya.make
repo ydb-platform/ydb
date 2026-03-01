@@ -23,4 +23,5 @@ DATA(arcadia/ydb/core/kqp/ut/view/input)
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(cpu:1)
 END()

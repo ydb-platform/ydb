@@ -29,4 +29,5 @@ SRCS(
     ut_subdomain.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -20,3 +20,4 @@ RECURSE(
     part18
     part19
 )
+REQUIREMENTS(cpu:1)

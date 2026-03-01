@@ -21,4 +21,5 @@ SRCS(
     control_plane_proxy_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

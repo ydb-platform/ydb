@@ -26,4 +26,5 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(cpu:1)
 END()

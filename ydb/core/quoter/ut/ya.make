@@ -23,5 +23,6 @@ IF (NOT OS_WINDOWS)
         SIZE(MEDIUM)
     ENDIF()
 
+REQUIREMENTS(cpu:1)
     END()
 ENDIF()

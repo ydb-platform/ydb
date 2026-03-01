@@ -25,4 +25,5 @@ SRCS(
     dq_scalar_hash_join_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

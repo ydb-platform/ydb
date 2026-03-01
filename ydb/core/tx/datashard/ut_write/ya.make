@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_write.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

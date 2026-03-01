@@ -76,4 +76,5 @@ PY3TEST()
         )
     ENDIF()
 
+REQUIREMENTS(cpu:1)
 END()

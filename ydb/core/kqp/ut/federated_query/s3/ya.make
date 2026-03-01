@@ -30,4 +30,5 @@ YQL_LAST_ABI_VERSION()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
+REQUIREMENTS(cpu:1)
 END()

@@ -14,4 +14,5 @@ DATA(
     arcadia/ydb/tests/tools/kqprun/configuration/app_config.conf
 )
 
+REQUIREMENTS(cpu:1)
 END()

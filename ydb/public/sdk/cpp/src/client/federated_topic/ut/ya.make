@@ -35,4 +35,5 @@ SRCS(
     basic_usage_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

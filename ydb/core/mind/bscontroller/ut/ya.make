@@ -21,4 +21,5 @@ PEERDIR(
     ydb/core/yql_testlib
 )
 
+REQUIREMENTS(cpu:1)
 END()

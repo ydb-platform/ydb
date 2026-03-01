@@ -23,4 +23,5 @@ SRCS(
     blobstorage_node_warden_ut_fat.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -17,4 +17,5 @@ PEERDIR(
     ydb/core/testlib/pg
 )
 
+REQUIREMENTS(cpu:1)
 END()

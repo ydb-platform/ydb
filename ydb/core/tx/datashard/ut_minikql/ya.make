@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_minikql.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

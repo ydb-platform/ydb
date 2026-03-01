@@ -28,5 +28,6 @@ IF (NOT WITH_VALGRIND)
         ut_subdomain_reboots.cpp
     )
 
+REQUIREMENTS(cpu:1)
     END()
 ENDIF()

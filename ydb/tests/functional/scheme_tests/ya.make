@@ -18,4 +18,5 @@ PEERDIR(
     ydb/tests/oss/canonical
 )
 
+REQUIREMENTS(cpu:1)
 END()

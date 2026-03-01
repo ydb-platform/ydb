@@ -20,4 +20,5 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -41,6 +41,7 @@ DATA_FILES(
     ydb/library/benchmarks/runner/upload_results.py
 )
 
+REQUIREMENTS(cpu:1)
 END()
 
 RECURSE(

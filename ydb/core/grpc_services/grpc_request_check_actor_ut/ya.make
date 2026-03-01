@@ -15,4 +15,5 @@ SRCS(
     grpc_request_check_actor_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

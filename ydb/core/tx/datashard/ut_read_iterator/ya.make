@@ -31,4 +31,5 @@ SRCS(
     datashard_ut_read_iterator_ext_blobs.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

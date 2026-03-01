@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_replication.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

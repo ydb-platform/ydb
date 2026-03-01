@@ -23,7 +23,7 @@ PEERDIR(
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:1)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

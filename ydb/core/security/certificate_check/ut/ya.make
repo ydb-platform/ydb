@@ -15,4 +15,5 @@ SRCS(
     cert_utils_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

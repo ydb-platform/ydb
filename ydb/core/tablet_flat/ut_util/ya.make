@@ -7,4 +7,5 @@ SRCS(
     util_string_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

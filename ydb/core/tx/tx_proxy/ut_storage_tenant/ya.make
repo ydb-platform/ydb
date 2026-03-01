@@ -27,4 +27,5 @@ SRCS(
     proxy_ut_helpers.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_change_collector.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

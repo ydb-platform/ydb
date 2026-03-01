@@ -31,4 +31,5 @@ SRCS(
     datashard_ut_sequence.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

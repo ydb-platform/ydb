@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_object_storage_listing.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

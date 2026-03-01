@@ -32,4 +32,5 @@ SRCS(
     datashard_ut_erase_rows.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

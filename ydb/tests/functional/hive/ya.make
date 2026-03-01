@@ -9,7 +9,7 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:16 cpu:1)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")

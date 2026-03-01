@@ -13,4 +13,5 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(group_test_ut.cpp)
 
+REQUIREMENTS(cpu:1)
 END()

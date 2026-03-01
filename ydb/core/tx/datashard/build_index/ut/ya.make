@@ -38,4 +38,5 @@ SRCS(
     ut_unique_index.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

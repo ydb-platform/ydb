@@ -23,4 +23,5 @@ SRCS(
     ut_vector_index_build.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -25,5 +25,6 @@ ydb/tests/library
 ydb/tests/library/test_meta
 )
 
+REQUIREMENTS(cpu:2)
 END()
 

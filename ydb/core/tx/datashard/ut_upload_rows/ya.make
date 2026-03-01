@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_upload_rows.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

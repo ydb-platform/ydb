@@ -20,4 +20,5 @@ SRCS(
     ut_resource_pool.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

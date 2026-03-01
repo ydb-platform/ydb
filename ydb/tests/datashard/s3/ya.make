@@ -25,4 +25,5 @@ DEPENDS(
     contrib/python/moto/bin
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -20,4 +20,5 @@ SRCS(
     msgbus_server_pq_metarequest_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

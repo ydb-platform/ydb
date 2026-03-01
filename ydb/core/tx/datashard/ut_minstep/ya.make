@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_minstep.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

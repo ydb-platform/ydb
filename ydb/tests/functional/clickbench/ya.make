@@ -11,7 +11,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_FEATURE_FLAGS="enable_resource_pools")
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:1)
 
 DEPENDS(
     ydb/apps/ydb

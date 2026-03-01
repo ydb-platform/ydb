@@ -25,4 +25,5 @@ SRCS(
     ut_auditsettings.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

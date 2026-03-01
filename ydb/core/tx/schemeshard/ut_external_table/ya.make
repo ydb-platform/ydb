@@ -25,4 +25,5 @@ SRCS(
     ut_external_table.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

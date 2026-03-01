@@ -29,4 +29,5 @@ PY_SRCS(
     conftest.py
 )
 
+REQUIREMENTS(cpu:1)
 END()

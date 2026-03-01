@@ -20,4 +20,5 @@ SRCS(
     ut_column_build.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

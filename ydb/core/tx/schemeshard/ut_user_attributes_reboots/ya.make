@@ -28,5 +28,6 @@ IF (NOT WITH_VALGRIND)
         ut_user_attributes_reboots.cpp
     )
 
+REQUIREMENTS(cpu:1)
     END()
 ENDIF()

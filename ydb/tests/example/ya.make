@@ -14,4 +14,5 @@ PEERDIR(
     ydb/tests/library/test_meta
 )
 
+REQUIREMENTS(cpu:1)
 END()

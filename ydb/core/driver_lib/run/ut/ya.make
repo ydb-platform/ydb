@@ -14,4 +14,5 @@ SRCS(
     auto_config_initializer_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

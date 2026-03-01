@@ -33,7 +33,15 @@ else:
 CHUNK_FROM_SUBTEST_RE = re.compile(r"\[(?:[^\]]*?\s)?(\d+)/(?:\d+)\]\s+chunk")
 CHUNK_SOLE_RE = re.compile(r"^\s*sole\s+chunk\s*$", re.IGNORECASE)
 CHUNK_BRACKET_ONLY_RE = re.compile(r"^\s*\[[^\]]+\]\s+chunk\s*$", re.IGNORECASE)
+CHUNK_GROUP_FROM_SUBTEST_RE = re.compile(r"\[([^\]\s]+)\s+\d+/\d+\]\s+chunk", re.IGNORECASE)
+CHUNK_GROUP_BRACKET_ONLY_RE = re.compile(r"\[([^\]]+)\]\s+chunk", re.IGNORECASE)
 RUN_UID_RE = re.compile(r"Run\((rnd-[^\$\)]+)")
+RUN_SUITE_GROUP_CHUNK_RE = re.compile(
+    r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/testing_out_stuff/([^/]+)/chunk(\d+)/"
+)
+RUN_SUITE_CHUNK_IN_STUFF_RE = re.compile(
+    r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/testing_out_stuff/chunk(\d+)/"
+)
 RUN_SUITE_CHUNK_RE = re.compile(r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/chunk(\d+)/")
 PART_SUFFIX_RE = re.compile(r"/part\d+$")
 
@@ -96,6 +104,48 @@ def normalize_suite_path(path: str) -> str:
     return PART_SUFFIX_RE.sub("", path)
 
 
+def normalize_chunk_group(group: Optional[str]) -> Optional[str]:
+    if not group:
+        return None
+    g = str(group).strip().strip("/")
+    if not g:
+        return None
+    # For report groups like "test_postgres.py" use stem.
+    if g.endswith(".py"):
+        g = g[:-3]
+    # Keep only last path part if path-like.
+    if "/" in g:
+        g = g.rsplit("/", 1)[-1]
+    return g or None
+
+
+def chunk_group_from_subtest(subtest_name: str) -> Optional[str]:
+    m = CHUNK_GROUP_FROM_SUBTEST_RE.search(subtest_name)
+    if m:
+        return normalize_chunk_group(m.group(1))
+    m2 = CHUNK_GROUP_BRACKET_ONLY_RE.search(subtest_name)
+    if m2:
+        raw = m2.group(1).strip()
+        # For plain indexed chunks like "[3/10] chunk" there is no group.
+        if re.fullmatch(r"\d+/\d+", raw):
+            return None
+        return normalize_chunk_group(raw)
+    return None
+
+
+def extract_suite_group_chunk_from_run_name(arg_name: str) -> tuple[Optional[str], Optional[str], Optional[int]]:
+    m = RUN_SUITE_GROUP_CHUNK_RE.search(arg_name)
+    if m:
+        return m.group(1), normalize_chunk_group(m.group(2)), int(m.group(3))
+    m1 = RUN_SUITE_CHUNK_IN_STUFF_RE.search(arg_name)
+    if m1:
+        return m1.group(1), None, int(m1.group(2))
+    m2 = RUN_SUITE_CHUNK_RE.search(arg_name)
+    if m2:
+        return m2.group(1), None, int(m2.group(2))
+    return None, None, None
+
+
 def _status_bucket() -> dict[str, int]:
     return {"errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0}
 
@@ -111,16 +161,18 @@ def _classify_failure(status: str, error_type: str, is_muted: bool) -> tuple[boo
 
 def parse_report_chunks(
     report_path: Path, suite_filter: Optional[str]
-) -> tuple[dict[tuple[str, int], dict[str, Any]], dict[str, dict[str, dict[str, int]]]]:
+) -> tuple[dict[tuple[str, Optional[str], int], dict[str, Any]], dict[str, dict[str, dict[str, int]]]]:
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
-    chunks: dict[tuple[str, int], dict[str, Any]] = {}
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     report_status_by_suite: dict[str, dict[str, dict[str, int]]] = {}
 
     def ensure_suite(suite: str) -> dict[str, dict[str, int]]:
         if suite not in report_status_by_suite:
             report_status_by_suite[suite] = {"chunks": _status_bucket(), "tests": _status_bucket()}
         return report_status_by_suite[suite]
+
+    parsed_chunk_rows: list[tuple[str, Optional[str], int, dict[str, Any]]] = []
 
     for item in results:
         if not isinstance(item, dict):
@@ -153,6 +205,7 @@ def parse_report_chunks(
             continue
 
         sub = str(item.get("subtest_name", ""))
+        group = chunk_group_from_subtest(sub)
         m = CHUNK_FROM_SUBTEST_RE.search(sub)
         if m:
             idx = int(m.group(1))
@@ -162,7 +215,7 @@ def parse_report_chunks(
         else:
             continue
         metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
-        chunks[(suite, idx)] = {
+        meta = {
             "status": status,
             "error_type": item.get("error_type"),
             "is_muted": is_muted,
@@ -172,6 +225,21 @@ def parse_report_chunks(
             "hid": item.get("hid"),
             "id": item.get("id"),
         }
+        parsed_chunk_rows.append((suite, group, idx, meta))
+
+    for suite, group, idx, meta in parsed_chunk_rows:
+        chunks[(suite, group, idx)] = meta
+
+    # Backward-compatible fallback key: (suite, None, chunk_idx).
+    # Add only when chunk_idx is unique within suite to avoid cross-group mixups.
+    per_suite_idx_count: dict[tuple[str, int], int] = defaultdict(int)
+    for suite, _group, idx, _meta in parsed_chunk_rows:
+        per_suite_idx_count[(suite, idx)] += 1
+    for suite, group, idx, meta in parsed_chunk_rows:
+        if per_suite_idx_count[(suite, idx)] == 1 and (suite, None, idx) not in chunks:
+            alias_meta = dict(meta)
+            alias_meta["_fallback_alias"] = True
+            chunks[(suite, None, idx)] = alias_meta
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
         by_kind["tests"]["fails_total"] = by_kind["tests"]["errors"] + by_kind["tests"]["timeouts"]
@@ -183,7 +251,54 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
     stacks: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     runs: list[dict[str, Any]] = []
 
+    def _tid_from_thread_name(name: str) -> int:
+        m = re.search(r"_(\d+)$", name or "")
+        if m:
+            return int(m.group(1))
+        return abs(hash(name or "worker")) % 100_000
+
     for ev in events:
+        # Old evlog format (jsonl): worker_threads/node-finished with value.time.
+        if "ph" not in ev and ev.get("namespace") == "worker_threads" and ev.get("event") == "node-finished":
+            value = ev.get("value") if isinstance(ev.get("value"), dict) else {}
+            arg_name = str(value.get("name", ""))
+            if not arg_name.startswith("Run("):
+                continue
+            suite, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            if suite is None or chunk is None:
+                continue
+            if suite_filter is not None and suite != suite_filter:
+                continue
+            time_range = value.get("time") if isinstance(value.get("time"), list) else None
+            if (
+                isinstance(time_range, list)
+                and len(time_range) == 2
+                and isinstance(time_range[0], (int, float))
+                and isinstance(time_range[1], (int, float))
+                and float(time_range[1]) > float(time_range[0])
+            ):
+                start_us = float(time_range[0]) * 1_000_000.0
+                end_us = float(time_range[1]) * 1_000_000.0
+            else:
+                continue
+            tid = _tid_from_thread_name(str(ev.get("thread_name", "")))
+            m_uid = RUN_UID_RE.search(arg_name)
+            runs.append(
+                {
+                    "pid": 1,
+                    "tid": tid,
+                    "start_us": start_us,
+                    "end_us": end_us,
+                    "dur_us": end_us - start_us,
+                    "suite_path": suite,
+                    "chunk_group": chunk_group,
+                    "chunk": chunk,
+                    "uid": m_uid.group(1) if m_uid else None,
+                    "raw_name": arg_name,
+                }
+            )
+            continue
+
         ph = ev.get("ph")
         if ph not in ("B", "E"):
             continue
@@ -194,11 +309,8 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
         if ph == "B":
             args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
             arg_name = str(args.get("name", ""))
-            name = str(ev.get("name", ""))
             m_uid = RUN_UID_RE.search(arg_name)
-            m_sc = RUN_SUITE_CHUNK_RE.search(arg_name)
-            suite = m_sc.group(1) if m_sc else None
-            chunk = int(m_sc.group(2)) if m_sc else None
+            suite, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
             is_target = (
                 arg_name.startswith("Run(")
                 and suite is not None
@@ -211,6 +323,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     "arg_name": arg_name,
                     "is_target": is_target,
                     "suite": suite,
+                    "chunk_group": chunk_group,
                     "chunk": chunk,
                     "uid": m_uid.group(1) if m_uid else None,
                 }
@@ -229,6 +342,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     "end_us": ts,
                     "dur_us": ts - begin["ts"],
                     "suite_path": begin["suite"],
+                    "chunk_group": begin.get("chunk_group"),
                     "chunk": begin["chunk"],
                     "uid": begin["uid"],
                     "raw_name": begin["arg_name"],
@@ -249,7 +363,7 @@ def add_counter_series(trace_events: list[dict[str, Any]], pid: int, name: str, 
 
 def build_trace(
     runs: list[dict[str, Any]],
-    chunks: dict[tuple[str, int], dict[str, Any]],
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
     suite_filter: Optional[str],
     requirements_cache: Optional[dict[str, dict[str, Any]]] = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
@@ -265,8 +379,13 @@ def build_trace(
     runs_with_synthetic_metrics = 0
     enriched_runs: list[dict[str, Any]] = []
 
-    run_keys = {(str(r["suite_path"]), int(r["chunk"])) for r in runs if r.get("suite_path") is not None and r.get("chunk") is not None}
-    missing_runs_for_chunk = len(set(chunks.keys()) - run_keys)
+    run_keys = {
+        (normalize_suite_path(str(r["suite_path"])), normalize_chunk_group(r.get("chunk_group")), int(r["chunk"]))
+        for r in runs
+        if r.get("suite_path") is not None and r.get("chunk") is not None
+    }
+    report_chunk_keys = {k for k, v in chunks.items() if not bool(v.get("_fallback_alias"))}
+    missing_runs_for_chunk = len(report_chunk_keys - run_keys)
 
     suite_matched: dict[str, int] = defaultdict(int)
     suite_missing: dict[str, int] = defaultdict(int)
@@ -274,8 +393,9 @@ def build_trace(
     for r in runs:
         suite_raw = str(r["suite_path"])
         suite = normalize_suite_path(suite_raw)
+        chunk_group = normalize_chunk_group(r.get("chunk_group"))
         idx = int(r["chunk"])
-        meta = chunks.get((suite_raw, idx), {})
+        meta = chunks.get((suite, chunk_group, idx), {}) or chunks.get((suite, None, idx), {})
         if meta:
             matched += 1
             suite_matched[suite] += 1
@@ -314,11 +434,12 @@ def build_trace(
                 "tid": int(r["tid"]),
                 "ts": r["start_us"],
                 "dur": r["dur_us"],
-                "name": f"{suite}::chunk{idx}",
+                "name": f"{suite}::{chunk_group}/chunk{idx}" if chunk_group else f"{suite}::chunk{idx}",
                 "cat": "suite_chunk",
                 "args": {
                     "suite_path": suite,
                     "suite_path_raw": suite_raw,
+                    "chunk_group": chunk_group,
                     "chunk": idx,
                     "status": status,
                     "error_type": error_type,
@@ -346,6 +467,7 @@ def build_trace(
         er["ram_kb_report"] = ram
         er["suite_path"] = suite
         er["suite_path_raw"] = suite_raw
+        er["chunk_group"] = chunk_group
         er["chunk"] = idx
         er["synthetic_metrics"] = synthetic_metrics
         er["status"] = status
@@ -376,7 +498,7 @@ def build_trace(
     stats = {
         "suite_path_filter": suite_filter,
         "runs_from_evlog": len(runs),
-        "chunks_in_report": len(chunks),
+        "chunks_in_report": len(report_chunk_keys),
         "matched_runs_with_metrics": matched,
         "runs_without_report_metrics": missing_metrics,
         "runs_with_synthetic_metrics": runs_with_synthetic_metrics,
@@ -409,7 +531,8 @@ def _build_step_series(runs: list[dict[str, Any]], value_key: str, top_labels: s
         if label_mode == "suite":
             label = str(r["suite_path"])
         else:
-            label = f"{r['suite_path']}::chunk{r['chunk']}"
+            group = normalize_chunk_group(r.get("chunk_group"))
+            label = f"{r['suite_path']}::{group}/chunk{r['chunk']}" if group else f"{r['suite_path']}::chunk{r['chunk']}"
         v = float(r.get(value_key, 0.0) or 0.0)
         events.append((float(r["start_us"]), +1, label, v))
         events.append((float(r["end_us"]), -1, label, v))
@@ -686,13 +809,14 @@ def build_html_dashboard(
         ram_by_label = defaultdict(float)
         active_time_by_label = defaultdict(float)
         for r in runs:
-            lb = f"{r['suite_path']}::chunk{r['chunk']}"
+            group = normalize_chunk_group(r.get("chunk_group"))
+            lb = f"{r['suite_path']}::{group}/chunk{r['chunk']}" if group else f"{r['suite_path']}::chunk{r['chunk']}"
             cpu_by_label[lb] += float(r.get("cpu_sec_report", 0.0) or 0.0)
             ram_by_label[lb] += float(r.get("ram_kb_report", 0.0) or 0.0)
             active_time_by_label[lb] += float(r.get("dur_us", 0.0) or 0.0) / 1_000_000.0
 
         def suite_of_label(lb: str) -> str:
-            return lb.split("::chunk", 1)[0]
+            return lb.split("::", 1)[0]
 
         top_cpu = [lb for lb, _ in sorted(cpu_by_label.items(), key=lambda x: x[1], reverse=True) if suite_of_label(lb) in set(top_cpu_suite)]
         top_ram = [lb for lb, _ in sorted(ram_by_label.items(), key=lambda x: x[1], reverse=True) if suite_of_label(lb) in set(top_ram_suite)]
@@ -772,10 +896,10 @@ def build_html_dashboard(
     ):
         if lb == "other":
             track_suite[lb] = "other"
-        elif "::chunk" not in lb:
+        elif "::" not in lb:
             track_suite[lb] = lb
         else:
-            track_suite[lb] = lb.split("::chunk", 1)[0]
+            track_suite[lb] = lb.split("::", 1)[0]
 
     synthetic_suites = {str(r["suite_path"]) for r in runs if bool(r.get("synthetic_metrics"))}
     track_has_synthetic = {
@@ -1157,7 +1281,7 @@ def build_html_dashboard(
 
     function suiteFromLabel(label) {{
       if (!label || label === 'other') return '';
-      if (label.includes('::chunk')) return label.split('::chunk', 1)[0];
+      if (label.includes('::')) return label.split('::', 1)[0];
       return label;
     }}
 

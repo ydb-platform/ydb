@@ -243,6 +243,35 @@ public:
         return builder.Build();
     }
 
+    static TIntervalsIterator BuildKeyBasedIterator(const THashSet<ui64>& intersectingPortions, const ui64 basePortionId) {
+        // For key-based deduplication, create a single interval that includes all intersecting portions
+        TIntervalsIteratorBuilder builder;
+        
+        // Create a single interval covering all portions
+        // We'll use the base portion's borders as the interval boundaries
+        // The actual deduplication will be done by comparing PK keys during merge
+        std::vector<TIntervalInfo> intervals;
+        std::set<TIntervalsIterator::TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByLeftBorder> portions;
+        
+        // Create a single interval (index 0)
+        // The interval boundaries will be set during filter construction
+        TIntervalBorder beginBorder = TIntervalBorder::First(
+            std::make_shared<NArrow::NMerger::TSortableBatchPosition>(), basePortionId);
+        TIntervalBorder endBorder = TIntervalBorder::Last(
+            std::make_shared<NArrow::NMerger::TSortableBatchPosition>(), basePortionId);
+        
+        // All intersecting portions are active in this single interval
+        THashSet<ui64> allPortions = intersectingPortions;
+        intervals.emplace_back(beginBorder, endBorder, allPortions);
+        
+        // All portions span the entire single interval
+        for (const auto& portionId : intersectingPortions) {
+            portions.emplace(portionId, 0, 0);
+        }
+        
+        return TIntervalsIterator(std::move(intervals), std::move(portions));
+    }
+
     ui64 NumIntervals() const {
         return Intervals.size();
     }

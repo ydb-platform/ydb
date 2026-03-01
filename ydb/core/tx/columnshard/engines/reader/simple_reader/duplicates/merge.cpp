@@ -75,6 +75,25 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
 
 THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(const TIntervalInfo& interval,
     NArrow::NMerger::TMergePartialStream& merger, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
+    
+    // Key-based deduplication: process all data at once by comparing PK keys
+    if (Context.GetGlobalContext().GetUseKeyBasedDedup()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("mode", "key_based_dedup");
+        
+        TFiltersBuilder filtersBuilder;
+        for (const auto& [portionId, _] : columnData) {
+            filtersBuilder.AddSource(portionId);
+        }
+        
+        // Process all records from all portions, deduplicating by PK keys
+        // The merger will handle the deduplication by comparing PK keys
+        merger.DrainAll(filtersBuilder);
+        
+        Context.GetGlobalContext().GetCounters()->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
+        return std::move(filtersBuilder).ExtractFilters();
+    }
+    
+    // Original boundary-based deduplication
     merger.SkipToBound(*interval.GetBegin().GetKey(), !interval.GetBegin().GetIsLast());
 
     AFL_VERIFY(!interval.IsEmpty());

@@ -9,6 +9,7 @@ SRCS(
     splitter.cpp
     context.cpp
     executor.cpp
+    pk_fetcher.cpp
 )
 
 PEERDIR(

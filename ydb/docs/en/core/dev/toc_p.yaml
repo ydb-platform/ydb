@@ -20,6 +20,8 @@ items:
   href: secondary-indexes.md
 - name: Vector indexes
   href: vector-indexes.md
+- name: Vector index type vector_kmeans_tree
+  href: vector-indexes-kmeans-tree-type.md
 - name: Query plans optimization
   href: query-plans-optimization.md
 - name: Resource consumption management

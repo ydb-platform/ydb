@@ -11,6 +11,228 @@
 
 {% list tabs %}
 
+<<<<<<< HEAD
+=======
+- C++
+
+  В {{ ydb-short-name }} C++ SDK выполнение повторных попыток с корректной обработкой ошибок реализовано в нескольких программных интерфейсах:
+
+  {% cut "Синхронное выполнение повторных попыток" %}
+
+  Для выполнения запросов с автоматическими повторными попытками используется метод `RetryQuerySync`.
+  Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
+  {{ ydb-short-name }} C++ SDK автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
+
+  Пример кода, использующего `RetryQuerySync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              SELECT series_id, title
+              FROM series
+              WHERE series_id = 1;
+          )";
+
+          auto result = session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+
+          if (!result.IsSuccess()) {
+              return result;
+          }
+
+          // Обработка результата запроса
+          auto resultSet = result.GetResultSet(0);
+          NYdb::TResultSetParser parser(resultSet);
+          while (parser.TryNextRow()) {
+              std::cout << "Series"
+                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                  << std::endl;
+          }
+
+          return result;
+      });
+
+      if (!result.IsSuccess()) {
+          // Обработка ошибки после всех попыток
+          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Асинхронное выполнение повторных попыток" %}
+
+  Для асинхронного выполнения запросов с автоматическими повторными попытками используется метод `RetryQuery`.
+  Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно.
+
+  Пример кода, использующего `RetryQuery`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
+      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
+          auto query = R"(
+              SELECT series_id, title, release_date
+              FROM series
+              WHERE series_id = 1;
+          )";
+
+          return session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+              auto result = asyncResult.GetValue();
+              if (!result.IsSuccess()) {
+                  return result;
+              }
+
+              // Обработка результата запроса
+              auto resultSet = result.GetResultSet(0);
+              NYdb::TResultSetParser parser(resultSet);
+              while (parser.TryNextRow()) {
+                  std::cout << "Series"
+                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                      << std::endl;
+              }
+
+              return result;
+          });
+      });
+
+      // Ожидание завершения
+      auto status = future.GetValueSync();
+      if (!status.IsSuccess()) {
+          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Выполнение повторных попыток при работе со стриминговыми запросами" %}
+
+  Для выполнения стриминговых запросов с автоматическими повторными попытками используется метод `StreamExecuteQuery`.
+  Стриминговые запросы позволяют обрабатывать большие объемы данных, получая результаты частями.
+
+  Пример кода, использующего `RetryQuerySync` со `StreamExecuteQuery`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              SELECT series_id, title, release_date
+              FROM series
+              WHERE series_id > 0;
+          )";
+
+          auto resultStreamQuery = session.StreamExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::NoTx()
+          ).GetValueSync();
+
+          if (!resultStreamQuery.IsSuccess()) {
+              return resultStreamQuery;
+          }
+
+          // Обработка результатов по частям
+          bool eos = false;
+          while (!eos) {
+              auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
+
+              if (!streamPart.IsSuccess()) {
+                  eos = true;
+                  if (!streamPart.EOS()) {
+                      return streamPart;
+                  }
+                  continue;
+              }
+
+              if (streamPart.HasResultSet()) {
+                  auto rs = streamPart.ExtractResultSet();
+                  NYdb::TResultSetParser parser(rs);
+                  while (parser.TryNextRow()) {
+                      std::cout << "Series"
+                          << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                          << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                          << std::endl;
+                  }
+              }
+          }
+
+          return resultStreamQuery;
+      });
+
+      if (!result.IsSuccess()) {
+          std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Настройка параметров повторных попыток" %}
+
+  Пользователь может настраивать поведение механизма повторных попыток с помощью класса `TRetryOperationSettings`:
+
+  * `MaxRetries(uint32_t)` - максимальное количество повторных попыток (по умолчанию 10)
+  * `Idempotent(bool)` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок
+  * `RetryNotFound(bool)` - повторять ли операции, вернувшие статус `NOT_FOUND` (по умолчанию true)
+  * `MaxTimeout(TDuration)` - максимальное время выполнения всех попыток
+  * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
+  * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
+
+  Пример использования настроек повторных попыток:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+  #include <ydb-cpp-sdk/client/retry/retry.h>
+
+  void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
+      auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
+          .Idempotent(true)
+          .MaxRetries(20)
+          .MaxTimeout(TDuration::Seconds(30));
+
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              UPSERT INTO series (series_id, title)
+              VALUES (10, "New Series");
+          )";
+
+          auto result = session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+
+          if (!result.IsSuccess()) {
+              return result;
+          }
+
+          // Обработка результата запроса
+          std::cout << "Query executed successfully" << std::endl;
+          return result;
+      }, retrySettings);
+
+      if (!result.IsSuccess()) {
+          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+>>>>>>> eaa6624d4cb (Python snippets in Recipes and Reference (#33698))
 - Go (native)
 
   В {{ ydb-short-name }} Go SDK корректная обработка ошибок закреплена в нескольких программных интерфейсах:
@@ -328,5 +550,92 @@
       ```
 
     {% endcut %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    В {{ ydb-short-name }} Python SDK выполнение повторных попыток реализовано в `QuerySessionPool` с использованием класса `RetrySettings` для настройки параметров повторов. Класс `RetrySettings` поддерживает следующие опции:
+
+    * `max_retries` - максимальное количество повторных попыток (по умолчанию 10)
+    * `idempotent` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок (по умолчанию False)
+    * `backoff_ceiling`, `backoff_slot_duration` - параметры алгоритма экспоненциальной задержки
+    * `fast_backoff_settings`, `slow_backoff_settings` - настройки быстрых и медленных повторов
+
+    Для выполнения запросов с повторными попытками `QuerySessionPool` предоставляет методы `retry_operation_sync` и `execute_with_retries`. Метод `execute_with_retries` предназначен для разовых запросов с неявным режимом транзакции (implicit). Для остальных случаев (явные транзакции, несколько операций в одной транзакции) используйте `retry_operation_sync`.
+
+    Пример кода, использующего execute_with_retries:
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        result_sets = pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
+
+    Пример кода, использующего retry_operation_sync:
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+              with session.transaction().execute(
+                  "SELECT 1",
+                  commit_tx=True,
+              ) as result_sets:
+                  pass
+
+        result = pool.retry_operation_sync(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    Пример кода, использующего execute_with_retries:
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        result_sets = await pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
+
+    Пример кода, использующего retry_operation_sync:
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
+
+  - SQLAlchemy
+
+    При использовании {{ ydb-short-name }} через SQLAlchemy выполнение повторных попыток происходит под капотом и не регулируется снаружи.
+
+  {% endlist %}
 
 {% endlist %}

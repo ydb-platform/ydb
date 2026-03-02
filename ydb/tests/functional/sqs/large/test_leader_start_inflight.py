@@ -40,7 +40,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
     def test_limit_leader_start_inflight(self, is_fifo, tables_format):
         self._init_with_params(is_fifo, tables_format)
 
-        queues = []
+        queues = []  # 13
         for i in range(20):
             queues.append(self._create_queue_and_assert(f'{i}_{self.queue_name}', is_fifo=is_fifo))
 

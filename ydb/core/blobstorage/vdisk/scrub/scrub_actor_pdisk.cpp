@@ -2,11 +2,12 @@
 
 namespace NKikimr {
 
-    std::optional<TRcBuf> TScrubCoroImpl::Read(const TDiskPart& part) {
+    std::optional<TRcBuf> TScrubCoroImpl::Read(const TDiskPart& part, TLogoBlobID hugeBlobId) {
         Y_VERIFY_S(part.ChunkIdx, ScrubCtx->VCtx->VDiskLogPrefix);
         Y_VERIFY_S(part.Size, ScrubCtx->VCtx->VDiskLogPrefix);
         auto msg = std::make_unique<NPDisk::TEvChunkRead>(ScrubCtx->PDiskCtx->Dsk->Owner,
             ScrubCtx->PDiskCtx->Dsk->OwnerRound, part.ChunkIdx, part.Offset, part.Size, NPriRead::HullLow, nullptr);
+        msg->BlobId = hugeBlobId;
         ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "reading data from " << part.ToString();
@@ -20,8 +21,8 @@ namespace NKikimr {
         return m->Status == NKikimrProto::OK && m->Data.IsReadable() ? std::make_optional(m->Data.ToString()) : std::nullopt;
     }
 
-    bool TScrubCoroImpl::IsReadable(const TDiskPart& part) {
-        return Read(part).has_value();
+    bool TScrubCoroImpl::IsReadable(const TDiskPart& part, TLogoBlobID hugeBlobId) {
+        return Read(part, hugeBlobId).has_value();
     }
 
     void TScrubCoroImpl::Write(const TDiskPart& part, TString data) {

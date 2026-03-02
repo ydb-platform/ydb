@@ -31,6 +31,7 @@ private:
     TVector<TVChunk> VChunks;
 
     size_t GetVChunkIndex(ui64 blockIndex) const;
+    size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

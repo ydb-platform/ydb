@@ -521,18 +521,31 @@ def main() -> None:
     p.add_argument("--suite-path", default=None, help="Suite path to filter; omit for ALL suites")
     p.add_argument("--report", required=True, type=Path, help="Path to report.json")
     p.add_argument("--evlog", required=True, type=Path, help="Path to ya evlog json/jsonl")
-    p.add_argument("--out-trace", required=True, type=Path, help="Output trace JSON for chrome://tracing / Perfetto")
-    p.add_argument("--out-stats", type=Path, default=None, help="Optional output JSON with matching stats")
-    p.add_argument("--out-html", type=Path, default=None, help="Optional HTML dashboard with layered CPU/RAM charts")
+    p.add_argument("--out-html", type=Path, default=None, help="Output HTML dashboard (also sets default paths for sibling outputs)")
+    p.add_argument("--out-trace", type=Path, default=None, help="Output trace JSON (default: <html-stem>_trace.json next to --out-html)")
+    p.add_argument("--out-stats", type=Path, default=None, help="Output stats JSON (default: <html-stem>_stats.json next to --out-html)")
+    p.add_argument("--out-cpu-suggestions", type=Path, default=None, help="Output CPU suggestions JSON (default: <html-stem>_suggestions.json next to --out-html)")
     p.add_argument("--top-n", type=int, default=12, help="Top suites to keep highlighted; suite+chunk mode keeps all chunks of these suites")
     p.add_argument("--max-points", type=int, default=1000, help="Max points per series in HTML dashboard (downsampling)")
     p.add_argument("--html-by-chunk", action="store_true", help="Include suite+chunk charts in HTML (default: only by suite)")
     p.add_argument("--full-table", action="store_true", help="Generate additional detailed *_table.html (disabled by default)")
     p.add_argument("--maximize-reqs-for-timeout-tests", action="store_true", help="For suites with test timeouts use size max: SMALL=1, MEDIUM=4, LARGE=all")
-    p.add_argument("--out-cpu-suggestions", type=Path, default=None, help="Output JSON with per-suite recommended cpuN for runner")
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
     p.add_argument("--sanitizer", type=str, default=None, help="Optional SANITIZER_TYPE value for ya.make IF branches")
     args = p.parse_args()
+
+    # Auto-derive sibling output paths from --out-html when not specified explicitly.
+    if args.out_html:
+        stem = args.out_html.with_suffix("")
+        if args.out_trace is None:
+            args.out_trace = stem.parent / (stem.name + "_trace.json")
+        if args.out_stats is None:
+            args.out_stats = stem.parent / (stem.name + "_stats.json")
+        if args.out_cpu_suggestions is None:
+            args.out_cpu_suggestions = stem.parent / (stem.name + "_suggestions.json")
+
+    if args.out_trace is None:
+        raise SystemExit("Specify --out-trace or --out-html (trace path will be derived automatically)")
 
     # Prevent accidental overwrite of inputs by outputs.
     report_r = args.report.resolve()

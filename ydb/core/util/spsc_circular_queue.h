@@ -18,9 +18,14 @@ public:
     {
     }
 
+    // Not safe to call concurrently with TryPush/TryPop; external synchronization required.
+    // All items in the queue are lost.
     void Resize(size_t capacity) {
         Capacity = capacity ? FastClp2(capacity) : 0;
+        FirstEmpty = 0;
+        FirstUsed = 0;
         Queue.resize(Capacity);
+        Size_.store(0, std::memory_order_release);
     }
 
     bool TryPush(T&& item) {

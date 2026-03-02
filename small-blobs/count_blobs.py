@@ -3,11 +3,11 @@ import re
 from pathlib import Path
 import sys
 import time
-
+from dataclasses import dataclass, field
+from collections.abc import Iterable
 
 LOGO_BLOB_ID_RE = re.compile(r"\[(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)\]")
-DATA_PREFIX_RE = re.compile(r"^\d+\s+\d+\s+[ABC]\b")
-LOCAL_ALL_ZERO_MARKER = "local: 0 0 0 0 0 0 "
+LOCAL_VECTOR_RE = re.compile(r"\blocal:\s+([01](?:\s+[01])*)\b")
 
 # BlobStorage huge/inplaced thresholds by media (runtime values, bytes).
 MIN_HUGE_BLOB_IN_BYTES_BY_MEDIA = {
@@ -20,6 +20,321 @@ ERASURE_BLOCK_4_2 = "block-4-2"
 ERASURE_MIRROR_3_DC = "mirror-3-dc"
 DEFAULT_ERASURE = ERASURE_BLOCK_4_2
 DEFAULT_BLOB_HEADER_SIZE_BYTES = 8
+
+
+@dataclass
+class Blob:
+    total: int = 0
+    with_local: int = 0
+    local_union: int = 0
+    not_keep: int = 0
+    inplaced: bool = False
+
+    def keep(self) -> bool:
+        return self.not_keep == 0
+    
+    def keep_and_local(self) -> bool:
+        return self.not_keep == 0 and self.with_local > 0
+
+    def keep_and_full_local(self) -> bool:
+        return self.not_keep == 0 and self.local_union == 0b111111
+
+    def add(self, record: "LBRecord") -> None:
+        self.total += 1
+        if record.local:
+            self.with_local += 1
+        self.local_union |= record.local
+        if record.not_keep:
+            self.not_keep += 1
+        self.inplaced = record.inplaced
+
+
+@dataclass
+class Channel:
+    erasure: str
+    _blobs: dict[str, Blob] = field(default_factory=dict)
+    total: int = 0
+    with_local: int = 0
+    fresh: int = 0
+    not_keep: int = 0
+    # like the NumItemsInplaced/Huge counter: with local and not fresh
+    num_items_inplaced: int = 0
+    num_items_huge: int = 0
+    inplaced_size: int = 0
+    huge_size: int = 0
+
+    def blobs(self) -> Iterable[Blob]:
+        return self._blobs.values()
+
+    def blobs_keep(self) -> Iterable[Blob]:
+        for blob in self._blobs.values():
+            if blob.keep():
+                yield blob
+    
+    def blobs_keep_and_local(self) -> Iterable[Blob]:
+        for blob in self._blobs.values():
+            if blob.keep_and_local():
+                yield blob
+    
+    def blobs_keep_and_full_local(self) -> Iterable[Blob]:
+        for blob in self._blobs.values():
+            if blob.keep_and_full_local():
+                yield blob
+
+    def add(self, record: "LBRecord") -> None:
+        self.total += 1
+        if record.local:
+            self.with_local += 1
+        if record.fresh:
+            self.fresh += 1
+        if record.not_keep:
+            self.not_keep += 1
+        if record.local and not record.fresh and record.inplaced:
+            self.num_items_inplaced += 1
+            self.inplaced_size += record.part_size
+        if record.local and not record.fresh and not record.inplaced:
+            self.num_items_huge += 1
+            self.huge_size += record.part_size
+        
+        blob = self._blobs.get(record.blob_id)
+        if blob is None:
+            blob = Blob()
+            self._blobs[record.blob_id] = blob
+        blob.add(record)
+
+    def print_blob_group(
+        self,
+        logger: "Logger",
+        blobs_name: str,
+        blobs_enumerator: Iterable[Blob],
+        total_channel_blobs: int,
+        total_blobs: int,
+        total_channel_records: int,
+        total_records: int,
+    ) -> None:
+        emit = logger.emit
+        right = logger.shift_right
+        left = logger.shift_left
+
+        blobs = 0
+        small_blobs = 0
+        huge_blobs = 0
+        records = 0
+        small_records = 0
+        huge_records = 0
+        for blob in blobs_enumerator:
+            blobs += 1
+            records += blob.total
+            if blob.inplaced:
+                small_blobs += 1
+                small_records += blob.total
+            else:
+                huge_blobs += 1
+                huge_records += blob.total
+
+        emit(f"{blobs_name} blobs:", str(blobs), pct(blobs, total_channel_blobs), pct(blobs, total_blobs))
+        right()
+        emit("records:", str(records), pct(records, total_channel_records), pct(records, total_records))
+        emit("records per blob:", f"{(records / blobs):.1f}" if blobs else "0.0")
+        emit("small blobs:", str(small_blobs), pct(small_blobs, blobs), pct(small_blobs, total_blobs))
+        right()
+        emit("records:", str(small_records), pct(small_records, records), pct(small_records, total_records))
+        emit("records per blob:", f"{(small_records / small_blobs):.1f}" if small_blobs else "0.0")
+        left()
+        emit("huge blobs:", str(huge_blobs), pct(huge_blobs, blobs), pct(huge_blobs, total_blobs))
+        right()
+        emit("records:", str(huge_records), pct(huge_records, records), pct(huge_records, total_records))
+        emit("records per blob:", f"{(huge_records / huge_blobs):.1f}" if huge_blobs else "0.0")
+        left()
+        left()
+
+    def print(
+        self,
+        logger: "Logger",
+        label: str,
+        total_blobs: int,
+        total_logoblobs_records: int,
+        total_records: int,
+    ) -> None:
+        emit = logger.emit
+        right = logger.shift_right
+        left = logger.shift_left
+
+        if self.total == 0:
+            emit(f"{label}:", "0")
+            return
+
+        emit(f"{label}:", str(self.total), pct(self.total, total_logoblobs_records), pct(self.total, total_records))
+        right()
+        emit("not keep:", str(self.not_keep), pct(self.not_keep, self.total), pct(self.not_keep, total_records))
+        emit("with local:", str(self.with_local), pct(self.with_local, self.total), pct(self.with_local, total_records))
+        emit("fresh:", str(self.fresh), pct(self.fresh, self.total), pct(self.fresh, total_records))
+        emit("inplaced:", str(self.num_items_inplaced), pct(self.num_items_inplaced, self.total), pct(self.num_items_inplaced, total_records))
+        emit("huge:", str(self.num_items_huge), pct(self.num_items_huge, self.total), pct(self.num_items_huge, total_records))
+        emit("inplaced size:", human_size(self.inplaced_size))
+        emit("huge size:", human_size(self.huge_size))
+
+        total_channel_blobs = len(self._blobs)
+        self.print_blob_group(logger, "all", self.blobs(), total_channel_blobs, total_blobs, self.total, total_records)
+        self.print_blob_group(logger, "keep", self.blobs_keep(), total_channel_blobs, total_blobs, self.total, total_records)
+        self.print_blob_group(logger, "keep and local", self.blobs_keep_and_local(), total_channel_blobs, total_blobs, self.total, total_records)
+        self.print_blob_group(logger, "keep and full local", self.blobs_keep_and_full_local(), total_channel_blobs, total_blobs, self.total, total_records)
+        left()
+
+@dataclass
+class LBRecord:
+    not_keep: bool
+    local: int
+    inplaced: bool
+    blob_size: int
+    part_size: int
+    blob_id: str
+    channel: int
+    fresh: bool
+
+    @classmethod
+    def from_logoblob_record(
+        cls,
+        logoblob_record: str,
+        erasure: str,
+        media: str = DEFAULT_BS_MEDIA,
+        min_huge_blob_in_bytes: int | None = None,
+    ) -> "LBRecord":
+        table_parts = logoblob_record.split(maxsplit=1)
+        table_type = table_parts[0] if table_parts else ""
+        if not table_type:
+            raise ValueError("failed to parse table_type from logoblob record")
+
+        match = LOGO_BLOB_ID_RE.search(logoblob_record)
+        if not match:
+            raise ValueError("failed to parse TLogoBlobID from logoblob record")
+        blob_id = match.group(0)
+        _tablet_id, _generation, _step, channel_raw, _cookie, blob_size_raw, _part_id = match.groups()
+        channel = int(channel_raw)
+        blob_size = int(blob_size_raw)
+        part_size = max_part_size(blob_size, erasure)
+        inplaced = is_small(
+            blob_size,
+            media=media,
+            erasure=erasure,
+            min_huge_blob_in_bytes=min_huge_blob_in_bytes,
+        )
+
+        local = 0
+        local_match = LOCAL_VECTOR_RE.search(logoblob_record)
+        if local_match:
+            for idx, bit in enumerate(local_match.group(1).split()):
+                if bit == "1":
+                    local |= 1 << idx
+
+        not_keep = "DoNotKeep" in logoblob_record
+        fresh = table_type in ("FCur", "FDreg", "FOld")
+
+        return cls(
+            not_keep=not_keep,
+            local=local,
+            inplaced=inplaced,
+            blob_size=blob_size,
+            part_size=part_size,
+            blob_id=blob_id,
+            channel=channel,
+            fresh=fresh,
+        )
+
+
+@dataclass
+class Report:
+    erasure: str = DEFAULT_ERASURE
+    media: str = DEFAULT_BS_MEDIA
+    min_huge_blob_in_bytes: int | None = None
+    channels: list[Channel] = field(default_factory=list)
+    blocks_total: int = 0
+    barriers_total: int = 0
+    logoblobs_total: int = 0
+    non_data_lines_skipped: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.channels:
+            self.channels = [Channel(self.erasure), Channel(self.erasure), Channel(self.erasure)]
+
+    def add(self, line: str) -> None:
+        parts = line.split(maxsplit=3)
+        if len(parts) < 4:
+            self.non_data_lines_skipped += 1
+            return
+        db_kind = parts[2]
+
+        # From blobsan:
+        # A = LOGOBLOBS, B = BLOCKS, C = BARRIERS
+        if db_kind == "B":
+            self.blocks_total += 1
+            return
+        if db_kind == "C":
+            self.barriers_total += 1
+            return
+        if db_kind != "A":
+            self.non_data_lines_skipped += 1
+            return
+
+        # A - LOGOBLOBS records
+        logoblob_record = parts[3]
+        try:
+            record = LBRecord.from_logoblob_record(
+                logoblob_record,
+                erasure=self.erasure,
+                media=self.media,
+                min_huge_blob_in_bytes=self.min_huge_blob_in_bytes,
+            )
+        except ValueError:
+            self.non_data_lines_skipped += 1
+            return
+        self.logoblobs_total += 1
+        self.channels[min(record.channel, 2)].add(record)
+
+    def print(self) -> None:
+        if self.non_data_lines_skipped:
+            print(f"note: skipped non-data lines: {self.non_data_lines_skipped}", file=sys.stderr)
+
+        total_records = self.blocks_total + self.barriers_total + self.logoblobs_total
+        with_local = sum(ch.with_local for ch in self.channels)
+        fresh = sum(ch.fresh for ch in self.channels)
+        not_keep = sum(ch.not_keep for ch in self.channels)
+        num_items_inplaced = sum(ch.num_items_inplaced for ch in self.channels)
+        num_items_huge = sum(ch.num_items_huge for ch in self.channels)
+        inplaced_size = sum(ch.inplaced_size for ch in self.channels)
+        huge_size = sum(ch.huge_size for ch in self.channels)
+
+        log = Logger()
+        emit = log.emit
+        right = log.shift_right
+        left = log.shift_left
+
+        emit("total records:", str(total_records))
+        right()
+        emit("blocks:", str(self.blocks_total), pct(self.blocks_total, total_records))
+        emit("barriers:", str(self.barriers_total), pct(self.barriers_total, total_records))
+        emit("logoblobs:", str(self.logoblobs_total), pct(self.logoblobs_total, total_records))
+        right()
+        emit("with local:", str(with_local), pct(with_local, self.logoblobs_total), pct(with_local, total_records))
+        emit("fresh:", str(fresh), pct(fresh, self.logoblobs_total), pct(fresh, total_records))
+        emit("not keep:", str(not_keep), pct(not_keep, self.logoblobs_total), pct(not_keep, total_records))
+        emit("inplaced:", str(num_items_inplaced), pct(num_items_inplaced, self.logoblobs_total), pct(num_items_inplaced, total_records))
+        emit("huge:", str(num_items_huge), pct(num_items_huge, self.logoblobs_total), pct(num_items_huge, total_records))
+        emit("inplaced size:", human_size(inplaced_size), pct(inplaced_size, inplaced_size + huge_size), pct(inplaced_size, total_records))
+        emit("huge size:", human_size(huge_size), pct(huge_size, inplaced_size + huge_size), pct(huge_size, total_records))
+
+        total_blobs = sum(len(ch._blobs) for ch in self.channels)
+        for idx, channel_key in enumerate(("channel 0", "channel 1", "other channels")):
+            self.channels[idx].print(
+                logger=log,
+                label=channel_key,
+                total_blobs=total_blobs,
+                total_logoblobs_records=self.logoblobs_total,
+                total_records=total_records,
+            )
+        left()
+        left()
+        log.flush()
 
 
 def pct(part: int, whole: int) -> str:
@@ -96,19 +411,72 @@ def format_duration(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
-def new_channel_stats() -> dict[str, int | set[str]]:
-    return {
-        "records": 0,
-        "with_local_not_fresh_records": 0,
-        "estimated_size": 0,
-        "not_keep": 0,
-        "size": 0,
-        "small_estimated_size": 0,
-        "small_size": 0,
-        "small_records": 0,
-        "blobs": set(),
-        "small_blobs": set(),
-    }
+class Progress:
+    def __init__(self, total_bytes: int) -> None:
+        self._total_bytes = total_bytes
+        self._processed_bytes = 0
+        self._start_ts = time.monotonic()
+        self._last_progress_ts = self._start_ts
+
+    def add_processed_bytes(self, size: int) -> None:
+        self._processed_bytes += size
+
+    def print_progress(self) -> None:
+        now = time.monotonic()
+        if now - self._last_progress_ts < 1.0:
+            return
+
+        approx_percent = (
+            self._processed_bytes * 100.0 / self._total_bytes
+            if self._total_bytes
+            else 100.0
+        )
+        elapsed = max(now - self._start_ts, 1e-9)
+        bytes_per_sec = self._processed_bytes / elapsed
+        remaining_bytes = max(self._total_bytes - self._processed_bytes, 0)
+        eta_seconds = (remaining_bytes / bytes_per_sec) if bytes_per_sec > 0 else 0.0
+        print(
+            f"\rprogress: {approx_percent:.2f}% eta: {format_duration(eta_seconds)}",
+            end="",
+            file=sys.stderr,
+            flush=True,
+        )
+        self._last_progress_ts = now
+
+    def print_completed(self) -> None:
+        print("\rprogress: 100.00% eta: 00:00", file=sys.stderr)
+
+
+class Logger:
+    def __init__(self) -> None:
+        self._current_gap = 0
+        self._lines: list[tuple[int, str, str, tuple[str, ...]]] = []
+
+    def __enter__(self) -> "Logger":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is None:
+            self.flush()
+
+    def shift_right(self) -> None:
+        self._current_gap += 2
+
+    def shift_left(self) -> None:
+        self._current_gap = max(0, self._current_gap - 2)
+
+    def emit(self, label: str, value: str, *extras: str) -> None:
+        self._lines.append((self._current_gap, label, value, tuple(extras)))
+
+    def flush(self) -> None:
+        widths: dict[int, int] = {}
+        for gap, label, _value, _extras in self._lines:
+            widths[gap] = max(widths.get(gap, 0), len(label))
+
+        for gap, label, value, extras in self._lines:
+            tail = " ".join(x for x in extras if x)
+            print(f"{' ' * gap}{label:<{widths[gap]}}  {value}{(' ' + tail) if tail else ''}")
+        self._lines.clear()
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,182 +498,23 @@ def main() -> None:
     input_path = Path(args.input_path)
     total_bytes = input_path.stat().st_size
 
-    blocks_total = 0
-    barriers_total = 0
-    logoblobs_total = 0
-    logoblobs_with_local_total = 0
-    logoblobs_fresh_total = 0
-    logoblobs_with_local_not_fresh_total = 0
-
-    channels = {
-        "channel 0": new_channel_stats(),
-        "channel 1": new_channel_stats(),
-        "other channels": new_channel_stats(),
-    }
-    non_data_lines_skipped = 0
-
-    processed_bytes = 0
-    start_ts = time.monotonic()
-    last_progress_ts = time.monotonic()
+    report = Report(
+        erasure=args.erasure,
+        media=args.disk_type,
+        min_huge_blob_in_bytes=args.min_huge_blob_in_bytes,
+    )
+    progress = Progress(total_bytes)
 
     with input_path.open("rb") as f:
-        for line_no, raw_line in enumerate(f, start=1):
-            processed_bytes += len(raw_line)
-            now = time.monotonic()
-            if now - last_progress_ts >= 1.0:
-                approx_percent = (processed_bytes * 100.0 / total_bytes) if total_bytes else 100.0
-                elapsed = max(now - start_ts, 1e-9)
-                bytes_per_sec = processed_bytes / elapsed
-                remaining_bytes = max(total_bytes - processed_bytes, 0)
-                eta_seconds = (remaining_bytes / bytes_per_sec) if bytes_per_sec > 0 else 0.0
-                print(
-                    f"\rprogress: {approx_percent:.2f}% eta: {format_duration(eta_seconds)}",
-                    end="",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                last_progress_ts = now
+        for _line_no, raw_line in enumerate(f, start=1):
+            progress.add_processed_bytes(len(raw_line))
+            progress.print_progress()
 
             line = raw_line.decode("utf-8", errors="replace")
-            if not line.strip():
-                continue
-            if not DATA_PREFIX_RE.match(line):
-                # blobsan may emit non-record lines (for example, summary/diagnostic output)
-                # into the same file when stderr is merged with stdout.
-                non_data_lines_skipped += 1
-                continue
-            parts = line.split(maxsplit=3)
-            if len(parts) < 4:
-                fail(line_no, line, "expected at least 4 prefix fields")
-            db_kind = parts[2]
-            table_type = parts[3].split(maxsplit=1)[0]
+            report.add(line)
 
-            # From blobsan:
-            # A = LOGOBLOBS, B = BLOCKS, C = BARRIERS
-            if db_kind == "B":
-                blocks_total += 1
-                continue
-            if db_kind == "C":
-                barriers_total += 1
-                continue
-            if db_kind != "A":
-                fail(line_no, line, f"unknown db kind '{db_kind}'")
-
-            # LOGOBLOBS records.
-            if "Key#" not in line or "Ingress#" not in line:
-                fail(line_no, line, "LOGOBLOBS row missing 'Key#' or 'Ingress#'")
-            match = LOGO_BLOB_ID_RE.search(line)
-            if not match:
-                fail(line_no, line, "failed to parse TLogoBlobID from row")
-            logoblobs_total += 1
-            _tablet_id, _generation, _step, channel, _cookie, blob_size_raw, _part_id = match.groups()
-            channel_id = int(channel)
-            blob_size = int(blob_size_raw)
-            estimated_blob_size = estimate_blob_size(blob_size, args.erasure)
-            part_size = max_part_size(blob_size, args.erasure)
-            is_deleted = "DoNotKeep" in line
-            blob_id = match.group(0)
-            channel_key = "channel 0" if channel_id == 0 else "channel 1" if channel_id == 1 else "other channels"
-            st = channels[channel_key]
-            st["records"] += 1
-            is_fresh = table_type in ("FCur", "FDreg", "FOld")
-            if is_fresh:
-                logoblobs_fresh_total += 1
-            has_local = LOCAL_ALL_ZERO_MARKER not in line
-            if has_local:
-                logoblobs_with_local_total += 1
-                if blob_id not in st["blobs"]:
-                    st["blobs"].add(blob_id)
-                    st["estimated_size"] += estimated_blob_size
-                if is_small(
-                    blob_size,
-                    media=args.disk_type,
-                    erasure=args.erasure,
-                    min_huge_blob_in_bytes=args.min_huge_blob_in_bytes,
-                ) and blob_id not in st["small_blobs"]:
-                    st["small_blobs"].add(blob_id)
-                    st["small_estimated_size"] += estimated_blob_size
-            has_local_not_fresh = has_local and not is_fresh
-            if not has_local_not_fresh:
-                continue
-
-            logoblobs_with_local_not_fresh_total += 1
-            st["with_local_not_fresh_records"] += 1
-            st["size"] += part_size
-            if is_small(
-                blob_size,
-                media=args.disk_type,
-                erasure=args.erasure,
-                min_huge_blob_in_bytes=args.min_huge_blob_in_bytes,
-            ):
-                st["small_records"] += 1
-                st["small_size"] += part_size
-            if is_deleted:
-                st["not_keep"] += 1
-
-    print("\rprogress: 100.00% eta: 00:00", file=sys.stderr)
-    if non_data_lines_skipped:
-        print(f"note: skipped non-data lines: {non_data_lines_skipped}", file=sys.stderr)
-
-    total_records = blocks_total + barriers_total + logoblobs_total
-    logoblobs_estimated_size_total = sum(st.get("estimated_size", 0) for st in channels.values())
-    logoblobs_calculated_size_total = sum(int(st.get("size", 0)) for st in channels.values())
-
-    level_widths = {
-        0: len("total records:"),
-        2: len("logoblobs:"),
-        4: len("with local not fresh:"),
-        6: len("calculated size:"),
-        8: len("records per blob:"),
-        10: len("records per blob:"),
-    }
-
-    def emit(indent: int, label: str, value: str, *extras: str) -> None:
-        width = level_widths.get(indent, len(label))
-        tail = " ".join(x for x in extras if x)
-        print(f"{' ' * indent}{label:<{width}}  {value}{(' ' + tail) if tail else ''}")
-
-    emit(0, "total records:", str(total_records))
-    emit(2, "blocks:", str(blocks_total), pct(blocks_total, total_records))
-    emit(2, "barriers:", str(barriers_total), pct(barriers_total, total_records))
-    emit(2, "logoblobs:", str(logoblobs_total), pct(logoblobs_total, total_records))
-    emit(4, "with local:", str(logoblobs_with_local_total), pct(logoblobs_with_local_total, logoblobs_total), pct(logoblobs_with_local_total, total_records))
-    emit(4, "fresh:", str(logoblobs_fresh_total), pct(logoblobs_fresh_total, logoblobs_total), pct(logoblobs_fresh_total, total_records))
-    emit(4, "with local not fresh:", str(logoblobs_with_local_not_fresh_total), pct(logoblobs_with_local_not_fresh_total, logoblobs_total), pct(logoblobs_with_local_not_fresh_total, total_records))
-    emit(4, "estimated size:", human_size(logoblobs_estimated_size_total))
-    emit(4, "calculated size:", human_size(logoblobs_calculated_size_total))
-
-    for channel_key in ("channel 0", "channel 1", "other channels"):
-        st = channels[channel_key]
-        records = int(st["with_local_not_fresh_records"])
-        if records == 0:
-            emit(4, f"{channel_key}:", "0")
-            continue
-        estimated_size = int(st["estimated_size"])
-        not_keep = int(st["not_keep"])
-        size = int(st["size"])
-        small_estimated_size = int(st["small_estimated_size"])
-        small_size = int(st["small_size"])
-        small_records = int(st["small_records"])
-        blobs = len(st["blobs"])
-        unique_blobs = blobs
-        small_blobs = len(st["small_blobs"])
-        estimated_small_records = small_blobs * min_records_per_blob(args.erasure)
-        records_per_blob = (records / unique_blobs) if unique_blobs else 0.0
-        small_records_per_blob = (small_records / small_blobs) if small_blobs else 0.0
-
-        emit(4, f"{channel_key}:", str(records), pct(records, logoblobs_with_local_not_fresh_total), pct(records, total_records))
-        emit(6, "not keep:", str(not_keep), pct(not_keep, records), pct(not_keep, total_records))
-        emit(6, "unique blobs:", str(unique_blobs))
-        emit(8, "estimated size:", human_size(estimated_size), pct(estimated_size, logoblobs_estimated_size_total), pct(estimated_size, logoblobs_estimated_size_total))
-        emit(8, "calculated size:", human_size(size), pct(size, logoblobs_calculated_size_total), pct(size, logoblobs_calculated_size_total))
-        emit(8, "records per blob:", f"{records_per_blob:.1f}")
-        emit(8, "small blobs:", str(small_blobs), pct(small_blobs, blobs))
-        emit(10, "estimated size:", human_size(small_estimated_size), pct(small_estimated_size, estimated_size), pct(small_estimated_size, logoblobs_estimated_size_total))
-        emit(10, "calculated size:", human_size(small_size), pct(small_size, size), pct(small_size, logoblobs_calculated_size_total))
-        emit(10, "estimated:", str(estimated_small_records))
-        emit(10, "actual:", str(small_records), pct(small_records, records), pct(small_records, total_records))
-        emit(10, "records per blob:", f"{small_records_per_blob:.1f}")
+    progress.print_completed()
+    report.print()
 
 
 if __name__ == "__main__":

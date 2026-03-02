@@ -957,7 +957,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             switch (indexDesc->Type) {
                 case TIndexDescription::EType::GlobalJson:
-                    YQL_ENSURE(false);
+                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
@@ -1025,7 +1025,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             switch (indexDesc->Type) {
                 case TIndexDescription::EType::GlobalJson:
-                    YQL_ENSURE(false);
+                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:

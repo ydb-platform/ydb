@@ -261,12 +261,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
             for (const auto& column : indexKeys.KeyColumns) {
                 auto typeInfo = baseColumnTypes.at(column);
-                if (typeInfo.GetTypeId() != NScheme::NTypeIds::String &&
-                    typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
+                if (typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
                     typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument) {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
                     error = TStringBuilder() << "JSON column '" << column <<
-                        "' must have type 'String', 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);
+                        "' must have type 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);
                     return false;
                 }
             }

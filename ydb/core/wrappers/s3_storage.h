@@ -35,18 +35,18 @@ public:
         {
         }
 
-        NMonitoring::THistogramCounter* GetLatency();
-        NMonitoring::TCounterForPtr* GetBytesWritten();
-        NMonitoring::TCounterForPtr* GetBytesRead();
-        NMonitoring::TCounterForPtr* GetCodeCounter(const TString& code);
+        NMonitoring::THistogramCounter* GetLatency() const;
+        NMonitoring::TCounterForPtr* GetBytesWritten() const;
+        NMonitoring::TCounterForPtr* GetBytesRead() const;
+        NMonitoring::TCounterForPtr* GetCodeCounter(const TString& code) const;
 
     private:
         const TS3CountersRoot* Parent = nullptr;
         NMonitoring::TDynamicCounterPtr RequestGroup;
-        NMonitoring::THistogramPtr LatencyHist;
-        NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
-        NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
-        NMonitoring::TDynamicCounters::TCounterPtr CodeOk;
+        mutable NMonitoring::THistogramPtr LatencyHist;
+        mutable NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+        mutable NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+        mutable NMonitoring::TDynamicCounters::TCounterPtr CodeOk;
     };
 
     struct TS3CountersRoot {

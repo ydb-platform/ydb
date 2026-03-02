@@ -279,55 +279,65 @@ public:
 
 } // anonymous
 
-NMonitoring::THistogramCounter* TS3ExternalStorage::TS3RequestCounters::GetLatency() {
+NMonitoring::THistogramCounter* TS3ExternalStorage::TS3RequestCounters::GetLatency() const {
     if (LatencyHist) {
         return LatencyHist.Get();
+    }
+    if (!RequestGroup) {
+        return nullptr;
     }
 
     Y_ABORT_UNLESS(Parent);
     std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!LatencyHist && RequestGroup) {
+    if (!LatencyHist) {
         LatencyHist = RequestGroup->GetHistogram("LatencyMs", GetLatencyCollector());
     }
     return LatencyHist.Get();
 }
 
-NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesWritten() {
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesWritten() const {
     if (BytesWritten) {
         return BytesWritten.Get();
+    }
+    if (!RequestGroup) {
+        return nullptr;
     }
 
     Y_ABORT_UNLESS(Parent);
     std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!BytesWritten && RequestGroup) {
+    if (!BytesWritten) {
         BytesWritten = RequestGroup->GetCounter("BytesWritten");
     }
     return BytesWritten.Get();
 }
 
-NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesRead() {
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesRead() const {
     if (BytesRead) {
         return BytesRead.Get();
+    }
+    if (!RequestGroup) {
+        return nullptr;
     }
 
     Y_ABORT_UNLESS(Parent);
     std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!BytesRead && RequestGroup) {
+    if (!BytesRead) {
         BytesRead = RequestGroup->GetCounter("BytesRead");
     }
     return BytesRead.Get();
 }
 
-NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetCodeCounter(const TString& code) {
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetCodeCounter(const TString& code) const {
     if (code == OkCode && CodeOk) {
         return CodeOk.Get();
     }
 
-    Y_ABORT_UNLESS(Parent);
-    std::lock_guard<std::mutex> g(Parent->Mutex);
     if (!RequestGroup) {
         return nullptr;
     }
+
+    Y_ABORT_UNLESS(Parent);
+    std::lock_guard<std::mutex> g(Parent->Mutex);
     if (code == OkCode) {
         if (!CodeOk) {
             CodeOk = RequestGroup->GetNamedCounter("code", code, true);

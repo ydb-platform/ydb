@@ -9,6 +9,8 @@ items:
   href: update-executable.md
 - name: Database node authentication and authorization
   href: node-authorization.md
+- name: Managing a cluster in bridge mode
+  href: bridge-management.md
 - name: Managing a cluster's disk subsystem
   include:
     mode: link

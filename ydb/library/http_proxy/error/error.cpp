@@ -276,5 +276,12 @@ extern const TErrorClass TIMEOUT = {
     31
 };
 
+extern const TErrorClass UNSUPPORTED_OPERATION = {
+    "AWS.SimpleQueueService.UnsupportedOperation",
+    400,
+    "Unsupported operation.",
+    32
+};
+
 } // namespace NErrors
 } // namespace NKikimr::NSQS

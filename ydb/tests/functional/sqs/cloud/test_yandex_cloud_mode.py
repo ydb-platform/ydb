@@ -79,6 +79,17 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     def _get_queue_arn(self, queue_url):
         return self._sqs_api.get_queue_attributes(queue_url, ['QueueArn'])['QueueArn']
 
+    def _wait_for_redrive_policy(self, queue_url):
+        """Poll until RedrivePolicy appears in queue attributes, ensuring the queue
+        leader has reloaded its DLQ configuration after set_queue_attributes."""
+        timeout_ms = self.config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] * 2.0
+        deadline = time.time() + timeout_ms / 1000.0
+        while time.time() < deadline:
+            attrs = self._sqs_api.get_queue_attributes(queue_url)
+            if 'RedrivePolicy' in attrs:
+                return
+            time.sleep(0.1)
+
     def _make_boto_client(self, access_key_id, secret_access_key, url):
         session = boto3.session.Session()
         return session.client(
@@ -217,6 +228,9 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         redrive_policy = '{\"deadLetterTargetArn\":\"' + dlq_arn + '\",\"maxReceiveCount\":{}}}'.format(max_receive_count)
         self._sqs_api.set_queue_attributes(queue_url, {'RedrivePolicy': redrive_policy})
 
+        # wait for dead letter queue notification to propagate to queue leader
+        self._wait_for_redrive_policy(queue_url)
+
         # check one policy
         attributes = self._sqs_api.get_queue_attributes(queue_url)
         assert_that(attributes, has_items('RedrivePolicy'))
@@ -287,6 +301,9 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         max_receive_count = 1
         redrive_policy = '{\"deadLetterTargetArn\":\"' + dlq_arn + '\",\"maxReceiveCount\":{}}}'.format(max_receive_count)
         self._sqs_api.set_queue_attributes(queue_url, {'RedrivePolicy': redrive_policy})
+
+        # wait for dead letter queue notification to propagate to queue leader
+        self._wait_for_redrive_policy(queue_url)
 
         seq_no = 0
 
@@ -421,13 +438,14 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         redrive_policy_2 = '{\"deadLetterTargetArn\":\"' + queue_1_arn + '\",\"maxReceiveCount\":{}}}'.format(max_receive_count)
         self._sqs_api.set_queue_attributes(queue2_url, {'RedrivePolicy': redrive_policy_2})
 
+        # wait for dead letter queue notification to propagate to queue leaders
+        self._wait_for_redrive_policy(queue1_url)
+        self._wait_for_redrive_policy(queue2_url)
+
         # check one policy
         attributes = self._sqs_api.get_queue_attributes(queue1_url)
         assert_that(attributes, has_items('RedrivePolicy'))
         assert_that(attributes['RedrivePolicy'], equal_to(redrive_policy))
-
-        # wait for dead letter queue notification
-        time.sleep(self.config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] * 1.2 / 1000.0)
 
         def get_messages_count(queue_url):
             attrs = self._sqs_api.get_queue_attributes(queue_url)

@@ -79,7 +79,6 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
         // if flush was not successful, this means that producer was closed due to non retryable error
         // in this case we should see the close description (to simplify the example, we just print it to standard error)
         std::cerr << GetErrorMessage(flushResult) << std::endl;
-        return;
     }
 }
 

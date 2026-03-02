@@ -29,7 +29,9 @@ public:
     static constexpr TDuration MAX_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(2), TDuration::Seconds(30));
 
 protected:
-    TS3BackupTestFixture() = default;
+    TS3BackupTestFixture() {
+        AppConfig().MutableFeatureFlags()->SetEnableColumnTablesBackup(true);
+    }
 
     TString YdbConnectionString() {
         return TStringBuilder() << "localhost:" << Server().GetPort() << "/?database=/Root";

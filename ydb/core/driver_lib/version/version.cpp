@@ -27,7 +27,8 @@ TCompatibilityInfo::TCompatibilityInfo() {
 
     auto current = MakeCurrent();
 
-    // bool success = CompleteFromTag(current);
+    bool success = CompleteFromTag(current);
+    Y_UNUSED(success);
     // Y_ABORT_UNLESS(success);
 
     CurrentCompatibilityInfo.CopyFrom(current);
@@ -73,12 +74,13 @@ const TStored* TCompatibilityInfo::GetDefault(TComponentId componentId) const {
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary
-    "trunk",
+    "26-1",
 
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
-        "trunk"
+        "26-1",
+        "25-4"
     }
 };
 

@@ -200,7 +200,7 @@ void PrepareTables(TSession session) {
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 }
 
-void ValidateStats(const auto& result, bool isIdxLookupJoinEnabled, size_t rightTableReads,  size_t leftTableReads = 7) {
+void ValidateStats(const auto& result, bool isIdxLookupJoinEnabled, size_t rightTableReads, size_t leftTableReads = 7) {
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     if (isIdxLookupJoinEnabled) {
@@ -236,6 +236,8 @@ public:
     bool StreamLookup;
     size_t RightTableReads = 0;
     size_t LeftTableReads = 7;
+    // TODO: DqReplicate is not applicable here, the number of reading rows were increased because of not optimal plan enabled by filter push down over left
+    // join optional side.
     bool DqReplicate = false;
     bool DoValidateStats = true;
     bool OnlineReadOnly = false;
@@ -652,7 +654,7 @@ Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 8, StreamLookup, 14, /* dqReplicate */ true);
+        ])", 4, StreamLookup, 7);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
@@ -669,7 +671,7 @@ Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
             [["Value1"];["Value21"]];
             [["Value1"];["Value22"]];
             [["Value2"];["Value23"]]
-        ])", 4, StreamLookup);
+        ])", 4, StreamLookup, 7);
 }
 
 Y_UNIT_TEST_TWIN(SimpleLeftSemiJoin, StreamLookup) {

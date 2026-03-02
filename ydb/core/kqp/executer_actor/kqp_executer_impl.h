@@ -167,6 +167,9 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
+            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+        }
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
@@ -1565,8 +1568,10 @@ protected:
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
         }
 
-        if (const auto& infoAggregator = TasksGraph.GetMeta().DqInfoAggregator) {
-            this->Send(infoAggregator, new TEvents::TEvPoison());
+        for (const auto& [_, stage] : TasksGraph.GetStagesInfo()) {
+            for (const auto& [_, controlPlaneActorId] : stage.Meta.ControlPlaneActors) {
+                this->Send(controlPlaneActorId, new TEvents::TEvPoison());
+            }
         }
 
         this->Send(this->SelfId(), new TEvents::TEvPoison);

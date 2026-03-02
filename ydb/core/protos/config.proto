@@ -136,7 +136,7 @@ message TActorSystemConfig {
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
     optional bool UseUnitedPool = 22;
-    optional bool UseRingQueue = 19 [default = true];
+    optional bool UseRingQueue = 19;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -511,7 +511,7 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
-    optional bool EnableExternalDataChannel = 42 [default = true];
+    optional bool EnableExternalDataChannel = 42 [default = false];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
     optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
@@ -1813,7 +1813,7 @@ message TImmediateControlsConfig {
             Description: "Enable new FullSync protocol which allows to send PhantomFlags",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 1,
+            DefaultValue: 0,
         }];
 
         optional uint64 PhantomFlagStorageLimitPerVDiskBytes = 39 [(ControlOptions) = {
@@ -2499,7 +2499,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
@@ -2537,7 +2537,7 @@ message TColumnShardConfig {
     optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
-    optional bool EnableParallelCompaction = 56 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = false];
 
     message TStatistics {
         optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
@@ -2550,7 +2550,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 
@@ -2558,7 +2558,7 @@ message TColumnShardConfig {
     optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
     optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
-    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
+    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = false];
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
 }
@@ -2984,6 +2984,10 @@ message TNbsConfig {
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
 }
 
+message TTliConfig {
+    repeated string IgnoredTableRegexes = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3100,6 +3104,8 @@ message TAppConfig {
     optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
 
     optional TNbsConfig NbsConfig = 119;
+
+    optional TTliConfig TliConfig = 120;
 }
 
 message TYdbVersion {

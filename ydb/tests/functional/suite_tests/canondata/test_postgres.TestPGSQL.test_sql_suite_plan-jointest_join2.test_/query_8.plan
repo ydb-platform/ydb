@@ -29,17 +29,35 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-InnerJoin (Lookup)",
+                                        "Node Type": "TopSort-Filter-LeftJoin (Lookup)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "[Arg.x.x1,Arg.x.x2,Arg.y.y1,Arg.y.y2]"
+                                                "TopSortBy": "[row.x1,row.x2,row.y1,row.y2]"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.y.y2)"
                                             },
                                             {
                                                 "Inputs": [
@@ -47,7 +65,7 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (Lookup)"
+                                                "Name": "LeftJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -58,18 +76,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Filter",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 3
-                                                                    }
-                                                                ],
-                                                                "Name": "Filter",
-                                                                "Predicate": "Exist(item.y2)"
-                                                            }
-                                                        ],
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -126,10 +133,10 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "x.x1 (Asc)",
-                                    "x.x2 (Asc)",
-                                    "y.y1 (Asc)",
-                                    "y.y2 (Asc)"
+                                    "x1 (Asc)",
+                                    "x2 (Asc)",
+                                    "y1 (Asc)",
+                                    "y2 (Asc)"
                                 ]
                             }
                         ]

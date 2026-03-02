@@ -61,7 +61,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                         CAST(HOP_END() AS String) AS event_time,
                         AGGREGATE_LIST(ts) AS ts
                     FROM $filter
-                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S", "max" as TimeLimit)
+                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
                 );
 
                 $output = (
@@ -69,7 +69,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                         CAST(HOP_END() AS String) AS event_time,
                         AGGREGATE_LIST(ts) AS ts
                     FROM $hop
-                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S", "max" as TimeLimit)
+                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
                 );
 
                 INSERT INTO {cluster}{self.output_topic}

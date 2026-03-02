@@ -367,7 +367,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -383,7 +382,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -3712,6 +3710,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableColumnTablesBackup(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))

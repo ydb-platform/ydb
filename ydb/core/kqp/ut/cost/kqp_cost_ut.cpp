@@ -2120,7 +2120,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(CTAS, isOlap) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, true));
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -2167,6 +2169,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(40);
         // For executing REPLACE
         appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrSettings settings(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);

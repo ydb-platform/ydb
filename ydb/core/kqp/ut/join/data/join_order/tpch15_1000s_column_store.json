@@ -1,32 +1,26 @@
 {
-  "op_name":"InnerJoin (Grace)",
+  "op_name":"InnerJoin (Map)",
   "args":
     [
       {
-        "op_name":"HashShuffle",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"TableFullScan",
+              "table":"supplier"
+            },
+            {
+              "op_name":"HashShuffle",
               "args":
                 [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"supplier"
-                  },
                   {
                     "op_name":"HashShuffle",
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"lineitem"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"lineitem"
                         }
                       ]
                   }
@@ -39,14 +33,8 @@
         "args":
           [
             {
-              "op_name":"HashShuffle",
-              "args":
-                [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"lineitem"
-                  }
-                ]
+              "op_name":"TableFullScan",
+              "table":"lineitem"
             }
           ]
       }

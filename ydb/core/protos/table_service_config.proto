@@ -339,7 +339,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableHtapTx = 71 [default = false, (InvalidateCompileCache) = true];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
@@ -372,11 +372,11 @@ message TTableServiceConfig {
     // if the underlying array buffer is filled less than this value, then the buffer's capacity gets shrunk to actual size.
     // Otherwise, we potentially don't track the real buffer capacity and it may lead to OOM situations inside DqOutputChannel's.
 
-    optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableSnapshotIsolationRW = 76 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableBatchUpdates = 78 [default = true];
 
-    optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
+    optional bool AllowMultiBroadcasts = 79 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = true, (InvalidateCompileCache) = true];
 
@@ -392,7 +392,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true, (InvalidateCompileCache) = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
@@ -405,7 +405,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -414,7 +414,7 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 , (InvalidateCompileCache) = true];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 , (InvalidateCompileCache) = true];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true, (InvalidateCompileCache) = true];
 
@@ -431,15 +431,15 @@ message TTableServiceConfig {
     optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
     optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDataShardCreateTableAs = 102 [default = false, (InvalidateCompileCache) = true];
 
     optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 0, (InvalidateCompileCache) = true];
 
     optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashCombineByDefault = 105 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableBuildAggregationResultStages = 106 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
 
@@ -458,7 +458,7 @@ message TTableServiceConfig {
     optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];
     optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864];
 
-    optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
+    optional uint32 DqChannelVersion = 114 [ default = 1, (InvalidateCompileCache) = true];
 
     optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
 
@@ -471,7 +471,7 @@ message TTableServiceConfig {
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 
-    optional bool EnableDqHashAggregateByDefault = 117 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleEliminationForAggregation = 118 [default = false, (InvalidateCompileCache) = true];
 

@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 26,
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,334 +14,131 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 24
+                                        "ExternalPlanNodeId": 10
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 25,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 24,
+                                "Node Type": "Merge",
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit",
+                                        "Node Type": "TopSort-Filter-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 22
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "[row.q2,row.q1]"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "item.b.q1 > 0"
+                                            },
+                                            {
+                                                "Condition": "a.q2 = b._equijoin_column_0",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
-                                        "PlanNodeId": 23,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
-                                                "Node Type": "Merge",
-                                                "PlanNodeId": 22,
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Sort-Union",
-                                                        "Operators": [
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
                                                             {
-                                                                "Inputs": [
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
                                                                     {
-                                                                        "InternalOperatorId": 1
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
+                                                                        "ReadColumns": [
+                                                                            "q1 (-\u221e, +\u221e)",
+                                                                            "q2 (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
                                                                     }
                                                                 ],
-                                                                "Name": "Sort",
-                                                                "SortBy": "[row.q2,row.q1]"
-                                                            },
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 20
-                                                                    },
-                                                                    {
-                                                                        "ExternalPlanNodeId": 10
-                                                                    }
-                                                                ],
-                                                                "Name": "Union"
+                                                                "PlanNodeId": 6,
+                                                                "Tables": [
+                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                ]
                                                             }
-                                                        ],
-                                                        "PlanNodeId": 21,
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 5,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "Parallel": "True",
-                                                                "PlanNodeId": 20,
+                                                                "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Top",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Inputs": [
-                                                                                    {
-                                                                                        "ExternalPlanNodeId": 18
-                                                                                    }
-                                                                                ],
-                                                                                "Limit": "1001",
-                                                                                "Name": "Top",
-                                                                                "TopBy": "[row.q2,row.q1]"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 19,
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 2,
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "UnionAll",
-                                                                                "PlanNodeId": 18,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
+                                                                                "Node Type": "TableFullScan",
+                                                                                "Operators": [
                                                                                     {
-                                                                                        "Node Type": "Top-InnerJoin (Map)-Filter",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Limit": "1001",
-                                                                                                "Name": "Top",
-                                                                                                "TopBy": "[row.q2,row.q1]"
-                                                                                            },
-                                                                                            {
-                                                                                                "Condition": "a.q2 = b._equijoin_column_0",
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 2
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 13
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Name": "InnerJoin (Map)"
-                                                                                            },
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 16
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Name": "Filter",
-                                                                                                "Predicate": "Exist(item.q2)"
-                                                                                            }
+                                                                                        "Inputs": [],
+                                                                                        "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
+                                                                                        "ReadColumns": [
+                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                            "q2 (-\u221e, +\u221e)"
                                                                                         ],
-                                                                                        "PlanNodeId": 17,
-                                                                                        "Plans": [
-                                                                                            {
-                                                                                                "Node Type": "Map",
-                                                                                                "PlanNodeId": 16,
-                                                                                                "PlanNodeType": "Connection",
-                                                                                                "Plans": [
-                                                                                                    {
-                                                                                                        "Node Type": "Stage",
-                                                                                                        "PlanNodeId": 15,
-                                                                                                        "Plans": [
-                                                                                                            {
-                                                                                                                "Node Type": "TableFullScan",
-                                                                                                                "Operators": [
-                                                                                                                    {
-                                                                                                                        "Inputs": [],
-                                                                                                                        "Name": "TableFullScan",
-                                                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
-                                                                                                                        "ReadColumns": [
-                                                                                                                            "q1 (-\u221e, +\u221e)",
-                                                                                                                            "q2 (-\u221e, +\u221e)"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                                        "Scan": "Parallel",
-                                                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "PlanNodeId": 14,
-                                                                                                                "Tables": [
-                                                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                ]
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                ]
-                                                                                            },
-                                                                                            {
-                                                                                                "Node Type": "Broadcast",
-                                                                                                "PlanNodeId": 13,
-                                                                                                "PlanNodeType": "Connection",
-                                                                                                "Plans": [
-                                                                                                    {
-                                                                                                        "Node Type": "Stage",
-                                                                                                        "PlanNodeId": 12,
-                                                                                                        "Plans": [
-                                                                                                            {
-                                                                                                                "Node Type": "TableFullScan",
-                                                                                                                "Operators": [
-                                                                                                                    {
-                                                                                                                        "Inputs": [],
-                                                                                                                        "Name": "TableFullScan",
-                                                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
-                                                                                                                        "ReadColumns": [
-                                                                                                                            "q1 (-\u221e, +\u221e)",
-                                                                                                                            "q2 (-\u221e, +\u221e)"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                                        "Scan": "Parallel",
-                                                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "PlanNodeId": 11,
-                                                                                                                "Tables": [
-                                                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                ]
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                ]
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                ]
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                "Node Type": "UnionAll",
-                                                                "Parallel": "True",
-                                                                "PlanNodeId": 10,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "Top",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Inputs": [
-                                                                                    {
-                                                                                        "ExternalPlanNodeId": 8
+                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                        "Scan": "Parallel",
+                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
                                                                                     }
                                                                                 ],
-                                                                                "Limit": "1001",
-                                                                                "Name": "Top",
-                                                                                "TopBy": "[row.q2,row.q1]"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 9,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Node Type": "UnionAll",
-                                                                                "PlanNodeId": 8,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
-                                                                                    {
-                                                                                        "Node Type": "Top-LeftOnlyJoin (Map)",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Limit": "1001",
-                                                                                                "Name": "Top",
-                                                                                                "TopBy": "[row.q2,row.q1]"
-                                                                                            },
-                                                                                            {
-                                                                                                "Condition": "a.q2 = b._equijoin_column_0",
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 6
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 3
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Name": "LeftOnlyJoin (Map)"
-                                                                                            }
-                                                                                        ],
-                                                                                        "PlanNodeId": 7,
-                                                                                        "Plans": [
-                                                                                            {
-                                                                                                "Node Type": "Map",
-                                                                                                "PlanNodeId": 6,
-                                                                                                "PlanNodeType": "Connection",
-                                                                                                "Plans": [
-                                                                                                    {
-                                                                                                        "Node Type": "Stage",
-                                                                                                        "PlanNodeId": 5,
-                                                                                                        "Plans": [
-                                                                                                            {
-                                                                                                                "Node Type": "TableFullScan",
-                                                                                                                "Operators": [
-                                                                                                                    {
-                                                                                                                        "Inputs": [],
-                                                                                                                        "Name": "TableFullScan",
-                                                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
-                                                                                                                        "ReadColumns": [
-                                                                                                                            "q1 (-\u221e, +\u221e)",
-                                                                                                                            "q2 (-\u221e, +\u221e)"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                                        "Scan": "Parallel",
-                                                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "PlanNodeId": 4,
-                                                                                                                "Tables": [
-                                                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                ]
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                ]
-                                                                                            },
-                                                                                            {
-                                                                                                "Node Type": "Broadcast",
-                                                                                                "PlanNodeId": 3,
-                                                                                                "PlanNodeType": "Connection",
-                                                                                                "Plans": [
-                                                                                                    {
-                                                                                                        "Node Type": "Stage",
-                                                                                                        "PlanNodeId": 2,
-                                                                                                        "Plans": [
-                                                                                                            {
-                                                                                                                "Node Type": "TableFullScan",
-                                                                                                                "Operators": [
-                                                                                                                    {
-                                                                                                                        "Inputs": [],
-                                                                                                                        "Name": "TableFullScan",
-                                                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
-                                                                                                                        "ReadColumns": [
-                                                                                                                            "q1 (-\u221e, +\u221e)",
-                                                                                                                            "q2 (-\u221e, +\u221e)"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                                        "Scan": "Parallel",
-                                                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "PlanNodeId": 1,
-                                                                                                                "Tables": [
-                                                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
-                                                                                                                ]
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                ]
-                                                                                            }
-                                                                                        ]
-                                                                                    }
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
                                                                                 ]
                                                                             }
                                                                         ]
@@ -350,14 +147,14 @@
                                                             }
                                                         ]
                                                     }
-                                                ],
-                                                "SortColumns": [
-                                                    "q2 (Asc)",
-                                                    "q1 (Asc)"
                                                 ]
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "q2 (Asc)",
+                                    "q1 (Asc)"
                                 ]
                             }
                         ]
@@ -377,28 +174,6 @@
         {
             "name": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
             "reads": [
-                {
-                    "columns": [
-                        "q1",
-                        "q2"
-                    ],
-                    "scan_by": [
-                        "q1 (-\u221e, +\u221e)",
-                        "q2 (-\u221e, +\u221e)"
-                    ],
-                    "type": "FullScan"
-                },
-                {
-                    "columns": [
-                        "q1",
-                        "q2"
-                    ],
-                    "scan_by": [
-                        "q1 (-\u221e, +\u221e)",
-                        "q2 (-\u221e, +\u221e)"
-                    ],
-                    "type": "FullScan"
-                },
                 {
                     "columns": [
                         "q1",

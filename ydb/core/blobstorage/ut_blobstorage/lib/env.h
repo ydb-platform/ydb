@@ -563,7 +563,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
-                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, false, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
 
 #undef ADD_ICB_CONTROL

@@ -21,6 +21,7 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
+            'enable_resource_pools': True,  # just for canonized data - .metadata table
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False

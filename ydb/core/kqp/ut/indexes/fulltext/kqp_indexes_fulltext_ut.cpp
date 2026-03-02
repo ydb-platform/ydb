@@ -461,7 +461,6 @@ Y_UNIT_TEST(AddIndexWithRelevanceSettings) {
     {
         Ydb::Table::FulltextIndexSettings fulltextSettings;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-            layout: FLAT_RELEVANCE
             columns {
                 column: "Text"
                 analyzers {
@@ -1260,6 +1259,68 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
     }
     auto stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
     CompareYson(R"([[4u;0u;12u]])", NYdb::FormatResultSetYson(stats));
+}
+
+Y_UNIT_TEST_TWIN(UpdateWithRelevance, Covered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    if (Covered)
+        AddIndexCovered(db, "fulltext_relevance");
+    else
+        AddIndex(db, "fulltext_relevance");
+    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
+    CompareYson(R"([
+        [1u;"cats"];
+        [1u;"dogs"];
+        [1u;"foxes"];
+        [2u;"love"]
+    ])", NYdb::FormatResultSetYson(dict));
+    // Dataset is the same as in InsertWithRelevance - don't check index table contents
+
+    // Pure upsert of new rows is already checked in InsertWithRelevance
+
+    { // Update a row
+        TString query = R"sql(
+            UPDATE `/Root/Texts` SET Text="Birds love rabbits.", Data="birds data" WHERE Key=100
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];1u;"birds"];
+        [[200u];1u;"dogs"];
+        [[200u];1u;"foxes"];
+        [[100u];1u;"love"];
+        [[200u];1u;"love"];
+        [[100u];1u;"rabbits"];
+    ])", NYdb::FormatResultSetYson(index));
+    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
+    CompareYson(R"([
+        [1u;"birds"];
+        [0u;"cats"];
+        [1u;"dogs"];
+        [1u;"foxes"];
+        [2u;"love"];
+        [1u;"rabbits"]
+    ])", NYdb::FormatResultSetYson(dict));
+    auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["birds data"];[100u];3u];
+            [["dogs data"];[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];3u];
+            [[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
+    auto stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[2u;0u;6u]])", NYdb::FormatResultSetYson(stats));
 }
 
 Y_UNIT_TEST(ReplaceRow) {

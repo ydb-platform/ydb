@@ -1279,6 +1279,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrRunner kikimr(settings);
         if (UseAdmin) {
             kikimr.GetTestClient().GrantConnect("user_write@builtin");

@@ -152,7 +152,7 @@ message TFeatureFlags {
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
-    optional bool EnableResourcePools = 129 [default = true];
+    optional bool EnableResourcePools = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
@@ -237,10 +237,10 @@ message TFeatureFlags {
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
-    optional bool EnableOlapRejectProbability = 213 [default = true];
+    optional bool EnableOlapRejectProbability = 213 [default = false];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
-    optional bool EnableColumnTablesBackup = 216 [default = true];
+    optional bool EnableColumnTablesBackup = 216 [default = false];
     optional bool EnableReplication = 217 [default = true];
     optional bool EnableShuttingDownNodeState = 218 [default = false];
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
@@ -248,7 +248,7 @@ message TFeatureFlags {
     optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
-    optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
+    optional bool EnableResourcePoolsScheduler = 224 [default = false]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];

@@ -541,7 +541,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewColumns) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableColumnShardConfig()->SetDefaultCompactionPreset("tiling");
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         TKikimrRunner kikimr(settings);
 
@@ -606,7 +608,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewRanges) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableColumnShardConfig()->SetDefaultCompactionPreset("tiling");
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);

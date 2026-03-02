@@ -28,6 +28,7 @@ NMvp::TOAuth2Exchange::TCredentials::EType InferCredsType(const NMvp::TOAuth2Exc
 }
 
 void NormalizeSecretInfo(NMvp::TSecretInfo* secretInfo) {
+    secretInfo->SetSecret(StripString(secretInfo->GetSecret()));
     const bool hasSecret = !secretInfo->GetSecret().empty();
     const bool hasSecretFile = !secretInfo->GetSecretFile().empty();
 

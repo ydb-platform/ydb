@@ -3539,6 +3539,75 @@ namespace Tests {
         ythrow yexception() << "Waiting tenant status RUNNING timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ". Last tenant description:\n" << getTenantResult.DebugString();
     }
 
+    void TTenants::RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout) {
+        const TString path = request.path();
+        auto& runtime = *Server->GetRuntime();
+
+        // Check if serverless
+        bool isServerless = false;
+        {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+            const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+
+            if (response && response->Get()->Record.GetResponse().operation().status() == Ydb::StatusIds::SUCCESS) {
+                Ydb::Cms::GetDatabaseStatusResult status;
+                response->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
+                // Serverless if serverless_resources is set
+                isServerless = status.has_serverless_resources();
+            }
+        }
+
+        // Stop dedicated nodes
+        if (!isServerless) {
+            Stop(path);
+        }
+
+        // Remove
+        const auto result = NKikimr::NRpcService::DoLocalRpc<
+            NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Cms::RemoveDatabaseRequest, Ydb::Cms::RemoveDatabaseResponse>
+        >(std::move(request), "", "", runtime.GetActorSystem(0), true).ExtractValueSync();
+
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(result.operation().issues(), issues);
+            ythrow yexception() << "Failed to remove tenant " << path
+                << ", status: " << result.operation().status()
+                << ", reason:\n" << issues.ToString();
+        }
+
+        // Wait for NOT_FOUND
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+        const TInstant start = TInstant::Now();
+
+        while (TInstant::Now() - start <= timeout) {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            if (response) {
+                auto status = response->Get()->Record.GetResponse().operation().status();
+                if (status == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ythrow yexception() << "Waiting tenant removal timeout for " << path;
+    }
+
+    void TTenants::RemoveTenant(const TString& path, TDuration timeout) {
+        Ydb::Cms::RemoveDatabaseRequest request;
+        request.set_path(path);
+        RemoveTenant(std::move(request), timeout);
+    }
+
     TVector<ui32> &TTenants::Nodes(const TString &name) {
         return Tenants[name];
     }

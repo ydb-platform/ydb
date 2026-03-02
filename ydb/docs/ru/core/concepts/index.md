@@ -5,21 +5,19 @@
 Следующие темы обеспечивают всестороннее освещение основной функциональности {{ ydb-short-name }}, от высокоуровневой архитектуры и модели данных до продвинутых возможностей, таких как транзакции, индексирование и федеративные запросы.
 
 - [Глоссарий](glossary.md)
+- [Аналитические возможности](./analytics/index.md)
 - [Архитектура](architecture.md)
-- [Подключение к базе данных](connect.md)
+- [Соединение с БД](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)
+- [Выполнение запросов](query_execution/index.md)
 - [Транзакции](transactions.md)
-- [Вторичные индексы](secondary_indexes.md)
-- [Векторный поиск](vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
-- [Время жизни и вытеснение](ttl.md)
-- [Scan-запросы](scan_query.md)
+- [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
 - [Ограничения базы данных](limits-ydb.md)
-- [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)
-{% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
-- [Оптимизатор запросов](optimizer.md)
-- [Федеративные запросы](federated_query/index.md)
+- [Асинхронная репликация](async-replication.md)
+- [Режим bridge](./bridge.md)
+- [Трансфер данных](./transfer.md)
 
 ## См. также {#see-also}
 

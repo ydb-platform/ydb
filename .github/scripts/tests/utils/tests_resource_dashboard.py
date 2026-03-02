@@ -638,15 +638,29 @@ def _round_cpu_tier(cores: float) -> int:
     return 16
 
 
+def _next_cpu_tier(cpu: int) -> int:
+    """Move to the next runner tier: 1->2->4->8->16."""
+    if cpu <= 1:
+        return 2
+    if cpu <= 2:
+        return 4
+    if cpu <= 4:
+        return 8
+    if cpu <= 8:
+        return 16
+    return 16
+
+
 def build_cpu_suggestions(
     runs: list[dict[str, Any]],
     requirements_cache: Optional[dict[str, dict[str, Any]]] = None,
     report_status_by_suite: Optional[dict[str, dict[str, dict[str, int]]]] = None,
+    maximize_reqs_for_timeout_tests: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Per-suite stats from runs (cpu_sec_report, dur_us) to suggest cpuN for the runner.
     Returns list of dicts: suite_path, chunks_count, median_cores, p95_cores,
-    recommended_cpu (tier 1/2/4/8/16), total_cpu_sec, total_ram_gb, total_dur_sec, has_synthetic.
+    recommended_cpu (tier 1/2/4/8/16 or "all"), total_cpu_sec, total_ram_gb, total_dur_sec, has_synthetic.
     """
     by_suite: dict[str, list[float]] = defaultdict(list)
     by_suite_cpu: dict[str, float] = defaultdict(float)
@@ -697,24 +711,6 @@ def build_cpu_suggestions(
             median_c = sorted_cores[(n - 1) // 2] if n else 0.0
             idx95 = min(int(0.95 * n + 0.5), n - 1) if n else 0
             p95_c = sorted_cores[idx95] if n else 0.0
-        recommended = _round_cpu_tier(p95_c)
-        req = (requirements_cache or {}).get(suite, {})
-        ya_cpu = req.get("cpu_cores")
-        ya_ram = req.get("ram_gb")
-        ya_size = req.get("size")
-        # Policy: MEDIUM suites must not request more than cpu:4.
-        if str(ya_size or "").upper() == "MEDIUM" and recommended > 4:
-            recommended = 4
-        if ya_cpu is None:
-            cpu_action = "set"
-        else:
-            ya_cpu_i = int(ya_cpu)
-            if recommended > ya_cpu_i:
-                cpu_action = "raise"
-            elif recommended < ya_cpu_i:
-                cpu_action = "lower"
-            else:
-                cpu_action = "ok"
         if report_status_by_suite and suite in report_status_by_suite:
             chunk_status = report_status_by_suite[suite].get("chunks", _status_bucket())
             test_status = report_status_by_suite[suite].get("tests", _status_bucket())
@@ -727,12 +723,76 @@ def build_cpu_suggestions(
                 "fails_total": by_suite_errors[suite] + by_suite_timeouts[suite],
             }
             test_status = _status_bucket()
+
+        timeout_tests_count = int(test_status.get("timeouts", 0) or 0)
+        base_recommended = _round_cpu_tier(p95_c)
+        timeout_boost_applied = timeout_tests_count > 0
+        recommended = _next_cpu_tier(base_recommended) if timeout_boost_applied else base_recommended
+        req = (requirements_cache or {}).get(suite, {})
+        ya_cpu = req.get("cpu_cores")
+        ya_ram = req.get("ram_gb")
+        ya_size = req.get("size")
+        if not ya_size:
+            ya_size = "SMALL"
+        # Policy: MEDIUM suites must not request more than cpu:4.
+        medium_cap_applied = str(ya_size or "").upper() == "MEDIUM" and recommended > 4
+        if medium_cap_applied:
+            recommended = 4
+        timeout_max_policy_applied = bool(maximize_reqs_for_timeout_tests and timeout_tests_count > 0)
+        size_u = str(ya_size or "").upper()
+        timeout_max_value: Any = None
+        if timeout_max_policy_applied:
+            if size_u == "SMALL":
+                timeout_max_value = 1
+            elif size_u == "MEDIUM":
+                timeout_max_value = 4
+            elif size_u == "LARGE":
+                timeout_max_value = "all"
+            else:
+                timeout_max_value = "all"
+        recommended_req: Any = timeout_max_value if timeout_max_policy_applied else recommended
+        explain_parts = [
+            f"p95_cores={p95_c:.3f}",
+            f"base_tier={base_recommended}",
+        ]
+        if timeout_boost_applied:
+            explain_parts.append(f"test_timeouts={timeout_tests_count} -> next_tier={_next_cpu_tier(base_recommended)}")
+        if timeout_max_policy_applied:
+            explain_parts.append(f"maximize_reqs_for_timeout_tests(size={size_u or 'UNKNOWN'}) -> {timeout_max_value}")
+        if medium_cap_applied:
+            explain_parts.append("MEDIUM cap -> 4")
+        explain_parts.append(f"final={recommended_req}")
+        recommended_cpu_explain = "; ".join(explain_parts)
+        if recommended_req == "all":
+            if ya_cpu is None:
+                cpu_action = "set"
+            else:
+                cpu_action = "raise"
+        else:
+            recommended_num = int(recommended_req)
+            if ya_cpu is None:
+                # In ya.make implicit default is cpu:1, so do not suggest explicit set(cpu:1).
+                cpu_action = "ok" if recommended_num <= 1 else "set"
+            else:
+                ya_cpu_i = int(ya_cpu)
+                if recommended_num > ya_cpu_i:
+                    cpu_action = "raise"
+                elif recommended_num < ya_cpu_i:
+                    cpu_action = "lower"
+                else:
+                    cpu_action = "ok"
         out.append({
             "suite_path": suite,
             "chunks_count": len(cores_list),
             "median_cores": round(median_c, 3),
             "p95_cores": round(p95_c, 3),
-            "recommended_cpu": recommended,
+            "recommended_cpu": recommended_req,
+            "recommended_cpu_base": base_recommended,
+            "recommended_cpu_timeout_boost": timeout_boost_applied,
+            "recommended_cpu_timeout_max_policy_applied": timeout_max_policy_applied,
+            "recommended_cpu_timeout_max_policy_value": timeout_max_value,
+            "recommended_cpu_medium_cap_applied": medium_cap_applied,
+            "recommended_cpu_explain": recommended_cpu_explain,
             "total_cpu_sec": round(by_suite_cpu[suite], 2),
             "total_ram_gb": round(by_suite_ram_kb[suite] / (1024.0 * 1024.0), 3),
             "total_dur_sec": round(by_suite_dur[suite], 2),
@@ -1021,6 +1081,8 @@ def build_html_dashboard(
         <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
         <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
         <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>.</li>
+        <li>If there is at least one <b>test timeout</b>, <b>recommended_cpu</b> is increased by one tier (then MEDIUM cap is applied).</li>
+        <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites with test timeouts use size max: <b>SMALL=1, MEDIUM=4, LARGE=all</b>.</li>
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>
       </ol>
       <ul>
@@ -1154,11 +1216,16 @@ def build_html_dashboard(
       function getSuggestionsForScript() {{
         const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
         const visible = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
+        const hasCpuReqValue = (v) => {{
+          if (typeof v === 'number') return v > 0;
+          const t = String(v ?? '').trim().toLowerCase();
+          return t !== '' && t !== '0';
+        }};
         return visible
-          .filter(s => ['set', 'raise', 'lower'].includes(String(s.cpu_action || 'ok')) && Number(s.recommended_cpu || 0) > 0)
+          .filter(s => ['set', 'raise', 'lower'].includes(String(s.cpu_action || 'ok')) && hasCpuReqValue(s.recommended_cpu))
           .map(s => ({{
             suite_path: String(s.suite_path || ''),
-            recommended_cpu: Number(s.recommended_cpu || 1),
+            recommended_cpu: s.recommended_cpu,
             current_ya_cpu: s.ya_cpu_cores == null ? null : Number(s.ya_cpu_cores),
             action: String(s.cpu_action || 'ok'),
           }}));
@@ -1171,7 +1238,7 @@ def build_html_dashboard(
           '#!/usr/bin/env python3',
           '# Apply cpu REQUIREMENTS updates in ya.make files.',
           '# Generated by tests_resource_dashboard HTML.',
-          '# Usage: python3 apply_cpu_requirements.py --repo-root /path/to/ydb [--dry-run]',
+          '# Usage: python3 apply_cpu_requirements.py --repo-root /path/to/ydb [--dry-run] [--mode all|only-up|only-down|only-new]',
           '',
           'from __future__ import annotations',
           '',
@@ -1185,15 +1252,29 @@ def build_html_dashboard(
           '',
           "PART_SUFFIX_RE = re.compile(r'/part\\\\d+$')",
           "RE_REQ_LINE = re.compile(r'^(\\\\s*REQUIREMENTS\\\\s*\\\\()(.*?)(\\\\)\\\\s*)$')",
-          "RE_CPU = re.compile(r'\\\\bcpu\\\\s*:\\\\s*(\\\\w+)\\\\b', re.IGNORECASE)",
+          "RE_CPU = re.compile(r'\\\\bcpu\\\\s*:\\\\s*([^\\\\s)]+(?:\\\\([^)]*\\\\))?)', re.IGNORECASE)",
           "RE_IF = re.compile(r'^\\\\s*IF\\\\s*\\\\((.*)\\\\)\\\\s*$')",
           "RE_ELSE = re.compile(r'^\\\\s*ELSE\\\\s*\\\\(\\\\s*\\\\)\\\\s*$')",
           "RE_ENDIF = re.compile(r'^\\\\s*ENDIF\\\\s*\\\\(\\\\s*\\\\)\\\\s*$')",
+          "ACTION_BY_MODE = dict()",
+          "ACTION_BY_MODE['all'] = set(['raise', 'lower', 'set'])",
+          "ACTION_BY_MODE['only-up'] = set(['raise'])",
+          "ACTION_BY_MODE['only-down'] = set(['lower'])",
+          "ACTION_BY_MODE['only-new'] = set(['set'])",
           '',
           'def normalize_suite_path(path: str) -> str:',
           "    return PART_SUFFIX_RE.sub('', path or '')",
           '',
-          'def update_requirements_line(line: str, cpu: int) -> str:',
+          'def normalize_cpu_req(value: object) -> str:',
+          "    s = str(value).strip()",
+          "    if s.lower() == 'all':",
+          "        return 'all'",
+          '    try:',
+          '        return str(int(float(s)))',
+          '    except Exception:',
+          "        return s or '1'",
+          '',
+          'def update_requirements_line(line: str, cpu: str) -> str:',
           '    m = RE_REQ_LINE.match(line)',
           '    if not m:',
           '        return line',
@@ -1313,7 +1394,10 @@ def build_html_dashboard(
           '            return _line_indent(raw)',
           "    return ''",
           '',
-          'def apply_one(repo_root: Path, suite_path: str, cpu: int, dry_run: bool) -> tuple[str, str]:',
+          'def _has_module_block(lines: list[str]) -> bool:',
+          "    return any(raw.strip() == 'END()' for raw in lines)",
+          '',
+          'def apply_one(repo_root: Path, suite_path: str, cpu: str, dry_run: bool) -> tuple[str, str]:',
           '    suite = normalize_suite_path(suite_path)',
           "    ya_make = repo_root / suite / 'ya.make'",
           '    if not ya_make.exists():',
@@ -1331,11 +1415,13 @@ def build_html_dashboard(
           '            lines[req_idx] = new_line',
           '            changed = True',
           '    else:',
+          '        if not _has_module_block(lines):',
+          "            return suite, 'skip (no module block)'",
           '        insert_idx = _find_default_insert_index(lines)',
           '        if insert_idx < 0 or insert_idx > len(lines):',
           '            insert_idx = len(lines)',
           '        indent = _choose_insert_indent(lines, insert_idx)',
-          "        insert_line = indent + 'REQUIREMENTS(cpu:' + str(cpu) + ')'",
+          "        insert_line = indent + 'REQUIREMENTS(cpu:' + cpu + ')'",
           '        lines.insert(insert_idx, insert_line)',
           '        changed = True',
           '',
@@ -1346,10 +1432,15 @@ def build_html_dashboard(
           "        ya_make.write_text('\\\\n'.join(lines) + '\\\\n', encoding='utf-8')",
           "    return suite, 'updated' if not dry_run else 'would update'",
           '',
+          'def _action_allowed(action: str, mode: str) -> bool:',
+          "    allowed = ACTION_BY_MODE.get(mode, ACTION_BY_MODE['all'])",
+          "    return (action or '').lower() in allowed",
+          '',
           'def main() -> None:',
           "    p = argparse.ArgumentParser(description='Apply generated cpu REQUIREMENTS updates to ya.make files')",
           "    p.add_argument('--repo-root', type=Path, required=True, help='Repository root path')",
           "    p.add_argument('--dry-run', action='store_true', help='Print planned changes without writing files')",
+          "    p.add_argument('--mode', choices=['all', 'only-up', 'only-down', 'only-new'], default='all', help='Apply only raise/lower/set actions')",
           '    args = p.parse_args()',
           '',
           '    repo_root = args.repo_root.resolve()',
@@ -1360,19 +1451,23 @@ def build_html_dashboard(
           '    updates = []',
           '    for row in UPDATES:',
           "        suite = normalize_suite_path(str(row.get('suite_path', '')))",
-          "        cpu = int(row.get('recommended_cpu', 1) or 1)",
+          "        cpu = normalize_cpu_req(row.get('recommended_cpu', 1))",
+          "        action = str(row.get('action', '') or '').lower()",
+          '        if not _action_allowed(action, args.mode):',
+          '            continue',
           '        key = (suite, cpu)',
           '        if not suite or key in seen:',
           '            continue',
           '        seen.add(key)',
-          '        updates.append((suite, cpu))',
+          '        updates.append((suite, cpu, action))',
           '',
           "    print('Generated at: ' + str(GENERATED_AT))",
+          "    print('Mode: ' + str(args.mode))",
           "    print('Total suites to update: ' + str(len(updates)))",
           '    changed = 0',
-          '    for suite, cpu in updates:',
+          '    for suite, cpu, action in updates:',
           '        suite_out, status = apply_one(repo_root, suite, cpu, args.dry_run)',
-          "        print('- ' + str(suite_out) + ': cpu:' + str(cpu) + ' -> ' + str(status))",
+          "        print('- ' + str(suite_out) + ': action=' + str(action) + ' cpu:' + str(cpu) + ' -> ' + str(status))",
           "        if status == 'updated' or status == 'would update':",
           '            changed += 1',
           "    print('Completed. Changed entries: ' + str(changed))",
@@ -1409,7 +1504,7 @@ def build_html_dashboard(
         const hintEl = document.getElementById('generateCpuScriptHint');
         if (!hintEl) return;
         hintEl.textContent = items.length
-          ? ('Will include ' + items.length + ' actionable suite(s) from current filter.')
+          ? ('Will include ' + items.length + ' actionable suite(s) from current filter. Script supports --mode all|only-up|only-down|only-new.')
           : 'No actionable rows in current filter.';
       }}
 
@@ -1438,7 +1533,12 @@ def build_html_dashboard(
         const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
         const filtered = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
         const rowsData = filtered.map((s, i) => {{
-          const cpuCell = '<b>cpu:' + (s.recommended_cpu || 1) + '</b>' + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
+          const cpuExplain = String(s.recommended_cpu_explain || '').replace(/"/g, '&quot;');
+          const cpuReqText = String(s.recommended_cpu ?? 1);
+          const cpuBadge = cpuReqText === 'all'
+            ? '<span title="' + cpuExplain + '" style="display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;">cpu:all</span>'
+            : '<span title="' + cpuExplain + '"><b>cpu:' + cpuReqText + '</b></span>';
+          const cpuCell = cpuBadge + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
           return [
             String(i + 1),
             '<span style="max-width:400px;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;" title="' + (s.suite_path || '').replace(/"/g, '&quot;') + '">' + (s.suite_path || '') + '</span>',
@@ -1588,20 +1688,23 @@ def build_html_dashboard(
       const el = document.getElementById(plotId);
       if (!el || !el.data || !window.Plotly) return;
       const lineColors = [];
+      const lineWidths = [];
       const fillColors = [];
       const opacities = [];
       const idx = [];
       el.data.forEach((tr, i) => {{
         const name = tr.name || '';
         const base = colorForTrack(name);
-        const matched = isMatch(name, q);
+        const matched = name === 'other' ? true : isMatch(name, q);
         lineColors.push(matched ? base : '#cfcfcf');
+        lineWidths.push(matched ? 1 : 0);
         fillColors.push(matched ? base : '#cfcfcf');
         opacities.push(matched ? (name === 'other' ? 0.35 : 0.75) : 0.12);
         idx.push(i);
       }});
       Plotly.restyle(el, {{
         'line.color': lineColors,
+        'line.width': lineWidths,
         'fillcolor': fillColors,
         'opacity': opacities,
       }}, idx);
@@ -1619,8 +1722,47 @@ def build_html_dashboard(
       Plotly.restyle(el, {{'marker.colors': [colors]}}, [0]);
     }}
 
+    function collapseTracksByQuery(tracks, q) {{
+      if (!tracks) return tracks;
+      if (!q) return tracks;
+      const out = {{}};
+      let refLen = 0;
+      for (const vals of Object.values(tracks)) {{
+        refLen = Math.max(refLen, Array.isArray(vals) ? vals.length : 0);
+      }}
+      const other = new Array(refLen).fill(0);
+      for (const [name, valsRaw] of Object.entries(tracks)) {{
+        const vals = Array.isArray(valsRaw) ? valsRaw : [];
+        const matched = name !== 'other' && isMatch(name, q);
+        if (matched) {{
+          out[name] = vals;
+          continue;
+        }}
+        for (let i = 0; i < vals.length; i += 1) {{
+          other[i] += Number(vals[i] || 0);
+        }}
+      }}
+      out.other = other;
+      return out;
+    }}
+
     function applySuiteSearch() {{
       const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
+      const inc = document.getElementById('includeSyntheticCb')?.checked ?? true;
+      const cpuSuiteBase = inc ? data.cpu_tracks_suite : data.cpu_tracks_suite_no_synthetic;
+      const ramSuiteBase = inc ? data.ram_tracks_suite : data.ram_tracks_suite_no_synthetic;
+      const cpuChunkBase = inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic;
+      const ramChunkBase = inc ? data.ram_tracks : data.ram_tracks_no_synthetic;
+
+      if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
+        updateStackedPlotTracks('activeLayerChunk', collapseTracksByQuery(data.active_tracks_chunk, q));
+        updateStackedPlotTracks('cpuLayer', collapseTracksByQuery(cpuChunkBase, q));
+        updateStackedPlotTracks('ramLayer', collapseTracksByQuery(ramChunkBase, q));
+      }}
+      updateStackedPlotTracks('activeLayerSuite', collapseTracksByQuery(data.active_tracks_suite, q));
+      updateStackedPlotTracks('cpuLayerSuite', collapseTracksByQuery(cpuSuiteBase, q));
+      updateStackedPlotTracks('ramLayerSuite', collapseTracksByQuery(ramSuiteBase, q));
+
       ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
         .forEach(id => updateStackedPlotColors(id, q));
       ['cpuPie', 'ramPie', 'activePie', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite']
@@ -1652,6 +1794,7 @@ def build_html_dashboard(
         updateStackedPlotTracks('cpuLayer', inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic);
         updateStackedPlotTracks('ramLayer', inc ? data.ram_tracks : data.ram_tracks_no_synthetic);
       }}
+      applySuiteSearch();
     }}
 
     const cb = document.getElementById('includeSyntheticCb');
@@ -1894,6 +2037,293 @@ def build_html_dashboard(
     out_html.write_text(html, encoding="utf-8")
 
 
+def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Optional[str]) -> None:
+    report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+    results = report.get("results", []) if isinstance(report, dict) else []
+    rows: list[dict[str, Any]] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "test":
+            continue
+        suite_raw = str(item.get("path", "") or "")
+        if not suite_raw:
+            continue
+        suite = normalize_suite_path(suite_raw)
+        if suite_filter and suite != suite_filter:
+            continue
+
+        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+        sub = str(item.get("subtest_name", "") or "")
+        chunk_idx: Optional[int] = None
+        m_idx = CHUNK_FROM_SUBTEST_RE.search(sub)
+        if m_idx:
+            chunk_idx = int(m_idx.group(1))
+        elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
+            chunk_idx = 0
+        chunk_group = chunk_group_from_subtest(sub)
+
+        rows.append(
+            {
+                "suite_path": suite,
+                "suite_path_raw": suite_raw,
+                "test_name": str(item.get("name", "") or ""),
+                "subtest_name": sub,
+                "status": str(item.get("status", "") or ""),
+                "error_type": str(item.get("error_type", "") or ""),
+                "is_muted": bool(item.get("is_muted") or item.get("muted")),
+                "chunk": bool(item.get("chunk")),
+                "chunk_idx": chunk_idx,
+                "chunk_group": chunk_group,
+                "duration_sec": float(item.get("duration") or 0.0),
+                "cpu_sec": cpu_seconds(metrics),
+                "ram_kb": ram_kb(metrics),
+                "ru_utime": metrics.get("ru_utime"),
+                "ru_stime": metrics.get("ru_stime"),
+                "ru_maxrss": metrics.get("ru_maxrss"),
+                "ru_rss": metrics.get("ru_rss"),
+                "wall_time": metrics.get("wall_time"),
+                "id": item.get("id"),
+                "hid": item.get("hid"),
+                "size": item.get("size"),
+                "tags": ", ".join(item.get("tags", [])) if isinstance(item.get("tags"), list) else "",
+                "metrics_json": json.dumps(metrics, ensure_ascii=False, sort_keys=True),
+            }
+        )
+
+    payload = {
+        "suite_filter": suite_filter,
+        "report_path": str(report_path),
+        "rows_count": len(rows),
+        "rows": rows,
+    }
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Report table: suite/chunk/test</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; margin: 12px; }}
+    .toolbar {{ position: sticky; top: 0; background: #fff; z-index: 3; border-bottom: 1px solid #eee; padding: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+    .toolbar input, .toolbar select {{ padding: 4px 8px; }}
+    .table-wrap {{ overflow-x: auto; border: 1px solid #eee; border-radius: 6px; }}
+    table {{ width: 100%; min-width: 2650px; border-collapse: collapse; font-size: 12px; table-layout: fixed; }}
+    th, td {{ border: 1px solid #eee; padding: 4px 6px; vertical-align: top; }}
+    th {{ position: sticky; top: 48px; background: #fafafa; z-index: 2; cursor: pointer; user-select: none; }}
+    td pre {{ margin: 0; white-space: pre-wrap; word-break: break-word; max-width: 620px; }}
+    #tbody tr {{ content-visibility: auto; contain-intrinsic-size: 28px; }}
+    th:nth-child(1), td:nth-child(1) {{ width: 320px; }}
+    th:nth-child(2), td:nth-child(2) {{ width: 70px; }}
+    th:nth-child(3), td:nth-child(3) {{ width: 130px; }}
+    th:nth-child(4), td:nth-child(4) {{ width: 70px; }}
+    th:nth-child(5), td:nth-child(5) {{ width: 220px; }}
+    th:nth-child(6), td:nth-child(6) {{ width: 260px; }}
+    th:nth-child(22), td:nth-child(22) {{ width: 130px; }}
+    .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+    .muted {{ color: #6a737d; }}
+    .ok {{ color: #155724; }}
+    .fail {{ color: #721c24; }}
+    .sidepanel {{ position: fixed; top: 0; right: 0; width: min(52vw, 820px); height: 100vh; background: #fff; border-left: 1px solid #ddd; box-shadow: -8px 0 24px rgba(0,0,0,0.08); z-index: 20; display: none; }}
+    .sidepanel .head {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eee; }}
+    .sidepanel .body {{ padding: 10px 12px; height: calc(100vh - 56px); overflow: auto; }}
+  </style>
+</head>
+<body>
+  <h2>Report table: suite/chunk/test</h2>
+  <div class="muted">suite filter: {suite_filter or 'ALL SUITES'} | rows: <span id="rowsCount"></span></div>
+  <div class="toolbar">
+    <label>Search:</label>
+    <input id="q" type="text" placeholder="suite/test/subtest/status/tags" style="min-width: 360px;" />
+    <label>Status:</label>
+    <select id="statusSel">
+      <option value="">all</option>
+    </select>
+    <label>Mode:</label>
+    <select id="chunkSel">
+      <option value="">all</option>
+      <option value="chunk">chunk=true</option>
+      <option value="test">chunk=false</option>
+    </select>
+    <button type="button" onclick="clearFilters()">Clear</button>
+  </div>
+  <div class="table-wrap">
+    <table id="tbl">
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="metricsPanel" class="sidepanel" role="dialog" aria-modal="true">
+    <div class="head">
+      <b id="metricsPanelTitle">metrics</b>
+      <button type="button" onclick="closeMetricsPanel()">Close</button>
+    </div>
+    <div class="body">
+      <pre id="metricsPanelBody" class="mono"></pre>
+    </div>
+  </div>
+  <script>
+    const data = {json.dumps(payload, ensure_ascii=False)};
+    const cols = [
+      ['suite_path', 'suite_path'],
+      ['chunk', 'chunk'],
+      ['chunk_group', 'chunk_group'],
+      ['chunk_idx', 'chunk_idx'],
+      ['test_name', 'test_name'],
+      ['subtest_name', 'subtest_name'],
+      ['status', 'status'],
+      ['error_type', 'error_type'],
+      ['is_muted', 'is_muted'],
+      ['duration_sec', 'duration_sec'],
+      ['cpu_sec', 'cpu_sec'],
+      ['ram_kb', 'ram_kb'],
+      ['ru_utime', 'ru_utime'],
+      ['ru_stime', 'ru_stime'],
+      ['ru_maxrss', 'ru_maxrss'],
+      ['ru_rss', 'ru_rss'],
+      ['wall_time', 'wall_time'],
+      ['size', 'size'],
+      ['id', 'id'],
+      ['hid', 'hid'],
+      ['tags', 'tags'],
+      ['metrics_json', 'metrics'],
+    ];
+
+    let sortCol = 'suite_path';
+    let sortAsc = true;
+
+    function valueForSort(v) {{
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      const n = Number(v);
+      if (!Number.isNaN(n) && String(v).trim() !== '') return n;
+      return String(v).toLowerCase();
+    }}
+
+    function esc(s) {{
+      return String(s ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }}
+
+    function render() {{
+      const q = (document.getElementById('q').value || '').toLowerCase().trim();
+      const st = document.getElementById('statusSel').value;
+      const mode = document.getElementById('chunkSel').value;
+
+      const filtered = data.rows.map((r, idx) => ({{r, idx}})).filter(({{r}}) => {{
+        if (st && String(r.status || '') !== st) return false;
+        if (mode === 'chunk' && !r.chunk) return false;
+        if (mode === 'test' && r.chunk) return false;
+        if (!q) return true;
+        const hay = [
+          r.suite_path, r.test_name, r.subtest_name, r.status, r.error_type, r.tags, r.chunk_group, r.id, r.hid
+        ].map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.includes(q);
+      }});
+
+      filtered.sort((a, b) => {{
+        const av = valueForSort(a.r[sortCol]);
+        const bv = valueForSort(b.r[sortCol]);
+        if (av < bv) return sortAsc ? -1 : 1;
+        if (av > bv) return sortAsc ? 1 : -1;
+        return 0;
+      }});
+
+      const head = '<tr>' + cols.map(([k, title]) => {{
+        const marker = sortCol === k ? (sortAsc ? ' ▲' : ' ▼') : '';
+        return '<th data-col=\"' + k + '\">' + esc(title) + marker + '</th>';
+      }}).join('') + '</tr>';
+      document.getElementById('thead').innerHTML = head;
+      document.querySelectorAll('#thead th').forEach(th => th.addEventListener('click', () => {{
+        const c = th.getAttribute('data-col');
+        if (sortCol === c) sortAsc = !sortAsc;
+        else {{ sortCol = c; sortAsc = true; }}
+        render();
+      }}));
+
+      const body = filtered.map(({{r, idx}}) => {{
+        const statusCls = /^(OK|PASS)$/i.test(String(r.status || '')) ? 'ok' : (/^(FAILED|ERROR|TIMEOUT|INTERNAL|MUTE)$/i.test(String(r.status || '')) ? 'fail' : '');
+        const metricsCell = '<button type=\"button\" class=\"metrics-btn\" data-idx=\"' + String(idx) + '\">open metrics</button>';
+        const vals = {{
+          suite_path: esc(r.suite_path),
+          chunk: r.chunk ? 'true' : 'false',
+          chunk_group: esc(r.chunk_group || ''),
+          chunk_idx: r.chunk_idx == null ? '' : String(r.chunk_idx),
+          test_name: esc(r.test_name || ''),
+          subtest_name: esc(r.subtest_name || ''),
+          status: '<span class=\"' + statusCls + '\">' + esc(r.status || '') + '</span>',
+          error_type: esc(r.error_type || ''),
+          is_muted: r.is_muted ? 'true' : 'false',
+          duration_sec: Number(r.duration_sec || 0).toFixed(3),
+          cpu_sec: Number(r.cpu_sec || 0).toFixed(6),
+          ram_kb: Number(r.ram_kb || 0).toFixed(0),
+          ru_utime: esc(r.ru_utime ?? ''),
+          ru_stime: esc(r.ru_stime ?? ''),
+          ru_maxrss: esc(r.ru_maxrss ?? ''),
+          ru_rss: esc(r.ru_rss ?? ''),
+          wall_time: esc(r.wall_time ?? ''),
+          size: esc(r.size ?? ''),
+          id: '<span class=\"mono\">' + esc(r.id ?? '') + '</span>',
+          hid: '<span class=\"mono\">' + esc(r.hid ?? '') + '</span>',
+          tags: esc(r.tags || ''),
+          metrics_json: metricsCell,
+        }};
+        return '<tr>' + cols.map(([k]) => '<td>' + (vals[k] ?? '') + '</td>').join('') + '</tr>';
+      }}).join('');
+
+      document.getElementById('tbody').innerHTML = body;
+      document.querySelectorAll('.metrics-btn').forEach(btn => btn.addEventListener('click', () => {{
+        const idx = Number(btn.getAttribute('data-idx'));
+        openMetricsPanel(idx);
+      }}));
+      document.getElementById('rowsCount').textContent = String(filtered.length);
+    }}
+
+    function openMetricsPanel(idx) {{
+      const row = data.rows[idx];
+      if (!row) return;
+      const title = (row.suite_path || '') + ' | ' + (row.test_name || '') + (row.subtest_name ? (' | ' + row.subtest_name) : '');
+      const body = row.metrics_json || '{{}}';
+      const panel = document.getElementById('metricsPanel');
+      document.getElementById('metricsPanelTitle').textContent = title;
+      document.getElementById('metricsPanelBody').textContent = body;
+      panel.style.display = 'block';
+    }}
+
+    function closeMetricsPanel() {{
+      const panel = document.getElementById('metricsPanel');
+      panel.style.display = 'none';
+    }}
+
+    function clearFilters() {{
+      document.getElementById('q').value = '';
+      document.getElementById('statusSel').value = '';
+      document.getElementById('chunkSel').value = '';
+      render();
+    }}
+
+    const statuses = Array.from(new Set(data.rows.map(r => String(r.status || '')).filter(Boolean))).sort();
+    const stSel = document.getElementById('statusSel');
+    statuses.forEach(s => {{
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      stSel.appendChild(opt);
+    }});
+    document.getElementById('q').addEventListener('input', render);
+    document.getElementById('statusSel').addEventListener('change', render);
+    document.getElementById('chunkSel').addEventListener('change', render);
+    render();
+  </script>
+</body>
+</html>
+"""
+    out_html.write_text(html, encoding="utf-8")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Build tests resource dashboard from evlog + report")
     p.add_argument("--suite-path", default=None, help="Suite path to filter; omit for ALL suites")
@@ -1905,6 +2335,8 @@ def main() -> None:
     p.add_argument("--top-n", type=int, default=12, help="Top suites to keep highlighted; suite+chunk mode keeps all chunks of these suites")
     p.add_argument("--max-points", type=int, default=1000, help="Max points per series in HTML dashboard (downsampling)")
     p.add_argument("--html-by-chunk", action="store_true", help="Include suite+chunk charts in HTML (default: only by suite)")
+    p.add_argument("--full-table", action="store_true", help="Generate additional detailed *_table.html (disabled by default)")
+    p.add_argument("--maximize-reqs-for-timeout-tests", action="store_true", help="For suites with test timeouts use size max: SMALL=1, MEDIUM=4, LARGE=all")
     p.add_argument("--out-cpu-suggestions", type=Path, default=None, help="Output JSON with per-suite recommended cpuN for runner")
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
     p.add_argument("--sanitizer", type=str, default=None, help="Optional SANITIZER_TYPE value for ya.make IF branches")
@@ -1956,6 +2388,7 @@ def main() -> None:
         enriched_runs,
         requirements_cache=requirements_cache,
         report_status_by_suite=report_status_by_suite,
+        maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
     )
     if args.out_cpu_suggestions:
         args.out_cpu_suggestions.write_text(json.dumps(cpu_suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1974,6 +2407,8 @@ def main() -> None:
             "top_n": args.top_n,
             "max_points": args.max_points,
             "html_by_chunk": args.html_by_chunk,
+            "full_table": args.full_table,
+            "maximize_reqs_for_timeout_tests": args.maximize_reqs_for_timeout_tests,
             "repo_root_for_synthetic": str(repo_root) if repo_root else None,
             "sanitizer": args.sanitizer,
         }
@@ -1988,6 +2423,9 @@ def main() -> None:
             cpu_suggestions=cpu_suggestions,
             run_config=run_config,
         )
+        if args.full_table:
+            out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")
+            build_report_table_html(args.report, out_table_html, args.suite_path)
 
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     print(f"Trace written: {args.out_trace}")
@@ -1997,6 +2435,8 @@ def main() -> None:
         print(f"CPU suggestions written: {args.out_cpu_suggestions}")
     if args.out_html:
         print(f"HTML written: {args.out_html}")
+        if args.full_table:
+            print(f"Table HTML written: {args.out_html.with_name(args.out_html.stem + '_table.html')}")
 
 
 if __name__ == "__main__":

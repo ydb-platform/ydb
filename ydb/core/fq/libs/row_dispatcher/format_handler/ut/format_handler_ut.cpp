@@ -1,3 +1,5 @@
+#include <mutex>
+
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 
@@ -37,10 +39,12 @@ public:
         {}
 
         void Freeze() {
+            std::lock_guard lock(Mutex_);
             Frozen_ = true;
         }
 
         void ExpectOffsets(TVector<ui64> expectedOffsets) {
+            std::lock_guard lock(Mutex_);
             if (Frozen_) {
                 return;
             }
@@ -51,21 +55,25 @@ public:
         }
 
         void ExpectError(TStatusCode statusCode, const TString& message) {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!ExpectedError_, "Can not add existing error, client id: " << ClientId_);
             ExpectedError_ = {statusCode, message};
         }
 
         void Validate() const {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Offsets_.empty(), "Found " << Offsets_.size() << " missing batches, client id: " << ClientId_);
             UNIT_ASSERT_VALUES_EQUAL_C(ExpectedFilteredRows_, 0, "Found " << ExpectedFilteredRows_ << " not filtered rows, client id: " << ClientId_);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
         }
 
         bool IsStarted() const override {
+            std::lock_guard lock(Mutex_);
             return Started_;
         }
 
         bool IsFinished() const {
+            std::lock_guard lock(Mutex_);
             return Frozen_ || !HasData_;
         }
 
@@ -95,6 +103,7 @@ public:
         }
 
         void OnClientError(TStatus status) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, status: " << status.GetErrorMessage() << ", client id: " << ClientId_);
 
             if (ExpectedError_) {
@@ -110,6 +119,7 @@ public:
         }
 
         void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> /* watermark */) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Started_, "Unexpected data for not started session");
             UNIT_ASSERT_GE_C(rowSize, 0, "Expected non zero row size, got: " << rowSize);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
@@ -120,6 +130,7 @@ public:
         }
 
         void UpdateClientOffset(ui64 offset) override {
+            std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(Started_, "Unexpected offset for not started session");
             UNIT_ASSERT_C(!ExpectedError_, "Error is not handled: " << ExpectedError_->second << ", client id: " << ClientId_);
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, offset: " << offset << ", client id: " << ClientId_);
@@ -144,6 +155,7 @@ public:
         ui64 ExpectedFilteredRows_ = 0;
         std::queue<ui64> Offsets_;
         std::optional<std::pair<TStatusCode, TString>> ExpectedError_;
+        mutable std::mutex Mutex_;
     };
 
 public:

@@ -1,14 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <library/cpp/json/json_reader.h>
-
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
@@ -166,6 +160,23 @@ Y_UNIT_TEST(AddJsonIndexCoveringJsonNotNull) {
 
 Y_UNIT_TEST(AddJsonIndexCoveringJsonDocumentNotNull) {
     DoTestAddJsonIndex("JsonDocument", false, true);
+}
+
+Y_UNIT_TEST(UnsupportedType) {
+    auto kikimr = Kikimr();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTestTable(db, "Uint64");
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/TestTable` ADD INDEX json_idx
+                GLOBAL USING json ON (Text)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
 }
 
 }

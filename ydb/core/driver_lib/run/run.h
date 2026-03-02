@@ -78,6 +78,7 @@ protected:
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
     TVector<NYdb::NGlobalPlugins::IPlugin::TPtr> Plugins;
+    TString PendingUdfLogMessage;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 

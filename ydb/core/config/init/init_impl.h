@@ -670,7 +670,9 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (HttpProxyPort) {
-            appConfig.MutableHttpProxyConfig()->SetPort(HttpProxyPort);
+            auto* httpProxyConfig = appConfig.MutableHttpProxyConfig();
+            httpProxyConfig->SetEnabled(true);
+            httpProxyConfig->SetPort(HttpProxyPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::HttpProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (PGWireAddress) {

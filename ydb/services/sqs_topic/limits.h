@@ -12,5 +12,5 @@ namespace NKikimr::NSqsTopic::V1 {
     constexpr int DEFAULT_MIN_PARTITION_COUNT = 1;
     constexpr int DEFAULT_MAX_PARTITION_COUNT = 100;
 
-    std::expected<void, std::string> ValidateQueueName(const TStringBuf name, bool read);
+    std::expected<void, std::string> ValidateQueueName(const TStringBuf name, bool allowAccessExistingTopic);
 } // namespace NKikimr::NSqsTopic::V1

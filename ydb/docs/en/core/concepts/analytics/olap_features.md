@@ -32,7 +32,7 @@ Core concepts for organizing, scaling, and managing data.
 
 ### Integration with External Systems
 
-  - [Federated Queries](../federated_query/index.md): Run queries on data in external systems (S3, ClickHouse, Postgres).
+  - [Federated Queries](../query_execution/federated_query/index.md): Run queries on data in external systems (S3, ClickHouse, Postgres).
   - [Working with S3 via External Tables](../federated_query/s3/external_table.md): Read and write Parquet/CSV data in Object Storage.
 
 ## Data Processing and Transformation (ETL/ELT)

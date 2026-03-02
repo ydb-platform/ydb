@@ -5,15 +5,15 @@
 #include <ydb/library/pdisk_io/buffers.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/uring_router.h>
+#include <ydb/core/util/spsc_circular_queue.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne64.h>
 #include <util/string/printf.h>
-#include <util/system/condvar.h>
 #include <util/system/file.h>
 #include <util/system/hp_timer.h>
-#include <util/system/mutex.h>
+#include <util/system/spinlock.h>
 
 #include <atomic>
 #include <cstring>
@@ -24,6 +24,8 @@
 #include "device_test_tool.h"
 
 namespace NKikimr {
+
+static const NHPTimer::STime OneSecondCycles = static_cast<NHPTimer::STime>(NHPTimer::GetCyclesPerSecond());
 
 class TUringRouterTest : public TPerfTest {
     static constexpr ui64 Alignment = 4096;
@@ -39,9 +41,14 @@ class TUringRouterTest : public TPerfTest {
             auto* self = static_cast<TOp*>(op);
             self->DevState->OnIoComplete(*self);
         }
+
+        static void OnDropThunk(NPDisk::TUringOperation* op) noexcept {
+            auto* self = static_cast<TOp*>(op);
+            self->DevState->OnIoDrop(*self);
+        }
     };
 
-    struct TDeviceState {
+    struct alignas(64) TDeviceState {
         ui32 BuffSize = 0;
         ui64 DeviceSizeBytes = 0;
         THolder<TFileHandle> File;
@@ -51,15 +58,12 @@ class TUringRouterTest : public TPerfTest {
         TVector<ui8*> Buffers;
         TVector<NPDisk::TAlignedData> AlignedBuffers;
         TVector<TVector<ui8>> UnalignedBuffers;
-        TVector<ui32> FreeSlots;
-        TMutex SlotsMutex;
-        TMutex CompletionMutex;
-        TCondVar CompletionCondVar;
-        std::atomic<ui32> InFlight = 0;
+        TSpscCircularQueue<ui32> FreeSlots;
 
         NPrivate::TMersenne64 OffsetRandGen;
         NPrivate::TMersenne64 FillRandGen;
         NHPTimer::STime StartTime = 0;
+        std::atomic<ui32> InFlight = 0;
         ui64 WriteEventsDone = 0;
         NMonitoring::TPercentileTrackerLg<10, 5, 1> WriteLatencyUs;
 
@@ -69,36 +73,29 @@ class TUringRouterTest : public TPerfTest {
         {}
 
         bool TryTakeFreeSlot(ui32& slot) {
-            TGuard<TMutex> guard(SlotsMutex);
-            if (FreeSlots.empty()) {
-                return false;
-            }
-            slot = FreeSlots.back();
-            FreeSlots.pop_back();
-            return true;
+            return FreeSlots.TryPop(slot);
         }
 
         void ReturnFreeSlot(ui32 slot) {
-            TGuard<TMutex> guard(SlotsMutex);
-            FreeSlots.push_back(slot);
+            Y_VERIFY_S(FreeSlots.TryPush(std::move(slot)), "Returning slot to full FreeSlots queue");
         }
 
         void OnIoComplete(TOp& op) {
             const NHPTimer::STime now = GetNow();
             const ui64 durationUs = static_cast<ui64>(NHPTimer::GetSeconds(now - op.Start) * 1e6);
-            const NHPTimer::STime oneSecondCycles = static_cast<NHPTimer::STime>(NHPTimer::GetCyclesPerSecond());
-            if (now > StartTime + oneSecondCycles) {
+            if (now > StartTime + OneSecondCycles) {
                 WriteLatencyUs.Increment(durationUs);
                 ++WriteEventsDone;
             }
 
             ReturnFreeSlot(op.Slot);
             InFlight.fetch_sub(1, std::memory_order_release);
-            {
-                TGuard<TMutex> guard(CompletionMutex);
-                CompletionCondVar.Signal();
-            }
             Y_VERIFY_S(op.Result == (i32)BuffSize, "TUringRouter write failed, res# " << op.Result);
+        }
+
+        void OnIoDrop(TOp& op) {
+            ReturnFreeSlot(op.Slot);
+            InFlight.fetch_sub(1, std::memory_order_release);
         }
 
         static NHPTimer::STime GetNow() {
@@ -191,7 +188,6 @@ public:
     void Finish() override {
         for (auto& dev : DeviceStates) {
             if (dev && dev->Router) {
-                dev->Router->Stop();
                 dev->Router.Reset();
             }
             if (dev) {
@@ -217,15 +213,15 @@ private:
         dev.File = MakeHolder<TFileHandle>(path.c_str(), openFlags);
 
         NPDisk::TUringRouterConfig cfg;
-        cfg.QueueDepth = QueueDepth;
+        cfg.QueueDepth = QueueDepth * 2; // sq + cq
         cfg.UseSQPoll = true;
-        cfg.UseIOPoll = true;
+        cfg.UseIOPoll = false;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
         Y_VERIFY_S(dev.Router->RegisterFile(), "TUringRouter::RegisterFile failed for device " << deviceIdx);
 
         dev.Ops.resize(QueueDepth);
         dev.Buffers.resize(QueueDepth);
-        dev.FreeSlots.reserve(QueueDepth);
+        dev.FreeSlots.Resize(QueueDepth);
 
         if (UseAlignedData) {
             dev.AlignedBuffers.reserve(QueueDepth);
@@ -245,7 +241,9 @@ private:
             dev.Ops[i].DevState = &dev;
             dev.Ops[i].Slot = i;
             dev.Ops[i].OnComplete = TOp::OnCompleteThunk;
-            dev.FreeSlots.push_back(i);
+            dev.Ops[i].OnDrop = TOp::OnDropThunk;
+            Y_VERIFY_S(dev.FreeSlots.TryPush(std::move(i)), "Failed to prefill FreeSlots queue");
+
             TryFillRandom(dev, dev.Buffers[i], BuffSize);
         }
 
@@ -267,48 +265,43 @@ private:
         const NHPTimer::STime endTime = dev.StartTime + DurationSec * cyclesPerSecond;
 
         while (TDeviceState::GetNow() < endTime) {
-            bool submitted = false;
-            while (true) {
-                ui32 slot = 0;
-                if (!dev.TryTakeFreeSlot(slot)) {
+            ui32 slot = 0;
+
+            // wait until we have a free slot
+            while (!dev.TryTakeFreeSlot(slot)) {
+                if (TDeviceState::GetNow() >= endTime) {
                     break;
                 }
-
-                TryFillRandom(dev, dev.Buffers[slot], BuffSize);
-                TOp& op = dev.Ops[slot];
-                op.Start = TDeviceState::GetNow();
-
-                ui64 offset = NextOffset(dev);
-                bool ok = false;
-                if (UseWriteFixed) {
-                    ok = dev.Router->WriteFixed(dev.Buffers[slot], BuffSize, offset, static_cast<ui16>(slot), &op);
-                } else {
-                    ok = dev.Router->Write(dev.Buffers[slot], BuffSize, offset, &op);
-                }
-                if (!ok) {
-                    dev.ReturnFreeSlot(slot);
-                    break;
-                }
-
-                dev.InFlight.fetch_add(1, std::memory_order_relaxed);
-                submitted = true;
+                std::this_thread::yield();
+            }
+            if (TDeviceState::GetNow() >= endTime) {
+                break;
             }
 
-            if (submitted) {
-                dev.Router->Flush();
+            TOp& op = dev.Ops[slot];
+            op.Start = TDeviceState::GetNow();
+
+            ui64 offset = RandomOffset(dev);
+            bool ok = false;
+            if (UseWriteFixed) {
+                ok = dev.Router->WriteFixed(dev.Buffers[slot], BuffSize, offset, static_cast<ui16>(slot), &op);
             } else {
-                TGuard<TMutex> guard(dev.CompletionMutex);
-                dev.CompletionCondVar.WaitT(dev.CompletionMutex, TDuration::MilliSeconds(1));
+                ok = dev.Router->Write(dev.Buffers[slot], BuffSize, offset, &op);
             }
+            Y_ABORT_UNLESS(ok, "Failed to start write");
+
+            dev.InFlight.fetch_add(1, std::memory_order_relaxed);
+            dev.Router->Flush();
         }
 
         while (dev.InFlight.load(std::memory_order_acquire) > 0) {
-            TGuard<TMutex> guard(dev.CompletionMutex);
-            dev.CompletionCondVar.WaitT(dev.CompletionMutex, TDuration::Seconds(1));
+            SpinLockPause();
         }
+
+        dev.Router->Stop();
     }
 
-    ui64 NextOffset(TDeviceState& dev) const {
+    ui64 RandomOffset(TDeviceState& dev) const {
         ui64 offset = dev.OffsetRandGen.GenRand() % (dev.DeviceSizeBytes - BuffSize);
         if (UseAlignedData) {
             offset = (offset / Alignment) * Alignment;

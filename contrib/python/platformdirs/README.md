@@ -14,13 +14,27 @@ differences between macOS, Windows, Linux/Unix, and Android so you don't have to
 from platformdirs import PlatformDirs
 
 dirs = PlatformDirs("MyApp", "MyCompany")
-dirs.user_data_dir  # e.g. ~/.local/share/MyApp on Linux
-dirs.user_config_dir  # e.g. ~/.config/MyApp on Linux
-dirs.user_cache_dir  # e.g. ~/.cache/MyApp on Linux
-dirs.user_log_dir  # e.g. ~/.local/state/MyApp/log on Linux
+dirs.user_data_dir  # ~/.local/share/MyApp (Linux)
+dirs.user_config_dir  # ~/.config/MyApp (Linux)
+dirs.user_cache_dir  # ~/.cache/MyApp (Linux)
+dirs.user_state_dir  # ~/.local/state/MyApp (Linux)
+dirs.user_log_dir  # ~/.local/state/MyApp/log (Linux)
+dirs.user_documents_dir  # ~/Documents
+dirs.user_downloads_dir  # ~/Downloads
+dirs.user_runtime_dir  # /run/user/<uid>/MyApp (Linux)
 ```
 
-Convenience functions are also available:
+For Path objects instead of strings:
+
+```python
+from platformdirs import PlatformDirs
+
+dirs = PlatformDirs("MyApp", "MyCompany")
+dirs.user_data_path  # pathlib.Path('~/.local/share/MyApp')
+dirs.user_config_path  # pathlib.Path('~/.config/MyApp')
+```
+
+Convenience functions for quick access:
 
 ```python
 from platformdirs import user_data_dir, user_config_path
@@ -29,25 +43,28 @@ user_data_dir("MyApp", "MyCompany")  # returns str
 user_config_path("MyApp", "MyCompany")  # returns pathlib.Path
 ```
 
+## Directory types
+
+- **Data**: Persistent application data (`user_data_dir`, `site_data_dir`)
+- **Config**: Configuration files and settings (`user_config_dir`, `site_config_dir`)
+- **Cache**: Cached data that can be regenerated (`user_cache_dir`, `site_cache_dir`)
+- **State**: Non-essential runtime state like window positions (`user_state_dir`, `site_state_dir`)
+- **Logs**: Log files (`user_log_dir`, `site_log_dir`)
+- **Runtime**: Runtime files like sockets and PIDs (`user_runtime_dir`, `site_runtime_dir`)
+
+Each type has both `user_*` (per-user, writable) and `site_*` (system-wide, read-only for users) variants.
+
 ## Documentation
 
-Full documentation is available at [platformdirs.readthedocs.io](https://platformdirs.readthedocs.io), including:
+Full documentation is available at [platformdirs.readthedocs.io](https://platformdirs.readthedocs.io):
 
-- [Usage guide](https://platformdirs.readthedocs.io/en/latest/usage.html) -- parameters, examples, and patterns
-- [API reference](https://platformdirs.readthedocs.io/en/latest/api.html) -- all functions and classes
-- [Platform details](https://platformdirs.readthedocs.io/en/latest/platforms.html) -- per-platform paths and behavior
+- **[Getting started tutorial](https://platformdirs.readthedocs.io/en/latest/usage.html)** -- learn core concepts
+  through real-world examples
+- **[How-to guides](https://platformdirs.readthedocs.io/en/latest/howto.html)** -- recipes for common tasks and
+  platform-specific tips
+- **[API reference](https://platformdirs.readthedocs.io/en/latest/api.html)** -- complete list of functions and classes
+- **[Platform details](https://platformdirs.readthedocs.io/en/latest/platforms.html)** -- default paths for each
+  operating system
 
-## Why this fork?
-
-This repository is a friendly fork of the wonderful work started by
-[ActiveState](https://github.com/ActiveState/appdirs) who created `appdirs`, this package's ancestor.
-
-Maintaining an open source project is no easy task, particularly from within an organization, and the Python community
-is indebted to `appdirs` (and to Trent Mick and Jeff Rouse in particular) for creating an incredibly useful simple
-module, as evidenced by the wide number of users it has attracted over the years.
-
-Nonetheless, given the number of long-standing open issues and pull requests, and no clear path towards
-[ensuring that maintenance of the package would continue or grow](https://github.com/ActiveState/appdirs/issues/79),
-this fork was created.
-
-Contributions are most welcome.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/tox-dev/platformdirs/blob/main/CONTRIBUTING.md) for
+details.

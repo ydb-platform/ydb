@@ -6,6 +6,9 @@ import os.path
 import sys
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 from ._xdg import XDGMixin
 from .api import PlatformDirsABC
 
@@ -13,7 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class _MacOSDefaults(PlatformDirsABC):
+class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     """
     Default platform directories for macOS without XDG environment variable overrides.
 
@@ -83,9 +86,19 @@ class _MacOSDefaults(PlatformDirsABC):
         return self.user_data_dir
 
     @property
+    def site_state_dir(self) -> str:
+        """:return: state directory shared by users, same as `site_data_dir`"""
+        return self.site_data_dir
+
+    @property
     def user_log_dir(self) -> str:
         """:return: log directory tied to the user, e.g. ``~/Library/Logs/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/Library/Logs"))  # noqa: PTH111
+
+    @property
+    def site_log_dir(self) -> str:
+        """:return: log directory shared by users, e.g. ``/Library/Logs/$appname/$version``"""
+        return self._append_app_name_and_version("/Library/Logs")
 
     @property
     def user_documents_dir(self) -> str:
@@ -118,6 +131,31 @@ class _MacOSDefaults(PlatformDirsABC):
         return os.path.expanduser("~/Desktop")  # noqa: PTH111
 
     @property
+    def user_bin_dir(self) -> str:
+        """:return: bin directory tied to the user, e.g. ``~/.local/bin``"""
+        return os.path.expanduser("~/.local/bin")  # noqa: PTH111
+
+    @property
+    def site_bin_dir(self) -> str:
+        """:return: bin directory shared by users, e.g. ``/usr/local/bin``"""
+        return "/usr/local/bin"
+
+    @property
+    def user_applications_dir(self) -> str:
+        """:return: applications directory tied to the user, e.g. ``~/Applications``"""
+        return os.path.expanduser("~/Applications")  # noqa: PTH111
+
+    @property
+    def _site_applications_dirs(self) -> list[str]:
+        return ["/Applications"]
+
+    @property
+    def site_applications_dir(self) -> str:
+        """:return: applications directory shared by users, e.g. ``/Applications``"""
+        dirs = self._site_applications_dirs
+        return os.pathsep.join(dirs) if self.multipath else dirs[0]
+
+    @property
     def user_runtime_dir(self) -> str:
         """:return: runtime directory tied to the user, e.g. ``~/Library/Caches/TemporaryItems/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches/TemporaryItems"))  # noqa: PTH111
@@ -126,6 +164,16 @@ class _MacOSDefaults(PlatformDirsABC):
     def site_runtime_dir(self) -> str:
         """:return: runtime directory shared by users, same as `user_runtime_dir`"""
         return self.user_runtime_dir
+
+    def iter_config_dirs(self) -> Iterator[str]:
+        """:yield: all user and site configuration directories."""
+        yield self.user_config_dir
+        yield from self._site_config_dirs
+
+    def iter_data_dirs(self) -> Iterator[str]:
+        """:yield: all user and site data directories."""
+        yield self.user_data_dir
+        yield from self._site_data_dirs
 
 
 class MacOS(XDGMixin, _MacOSDefaults):

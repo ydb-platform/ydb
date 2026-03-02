@@ -12,7 +12,12 @@
 ## См. также
 
 - [Конфигурация спиллинга](../../reference/configuration/table_service_config.md)
+<<<<<<< HEAD
 - [Концепция спиллинга](../../concepts/spilling.md)
 - [Конфигурация контроллера памяти](../../reference/configuration/index.md#memory-controller)
+=======
+- [Концепция спиллинга](../../concepts/query_execution/spilling.md)
+- [Конфигурация контроллера памяти](../../reference/configuration/memory_controller_config.md)
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../performance/index.md)

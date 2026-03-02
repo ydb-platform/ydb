@@ -30,6 +30,7 @@
 
 Если применяемый на серверах кластера тип Linux использует `syslogd` для логирования, необходимо настроить ротацию файлов лога с использованием инструмента `logrotate` или его аналогов. Сервисы {{ ydb-short-name }}  могут генерировать значительный объем системных логов, в особенности при повышении уровня логирования для диагностических целей, поэтому важно включить ротацию файлов системного лога для исключения ситуаций переполнения файловой системы `/var`.
 
+<<<<<<< HEAD
 ### Выберите топологию для установки {#topology-select}
 
 Перед установкой выберите подходящую топологию кластера {{ ydb-short-name }}, от этого будет зависеть какое количество серверов и дисков вам потребуется:
@@ -44,6 +45,12 @@
 В каждом сервере должен быть хотя бы один отдельный диск для пользовательских данных. Рекомендуется также добавить отдельный небольшой диск под операционную систему. Подробнее о различных вариантах топологии и избыточности читайте в [этой статье](../../../concepts/topology.md).
 
 В дальнейшем вы сможете при необходимости [расширять кластер](../../configuration-management/configuration-v1/cluster-expansion.md) без остановки его работы и без прерывания доступа пользователей к данным.
+=======
+Выберите серверы и диски, которые будут использоваться для хранения данных:
+
+* Используйте схему отказоустойчивости `block-4-2` для развертывания кластера в одной зоне доступности (AZ), задействуя не менее 8 серверов. Данная схема позволяет переживать отказ 2 серверов.
+* Используйте схему отказоустойчивости `mirror-3-dc` для развертывания кластера в трех зонах доступности (AZ), задействуя не менее 9 серверов. Данная схема позволяет переживать отказ 1 AZ и 1 сервера в другой AZ. Количество задействованных серверов в каждой AZ должно быть одинаковым.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 {% note info %}
 
@@ -83,7 +90,11 @@
 
 ```bash
 sudo groupadd ydb
+<<<<<<< HEAD
 sudo useradd ydb -g ydb -m
+=======
+sudo useradd ydb -g ydb
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 ```
 
 Для того, чтобы сервис {{ ydb-short-name }} имел доступ к блочным дискам для работы, необходимо добавить пользователя, под которым будут запущены процессы {{ ydb-short-name }}, в группу `disk`:
@@ -94,7 +105,11 @@ sudo usermod -aG disk ydb
 
 ## Настройте лимиты файловых дескрипторов {#file-descriptors}
 
+<<<<<<< HEAD
 Для корректной работы {{ ydb-short-name }}, особенно при использовании [спиллинга](../../../concepts/spilling.md) в многоузловых кластерах, рекомендуется увеличить лимит на количество одновременно открытых файловых дескрипторов.
+=======
+Для корректной работы {{ ydb-short-name }}, особенно при использовании [спиллинга](../../../concepts/query_execution/spilling.md) в многоузловых кластерах, рекомендуется увеличить лимит на количество одновременно открытых файловых дескрипторов.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 Для изменения лимита файловых дескрипторов добавьте следующие строки в файл `/etc/security/limits.conf`:
 
@@ -121,7 +136,11 @@ ydb hard nofile 10000
     mkdir ydbd-stable-linux-amd64
     curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
+<<<<<<< HEAD
     где `binaries_url` — ссылка на архив нужной вам версии со страницы [загрузок](../../../downloads/index.md)
+=======
+    где `binaries_url` ссылка на архив нужной вам версии со страницы [загрузок](../../../downloads/index.md)
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
 
@@ -140,6 +159,28 @@ ydb hard nofile 10000
 
 {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 
+<<<<<<< HEAD
+=======
+Получить список блочных устройств на сервере можно командой `lsblk`. Пример вывода:
+
+```txt
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0    7:0    0  63.3M  1 loop /snap/core20/1822
+...
+vda    252:0    0    40G  0 disk
+├─vda1 252:1    0     1M  0 part
+└─vda2 252:2    0    40G  0 part /
+vdb    252:16   0   186G  0 disk
+└─vdb1 252:17   0   186G  0 part
+```
+
+Названия блочных устройств зависят от настроек операционной системы, заданных базовым образом или настроенных вручную. Обычно имена устройств состоят из трех частей:
+
+- Фиксированный префикс или префикс, указывающий на тип устройства
+- Последовательный идентификатор устройства (может быть буквой или числом)
+- Последовательный идентификатор раздела на данном устройстве (обычно число)
+
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 1. Создайте разделы на выбранных дисках:
 
     {% note alert %}
@@ -156,7 +197,11 @@ ydb hard nofile 10000
     sudo partx --u ${DISK}
     ```
 
+<<<<<<< HEAD
     После выполнения в системе появится диск с меткой `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
+=======
+    Выполните команду `ls -l /dev/disk/by-partlabel/`, чтобы убедиться что в системе появился диск с меткой `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
     Если вы планируете использовать более одного диска на каждом сервере, укажите для каждого свою уникальную метку вместо `ydb_disk_ssd_01`. Метки дисков должны быть уникальны в рамках каждого сервера, и используются в конфигурационных файлах, как показано в последующих инструкциях.
 
@@ -222,6 +267,7 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
 
 ## Подготовьте конфигурационные файлы {#config}
 
+<<<<<<< HEAD
 Подготовьте конфигурационный файл {{ ydb-short-name }} в зависимости от выбранной вами топологии (см. [выбор топологии](#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите и используйте подходящий для вашего случая.
 
 {% list tabs %}
@@ -729,6 +775,172 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   ```
 
 {% endlist %}
+=======
+Подготовьте конфигурационный файл {{ ydb-short-name }}:
+```yaml
+static_erasure: mirror-3-dc
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: static-node-1.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 1
+    data_center: 'zone-a'
+    rack: '1'
+- host: static-node-2.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-b'
+    rack: '2'
+- host: static-node-3.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-d'
+    rack: '3'
+domains_config:
+  security_config:
+    enforce_user_token_requirement: true
+    default_users:
+      - name: "root"
+        password: ""
+    default_access:
+      - "+(F):root"
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: mirror-3-dc
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+table_service_config:
+  sql_version: 1
+actor_system_config:
+  executor:
+  - name: System
+    threads: 2
+    type: BASIC
+  - name: User
+    threads: 3
+    type: BASIC
+  - name: Batch
+    threads: 2
+    type: BASIC
+  - name: IO
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC
+    spin_threshold: 10
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    profile_id: 0
+interconnect_config:
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+grpc_config:
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+    services_enabled:
+    - legacy
+client_certificate_authorization:
+  request_client_certificate: true
+  client_certificate_definitions:
+    - member_groups: ["registerNode@cert"]
+      subject_terms:
+      - short_name: "O"
+        values: ["YDB"]
+```
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
 
@@ -760,7 +972,11 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
 
 Остальные секции и настройки конфигурационного файла остаются без изменений.
 
+<<<<<<< HEAD
 Сохраните конфигурационный файл {{ydb-short-name}} под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
+=======
+Сохраните конфигурационный файл YDB под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../reference/configuration/index.md).
 
@@ -790,8 +1006,13 @@ sudo chmod 700 /opt/ydb/certs
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
+<<<<<<< HEAD
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static &
+=======
+  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --config-dir /opt/ydb/cfg \
+      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
   ```
 
 - С использованием systemd
@@ -818,7 +1039,11 @@ sudo chmod 700 /opt/ydb/certs
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
+<<<<<<< HEAD
       --yaml-config  /opt/ydb/cfg/config.yaml \
+=======
+      --config-dir /opt/ydb/cfg \
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
@@ -839,7 +1064,11 @@ sudo chmod 700 /opt/ydb/certs
 
 После запуска статических узлов проверьте их работоспособность через встроенный веб-интерфейс {{ ydb-short-name }} (Embedded UI):
 
+<<<<<<< HEAD
 1. Откройте в браузере адрес `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел;
+=======
+1. Откройте в браузере адрес `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел;
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 2. Перейдите на вкладку **Nodes**;
 3. Убедитесь, что в списке отображаются все 3 статических узла.
 
@@ -859,7 +1088,11 @@ sudo chmod 700 /opt/ydb/certs
 /opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
 ```
 
+<<<<<<< HEAD
 Инициализируйте кластер, используя полученный токен
+=======
+Инициализируйте кластер используя полученный токен
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -878,7 +1111,11 @@ echo $?
 
 При создании базы данных устанавливается первоначальное количество используемых групп хранения, определяющее доступную пропускную способность ввода-вывода и максимальную емкость хранения. Количество групп хранения может быть при необходимости увеличено после создания базы данных.
 
+<<<<<<< HEAD
 Порядок действий по созданию базы данных зависит от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
+=======
+На одном из серверов хранения в составе кластера выполните команды:
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -910,16 +1147,27 @@ echo $?
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+<<<<<<< HEAD
       --yaml-config  /opt/ydb/cfg/config.yaml \
+=======
+      --config-dir /opt/ydb/cfg \
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
+<<<<<<< HEAD
       --node-broker grpcs://<ydb-static-node3>:2135 &
   ```
 
   В примере команды выше `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` — FQDN трех любых серверов, на которых запущены статические узлы кластера.
+=======
+      --node-broker grpcs://<ydb-static-node3>:2135
+  ```
+
+  В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 - С использованием systemd
 
@@ -948,7 +1196,11 @@ echo $?
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+<<<<<<< HEAD
       --yaml-config  /opt/ydb/cfg/config.yaml \
+=======
+      --config-dir /opt/ydb/cfg \
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
@@ -963,7 +1215,11 @@ echo $?
   WantedBy=multi-user.target
   ```
 
+<<<<<<< HEAD
   В примере команды выше `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` — FQDN трех любых серверов, на которых запущены статические узлы кластера.
+=======
+  В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
   
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
@@ -977,8 +1233,11 @@ echo $?
 
 ## Настройка учетных записей {#security-setup}
 
+<<<<<<< HEAD
 1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../../reference/ydb-cli/install.md).
 
+=======
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
     ```bash
@@ -991,13 +1250,18 @@ echo $?
 1. Создайте дополнительные учетные записи:
 
     ```bash
+<<<<<<< HEAD
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+=======
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
         yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
     ```
 
 1. Установите права учетных записей, включив их во встроенные группы:
 
     ```bash
+<<<<<<< HEAD
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
@@ -1005,6 +1269,13 @@ echo $?
 В перечисленных выше примерах команд `<node.ydb.tech>` - FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`.
 
 При выполнении команд создания учетных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
+=======
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+        yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
+    ```
+
+В перечисленных выше примерах команд `<node.ydb.tech>` — FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`. При подключении по SSH к динамическому узлу {{ ydb-short-name }} удобно использовать конструкцию `grpcs://$(hostname -f):2136` для получения FQDN.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 При выполнении команд создания учётных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
 
@@ -1032,11 +1303,19 @@ echo $?
 
 {% endlist %}
 
+<<<<<<< HEAD
 Где `<node.ydb.tech>` — FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
 
 ## Проверка доступа ко встроенному web-интерфейсу
 
 Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
+=======
+Где `<node.ydb.tech>` - FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
+
+## Проверка доступа ко встроенному web-интерфейсу
+
+Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 В Web-браузере должно быть настроено доверие в отношении центра регистрации, выпустившего сертификаты для кластера {{ ydb-short-name }}, в противном случае будет отображено предупреждение об использовании недоверенного сертификата.
 
@@ -1072,6 +1351,7 @@ echo $?
 1. Пропускается ненужный в незащищенном режиме шаг по получению токена аутентификации перед выполнением инициализации кластера и созданием базы данных.
 1. Команда инициализации кластера выполняется в следующей форме:
 
+<<<<<<< HEAD
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
@@ -1084,5 +1364,19 @@ echo $?
 export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
+=======
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    ydb admin cluster bootstrap --uuid <строка>
+    echo $?
+    ```
+
+1. Команда создания базы данных выполняется в следующей форме:
+
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
+    ```
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 1. При обращении к базе данных из {{ ydb-short-name }} CLI и приложений используется протокол grpc вместо grpcs, и не используется аутентификация.

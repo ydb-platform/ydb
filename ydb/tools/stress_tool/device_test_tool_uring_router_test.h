@@ -215,7 +215,7 @@ private:
         NPDisk::TUringRouterConfig cfg;
         cfg.QueueDepth = QueueDepth;
         cfg.UseSQPoll = true;
-        cfg.UseIOPoll = true;
+        cfg.UseIOPoll = false;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
         Y_VERIFY_S(dev.Router->RegisterFile(), "TUringRouter::RegisterFile failed for device " << deviceIdx);
 

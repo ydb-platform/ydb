@@ -728,6 +728,10 @@ public:
                 return;
             }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
+            
+            // Pass WMState from session to the event
+            Y_ABORT_UNLESS(sessionInfo->WMState, "WMState must be initialized in session constructor");
+            ev->Get()->SetWmSessionUpdater(sessionInfo->WMState);
         }
 
         if (!TryFillPoolInfoFromCache(ev, requestId)) {

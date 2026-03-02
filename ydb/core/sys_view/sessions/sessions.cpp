@@ -89,6 +89,22 @@ public:
             insert({TSchema::UserSID::ColumnId, [] (const TNodeInfo& info, ui32) {   // 14
                 return TCell(info.GetUserSID().data(), info.GetUserSID().size());
             }});
+
+            insert({TSchema::WMPoolId::ColumnId, [] (const TNodeInfo& info, ui32) {   // 17
+                return TCell(info.GetWMPoolId().data(), info.GetWMPoolId().size());
+            }});
+
+            insert({TSchema::WMState::ColumnId, [] (const TNodeInfo& info, ui32) {   // 18
+                return TCell(info.GetWMState().data(), info.GetWMState().size());
+            }});
+
+            insert({TSchema::WMEnterTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 19
+                return info.GetWMEnterTime() ? TCell::Make<ui64>(info.GetWMEnterTime()) : TCell();
+            }});
+
+            insert({TSchema::WMExitTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 20
+                return info.GetWMExitTime() ? TCell::Make<ui64>(info.GetWMExitTime()) : TCell();
+            }});
         }
     };
 

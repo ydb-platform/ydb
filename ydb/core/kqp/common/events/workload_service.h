@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
@@ -10,6 +11,12 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+
+#include <memory>
+
+namespace NKikimr::NKqp {
+    struct IWmSessionUpdater;
+}
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -24,12 +31,13 @@ struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoo
 };
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
-    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "")
+    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
         : DatabaseId(databaseId)
         , SessionId(sessionId)
         , PoolId(poolId)
         , UserToken(userToken)
         , RequestText(requestText)
+        , WmSessionUpdater(wmSessionUpdater)
     {}
 
     const TString DatabaseId;
@@ -37,6 +45,7 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
     TString PoolId;  // Can be changed to default pool id
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString RequestText;
+    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {

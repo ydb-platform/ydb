@@ -75,6 +75,48 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
     if (fieldsMap.NeedField(VSessions::UserSID::ColumnId)) {  // 14
         proto->SetUserSID(ClientSID);
     }
+
+    if (fieldsMap.NeedField(VSessions::WMPoolId::ColumnId)) { // 17
+        if (WMState) {
+            proto->SetWMPoolId(WMState->GetPoolId());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WMState::ColumnId)) { // 18
+        if (WMState) {
+            using EWMState = IWmSessionUpdater::EWMState;
+            switch(WMState->GetState()) {
+                case EWMState::NONE: {
+                    proto->SetWMState("NONE");
+                    break;
+                }
+                case EWMState::PENDING: {
+                    proto->SetWMState("PENDING");
+                    break;
+                }
+                case EWMState::DELAYED: {
+                    proto->SetWMState("DELAYED");
+                    break;
+                }
+                case EWMState::EXITED: {
+                    proto->SetWMState("EXITED");
+                    break;
+                }
+            }
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WMEnterTime::ColumnId)) { // 19
+        if (WMState) {
+            proto->SetWMEnterTime(WMState->GetEnterTime().MicroSeconds());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WMExitTime::ColumnId)) { // 20
+        if (WMState) {
+            proto->SetWMExitTime(WMState->GetExitTime().MicroSeconds());
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

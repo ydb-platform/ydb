@@ -198,6 +198,7 @@ struct TKqpWorkloadServiceEvents {
         EvUpdatePoolInfo,
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
+        EvUpdateSessionWMState,
     };
 };
 

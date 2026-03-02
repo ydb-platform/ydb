@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
@@ -73,6 +74,53 @@ public:
     }
 };
 
+class TWmSessionUpdater final : public IWmSessionUpdater {
+public:
+    using EWMState = IWmSessionUpdater::EWMState;
+
+    void SetRequestState(EWMState state, TInstant timestamp) override {
+        const ui64 ts = timestamp.MicroSeconds();
+        
+        if (state == EWMState::PENDING || state == EWMState::DELAYED) {
+            EnterTimeUs.store(ts, std::memory_order_relaxed);
+        } else if (state == EWMState::EXITED) {
+            ExitTimeUs.store(ts, std::memory_order_relaxed);
+        }
+        
+        State.store(state, std::memory_order_release);
+    }
+
+    void SetPoolId(TString poolId) override {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        PoolId = std::move(poolId);
+    }
+    
+    EWMState GetState() const {
+        return State.load(std::memory_order_acquire);
+    }
+
+    TInstant GetEnterTime() const {
+        return TInstant::MicroSeconds(EnterTimeUs.load(std::memory_order_relaxed));
+    }
+
+    TInstant GetExitTime() const {
+        return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_relaxed));
+    }
+
+    TString GetPoolId() const {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        return PoolId;
+    }
+
+private:
+    std::atomic<EWMState> State{EWMState::NONE};
+    std::atomic<ui64> EnterTimeUs{0};
+    std::atomic<ui64> ExitTimeUs{0};
+
+    mutable TAdaptiveLock PoolIdLock;
+    TString PoolId;
+};
+
 template<typename TValue>
 struct TProcessResult {
     Ydb::StatusIds::StatusCode YdbStatus;
@@ -110,6 +158,7 @@ struct TKqpSessionInfo {
     TInstant SessionStartedAt;
     TInstant StateChangeAt;
     TInstant QueryStartAt;
+    std::shared_ptr<TWmSessionUpdater> WMState;
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
@@ -145,6 +194,7 @@ struct TKqpSessionInfo {
         , AttachedNodeId(0)
         , PgWire(pgWire)
         , SessionStartedAt(std::move(sessionStartedAt))
+        , WMState(std::make_shared<TWmSessionUpdater>())
     {
     }
 

@@ -358,6 +358,10 @@ message TSessionInfo {
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
     optional string UserName = 16;
+    optional string WMPoolId = 17;
+    optional string WMState = 18;
+    optional int64 WMEnterTime = 19;
+    optional int64 WMExitTime = 20;
 }
 
 message TEvListSessionsRequest {

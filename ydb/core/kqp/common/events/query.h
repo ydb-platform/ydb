@@ -15,6 +15,12 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
 
+#include <memory>
+
+namespace NKikimr::NKqp {
+    struct IWmSessionUpdater;
+}
+
 namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvQueryRequestRemote: public TEventPB<TEvQueryRequestRemote, NKikimrKqp::TEvQueryRequest,
@@ -347,6 +353,14 @@ public:
         return UserRequestContext;
     }
 
+    void SetWmSessionUpdater(const std::shared_ptr<IWmSessionUpdater>& wmSessionUpdater) {
+        WmSessionUpdater = wmSessionUpdater;
+    }
+
+    std::shared_ptr<IWmSessionUpdater> GetWmSessionUpdater() const {
+        return WmSessionUpdater;
+    }
+
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -483,6 +497,7 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
+    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

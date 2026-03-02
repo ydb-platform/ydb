@@ -36,6 +36,8 @@ public:
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h>
 
+#include <utility>
+
 template <typename TParent>
 class TNodeBuilder<TParent, TResultDataSink>: TNodeBuilderBase {
 public:
@@ -45,7 +47,7 @@ public:
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 

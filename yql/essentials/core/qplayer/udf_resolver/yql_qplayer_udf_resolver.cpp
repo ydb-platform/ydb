@@ -6,6 +6,8 @@
 
 #include <openssl/sha.h>
 
+#include <utility>
+
 namespace NYql::NCommon {
 
 namespace {
@@ -28,7 +30,7 @@ TString MakeHash(const TString& str) {
 class TResolver: public IUdfResolver {
 public:
     TResolver(IUdfResolver::TPtr inner, const TQContext& qContext)
-        : Inner_(inner)
+        : Inner_(std::move(inner))
         , QContext_(qContext)
     {
     }

@@ -1,6 +1,7 @@
 #include "cbo_optimizer_new.h"
 
 #include <array>
+#include <utility>
 
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
@@ -87,8 +88,8 @@ TJoinOptimizerNode::TJoinOptimizerNode(
     : IBaseOptimizerNode(JoinNodeType)
     , LeftArg(left)
     , RightArg(right)
-    , LeftJoinKeys(leftKeys)
-    , RightJoinKeys(rightKeys)
+    , LeftJoinKeys(std::move(leftKeys))
+    , RightJoinKeys(std::move(rightKeys))
     , JoinType(joinType)
     , JoinAlgo(joinAlgo)
     , LeftAny(leftAny)

@@ -3,6 +3,7 @@
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <cstdlib>
+#include <utility>
 
 using namespace NYql::NUdf;
 
@@ -14,7 +15,7 @@ namespace {
 class TBoxedValue: public TBoxedValueBase {
 public:
     explicit TBoxedValue(TUnboxedValue result)
-        : Result_(result)
+        : Result_(std::move(result))
     {
     }
     // Fetch: return Finish but assign non-trivial boxed value -> abort

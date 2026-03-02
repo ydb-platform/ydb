@@ -2,6 +2,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <unordered_set>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -196,8 +197,8 @@ private:
 
 public:
     TSetCreate(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -275,8 +276,8 @@ private:
 
 public:
     TSetDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -305,8 +306,8 @@ private:
 
 public:
     TSetMerge(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 

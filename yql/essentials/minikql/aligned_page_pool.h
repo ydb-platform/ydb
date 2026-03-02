@@ -13,6 +13,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace NKikimr {
@@ -71,8 +72,8 @@ public:
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
-                                  const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
-        : Counters_(counters)
+                                  TAlignedPagePoolCounters counters = TAlignedPagePoolCounters())
+        : Counters_(std::move(counters))
         , DebugInfo_(location)
     {
         if (Counters_.PoolsCntr) {

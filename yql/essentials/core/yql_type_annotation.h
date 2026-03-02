@@ -32,6 +32,7 @@
 #include <util/digest/city.h>
 
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace NYql {
@@ -51,17 +52,17 @@ class TModuleResolver : public IModuleResolver {
 public:
     using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
 
-    TModuleResolver(const NSQLTranslation::TTranslators& translators, TModulesTable&& modules,
+    TModuleResolver(NSQLTranslation::TTranslators translators, TModulesTable&& modules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
         THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
-        : Translators_(translators)
+        : Translators_(std::move(translators))
         , OwnedCtx_(std::move(ownedCtx))
         , LibsContext_(nextUniqueId)
         , Modules_(std::move(modules))
         , ClusterMapping_(clusterMapping)
         , SqlFlags_(sqlFlags)
-        , ModuleChecker_(moduleChecker)
+        , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
     {
         if (OwnedCtx_) {
@@ -69,20 +70,20 @@ public:
         }
     }
 
-    TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
+    TModuleResolver(NSQLTranslation::TTranslators translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix, TModuleChecker moduleChecker)
-        : Translators_(translators)
+        THashMap<int, TLibraryCohesion>>& libs, TString fileAliasPrefix, TModuleChecker moduleChecker)
+        : Translators_(std::move(translators))
         , ParentModules_(parentModules)
         , LibsContext_(nextUniqueId)
         , KnownPackages_(knownPackages)
         , Libs_(libs)
         , ClusterMapping_(clusterMapping)
         , SqlFlags_(sqlFlags)
-        , ModuleChecker_(moduleChecker)
+        , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
-        , FileAliasPrefix_(fileAliasPrefix)
+        , FileAliasPrefix_(std::move(fileAliasPrefix))
     {
     }
 
@@ -195,7 +196,7 @@ public:
     struct TOrderedItem {
         TString LogicalName;
         TString PhysicalName;
-        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TString logical, TString physical) : LogicalName(std::move(logical)), PhysicalName(std::move(physical)) {}
         TOrderedItem(TOrderedItem&&) = default;
         TOrderedItem(const TOrderedItem&) = default;
         TOrderedItem& operator=(const TOrderedItem&) = default;

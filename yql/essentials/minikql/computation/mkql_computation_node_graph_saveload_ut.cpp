@@ -10,6 +10,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -66,8 +68,8 @@ struct TSetup {
 };
 
 struct TStreamWithYield: public NUdf::TBoxedValue {
-    TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
-        : Items_(items)
+    TStreamWithYield(TUnboxedValueVector items, ui32 yieldPos, ui32 index)
+        : Items_(std::move(items))
         , YieldPos_(yieldPos)
         , Index_(index)
     {

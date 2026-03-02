@@ -23,6 +23,7 @@
 #include <util/system/env.h>
 
 #include <unordered_map>
+#include <utility>
 
 using namespace NYql;
 
@@ -121,10 +122,10 @@ private:
 
 class TBasicAggrFunc final: public TAstListNode {
 public:
-    TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFunc(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {
     }
@@ -214,10 +215,10 @@ protected:
 
 class TBasicAggrFactory final: public TAstListNode {
 public:
-    TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFactory(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {
     }
@@ -279,11 +280,11 @@ typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
 
 class TLiteralStringAtom: public INode {
 public:
-    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info, const TString& prefix = {})
+    TLiteralStringAtom(TPosition pos, TNodePtr node, TString info, TString prefix = {})
         : INode(pos)
-        , Node_(node)
-        , Info_(info)
-        , Prefix_(prefix)
+        , Node_(std::move(node))
+        , Info_(std::move(info))
+        , Prefix_(std::move(prefix))
     {
     }
 
@@ -507,9 +508,9 @@ public:
 
 class TTableName: public TCallNode {
 public:
-    TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& service)
+    TTableName(TPosition pos, const TVector<TNodePtr>& args, TString service)
         : TCallNode(pos, "TableName", 0, 2, args)
-        , Service_(service)
+        , Service_(std::move(service))
         , EmptyArgs_(args.empty())
     {
     }
@@ -2504,10 +2505,10 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
 
 class TCallableNode final: public INode {
 public:
-    TCallableNode(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args, bool forReduce)
+    TCallableNode(TPosition pos, const TString& module, TString name, const TVector<TNodePtr>& args, bool forReduce)
         : INode(pos)
         , Module_(module)
-        , Name_(name)
+        , Name_(std::move(name))
         , Args_(args)
         , ForReduce_(forReduce)
     {
@@ -2633,13 +2634,13 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+    TScriptUdf(TPosition pos, TString moduleName, TString funcName, const TVector<TNodePtr>& args,
                TNodePtr options)
         : INode(pos)
-        , ModuleName_(moduleName)
-        , FuncName_(funcName)
+        , ModuleName_(std::move(moduleName))
+        , FuncName_(std::move(funcName))
         , Args_(args)
-        , Options_(options)
+        , Options_(std::move(options))
     {
     }
 
@@ -2746,9 +2747,9 @@ TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString&
 template <bool Sorted, bool Hashed>
 class TYqlToDict final: public TCallNode {
 public:
-    TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
+    TYqlToDict(TPosition pos, TString mode, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ToDict", 4, 4, args)
-        , Mode_(mode)
+        , Mode_(std::move(mode))
     {
     }
 
@@ -2842,9 +2843,9 @@ private:
 
 class TInvalidBuiltin final: public INode {
 public:
-    TInvalidBuiltin(TPosition pos, const TString& info)
+    TInvalidBuiltin(TPosition pos, TString info)
         : INode(pos)
-        , Info_(info)
+        , Info_(std::move(info))
     {
     }
 

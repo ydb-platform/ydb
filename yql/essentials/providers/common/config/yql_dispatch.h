@@ -22,6 +22,8 @@
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace NPrivate {
@@ -110,8 +112,8 @@ public:
     public:
         using TPtr = TIntrusivePtr<TSettingHandler>;
 
-        explicit TSettingHandler(const TString& name)
-            : Name_(name)
+        explicit TSettingHandler(TString name)
+            : Name_(std::move(name))
         {
         }
 

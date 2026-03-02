@@ -19,6 +19,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -338,7 +340,7 @@ template <class TKey, class TValue>
 struct TBrokenDictIterator: public NUdf::TBoxedValue {
     TBrokenDictIterator(const std::vector<std::pair<TKey, TValue>>& dictData, PosPair holePos)
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Index_(-1)
     {
     }
@@ -374,7 +376,7 @@ struct TBrokenDictBoxedValue: public NUdf::TBoxedValue {
     TBrokenDictBoxedValue(const std::vector<std::pair<TKey, TValue>>& dictData,
                           PosPair holePos, NUdf::TUnboxedValue&& hole = NUdf::TUnboxedValuePod())
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Hole_(std::move(hole))
     {
     }

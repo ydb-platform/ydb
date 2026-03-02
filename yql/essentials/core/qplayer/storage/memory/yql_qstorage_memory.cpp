@@ -3,6 +3,8 @@
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -29,8 +31,8 @@ using TStatePtr = std::shared_ptr<TState>;
 
 class TReader: public IQReader {
 public:
-    explicit TReader(const TOperationMap::TMapPtr& map)
-        : Map_(map)
+    explicit TReader(TOperationMap::TMapPtr map)
+        : Map_(std::move(map))
     {
     }
 
@@ -49,8 +51,8 @@ private:
 
 class TWriter: public IQWriter {
 public:
-    TWriter(const TOperationMapPtr& operation, const TQWriterSettings& settings)
-        : Operation_(operation)
+    TWriter(TOperationMapPtr operation, const TQWriterSettings& settings)
+        : Operation_(std::move(operation))
         , Settings_(settings)
     {
     }
@@ -96,9 +98,9 @@ private:
 
 class TIterator: public IQIterator {
 public:
-    TIterator(const TQIteratorSettings& settings, const TOperationMap::TMapPtr& map)
+    TIterator(const TQIteratorSettings& settings, TOperationMap::TMapPtr map)
         : Settings_(settings)
-        , Map_(map)
+        , Map_(std::move(map))
         , It_(Map_->begin())
     {
     }

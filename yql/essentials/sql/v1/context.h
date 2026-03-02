@@ -18,6 +18,8 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NSQLTranslationV1 {
 inline bool IsAnonymousName(const TString& name) {
     return name == "$_";
@@ -28,9 +30,9 @@ inline bool IsStreamingService(const TString& service) {
 }
 
 struct TNodeWithUsageInfo: public TThrRefBase {
-    explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
-        : Node(node)
-        , NamePos(namePos)
+    explicit TNodeWithUsageInfo(TNodePtr node, TPosition namePos, int level)
+        : Node(std::move(node))
+        , NamePos(std::move(namePos))
         , Level(level)
     {
     }
@@ -101,12 +103,12 @@ enum class EFlattenAndAggrExprsPersistence {
 
 class TContext {
 public:
-    TContext(const TLexers& lexers,
-             const TParsers& parsers,
+    TContext(TLexers lexers,
+             TParsers parsers,
              const NSQLTranslation::TTranslationSettings& settings,
-             const NSQLTranslation::TSQLHints& hints,
+             NSQLTranslation::TSQLHints hints,
              NYql::TIssues& issues,
-             const TString& query = {});
+             TString query = {});
 
     virtual ~TContext();
 

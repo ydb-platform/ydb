@@ -15,6 +15,8 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/singleton.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -629,7 +631,7 @@ public:
     TSortedSetHolder(
         TMemoryUsageInfo* memInfo,
         TSortedSetFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -638,8 +640,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -843,7 +845,7 @@ public:
     TSortedDictHolder(
         TMemoryUsageInfo* memInfo,
         TSortedDictFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -852,8 +854,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -1048,11 +1050,11 @@ public:
     };
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
-                     const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                     TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                      const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Set_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -1855,11 +1857,11 @@ public:
     };
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
-                      const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                      TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                       const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Map_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -2645,7 +2647,7 @@ public:
 
     TLimitedList(TMemoryUsageInfo* memInfo, NUdf::TRefCountedPtr<NUdf::IBoxedValue> parent, TMaybe<ui64> skip, TMaybe<ui64> take)
         : TComputationValue(memInfo)
-        , Parent_(parent)
+        , Parent_(std::move(parent))
         , Skip_(skip)
         , Take_(take)
     {
@@ -2853,7 +2855,7 @@ class TDictValueBuilder: public NUdf::IDictValueBuilder {
 public:
     TDictValueBuilder(
         const THolderFactory& holderFactory,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         ui32 dictFlags,
         TType* encodeType,
@@ -2861,7 +2863,7 @@ public:
         const NUdf::IEquate* equate,
         const NUdf::ICompare* compare)
         : HolderFactory_(holderFactory)
-        , Types_(types)
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , DictFlags_(dictFlags)
         , EncodeType_(encodeType)

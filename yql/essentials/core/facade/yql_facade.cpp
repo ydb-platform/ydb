@@ -50,6 +50,8 @@
 #include <util/system/rusage.h>
 #include <util/generic/yexception.h>
 
+#include <utility>
+
 using namespace NThreading;
 
 namespace NYql {
@@ -76,7 +78,7 @@ const TString StartTimeLabel = "StartTime";
 class TUrlLoader: public IUrlLoader {
 public:
     explicit TUrlLoader(TFileStoragePtr storage)
-        : Storage_(storage)
+        : Storage_(std::move(storage))
     {
     }
 
@@ -195,14 +197,14 @@ TProgramFactory::TProgramFactory(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
-    const TString& runner)
+    TString runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(MakeIntrusive<TCredentials>())
     , GatewaysConfig_(nullptr)
-    , Runner_(runner)
+    , Runner_(std::move(runner))
     , ArrowResolver_(MakeSimpleArrowResolver(*functionRegistry))
 {
 }
@@ -332,7 +334,7 @@ TProgramPtr TProgramFactory::Create(
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
-    const TString& issueReportTarget,
+    TString issueReportTarget,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TIntrusivePtr<IRandomProvider> randomProvider,
     const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -341,59 +343,59 @@ TProgram::TProgram(
     TLangVersion langVer,
     TLangVersion maxLangVer,
     bool volatileResults,
-    const TUserDataTable& userDataTable,
+    TUserDataTable userDataTable,
     const TCredentials::TPtr& credentials,
-    const IModuleResolver::TPtr& modules,
-    const IUrlListerManagerPtr& urlListerManager,
+    IModuleResolver::TPtr modules,
+    IUrlListerManagerPtr urlListerManager,
     const IUdfResolver::TPtr& udfResolver,
     const TUdfIndex::TPtr& udfIndex,
-    const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
+    TUdfIndexPackageSet::TPtr udfIndexPackageSet,
     const TFileStoragePtr& fileStorage,
     const IUrlPreprocessing::TPtr& urlPreprocessing,
     const TGatewaysConfig* gatewaysConfig,
-    const TString& filename,
-    const TString& sourceCode,
-    const TString& sessionId,
+    TString filename,
+    TString sourceCode,
+    TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
-    const IArrowResolver::TPtr& arrowResolver,
+    IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
     TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
-    : IssueReportTarget_(issueReportTarget)
+    : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
     , AstRoot_(nullptr)
-    , Modules_(modules)
+    , Modules_(std::move(modules))
     , DataProvidersInit_(dataProvidersInit)
     , LangVer_(langVer)
     , MaxLangVer_(maxLangVer)
     , VolatileResults_(volatileResults)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
-    , UrlListerManager_(urlListerManager)
+    , UrlListerManager_(std::move(urlListerManager))
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
-    , UdfIndexPackageSet_(udfIndexPackageSet)
+    , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
-    , SavedUserDataTable_(userDataTable)
+    , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
-    , Filename_(filename)
-    , SourceCode_(sourceCode)
+    , Filename_(std::move(filename))
+    , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
     , ExprRoot_(nullptr)
-    , SessionId_(sessionId)
+    , SessionId_(std::move(sessionId))
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
-    , ArrowResolver_(arrowResolver)
+    , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
-    , GatewaysForMerge_(gatewaysForMerge)
+    , GatewaysForMerge_(std::move(gatewaysForMerge))
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {

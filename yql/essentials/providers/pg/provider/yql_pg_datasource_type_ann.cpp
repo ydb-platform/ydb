@@ -6,6 +6,8 @@
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -14,7 +16,7 @@ class TPgDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     explicit TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
-        , State_(state)
+        , State_(std::move(state))
     {
         using TSelf = TPgDataSourceTypeAnnotationTransformer;
         AddHandler({TPgReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));

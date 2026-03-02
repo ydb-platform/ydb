@@ -11,6 +11,8 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
+#include <utility>
+
 namespace {
 
 using namespace NKikimr;
@@ -49,16 +51,16 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
         TUdfModuleLoader(
             TUdfModulesMap& modulesMap,
             THashSet<TString>* newModules,
-            const TString& libraryPath,
+            TString libraryPath,
             const TUdfModuleRemappings& remappings,
             ui32 abiVersion,
-            const TString& customUdfPrefix = {})
+            TString customUdfPrefix = {})
             : ModulesMap_(modulesMap)
             , NewModules_(newModules)
-            , LibraryPath_(libraryPath)
+            , LibraryPath_(std::move(libraryPath))
             , Remappings_(remappings)
             , AbiVersion_(NUdf::AbiVersionToStr(abiVersion))
-            , CustomUdfPrefix_(customUdfPrefix)
+            , CustomUdfPrefix_(std::move(customUdfPrefix))
         {
         }
 

@@ -14,6 +14,8 @@
 #include <util/string/split.h>
 #include <util/generic/overloaded.h>
 
+#include <utility>
+
 using namespace NYql::NUdf;
 using namespace NYql::NDom;
 using namespace NYsonPull;
@@ -1447,8 +1449,8 @@ class TIterate: public TBoxedValue {
 
     class TListValue: public TManagedBoxedValue {
     public:
-        TListValue(const TUnboxedValue& root, const TFields& fields, const IValueBuilder* valueBuilder)
-            : Root_(root)
+        TListValue(TUnboxedValue root, const TFields& fields, const IValueBuilder* valueBuilder)
+            : Root_(std::move(root))
             , Fields_(fields)
             , ValueBuilder_(valueBuilder)
         {

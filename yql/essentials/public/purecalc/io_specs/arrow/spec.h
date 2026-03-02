@@ -69,7 +69,7 @@ private:
     const NYT::TNode Schema_;
 
 public:
-    explicit TArrowOutputSpec(const NYT::TNode& schema);
+    explicit TArrowOutputSpec(NYT::TNode schema);
     const NYT::TNode& GetSchema() const override;
     bool AcceptsBlocks() const override {
         return true;

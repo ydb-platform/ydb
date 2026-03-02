@@ -15,6 +15,8 @@
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <utility>
+
 namespace NYql::NPg {
 
 const ui32 MaximumExtensionsCount = 64; // see TTypeAnnotationNode::GetUsedPgExtensions
@@ -1117,10 +1119,10 @@ private:
 class TOpClassesParser: public TParser {
 public:
     TOpClassesParser(TOpClasses& opClasses, const THashMap<TString, ui32>& typeByName,
-                     const TOpFamilies& opFamilies)
+                     TOpFamilies opFamilies)
         : OpClasses_(opClasses)
         , TypeByName_(typeByName)
-        , OpFamilies_(opFamilies)
+        , OpFamilies_(std::move(opFamilies))
     {
     }
 

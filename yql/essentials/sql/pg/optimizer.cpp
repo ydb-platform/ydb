@@ -2,6 +2,7 @@
 #include "optimizer.h"
 
 #include <iostream>
+#include <utility>
 #include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -118,9 +119,9 @@ List* MakeRelOptInfoList(const IOptimizer::TInput& input) {
 }
 
 TPgOptimizer::TPgOptimizer(
-    const TInput& input,
+    TInput input,
     const std::function<void(const TString&)>& log)
-    : Input_(input)
+    : Input_(std::move(input))
     , Log_(log)
 {
     get_relation_stats_hook = RelationStatsHook;

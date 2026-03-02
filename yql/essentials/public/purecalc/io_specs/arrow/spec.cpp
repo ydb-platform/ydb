@@ -8,6 +8,8 @@
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <utility>
+
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NUdf;
 using namespace NKikimr::NMiniKQL;
@@ -526,8 +528,8 @@ ConsumerType TInputSpecTraits<TArrowInputSpec>::MakeConsumer(
     return MakeHolder<TArrowConsumerImpl>(inputSpec, std::move(worker));
 }
 
-TArrowOutputSpec::TArrowOutputSpec(const NYT::TNode& schema)
-    : Schema_(schema)
+TArrowOutputSpec::TArrowOutputSpec(NYT::TNode schema)
+    : Schema_(std::move(schema))
 {
 }
 

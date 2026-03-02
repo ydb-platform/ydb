@@ -3,6 +3,8 @@
 
 #include <util/generic/map.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -12,8 +14,8 @@ struct TPinAttrs {
     ui32 ProviderId = 0;
     ui32 PinId = 0;
 
-    explicit TPinAttrs(const TPinInfo& info)
-        : Info(info)
+    explicit TPinAttrs(TPinInfo info)
+        : Info(std::move(info))
     {
     }
 };

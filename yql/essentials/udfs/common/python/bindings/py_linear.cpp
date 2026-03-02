@@ -10,6 +10,8 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -162,8 +164,8 @@ PyObject* TPyDynamicLinear::Extract(PyObject* self, PyObject* /* arg */)
 
 class TDynamicLinearProxy: public NUdf::TBoxedValue {
 public:
-    TDynamicLinearProxy(const TPyCastContext::TPtr& castCtx, const NUdf::TType* itemType, TPyObjectPtr&& pyObject)
-        : CastCtx_(castCtx)
+    TDynamicLinearProxy(TPyCastContext::TPtr castCtx, const NUdf::TType* itemType, TPyObjectPtr&& pyObject)
+        : CastCtx_(std::move(castCtx))
         , ItemType_(itemType)
         , PyObject_(std::move(pyObject))
     {

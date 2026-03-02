@@ -66,6 +66,8 @@ public:
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.defs.inl.h>
 
+#include <utility>
+
 template <typename TParent>
 class TNodeBuilder<TParent, TCoWorld>: public NGenerated::TCoWorldBuilder<TParent> {
 public:
@@ -283,7 +285,7 @@ public:
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 

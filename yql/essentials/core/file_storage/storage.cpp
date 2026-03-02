@@ -29,6 +29,7 @@
 #endif
 
 #include <cerrno>
+#include <utility>
 
 namespace NYql {
 
@@ -59,11 +60,11 @@ constexpr const char* FileLocksDir = "locks";
 constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
-    : Path_(path)
-    , StorageFileName_(storageFileName)
+TFileLink::TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy)
+    : Path_(std::move(path))
+    , StorageFileName_(std::move(storageFileName))
     , Size_(size)
-    , Md5_(md5)
+    , Md5_(std::move(md5))
     , DeleteOnDestroy_(deleteOnDestroy)
 {
 }

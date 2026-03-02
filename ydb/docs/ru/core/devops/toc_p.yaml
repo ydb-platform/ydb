@@ -4,6 +4,11 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
+- name: Обслуживание кластера
+  href: cluster-maintenance/index.md
+  include:
+    mode: link
+    path: cluster-maintenance/toc_p.yaml
 - name: Управление конфигурацией кластера
   href: configuration-management/index.md
   include:

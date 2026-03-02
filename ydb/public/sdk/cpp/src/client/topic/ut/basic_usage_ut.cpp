@@ -59,6 +59,15 @@ TWriteMessage CreateMessage(std::string_view payload, const std::string& key, ui
     return msg;
 }
 
+struct TExample {
+    std::string Payload;
+    std::string Serialize() const { return Payload; }
+};
+
+std::string Serialize(const TExample& value) {
+    return value.Payload;
+}
+
 // Write a message with binary (non-UTF8) producer ID using direct tablet communication
 // This bypasses gRPC string validation by sending directly to the PQ tablet
 // The SourceId field in TCmdWrite is defined as 'bytes' in protobuf, so it supports binary data
@@ -1695,11 +1704,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(TypedProducer_BasicWrite) {
-        struct TExample {
-            std::string Payload;
-            std::string Serialize() const { return Payload; }
-        };
-
         constexpr ui64 messageCount = 100;
 
         auto settings = TTopicSdkTestSetup::MakeServerSettings();

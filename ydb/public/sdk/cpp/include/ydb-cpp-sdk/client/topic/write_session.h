@@ -184,35 +184,9 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 };
 
 template<class T>
-concept HasMemberSerializeToString =
+concept Serializable =
     requires(const T& t) {
-        { t.Serialize() } -> std::convertible_to<std::string>;
-    };
-
-template<class T>
-concept HasMemberSerializeAsString =
-    requires(const T& t) {
-        { t.SerializeAsString() } -> std::convertible_to<std::string>;
-    };
-
-//! Customization point for converting user payloads to std::string.
-//! By default it supports types with Serialize()/SerializeAsString().
-//! Users can also provide overloads of `SerializeToString(const T&)`
-//! in namespaces associated с их типом; они будут найдены ADL.
-template<class T>
-std::string SerializeToString(const T& value) requires HasMemberSerializeToString<T> {
-    return value.Serialize();
-}
-
-template<class T>
-std::string SerializeToString(const T& value) requires (!HasMemberSerializeToString<T> && HasMemberSerializeAsString<T>) {
-    return value.SerializeAsString();
-}
-
-template<class T>
-concept SerializableToString =
-    requires(const T& t) {
-        { SerializeToString(t) } -> std::convertible_to<std::string>;
+        { Serialize(t) } -> std::convertible_to<std::string>;
     };
 
 //! Contains the message to write and all the options.
@@ -293,9 +267,9 @@ public:
         return *this;
     }
 
-    template<SerializableToString T>
+    template<Serializable T>
     TWriteMessage(const T& data)
-        : DataHolder(SerializeToString(data))
+        : DataHolder(Serialize(data))
         , Data(*DataHolder)
     {}
 

@@ -5,6 +5,31 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.2"
+        },
+        0,
+        0,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.3"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.4"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.5"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.6"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.7"
         }
     ],
     "test_canonical_requests.Test.test_cluster_get_set": [

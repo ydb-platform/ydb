@@ -1,4 +1,4 @@
-LIBRARY()
+UNITTEST_FOR(ydb/mvp/meta)
 
 SRCS(
     source.cpp

@@ -426,10 +426,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         settings.SourcePath(CommonSourcePath);
     }
 
-    if (CommonDestinationPrefix) {
-        settings.DestinationPrefix(CommonDestinationPrefix);
-    }
-
     if (encryption) {
         settings.SymmetricEncryption(EncryptionAlgorithm, EncryptionKey);
     }
@@ -457,13 +453,13 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
     }
 
-    TResponse response = CallExport(client, settings).ExtractValueSync();
+    TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();
     if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
         // Retry the export operation limiting the scope to tables only.
         // This approach ensures compatibility with servers running an older version of YDB.
         settings.Item_ = std::move(originalItems);
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterTables);
-        response = CallExport(client, settings).ExtractValueSync();
+        response = CallExport<TResponse>(client, settings).ExtractValueSync();
     }
     ThrowOnError(response);
     PrintOperation(response, OutputFormat);
@@ -579,6 +575,10 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.UseVirtualAddressing(UseVirtualAddressing);
     settings.IncludeIndexData(IncludeIndexData);
 
+    if (CommonDestinationPrefix) {
+        settings.DestinationPrefix(CommonDestinationPrefix);
+    }
+
     return TCommandExportBase::Run<TExportToS3Settings, TExportToS3Response>(config, settings);
 }
 
@@ -618,6 +618,8 @@ int TCommandExportToFs::Run(TConfig& config) {
     return TCommandExportBase::Run<TExportToFsSettings, TExportToFsResponse>(config, settings);
 }
 
+template int TCommandExportBase::Run<NExport::TExportToS3Settings, NExport::TExportToS3Response>(TConfig& config, NExport::TExportToS3Settings& settings);
+template int TCommandExportBase::Run<NExport::TExportToFsSettings, NExport::TExportToFsResponse>(TConfig& config, NExport::TExportToFsSettings& settings);
 
 }
 }

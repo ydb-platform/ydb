@@ -776,7 +776,7 @@ class KikimrConfigGenerator(object):
 
     @property
     def http_proxy_enabled(self):
-        return self.yaml_config['http_proxy_config']['enabled']
+        return self.yaml_config.get('http_proxy_config', {}).get('enabled')
 
     @property
     def working_dir(self):

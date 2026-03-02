@@ -472,6 +472,28 @@ public:
     }
 };
 
+class TAsyncPrepareEmptyYqlResult : public IKikimrAsyncResult<IKqpHost::TQueryResult> {
+public:
+    using TResult = IKqpHost::TQueryResult;
+
+    bool HasResult() const override {
+        return true;
+    }
+
+    TResult GetResult() override {
+        TResult result;
+        result.SetSuccess();
+        result.PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        result.PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        result.AllowCache = false;
+        return result;
+    }
+
+    NThreading::TFuture<bool> Continue() override {
+        return NThreading::MakeFuture<bool>(true);
+    }
+};
+
 class TAsyncSplitQueryResult : public TKqpAsyncResultBase<IKqpHost::TSplitResult> {
 public:
     using TResult = IKqpHost::TSplitResult;
@@ -1578,6 +1600,9 @@ private:
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {
                 if (!compileResult.QueryExpr) {
+                    if (IsQueryOnlyComments(query.Text)) {
+                        return MakeIntrusive<TAsyncPrepareEmptyYqlResult>();
+                    }
                     return nullptr;
                 }
                 auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;

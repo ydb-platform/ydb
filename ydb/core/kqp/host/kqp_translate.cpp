@@ -384,5 +384,36 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
     return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
 }
 
+bool IsQueryOnlyComments(const TString& query) {
+    size_t i = 0;
+    while (i < query.size()) {
+        const unsigned char c = query[i];
+        if (std::isspace(c)) {
+            ++i;
+            continue;
+        }
+        // Single-line comment: skip to end of line
+        if (c == '-' && i + 1 < query.size() && query[i + 1] == '-') {
+            i += 2;
+            while (i < query.size() && query[i] != '\n') {
+                ++i;
+            }
+            continue;
+        }
+        // Multi-line comment: skip to closing */
+        if (c == '/' && i + 1 < query.size() && query[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < query.size() && !(query[i] == '*' && query[i + 1] == '/')) {
+                ++i;
+            }
+            i += 2; // skip */
+            continue;
+        }
+        // Non-comment, non-whitespace character found
+        return false;
+    }
+    return true;
+}
+
 } // namespace NKqp
 } // namespace NKikimr

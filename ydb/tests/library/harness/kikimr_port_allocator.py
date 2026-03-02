@@ -183,6 +183,7 @@ DEFAULT_GRPC_SSL_PORT = 2137
 DEFAULT_SQS_PORT = 8771
 DEFAULT_PUBLIC_HTTP_PORT = 8766
 DEFAULT_PGWIRE_PORT = 5432
+DEFAULT_HTTP_PROXY_PORT = 8433
 
 #
 # Fixed port allocator
@@ -201,7 +202,8 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         sqs_port=DEFAULT_SQS_PORT,
         grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
         public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
-        pgwire_port=DEFAULT_PGWIRE_PORT
+        pgwire_port=DEFAULT_PGWIRE_PORT,
+        http_proxy_port=DEFAULT_HTTP_PROXY_PORT
     ):
         super(KikimrFixedNodePortAllocator, self).__init__()
 
@@ -214,6 +216,7 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT', grpc_ssl_port))
         self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT', public_http_port))
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
+        self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
 
     @property
     def mon_port(self):
@@ -246,6 +249,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def pgwire_port(self):
         return self.__pgwire_port + self.base_port_offset
+
+    @property
+    def http_proxy_port(self):
+        return self.__http_proxy_port + self.base_port_offset
 
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):

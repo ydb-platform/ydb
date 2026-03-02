@@ -63,12 +63,16 @@ class Workload:
 
     def drop_topics(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(f"""
-                    DROP TOPIC `{self.topic_name}`;
-                """)
-            session_pool.execute_with_retries(f"""
-                    DROP TOPIC `{self.dlq_topic_name}`;
-                """)
+            try:
+                session_pool.execute_with_retries(f"""
+                        DROP TOPIC `{self.topic_name}`;
+                    """)
+                session_pool.execute_with_retries(f"""
+                        DROP TOPIC `{self.dlq_topic_name}`;
+                    """)
+            except Exception as e:
+                logging.error(f"Error dropping topics: {e}")
+                pass
 
     def get_command(self, subcmds: list[str]) -> list[str]:
         return (

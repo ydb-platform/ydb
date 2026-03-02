@@ -775,6 +775,10 @@ class KikimrConfigGenerator(object):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
+    def http_proxy_enabled(self):
+        return self.yaml_config['http_proxy_config']['enabled']
+
+    @property
     def working_dir(self):
         return self.__working_dir
 

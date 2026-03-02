@@ -1,0 +1,1065 @@
+"""HTML dashboard rendering for tests resource dashboard.
+
+Contains build_html_dashboard which takes a pre-computed payload and writes
+the self-contained HTML file with Plotly.js charts, CPU suggestions table
+and ya.make update script generator.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Optional
+
+try:
+    from .dashboard_html_payload import build_dashboard_payload
+except ImportError:
+    from dashboard_html_payload import build_dashboard_payload  # type: ignore[no-redef]
+
+
+def build_html_dashboard(
+    suite_filter: Optional[str],
+    runs: list[dict[str, Any]],
+    stats: dict[str, Any],
+    out_html: Path,
+    top_n: int,
+    max_points: int = 1000,
+    by_chunk: bool = False,
+    cpu_suggestions: Optional[list[dict[str, Any]]] = None,
+    run_config: Optional[dict[str, Any]] = None,
+) -> None:
+    payload = build_dashboard_payload(
+        suite_filter=suite_filter,
+        runs=runs,
+        stats=stats,
+        top_n=top_n,
+        max_points=max_points,
+        by_chunk=by_chunk,
+        cpu_suggestions=cpu_suggestions,
+        run_config=run_config,
+    )
+
+    html = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chunk Resource Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 16px; }}
+    .toolbar {{ position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; margin: 8px 0 10px 0; padding: 8px 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(2px); }}
+    .toolbar input[type="text"] {{ min-width: 340px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
+    .toolbar button {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
+    .cpu-help {{ display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d0d7de; background: #f6f8fa; font-size: 12px; line-height: 1.45; }}
+    .cpu-help ol, .cpu-help ul {{ margin: 6px 0 6px 18px; padding: 0; }}
+    .metrics-help {{ margin: 8px 0 12px 0; }}
+    .metrics-help .box {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; }}
+    .metrics-help ul {{ margin: 6px 0 0 18px; padding: 0; }}
+    .tabs {{ display: flex; gap: 8px; margin: 8px 0 12px 0; }}
+    .tabbtn {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
+    .tabbtn.active {{ background: #e7f3ff; border-color: #8cc8ff; }}
+    .tab {{ display: none; }}
+    .tab.active {{ display: block; }}
+    .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+    .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
+    .chart {{ width: 100%; height: 420px; min-width: 0; }}
+    .wide {{ width: 100%; height: 520px; }}
+    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
+    .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
+    .clickbox table {{ width: 100%; border-collapse: collapse; }}
+    .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
+    .clickbox th {{ position: sticky; top: 0; background: #fafafa; }}
+    .clickbox thead tr:first-child th {{ background: #f2f4f7; }}
+    .clickbox thead tr:nth-child(2) th {{ background: #f8fafc; }}
+    /* Visual separators between logical column groups in CPU suggestions. */
+    #cpuSuggestionsInner td.group-end, #cpuSuggestionsInner th.group-end {{
+      position: relative;
+      border-right: 1px solid #c9d1db;
+    }}
+    #cpuSuggestionsInner td.group-end::after, #cpuSuggestionsInner th.group-end::after {{
+      content: "";
+      position: absolute;
+      top: -1px;
+      right: -10px;
+      width: 10px;
+      height: calc(100% + 2px);
+      pointer-events: none;
+      background: linear-gradient(to right, rgba(144, 158, 176, 0.28), rgba(144, 158, 176, 0.0));
+    }}
+    pre {{ background: #f6f8fa; padding: 12px; border-radius: 8px; }}
+  </style>
+</head>
+<body>
+  <h2>Suite filter: {suite_filter or 'ALL SUITES'}</h2>
+  <details style="margin: 8px 0 12px 0;">
+    <summary><b>Run stats</b></summary>
+    <pre id="stats"></pre>
+  </details>
+  <details style="margin: 8px 0 12px 0;">
+    <summary><b>Config</b></summary>
+    <pre id="runConfig"></pre>
+  </details>
+  <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
+    <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span>CPU suggestions (recommended_cpu for runner)</span>
+      <button id="cpuHelpToggle" type="button" title="Show recommendation logic" style="padding:0 8px;min-width:auto;">?</button>
+    </h3>
+    <div id="cpuHelpText" class="cpu-help">
+      <ol>
+        <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
+        <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
+        <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>.</li>
+        <li>If there is at least one <b>test timeout</b>, <b>recommended_cpu</b> is increased by one tier (then MEDIUM cap is applied).</li>
+        <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites with test timeouts use size max: <b>SMALL=1, MEDIUM=4, LARGE=all</b>.</li>
+        <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>
+      </ol>
+      <ul>
+        <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>.</li>
+        <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests).</li>
+        <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
+        <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
+        <li><b>fails_total</b>: <code>errors + timeouts</code>.</li>
+      </ul>
+    </div>
+    <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 8px 0;">
+      <button id="generateCpuScriptBtn" type="button">Generate ya.make CPU update script (.py)</button>
+      <span id="generateCpuScriptHint" style="font-size:12px;color:#586069;"></span>
+    </div>
+    <div id="cpuSuggestionsTable" class="clickbox"></div>
+  </div>
+  <div class="toolbar">
+    <label for="suiteSearch"><b>Search suite:</b></label>
+    <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
+    <button onclick="clearSuiteSearch()">Clear</button>
+    <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="">
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="includeSyntheticCb" checked />
+        <span>Include estimated (from ya.make) CPU/RAM</span>
+      </label>
+    </span>
+  </div>
+  <details class="metrics-help">
+    <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
+    <div class="box">
+      <ul>
+        <li><b>Chunk duration (seconds):</b> <code>evlog_dur_sec = (end_us - start_us) / 1e6</code> from evlog B/E events.</li>
+        <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
+        <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / evlog_dur_sec</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+        <li><b>RAM per chunk (report):</b> <code>ram_kb_report = ru_maxrss</code>, fallback <code>ru_rss / 1024</code>.</li>
+        <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+        <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
+      </ul>
+    </div>
+  </details>
+  <div id="activeChunks" class="wide"></div>
+  <div class="tabs" id="tabsBar" style="display: none;">
+    <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
+    <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
+  </div>
+  <div id="chunkTab" class="tab active" style="display: none;">
+    <div id="activeLayerChunk" class="wide"></div>
+    <div id="activeHoverChunk" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
+    <div id="activeClickChunk" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+    <div id="cpuLayer" class="wide"></div>
+    <div id="cpuHover" class="hoverbox">Hover CPU chart to see sorted contributors</div>
+    <div id="cpuClick" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+    <div id="ramLayer" class="wide"></div>
+    <div id="ramHover" class="hoverbox">Hover RAM chart to see sorted contributors</div>
+    <div id="ramClick" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+    <div class="row">
+      <div id="cpuPie" class="chart"></div>
+      <div id="ramPie" class="chart"></div>
+    </div>
+    <div class="row1">
+      <div id="activePie" class="chart"></div>
+    </div>
+  </div>
+  <div id="suiteTab" class="tab">
+    <div id="activeLayerSuite" class="wide"></div>
+    <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
+    <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+    <div id="cpuLayerSuite" class="wide"></div>
+    <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
+    <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+    <div id="ramLayerSuite" class="wide"></div>
+    <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
+    <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+    <div class="row">
+      <div id="cpuPieSuite" class="chart"></div>
+      <div id="ramPieSuite" class="chart"></div>
+    </div>
+    <div class="row1">
+      <div id="activePieSuite" class="chart"></div>
+    </div>
+  </div>
+  <script>
+    function showTab(id) {{
+      const tabs = ['chunkTab', 'suiteTab'];
+      tabs.forEach(t => {{
+        document.getElementById(t).classList.toggle('active', t === id);
+      }});
+      document.getElementById('tabBtnChunk').classList.toggle('active', id === 'chunkTab');
+      document.getElementById('tabBtnSuite').classList.toggle('active', id === 'suiteTab');
+      // Hidden-tab Plotly charts need explicit resize after becoming visible.
+      setTimeout(() => {{
+        const ids = id === 'suiteTab'
+          ? ['activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'activeChunks']
+          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'cpuPie', 'ramPie', 'activePie', 'activeChunks'];
+        ids.forEach(cid => {{
+          const el = document.getElementById(cid);
+          if (el && window.Plotly) {{
+            Plotly.Plots.resize(el);
+          }}
+        }});
+      }}, 0);
+    }}
+
+    const data = {json.dumps(payload, ensure_ascii=False)};
+    document.getElementById('stats').textContent = JSON.stringify(data.stats, null, 2);
+    document.getElementById('runConfig').textContent = JSON.stringify(data.run_config || {{}}, null, 2);
+
+    if (data.by_chunk) {{
+      document.getElementById('tabsBar').style.display = 'flex';
+      document.getElementById('chunkTab').style.display = 'block';
+      document.getElementById('suiteTab').style.display = 'none';
+    }} else {{
+      document.getElementById('suiteTab').classList.add('active');
+      document.getElementById('suiteTab').style.display = 'block';
+    }}
+
+    if (data.cpu_suggestions && data.cpu_suggestions.length > 0) {{
+      document.getElementById('cpuSuggestionsSection').style.display = 'block';
+      const nSyn = (data.stats && data.stats.runs_with_synthetic_metrics) ? Number(data.stats.runs_with_synthetic_metrics) : 0;
+      const synEl = document.getElementById('syntheticNote');
+      if (nSyn > 0 && synEl) {{
+        synEl.style.display = 'block';
+        synEl.textContent = 'Part of CPU/RAM is estimated from ya.make REQUIREMENTS for ' + nSyn + ' runs without report metrics.';
+      }}
+
+      // Default: show suites with the highest non-chunk failures first.
+      let suggestionsSortCol = 17;  // test_fails_total
+      let suggestionsSortAsc = false;
+
+      function getSuggestionsForScript() {{
+        const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
+        const visible = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
+        const hasCpuReqValue = (v) => {{
+          if (typeof v === 'number') return v > 0;
+          const t = String(v ?? '').trim().toLowerCase();
+          return t !== '' && t !== '0';
+        }};
+        return visible
+          .filter(s => ['set', 'raise', 'lower'].includes(String(s.cpu_action || 'ok')) && hasCpuReqValue(s.recommended_cpu))
+          .map(s => ({{
+            suite_path: String(s.suite_path || ''),
+            recommended_cpu: s.recommended_cpu,
+            current_ya_cpu: s.ya_cpu_cores == null ? null : Number(s.ya_cpu_cores),
+            action: String(s.cpu_action || 'ok'),
+          }}));
+      }}
+
+      function buildCpuUpdateScript(items) {{
+        const payloadJson = JSON.stringify(items, null, 2);
+        const nowIso = new Date().toISOString();
+        return [
+          '#!/usr/bin/env python3',
+          '# Apply cpu REQUIREMENTS updates in ya.make files.',
+          '# Generated by tests_resource_dashboard HTML.',
+          '# Usage: python3 apply_cpu_requirements.py --repo-root /path/to/ydb [--dry-run] [--mode all|only-raise|only-lower|only-set]',
+          '',
+          'from __future__ import annotations',
+          '',
+          'import argparse',
+          'import json',
+          'import re',
+          'from pathlib import Path',
+          '',
+          'GENERATED_AT = ' + JSON.stringify(nowIso),
+          'UPDATES = json.loads(' + JSON.stringify(payloadJson) + ')',
+          '',
+          "PART_SUFFIX_RE = re.compile(r'/part\\\\d+$')",
+          "RE_REQ_LINE = re.compile(r'^(\\\\s*REQUIREMENTS\\\\s*\\\\()(.*?)(\\\\)\\\\s*)$')",
+          "RE_CPU = re.compile(r'\\\\bcpu\\\\s*:\\\\s*([^\\\\s)]+(?:\\\\([^)]*\\\\))?)', re.IGNORECASE)",
+          "RE_IF = re.compile(r'^\\\\s*IF\\\\s*\\\\((.*)\\\\)\\\\s*$')",
+          "RE_ELSE = re.compile(r'^\\\\s*ELSE\\\\s*\\\\(\\\\s*\\\\)\\\\s*$')",
+          "RE_ENDIF = re.compile(r'^\\\\s*ENDIF\\\\s*\\\\(\\\\s*\\\\)\\\\s*$')",
+          "ACTION_BY_MODE = dict()",
+          "ACTION_BY_MODE['all'] = set(['raise', 'lower', 'set'])",
+          "ACTION_BY_MODE['only-raise'] = set(['raise'])",
+          "ACTION_BY_MODE['only-lower'] = set(['lower'])",
+          "ACTION_BY_MODE['only-set'] = set(['set'])",
+          '',
+          'def normalize_suite_path(path: str) -> str:',
+          "    return PART_SUFFIX_RE.sub('', path or '')",
+          '',
+          'def normalize_cpu_req(value: object) -> str:',
+          "    s = str(value).strip()",
+          "    if s.lower() == 'all':",
+          "        return 'all'",
+          '    try:',
+          '        return str(int(float(s)))',
+          '    except Exception:',
+          "        return s or '1'",
+          '',
+          'def update_requirements_line(line: str, cpu: str) -> str:',
+          '    m = RE_REQ_LINE.match(line)',
+          '    if not m:',
+          '        return line',
+          '    prefix, body, suffix = m.group(1), m.group(2), m.group(3)',
+          '    if RE_CPU.search(body):',
+          "        body = RE_CPU.sub('cpu:' + str(cpu), body, count=1)",
+          '    else:',
+          "        body = (body.strip() + ' ' if body.strip() else '') + 'cpu:' + str(cpu)",
+          '    return prefix + body + suffix',
+          '',
+          'def _eval_condition_default(cond: str) -> bool:',
+          "    expr = (cond or '').strip()",
+          '    has_san = False',
+          "    expr = re.sub(r'\\\\bOS_WINDOWS\\\\b', 'False', expr)",
+          "    expr = re.sub(r'\\\\bOS_LINUX\\\\b', 'True', expr)",
+          "    expr = re.sub(r'\\\\bOS_DARWIN\\\\b', 'False', expr)",
+          "    expr = re.sub(r'\\\\bSANITIZER_TYPE\\\\b', 'True' if has_san else 'False', expr)",
+          "    expr = re.sub(r'\\\\bWITH_VALGRIND\\\\b', 'False', expr)",
+          "    expr = re.sub(r'\\\\bOR\\\\b', 'or', expr)",
+          "    expr = re.sub(r'\\\\bAND\\\\b', 'and', expr)",
+          "    expr = re.sub(r'\\\\bNOT\\\\b', 'not', expr)",
+          '    try:',
+          "        return bool(eval(expr, dict(__builtins__=None), dict()))",
+          '    except Exception:',
+          "        return False",
+          '',
+          'def _find_default_requirements_line(lines: list[str]) -> int | None:',
+          '    stack: list[tuple[bool, bool, bool, bool]] = []',
+          '    current_active = True',
+          '    for i, raw in enumerate(lines):',
+          "        line = raw.strip()",
+          '        m_if = RE_IF.match(line)',
+          '        if m_if:',
+          '            parent_active = current_active',
+          '            if_res = _eval_condition_default(m_if.group(1))',
+          '            current_active = parent_active and if_res',
+          '            stack.append((parent_active, if_res, current_active, False))',
+          '            continue',
+          '        if RE_ELSE.match(line):',
+          '            if not stack:',
+          '                continue',
+          '            parent_active, if_res, prev_cur, seen_else = stack.pop()',
+          '            if seen_else:',
+          '                stack.append((parent_active, if_res, prev_cur, seen_else))',
+          '                continue',
+          '            current_active = parent_active and (not if_res)',
+          '            stack.append((parent_active, if_res, current_active, True))',
+          '            continue',
+          '        if RE_ENDIF.match(line):',
+          '            if stack:',
+          '                stack.pop()',
+          '            current_active = stack[-1][2] if stack else True',
+          '            continue',
+          '        if current_active and RE_REQ_LINE.match(raw):',
+          '            return i',
+          '    return None',
+          '',
+          'def _find_default_insert_index(lines: list[str]) -> int:',
+          '    stack: list[tuple[bool, bool, bool, bool]] = []',
+          '    current_active = True',
+          '    last_active_size_idx: int | None = None',
+          '    end_idx: int | None = None',
+          '    for i, raw in enumerate(lines):',
+          "        line = raw.strip()",
+          "        if line == 'END()' and end_idx is None:",
+          '            end_idx = i',
+          '        m_if = RE_IF.match(line)',
+          '        if m_if:',
+          '            parent_active = current_active',
+          '            if_res = _eval_condition_default(m_if.group(1))',
+          '            current_active = parent_active and if_res',
+          '            stack.append((parent_active, if_res, current_active, False))',
+          '            continue',
+          '        if RE_ELSE.match(line):',
+          '            if not stack:',
+          '                continue',
+          '            parent_active, if_res, prev_cur, seen_else = stack.pop()',
+          '            if seen_else:',
+          '                stack.append((parent_active, if_res, prev_cur, seen_else))',
+          '                continue',
+          '            current_active = parent_active and (not if_res)',
+          '            stack.append((parent_active, if_res, current_active, True))',
+          '            continue',
+          '        if RE_ENDIF.match(line):',
+          '            if stack:',
+          '                stack.pop()',
+          '            current_active = stack[-1][2] if stack else True',
+          '            continue',
+          "        if current_active and line.startswith('SIZE('):",
+          '            last_active_size_idx = i',
+          '    if last_active_size_idx is not None:',
+          '        return last_active_size_idx + 1',
+          '    if end_idx is not None:',
+          '        return end_idx',
+          '    return len(lines)',
+          '',
+          'def _line_indent(raw: str) -> str:',
+          '    return raw[:len(raw) - len(raw.lstrip())]',
+          '',
+          'def _choose_insert_indent(lines: list[str], insert_idx: int) -> str:',
+          '    candidates: list[str] = []',
+          '    if 0 <= insert_idx - 1 < len(lines):',
+          '        candidates.append(lines[insert_idx - 1])',
+          '    if 0 <= insert_idx < len(lines):',
+          '        candidates.append(lines[insert_idx])',
+          '    for raw in candidates:',
+          '        stripped = raw.strip()',
+          '        if not stripped:',
+          '            continue',
+          "        if stripped in {'ELSE()', 'ENDIF()', 'END()'}:",
+          '            continue',
+          '        if RE_IF.match(stripped) or RE_ELSE.match(stripped) or RE_ENDIF.match(stripped):',
+          '            continue',
+          '        return _line_indent(raw)',
+          '    for raw in candidates:',
+          '        if raw.strip():',
+          '            return _line_indent(raw)',
+          "    return ''",
+          '',
+          'def _has_module_block(lines: list[str]) -> bool:',
+          "    return any(raw.strip() == 'END()' for raw in lines)",
+          '',
+          'def apply_one(repo_root: Path, suite_path: str, cpu: str, dry_run: bool) -> tuple[str, str]:',
+          '    suite = normalize_suite_path(suite_path)',
+          "    ya_make = repo_root / suite / 'ya.make'",
+          '    if not ya_make.exists():',
+          "        return suite, 'missing ya.make'",
+          '',
+          "    text = ya_make.read_text(encoding='utf-8', errors='replace')",
+          '    lines = text.splitlines()',
+          '',
+          '    changed = False',
+          '    req_idx = _find_default_requirements_line(lines)',
+          '',
+          '    if req_idx is not None:',
+          '        new_line = update_requirements_line(lines[req_idx], cpu)',
+          '        if new_line != lines[req_idx]:',
+          '            lines[req_idx] = new_line',
+          '            changed = True',
+          '    else:',
+          '        if not _has_module_block(lines):',
+          "            return suite, 'skip (no module block)'",
+          '        insert_idx = _find_default_insert_index(lines)',
+          '        if insert_idx < 0 or insert_idx > len(lines):',
+          '            insert_idx = len(lines)',
+          '        indent = _choose_insert_indent(lines, insert_idx)',
+          "        insert_line = indent + 'REQUIREMENTS(cpu:' + cpu + ')'",
+          '        lines.insert(insert_idx, insert_line)',
+          '        changed = True',
+          '',
+          '    if not changed:',
+          "        return suite, 'no change'",
+          '',
+          '    if not dry_run:',
+          "        ya_make.write_text('\\\\n'.join(lines) + '\\\\n', encoding='utf-8')",
+          "    return suite, 'updated' if not dry_run else 'would update'",
+          '',
+          'def _action_allowed(action: str, mode: str) -> bool:',
+          "    allowed = ACTION_BY_MODE.get(mode, ACTION_BY_MODE['all'])",
+          "    return (action or '').lower() in allowed",
+          '',
+          'def main() -> None:',
+          "    p = argparse.ArgumentParser(description='Apply generated cpu REQUIREMENTS updates to ya.make files')",
+          "    p.add_argument('--repo-root', type=Path, required=True, help='Repository root path')",
+          "    p.add_argument('--dry-run', action='store_true', help='Print planned changes without writing files')",
+          "    p.add_argument('--mode', choices=['all', 'only-raise', 'only-lower', 'only-set'], default='all', help='Filter by cpu_action: all / only-raise / only-lower / only-set')",
+          '    args = p.parse_args()',
+          '',
+          '    repo_root = args.repo_root.resolve()',
+          '    if not repo_root.exists() or not repo_root.is_dir():',
+          "        raise SystemExit('Invalid --repo-root: ' + str(repo_root))",
+          '',
+          '    seen = set()',
+          '    updates = []',
+          '    for row in UPDATES:',
+          "        suite = normalize_suite_path(str(row.get('suite_path', '')))",
+          "        cpu = normalize_cpu_req(row.get('recommended_cpu', 1))",
+          "        action = str(row.get('action', '') or '').lower()",
+          '        if not _action_allowed(action, args.mode):',
+          '            continue',
+          '        key = (suite, cpu)',
+          '        if not suite or key in seen:',
+          '            continue',
+          '        seen.add(key)',
+          '        updates.append((suite, cpu, action))',
+          '',
+          "    print('Generated at: ' + str(GENERATED_AT))",
+          "    print('Mode: ' + str(args.mode))",
+          "    print('Total suites to update: ' + str(len(updates)))",
+          '    changed = 0',
+          '    for suite, cpu, action in updates:',
+          '        suite_out, status = apply_one(repo_root, suite, cpu, args.dry_run)',
+          "        print('- ' + str(suite_out) + ': action=' + str(action) + ' cpu:' + str(cpu) + ' -> ' + str(status))",
+          "        if status == 'updated' or status == 'would update':",
+          '            changed += 1',
+          "    print('Completed. Changed entries: ' + str(changed))",
+          '',
+          "if __name__ == '__main__':",
+          '    main()',
+          '',
+        ].join('\\n');
+      }}
+
+      function downloadCpuUpdateScript() {{
+        const items = getSuggestionsForScript();
+        const hintEl = document.getElementById('generateCpuScriptHint');
+        if (!items.length) {{
+          if (hintEl) hintEl.textContent = 'No actionable rows in current filter.';
+          return;
+        }}
+        const content = buildCpuUpdateScript(items);
+        const blob = new Blob([content], {{ type: 'text/x-python' }});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        a.href = url;
+        a.download = 'apply_cpu_requirements_' + ts + '.py';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (hintEl) hintEl.textContent = 'Script downloaded for ' + items.length + ' suite(s).';
+      }}
+
+      function refreshCpuScriptHint() {{
+        const items = getSuggestionsForScript();
+        const hintEl = document.getElementById('generateCpuScriptHint');
+        if (!hintEl) return;
+        hintEl.textContent = items.length
+          ? ('Will include ' + items.length + ' actionable suite(s) from current filter. Script supports --mode all|only-raise|only-lower|only-set.')
+          : 'No actionable rows in current filter.';
+      }}
+
+      function sortableValue(raw) {{
+        const s = String(raw ?? '').replace(/<[^>]*>/g, '').replace(/[\\s,]+/g, ' ').trim();
+        const n = Number(s.replace(/[^\\d.+-]/g, ''));
+        return Number.isFinite(n) && s.match(/[-+]?\\d/) ? n : s.toLowerCase();
+      }}
+
+      const suggestionsColumns = [
+        'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size',
+        'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
+        'total_ram_gb', 'total_dur_sec', 'recommended_cpu', 'cpu_action',
+        'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_fails_total',
+        'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total'
+      ];
+
+      function actionCell(action) {{
+        if (action === 'raise') return '<span style="color:#856404;background:#fff3cd;padding:2px 6px;border-radius:10px;">raise</span>';
+        if (action === 'lower') return '<span style="color:#0c5460;background:#d1ecf1;padding:2px 6px;border-radius:10px;">lower</span>';
+        if (action === 'set') return '<span style="color:#721c24;background:#f8d7da;padding:2px 6px;border-radius:10px;">set</span>';
+        return '<span style="color:#155724;background:#d4edda;padding:2px 6px;border-radius:10px;">ok</span>';
+      }}
+
+      function renderSuggestionsTable() {{
+        const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
+        const filtered = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
+        const rowsData = filtered.map((s, i) => {{
+          const cpuExplain = String(s.recommended_cpu_explain || '').replace(/"/g, '&quot;');
+          const cpuReqText = String(s.recommended_cpu ?? 1);
+          const cpuBadge = cpuReqText === 'all'
+            ? '<span title="' + cpuExplain + '" style="display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;">cpu:all</span>'
+            : '<span title="' + cpuExplain + '"><b>cpu:' + cpuReqText + '</b></span>';
+          const cpuCell = cpuBadge + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
+          return [
+            String(i + 1),
+            '<span style="max-width:400px;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;" title="' + (s.suite_path || '').replace(/"/g, '&quot;') + '">' + (s.suite_path || '') + '</span>',
+            String(s.ya_ram_gb ?? ''),
+            String(s.ya_cpu_cores ?? ''),
+            String(s.ya_size ?? ''),
+            String(s.chunks_count || 0),
+            (s.median_cores != null ? Number(s.median_cores).toFixed(3) : ''),
+            (s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : ''),
+            (s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : ''),
+            (s.total_ram_gb != null ? Number(s.total_ram_gb).toFixed(3) : ''),
+            (s.total_dur_sec != null ? Number(s.total_dur_sec).toFixed(1) : '') + ' s',
+            cpuCell,
+            actionCell(s.cpu_action || 'ok'),
+            String(s.test_errors || 0),
+            String(s.test_timeouts || 0),
+            String(s.test_muted || 0),
+            String(s.test_muted_timeouts || 0),
+            String(s.test_fails_total || 0),
+            String(s.chunk_errors || 0),
+            String(s.chunk_timeouts || 0),
+            String(s.chunk_muted || 0),
+            String(s.chunk_muted_timeouts || 0),
+            String(s.chunk_fails_total || 0),
+          ];
+        }});
+
+        rowsData.sort((a, b) => {{
+          const av = sortableValue(a[suggestionsSortCol]);
+          const bv = sortableValue(b[suggestionsSortCol]);
+          if (av < bv) return suggestionsSortAsc ? -1 : 1;
+          if (av > bv) return suggestionsSortAsc ? 1 : -1;
+          return 0;
+        }});
+
+        const marker = (idx) => (idx === suggestionsSortCol ? (suggestionsSortAsc ? ' ▲' : ' ▼') : '');
+        const topHeader =
+          '<tr>' +
+          '<th data-col="0" rowspan="2" style="cursor:pointer;user-select:none;">#' + marker(0) + '</th>' +
+          '<th data-col="1" rowspan="2" style="cursor:pointer;user-select:none;">suite_path' + marker(1) + '</th>' +
+          '<th colspan="3">ya.make</th>' +
+          '<th colspan="1">runtime</th>' +
+          '<th colspan="3">cpu usage</th>' +
+          '<th colspan="1">ram usage</th>' +
+          '<th colspan="1">runtime</th>' +
+          '<th colspan="2">decision</th>' +
+          '<th colspan="5">status tests</th>' +
+          '<th colspan="5">status chunks</th>' +
+          '</tr>';
+        const subHeader =
+          '<tr>' +
+          '<th data-col="2" style="cursor:pointer;user-select:none;">ya_ram_gb' + marker(2) + '</th>' +
+          '<th data-col="3" style="cursor:pointer;user-select:none;">ya_cpu' + marker(3) + '</th>' +
+          '<th data-col="4" class="group-end" style="cursor:pointer;user-select:none;">ya_size' + marker(4) + '</th>' +
+          '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;">chunks' + marker(5) + '</th>' +
+          '<th data-col="6" style="cursor:pointer;user-select:none;">median_cores' + marker(6) + '</th>' +
+          '<th data-col="7" style="cursor:pointer;user-select:none;">p95_cores' + marker(7) + '</th>' +
+          '<th data-col="8" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(8) + '</th>' +
+          '<th data-col="9" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(9) + '</th>' +
+          '<th data-col="10" class="group-end" style="cursor:pointer;user-select:none;">total_dur_sec' + marker(10) + '</th>' +
+          '<th data-col="11" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(11) + '</th>' +
+          '<th data-col="12" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(12) + '</th>' +
+          '<th data-col="13" style="cursor:pointer;user-select:none;">errors' + marker(13) + '</th>' +
+          '<th data-col="14" style="cursor:pointer;user-select:none;">timeouts' + marker(14) + '</th>' +
+          '<th data-col="15" style="cursor:pointer;user-select:none;">muted' + marker(15) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(16) + '</th>' +
+          '<th data-col="17" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(17) + '</th>' +
+          '<th data-col="18" style="cursor:pointer;user-select:none;">errors' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;">timeouts' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;">muted' + marker(20) + '</th>' +
+          '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
+          '<th data-col="22" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(22) + '</th>' +
+          '</tr>';
+
+        const groupEnds = new Set([4, 5, 8, 9, 10, 12, 17, 22]);
+        const bodyHtml = rowsData.map(cols => (
+          '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
+        )).join('');
+        document.getElementById('cpuSuggestionsTable').innerHTML =
+          '<table id=\"cpuSuggestionsInner\" style=\"width:100%;border-collapse:collapse;\"><thead>' + topHeader + subHeader + '</thead><tbody>' + bodyHtml + '</tbody></table>';
+
+        const ths = document.querySelectorAll('#cpuSuggestionsInner thead th');
+        ths.forEach(th => th.addEventListener('click', () => {{
+          const col = Number(th.getAttribute('data-col'));
+          if (suggestionsSortCol === col) suggestionsSortAsc = !suggestionsSortAsc;
+          else {{
+            suggestionsSortCol = col;
+            suggestionsSortAsc = true;
+          }}
+          renderSuggestionsTable();
+        }}));
+        refreshCpuScriptHint();
+      }}
+
+      const helpBtn = document.getElementById('cpuHelpToggle');
+      const helpBox = document.getElementById('cpuHelpText');
+      if (helpBtn && helpBox) {{
+        helpBtn.addEventListener('click', () => {{
+          helpBox.style.display = helpBox.style.display === 'block' ? 'none' : 'block';
+        }});
+      }}
+      const genBtn = document.getElementById('generateCpuScriptBtn');
+      if (genBtn) {{
+        genBtn.addEventListener('click', downloadCpuUpdateScript);
+      }}
+      window.renderSuggestionsTable = renderSuggestionsTable;
+      renderSuggestionsTable();
+    }}
+
+    function colorForTrack(trackName) {{
+      const s = data.track_suite[trackName];
+      if (!s || s === 'other') return '#bdbdbd';
+      return data.suite_color[s] || '#999';
+    }}
+
+    function suiteFromLabel(label) {{
+      if (!label || label === 'other') return '';
+      if (label.includes('::')) return label.split('::', 1)[0];
+      return label;
+    }}
+
+    function hexToRgba(hex, alpha) {{
+      if (!hex || !hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) {{
+        return `rgba(180,180,180,${{alpha}})`;
+      }}
+      let r, g, b;
+      if (hex.length === 4) {{
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+      }} else {{
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+      }}
+      return `rgba(${{r}},${{g}},${{b}},${{alpha}})`;
+    }}
+
+    function isMatch(label, q) {{
+      if (!q) return true;
+      const s = suiteFromLabel(label).toLowerCase();
+      const l = String(label || '').toLowerCase();
+      return s.includes(q) || l.includes(q);
+    }}
+
+    function updateStackedPlotColors(plotId, q) {{
+      const el = document.getElementById(plotId);
+      if (!el || !el.data || !window.Plotly) return;
+      const lineColors = [];
+      const lineWidths = [];
+      const fillColors = [];
+      const opacities = [];
+      const idx = [];
+      el.data.forEach((tr, i) => {{
+        const name = tr.name || '';
+        const base = colorForTrack(name);
+        const matched = name === 'other' ? true : isMatch(name, q);
+        lineColors.push(matched ? base : '#cfcfcf');
+        lineWidths.push(matched ? 1 : 0);
+        fillColors.push(matched ? base : '#cfcfcf');
+        opacities.push(matched ? (name === 'other' ? 0.35 : 0.75) : 0.12);
+        idx.push(i);
+      }});
+      Plotly.restyle(el, {{
+        'line.color': lineColors,
+        'line.width': lineWidths,
+        'fillcolor': fillColors,
+        'opacity': opacities,
+      }}, idx);
+    }}
+
+    function updatePieColors(plotId, q) {{
+      const el = document.getElementById(plotId);
+      if (!el || !el.data || !el.data[0] || !window.Plotly) return;
+      const labels = el.data[0].labels || [];
+      const colors = labels.map(lb => {{
+        const base = lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999');
+        const matched = isMatch(lb, q);
+        return hexToRgba(base, matched ? 0.92 : 0.18);
+      }});
+      Plotly.restyle(el, {{'marker.colors': [colors]}}, [0]);
+    }}
+
+    function collapseTracksByQuery(tracks, q) {{
+      if (!tracks) return tracks;
+      if (!q) return tracks;
+      const out = {{}};
+      let refLen = 0;
+      for (const vals of Object.values(tracks)) {{
+        refLen = Math.max(refLen, Array.isArray(vals) ? vals.length : 0);
+      }}
+      const other = new Array(refLen).fill(0);
+      for (const [name, valsRaw] of Object.entries(tracks)) {{
+        const vals = Array.isArray(valsRaw) ? valsRaw : [];
+        const matched = name !== 'other' && isMatch(name, q);
+        if (matched) {{
+          out[name] = vals;
+          continue;
+        }}
+        for (let i = 0; i < vals.length; i += 1) {{
+          other[i] += Number(vals[i] || 0);
+        }}
+      }}
+      out.other = other;
+      return out;
+    }}
+
+    function applySuiteSearch() {{
+      const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
+      const inc = document.getElementById('includeSyntheticCb')?.checked ?? true;
+      const cpuSuiteBase = inc ? data.cpu_tracks_suite : data.cpu_tracks_suite_no_synthetic;
+      const ramSuiteBase = inc ? data.ram_tracks_suite : data.ram_tracks_suite_no_synthetic;
+      const cpuChunkBase = inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic;
+      const ramChunkBase = inc ? data.ram_tracks : data.ram_tracks_no_synthetic;
+
+      if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
+        updateStackedPlotTracks('activeLayerChunk', collapseTracksByQuery(data.active_tracks_chunk, q));
+        updateStackedPlotTracks('cpuLayer', collapseTracksByQuery(cpuChunkBase, q));
+        updateStackedPlotTracks('ramLayer', collapseTracksByQuery(ramChunkBase, q));
+      }}
+      updateStackedPlotTracks('activeLayerSuite', collapseTracksByQuery(data.active_tracks_suite, q));
+      updateStackedPlotTracks('cpuLayerSuite', collapseTracksByQuery(cpuSuiteBase, q));
+      updateStackedPlotTracks('ramLayerSuite', collapseTracksByQuery(ramSuiteBase, q));
+
+      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+        .forEach(id => updateStackedPlotColors(id, q));
+      ['cpuPie', 'ramPie', 'activePie', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite']
+        .forEach(id => updatePieColors(id, q));
+      if (window.renderSuggestionsTable) {{
+        window.renderSuggestionsTable();
+      }}
+    }}
+
+    function clearSuiteSearch() {{
+      const el = document.getElementById('suiteSearch');
+      if (el) el.value = '';
+      applySuiteSearch();
+    }}
+
+    function updateStackedPlotTracks(divId, tracks) {{
+      const el = document.getElementById(divId);
+      if (!el || !el.data || !window.Plotly) return;
+      const names = el.data.map(t => t.name);
+      const yArrays = names.map(n => (tracks[n] != null ? tracks[n] : []));
+      Plotly.restyle(el, {{y: yArrays}}, names.map((_, i) => i));
+    }}
+
+    function applySyntheticToCharts() {{
+      const inc = document.getElementById('includeSyntheticCb')?.checked ?? true;
+      updateStackedPlotTracks('cpuLayerSuite', inc ? data.cpu_tracks_suite : data.cpu_tracks_suite_no_synthetic);
+      updateStackedPlotTracks('ramLayerSuite', inc ? data.ram_tracks_suite : data.ram_tracks_suite_no_synthetic);
+      if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
+        updateStackedPlotTracks('cpuLayer', inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic);
+        updateStackedPlotTracks('ramLayer', inc ? data.ram_tracks : data.ram_tracks_no_synthetic);
+      }}
+      applySuiteSearch();
+    }}
+
+    const cb = document.getElementById('includeSyntheticCb');
+    const cbWrap = document.getElementById('syntheticCheckboxWrap');
+    if (cb) {{
+      if (!data.has_synthetic_metrics) {{
+        cb.checked = false;
+        cb.disabled = true;
+        if (cbWrap) {{
+          cbWrap.title = 'No runs with estimated metrics from ya.make in this report.';
+        }}
+      }}
+      cb.addEventListener('change', applySyntheticToCharts);
+    }}
+
+    function humanFromKb(kb) {{
+      const mb = kb / 1024.0;
+      if (mb < 1024) return mb.toFixed(2) + ' MB';
+      const gb = mb / 1024.0;
+      return gb.toFixed(2) + ' GB';
+    }}
+
+    function humanFromSec(sec) {{
+      if (sec < 60) return sec.toFixed(2) + ' s';
+      if (sec < 3600) return (sec / 60).toFixed(2) + ' min';
+      return (sec / 3600).toFixed(2) + ' h';
+    }}
+
+    function stackedArea(divId, xs, tracks, title, yTitle) {{
+      const names = Object.keys(tracks);
+      const traces = names.map((n) => {{
+        const c = colorForTrack(n);
+        return {{
+          x: xs,
+          y: tracks[n],
+          mode: 'lines',
+          line: {{width: 1, color: c}},
+          fillcolor: c,
+          opacity: n === 'other' ? 0.45 : 0.75,
+          name: n,
+          stackgroup: 'one',
+          hoverinfo: 'none',
+        }};
+      }});
+      Plotly.newPlot(divId, traces, {{
+        title,
+        xaxis: {{title: 'time (sec)'}},
+        yaxis: {{title: yTitle}},
+        hovermode: 'x unified',
+        showlegend: false,
+        margin: {{l: 60, r: 20, t: 50, b: 50}},
+      }}, {{responsive: true}});
+    }}
+
+    function formatValue(y, unit) {{
+      if (unit === 'active') return String(Math.round(y));
+      if (unit === 'GB') return y.toFixed(3);
+      return y.toFixed(3);
+    }}
+
+    function attachSortedHover(plotId, panelId, unit) {{
+      const plot = document.getElementById(plotId);
+      const panel = document.getElementById(panelId);
+      if (!plot || !panel) return;
+      plot.on('plotly_hover', (ev) => {{
+        if (!ev || !ev.points || !ev.points.length) return;
+        const t = ev.points[0].x;
+        const rows = ev.points
+          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
+          .filter(p => p.y > 0)
+          .sort((a, b) => b.y - a.y);
+        const top = rows.slice(0, 40);
+        const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
+        panel.textContent = `t=${{Number(t).toFixed(2)}}s\\n` + lines.join('\\n');
+      }});
+      plot.on('plotly_unhover', () => {{
+        panel.textContent = 'Move cursor over chart to see sorted contributors';
+      }});
+    }}
+
+    function renderClickTable(panelId, rows, t, unit) {{
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      const top = rows.slice(0, 100);
+      const includeSynthetic = document.getElementById('includeSyntheticCb')?.checked ?? true;
+      const htmlRows = top.map((r, i) => {{
+        const isSynthetic = includeSynthetic && data.has_synthetic_metrics && data.track_has_synthetic && data.track_has_synthetic[r.name];
+        const syntheticBadge = isSynthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '';
+        return (
+        '<tr>' +
+          '<td>' + (i + 1) + '</td>' +
+          '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;background:' + colorForTrack(r.name) + ';"></span>' + r.name + syntheticBadge + '</td>' +
+          '<td>' + formatValue(r.y, unit) + ' ' + unit + '</td>' +
+        '</tr>'
+        );
+      }}).join('');
+      panel.innerHTML =
+        '<div><b>t=' + Number(t).toFixed(2) + 's</b> | rows: ' + top.length + '</div>' +
+        '<table><thead><tr><th>#</th><th>suite+chunk</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
+    }}
+
+    function attachSortedClick(plotId, panelId, unit) {{
+      const plot = document.getElementById(plotId);
+      if (!plot) return;
+      plot.on('plotly_click', (ev) => {{
+        if (!ev || !ev.points || !ev.points.length) return;
+        const t = ev.points[0].x;
+        const rows = ev.points
+          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
+          .filter(p => p.y > 0)
+          .sort((a, b) => b.y - a.y);
+        renderClickTable(panelId, rows, t, unit);
+      }});
+    }}
+
+    Plotly.newPlot('activeChunks', [{{
+      x: data.xs_active,
+      y: data.ys_active,
+      mode: 'lines',
+      name: 'active_chunks',
+      line: {{color: '#444', width: 2}},
+      hoverinfo: 'none',
+    }}], {{
+      title: 'Concurrent running chunks',
+      xaxis: {{title: 'time (sec)'}},
+      yaxis: {{title: 'count'}},
+      hovermode: 'x unified',
+    }}, {{responsive: true}});
+
+    if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
+      stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks');
+      attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
+      attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
+      stackedArea('cpuLayer', data.xs_cpu, data.cpu_tracks, 'Layered CPU (estimated cores) by suite+chunk', 'cores');
+      stackedArea('ramLayer', data.xs_ram, data.ram_tracks, 'Layered RAM by suite+chunk', 'GB');
+      attachSortedHover('cpuLayer', 'cpuHover', 'cores');
+      attachSortedHover('ramLayer', 'ramHover', 'GB');
+      attachSortedClick('cpuLayer', 'cpuClick', 'cores');
+      attachSortedClick('ramLayer', 'ramClick', 'GB');
+    }}
+
+    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks');
+    attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
+    attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
+
+    stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
+    stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');
+    attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
+    attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
+    attachSortedClick('cpuLayerSuite', 'cpuClickSuite', 'cores');
+    attachSortedClick('ramLayerSuite', 'ramClickSuite', 'GB');
+
+    if (data.by_chunk && data.pie_cpu_labels && data.pie_cpu_labels.length > 0) {{
+      Plotly.newPlot('cpuPie', [{{
+        type: 'pie',
+        labels: data.pie_cpu_labels,
+        values: data.pie_cpu_vals,
+        customdata: data.pie_cpu_vals.map(v => humanFromSec(v)),
+        marker: {{colors: data.pie_cpu_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+        textinfo: 'percent',
+        textposition: 'inside',
+        automargin: true,
+        sort: false,
+        hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
+      }}], {{title: 'CPU consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      Plotly.newPlot('ramPie', [{{
+        type: 'pie',
+        labels: data.pie_ram_labels,
+        values: data.pie_ram_vals,
+        customdata: data.pie_ram_vals.map(v => humanFromKb(v)),
+        marker: {{colors: data.pie_ram_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+        textinfo: 'percent',
+        textposition: 'inside',
+        automargin: true,
+        sort: false,
+        hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
+      }}], {{title: 'RAM consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      Plotly.newPlot('activePie', [{{
+        type: 'pie',
+        labels: data.pie_active_labels,
+        values: data.pie_active_vals,
+        customdata: data.pie_active_vals.map(v => humanFromSec(v)),
+        marker: {{colors: data.pie_active_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+        textinfo: 'percent',
+        textposition: 'inside',
+        automargin: true,
+        sort: false,
+        hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
+      }}], {{title: 'Active time share (suite+chunk, top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}
+
+    Plotly.newPlot('cpuPieSuite', [{{
+      type: 'pie',
+      labels: data.pie_cpu_suite_labels,
+      values: data.pie_cpu_suite_vals,
+      customdata: data.pie_cpu_suite_vals.map(v => humanFromSec(v)),
+      marker: {{colors: data.pie_cpu_suite_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+      textinfo: 'percent',
+      textposition: 'inside',
+      automargin: true,
+      sort: false,
+      hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
+    }}], {{title: 'CPU consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+
+    Plotly.newPlot('ramPieSuite', [{{
+      type: 'pie',
+      labels: data.pie_ram_suite_labels,
+      values: data.pie_ram_suite_vals,
+      customdata: data.pie_ram_suite_vals.map(v => humanFromKb(v)),
+      marker: {{colors: data.pie_ram_suite_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+      textinfo: 'percent',
+      textposition: 'inside',
+      automargin: true,
+      sort: false,
+      hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
+    }}], {{title: 'RAM consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+
+    Plotly.newPlot('activePieSuite', [{{
+      type: 'pie',
+      labels: data.pie_active_suite_labels,
+      values: data.pie_active_suite_vals,
+      customdata: data.pie_active_suite_vals.map(v => humanFromSec(v)),
+      marker: {{colors: data.pie_active_suite_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+      textinfo: 'percent',
+      textposition: 'inside',
+      automargin: true,
+      sort: false,
+      hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
+    }}], {{title: 'Active time share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+
+    const suiteSearchEl = document.getElementById('suiteSearch');
+    if (suiteSearchEl) {{
+      suiteSearchEl.addEventListener('input', applySuiteSearch);
+    }}
+    applySuiteSearch();
+  </script>
+</body>
+</html>
+"""
+    out_html.write_text(html, encoding="utf-8")

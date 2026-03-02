@@ -48,10 +48,3 @@ Disadvantages:
 
 * index build can take considerable time;
 * the current version does not support data modification operations: insert, update, delete.
-
-## Vector index recipes {#vector-index-recipes}
-
-To get started with vector indexes, you can use the following recipes:
-
-* [YDB CLI & YQL](../../recipes/vector-search)
-* [YDB SDK: Python, C++](../../recipes/ydb-sdk/vector-search.md)

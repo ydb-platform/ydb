@@ -35,7 +35,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
     * `levels`: number of levels in the tree, defining search depth (recommended 1-3)
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512)
 
-Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md).
+Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ## Types of Vector Indexes {#types}
 

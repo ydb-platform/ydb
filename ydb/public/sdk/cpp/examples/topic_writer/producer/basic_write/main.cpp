@@ -1,3 +1,4 @@
+#include <thread>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -65,7 +66,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
         if (writeResult.IsTimeout()) {
             // when timeout occurs this means that producer's buffer is overloaded by memory (see MaxMemoryUsage setting)
             // so we need to wait for some time and try to write again later
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
     }

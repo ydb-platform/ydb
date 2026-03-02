@@ -314,7 +314,6 @@ public:
     bool Compressed() const {
         return Codec.has_value();
     }
- 
     //! Message body.
     std::string_view Data;
 

@@ -318,8 +318,13 @@ public:
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
+
     template<typename T>
-    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings);
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        auto producer = CreateProducer(settings);
+        return std::make_shared<TTypedProducer<T>>(producer);
+    }
+
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =

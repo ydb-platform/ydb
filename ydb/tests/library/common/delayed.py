@@ -107,6 +107,8 @@ def pretty_tablet_info(info):
 def wait_tablets_are_active(client, tablet_ids=(), timeout_seconds=120, cluster=None, details=None):
 
     start_time = time.time()
+    consecutive_required = 3
+    step_seconds = 1.0
     logger.info("Waiting tablets to become active")
 
     def predicate(raise_error=False):
@@ -147,7 +149,16 @@ def wait_tablets_are_active(client, tablet_ids=(), timeout_seconds=120, cluster=
             return False
         return True
 
-    if not wait_for(predicate, timeout_seconds):
+    consecutive_count = [0]
+
+    def stable_predicate():
+        if predicate():
+            consecutive_count[0] += 1
+            return consecutive_count[0] >= consecutive_required
+        consecutive_count[0] = 0
+        return False
+
+    if not wait_for(stable_predicate, timeout_seconds, step_seconds=step_seconds, multiply=1):
         predicate(raise_error=True)
     logger.info(
         "%d tablet(s) are active now." % len(

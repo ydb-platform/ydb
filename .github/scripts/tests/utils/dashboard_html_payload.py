@@ -34,6 +34,7 @@ def build_dashboard_payload(
     by_chunk: bool,
     cpu_suggestions: Optional[list[dict[str, Any]]] = None,
     run_config: Optional[dict[str, Any]] = None,
+    suite_event_times: Optional[dict[str, dict[str, list[float]]]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -171,6 +172,45 @@ def build_dashboard_payload(
     track_has_synthetic = {
         lb: (track_suite.get(lb) in synthetic_suites) for lb in track_suite.keys()
     }
+    # Always build chunk-level events as fallback, then merge with provided test-level events.
+    timeout_times_by_suite: dict[str, list[float]] = defaultdict(list)
+    error_times_by_suite: dict[str, list[float]] = defaultdict(list)
+    for rr in runs:
+        suite = str(rr.get("suite_path") or "")
+        if not suite:
+            continue
+        status = str(rr.get("status", "") or "").upper()
+        error_type = str(rr.get("error_type", "") or "").upper()
+        is_timeout = error_type == "TIMEOUT" or ("TIMEOUT" in status)
+        is_muted = bool(rr.get("is_muted")) or status == "MUTE"
+        is_failedish = status in {"FAILED", "ERROR", "INTERNAL"}
+        t_sec = float(rr.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        if is_timeout:
+            timeout_times_by_suite[suite].append(round(t_sec, 1))
+        elif is_failedish and not is_muted:
+            error_times_by_suite[suite].append(round(t_sec, 1))
+    chunk_fallback_events: dict[str, dict[str, list[float]]] = {}
+    for s in sorted(set(timeout_times_by_suite.keys()) | set(error_times_by_suite.keys())):
+        chunk_fallback_events[s] = {
+            "timeout_sec": sorted(set(timeout_times_by_suite.get(s, []))),
+            "error_sec": sorted(set(error_times_by_suite.get(s, []))),
+        }
+
+    if suite_event_times is None:
+        suite_event_times = chunk_fallback_events
+    else:
+        merged: dict[str, dict[str, list[float]]] = {}
+        for s in set(chunk_fallback_events.keys()) | set(suite_event_times.keys()):
+            provided = suite_event_times.get(s, {})
+            fallback = chunk_fallback_events.get(s, {})
+            p_timeout = list(provided.get("timeout_sec", [])) if isinstance(provided, dict) else []
+            p_error = list(provided.get("error_sec", [])) if isinstance(provided, dict) else []
+            # If test-level mapping produced nothing for a suite, fall back to chunk-level times.
+            merged[s] = {
+                "timeout_sec": sorted(set(p_timeout if p_timeout else fallback.get("timeout_sec", []))),
+                "error_sec": sorted(set(p_error if p_error else fallback.get("error_sec", []))),
+            }
+        suite_event_times = merged
 
     return {
         "suite_filter": suite_filter,
@@ -242,4 +282,5 @@ def build_dashboard_payload(
         "suite_color": suite_color,
         "track_suite": track_suite,
         "track_has_synthetic": track_has_synthetic,
+        "suite_event_times": suite_event_times,
     }

@@ -34,6 +34,153 @@ def _next_cpu_tier(cpu: int) -> int:
     return 16
 
 
+def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """
+    Sweep-line over all runs.  For each suite computes:
+
+    Self parallelism
+      max_parallel_self         — peak simultaneous chunks of THIS suite
+      max_parallel_self_at_sec  — time (sec from global t0) of that peak
+
+    Other suites' load during our window
+      peak_others_during_suite         — max chunks of OTHER suites while we ran
+      peak_others_during_suite_at_sec  — when that happened
+
+    Global resource peaks during our window
+      peak_total_cpu_cores_during_suite  — max total instantaneous CPU (cores) while we ran
+      peak_total_cpu_at_sec
+      peak_total_ram_gb_during_suite     — max total RAM (GB) while we ran
+      peak_total_ram_at_sec
+    """
+    if not runs:
+        return {}
+
+    # Build events: (time_us, delta_active, suite, delta_cpu_cores, delta_ram_kb)
+    # +1 events are processed before -1 at the same timestamp (peaks are captured).
+    events: list[tuple[float, int, str, float, float]] = []
+    t0: Optional[float] = None
+    suite_start_us: dict[str, float] = {}
+    suite_end_us: dict[str, float] = {}
+    for r in runs:
+        suite = str(r.get("suite_path", ""))
+        if not suite:
+            continue
+        start = float(r.get("start_us", 0))
+        end = float(r.get("end_us", 0))
+        if end <= start:
+            continue
+        dur_s = (end - start) / 1e6
+        cpu_sec = float(r.get("cpu_sec_report", 0.0) or 0.0)
+        ram_kb = float(r.get("ram_kb_report", 0.0) or 0.0)
+        cores = cpu_sec / dur_s if dur_s > 0 else 0.0
+        if t0 is None or start < t0:
+            t0 = start
+        if suite not in suite_start_us or start < suite_start_us[suite]:
+            suite_start_us[suite] = start
+        if suite not in suite_end_us or end > suite_end_us[suite]:
+            suite_end_us[suite] = end
+        events.append((start,  1, suite, +cores, +ram_kb))
+        events.append((end,   -1, suite, -cores, -ram_kb))
+
+    if not events or t0 is None:
+        return {}
+
+    # Sort: same time → +1 before -1 so peaks register correctly
+    events.sort(key=lambda e: (e[0], -e[1]))
+
+    suite_count: dict[str, int] = defaultdict(int)
+    total_count = 0
+    total_cpu = 0.0
+    total_ram_kb = 0.0
+
+    # Per-suite peak trackers
+    peak_self: dict[str, int] = defaultdict(int)
+    peak_self_at: dict[str, float] = {}
+    suite_cpu: dict[str, float] = defaultdict(float)
+    suite_ram_kb: dict[str, float] = defaultdict(float)
+    peak_self_cpu: dict[str, float] = defaultdict(float)
+    peak_self_cpu_at: dict[str, float] = {}
+    peak_self_ram_kb: dict[str, float] = defaultdict(float)
+    peak_self_ram_at: dict[str, float] = {}
+    peak_others: dict[str, int] = defaultdict(int)
+    peak_others_at: dict[str, float] = {}
+    peak_cpu: dict[str, float] = defaultdict(float)
+    peak_cpu_at: dict[str, float] = {}
+    peak_ram: dict[str, float] = defaultdict(float)
+    peak_ram_at: dict[str, float] = {}
+
+    for time_us, delta, suite, dcpu, dram in events:
+        suite_count[suite] += delta
+        suite_cpu[suite] += dcpu
+        suite_ram_kb[suite] += dram
+        total_count += delta
+        total_cpu += dcpu
+        total_ram_kb += dram
+
+        # Update self-peak for the suite that just changed
+        if delta > 0 and suite_count[suite] > peak_self[suite]:
+            peak_self[suite] = suite_count[suite]
+            peak_self_at[suite] = time_us
+        if suite_count[suite] > 0 and suite_cpu[suite] > peak_self_cpu[suite]:
+            peak_self_cpu[suite] = suite_cpu[suite]
+            peak_self_cpu_at[suite] = time_us
+        if suite_count[suite] > 0 and suite_ram_kb[suite] > peak_self_ram_kb[suite]:
+            peak_self_ram_kb[suite] = suite_ram_kb[suite]
+            peak_self_ram_at[suite] = time_us
+
+        # Update resource peaks for ALL currently active suites.
+        # O(active_suites) per event — acceptable for typical CI data sizes.
+        for s, cnt in suite_count.items():
+            if cnt <= 0:
+                continue
+            others = total_count - cnt
+            if others > peak_others[s]:
+                peak_others[s] = others
+                peak_others_at[s] = time_us
+            if total_cpu > peak_cpu[s]:
+                peak_cpu[s] = total_cpu
+                peak_cpu_at[s] = time_us
+            if total_ram_kb > peak_ram[s]:
+                peak_ram[s] = total_ram_kb
+                peak_ram_at[s] = time_us
+
+    def _at(ts_us: Optional[float]) -> Optional[float]:
+        if ts_us is None:
+            return None
+        # Keep the same absolute time basis as dashboard series (x = start_us / 1e6),
+        # otherwise marker lines appear shifted left/right relative to plotted chunks.
+        return round(ts_us / 1e6, 1)
+
+    result: dict[str, dict[str, Any]] = {}
+    all_suites = (
+        set(peak_self)
+        | set(peak_others)
+        | set(peak_cpu)
+        | set(peak_ram)
+        | set(peak_self_cpu)
+        | set(peak_self_ram_kb)
+    )
+    for s in all_suites:
+        result[s] = {
+            "suite_start_sec": _at(suite_start_us.get(s)),
+            "suite_end_sec": _at(suite_end_us.get(s)),
+            "max_parallel_self": peak_self[s],
+            "max_parallel_self_at_sec": _at(peak_self_at.get(s)),
+            "peak_others_during_suite": peak_others[s],
+            "peak_others_during_suite_at_sec": _at(peak_others_at.get(s)),
+            "peak_self_cpu_cores_during_suite": round(peak_self_cpu[s], 3),
+            "peak_self_cpu_at_sec": _at(peak_self_cpu_at.get(s)),
+            "peak_self_ram_gb_during_suite": round(peak_self_ram_kb[s] / (1024.0 * 1024.0), 3),
+            "peak_self_ram_at_sec": _at(peak_self_ram_at.get(s)),
+            # Legacy total metrics kept for compatibility with older dashboards.
+            "peak_total_cpu_cores_during_suite": round(peak_cpu[s], 3),
+            "peak_total_cpu_at_sec": _at(peak_cpu_at.get(s)),
+            "peak_total_ram_gb_during_suite": round(peak_ram[s] / (1024.0 * 1024.0), 3),
+            "peak_total_ram_at_sec": _at(peak_ram_at.get(s)),
+        }
+    return result
+
+
 def build_cpu_suggestions(
     runs: list[dict[str, Any]],
     requirements_cache: Optional[dict[str, dict[str, Any]]] = None,
@@ -45,6 +192,7 @@ def build_cpu_suggestions(
     Returns list of dicts: suite_path, chunks_count, median_cores, p95_cores,
     recommended_cpu (tier 1/2/4/8/16 or "all"), total_cpu_sec, total_ram_gb, total_dur_sec, has_synthetic.
     """
+    parallel_stats = _compute_parallel_stats(runs)
     by_suite: dict[str, list[float]] = defaultdict(list)
     by_suite_cpu: dict[str, float] = defaultdict(float)
     by_suite_ram_kb: dict[str, float] = defaultdict(float)
@@ -117,12 +265,16 @@ def build_cpu_suggestions(
         ya_size = req.get("size")
         if not ya_size:
             ya_size = "SMALL"
-        # Policy: MEDIUM suites must not request more than cpu:4.
-        medium_cap_applied = str(ya_size or "").upper() == "MEDIUM" and recommended > 4
-        if medium_cap_applied:
+        # Policy: SMALL suites must not request more than cpu:1, MEDIUM — more than cpu:4.
+        size_u_cap = str(ya_size or "").upper()
+        small_cap_applied = size_u_cap == "SMALL" and recommended > 1
+        medium_cap_applied = size_u_cap == "MEDIUM" and recommended > 4
+        if small_cap_applied:
+            recommended = 1
+        elif medium_cap_applied:
             recommended = 4
         timeout_max_policy_applied = bool(maximize_reqs_for_timeout_tests and timeout_tests_count > 0)
-        size_u = str(ya_size or "").upper()
+        size_u = size_u_cap
         timeout_max_value: Any = None
         if timeout_max_policy_applied:
             if size_u == "SMALL":
@@ -142,6 +294,8 @@ def build_cpu_suggestions(
             explain_parts.append(f"test_timeouts={timeout_tests_count} -> next_tier={_next_cpu_tier(base_recommended)}")
         if timeout_max_policy_applied:
             explain_parts.append(f"maximize_reqs_for_timeout_tests(size={size_u or 'UNKNOWN'}) -> {timeout_max_value}")
+        if small_cap_applied:
+            explain_parts.append("SMALL cap -> 1")
         if medium_cap_applied:
             explain_parts.append("MEDIUM cap -> 4")
         explain_parts.append(f"final={recommended_req}")
@@ -174,6 +328,7 @@ def build_cpu_suggestions(
             "recommended_cpu_timeout_boost": timeout_boost_applied,
             "recommended_cpu_timeout_max_policy_applied": timeout_max_policy_applied,
             "recommended_cpu_timeout_max_policy_value": timeout_max_value,
+            "recommended_cpu_small_cap_applied": small_cap_applied,
             "recommended_cpu_medium_cap_applied": medium_cap_applied,
             "recommended_cpu_explain": recommended_cpu_explain,
             "total_cpu_sec": round(by_suite_cpu[suite], 2),
@@ -200,5 +355,21 @@ def build_cpu_suggestions(
             "muted_timeouts": chunk_status["muted_timeouts"],
             "fails_total": chunk_status["fails_total"],
             "cpu_action": cpu_action,
+            **{k: parallel_stats.get(suite, {}).get(k, v) for k, v in {
+                "suite_start_sec": None,
+                "suite_end_sec": None,
+                "max_parallel_self": 0,
+                "max_parallel_self_at_sec": None,
+                "peak_others_during_suite": 0,
+                "peak_others_during_suite_at_sec": None,
+                "peak_self_cpu_cores_during_suite": 0.0,
+                "peak_self_cpu_at_sec": None,
+                "peak_self_ram_gb_during_suite": 0.0,
+                "peak_self_ram_at_sec": None,
+                "peak_total_cpu_cores_during_suite": 0.0,
+                "peak_total_cpu_at_sec": None,
+                "peak_total_ram_gb_during_suite": 0.0,
+                "peak_total_ram_at_sec": None,
+            }.items()},
         })
     return out

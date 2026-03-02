@@ -27,6 +27,7 @@ def build_html_dashboard(
     by_chunk: bool = False,
     cpu_suggestions: Optional[list[dict[str, Any]]] = None,
     run_config: Optional[dict[str, Any]] = None,
+    suite_event_times: Optional[dict[str, dict[str, list[float]]]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -37,6 +38,7 @@ def build_html_dashboard(
         by_chunk=by_chunk,
         cpu_suggestions=cpu_suggestions,
         run_config=run_config,
+        suite_event_times=suite_event_times,
     )
 
     html = f"""<!doctype html>
@@ -87,6 +89,8 @@ def build_html_dashboard(
       background: linear-gradient(to right, rgba(144, 158, 176, 0.28), rgba(144, 158, 176, 0.0));
     }}
     pre {{ background: #f6f8fa; padding: 12px; border-radius: 8px; }}
+    .time-link {{ cursor: pointer; color: #2563eb; text-decoration: underline dotted; white-space: nowrap; }}
+    .time-link:hover {{ color: #e53e3e; }}
   </style>
 </head>
 <body>
@@ -132,6 +136,30 @@ def build_html_dashboard(
     <label for="suiteSearch"><b>Search suite:</b></label>
     <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
     <button onclick="clearSuiteSearch()">Clear</button>
+    <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;">
+      <b>Marker types:</b>
+      <label><input type="checkbox" id="mkStart" checked onchange="applyMarkersToCharts()">start</label>
+      <label><input type="checkbox" id="mkEnd" checked onchange="applyMarkersToCharts()">end</label>
+      <label><input type="checkbox" id="mkPar" onchange="applyMarkersToCharts()">par</label>
+      <label><input type="checkbox" id="mkOthers" onchange="applyMarkersToCharts()">others</label>
+      <label><input type="checkbox" id="mkCpu" checked onchange="applyMarkersToCharts()">cpu</label>
+      <label><input type="checkbox" id="mkRam" checked onchange="applyMarkersToCharts()">ram</label>
+      <label><input type="checkbox" id="mkError" onchange="applyMarkersToCharts()">errors</label>
+      <label><input type="checkbox" id="mkTimeout" onchange="applyMarkersToCharts()">timeouts</label>
+    </span>
+    <span id="markersLegend" style="display:none;font-size:11px;line-height:1.5;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fafafa;">
+      <b>Markers:</b>
+      <span style="margin-left:6px;">&#9135;&#9135; start</span>
+      <span style="margin-left:6px;">&#8209;&#8209;&#8209; end</span>
+      <span style="margin-left:6px;">&#183;&#183;&#183; par/others peak</span>
+      <span style="margin-left:6px;">&#8209;&#183;&#8209; CPU/RAM peak</span>
+      <span style="margin-left:6px;color:#b00020;">&#9473;&#9473; errors</span>
+      <span style="margin-left:6px;color:#e65100;">&#9473;&#9473; timeouts</span>
+      &nbsp;|&nbsp;
+      <span id="markersLegendSuites"></span>
+      <span id="markersLegendStats" style="margin-left:6px;color:#586069;"></span>
+    </span>
     <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="">
       <label style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="includeSyntheticCb" checked />
@@ -212,12 +240,19 @@ def build_html_dashboard(
             Plotly.Plots.resize(el);
           }}
         }});
+        // Re-apply markers after resize (charts lose shapes on hidden→visible transition).
+        applyMarkersToCharts();
       }}, 0);
     }}
 
     const data = {json.dumps(payload, ensure_ascii=False)};
     document.getElementById('stats').textContent = JSON.stringify(data.stats, null, 2);
     document.getElementById('runConfig').textContent = JSON.stringify(data.run_config || {{}}, null, 2);
+
+    // Marker state lives at top scope so all functions can access it.
+    const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite'];
+    // Each entry: {{ shapes: [...], annotations: [...] }} by suite_path.
+    const _suiteMarkerData = {{}};
 
     if (data.by_chunk) {{
       document.getElementById('tabsBar').style.display = 'flex';
@@ -547,7 +582,11 @@ def build_html_dashboard(
         'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
         'total_ram_gb', 'total_dur_sec', 'recommended_cpu', 'cpu_action',
         'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_fails_total',
-        'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total'
+        'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total',
+        'max_parallel_self', 'max_parallel_self_at_sec',
+        'peak_others_during_suite', 'peak_others_during_suite_at_sec',
+        'peak_self_cpu_cores_during_suite', 'peak_self_cpu_at_sec',
+        'peak_self_ram_gb_during_suite', 'peak_self_ram_at_sec'
       ];
 
       function actionCell(action) {{
@@ -567,12 +606,25 @@ def build_html_dashboard(
             ? '<span title="' + cpuExplain + '" style="display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;">cpu:all</span>'
             : '<span title="' + cpuExplain + '"><b>cpu:' + cpuReqText + '</b></span>';
           const cpuCell = cpuBadge + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
+          const sizeCapped = s.recommended_cpu_small_cap_applied || s.recommended_cpu_medium_cap_applied;
+          const sizeCapHint = sizeCapped
+            ? (s.recommended_cpu_small_cap_applied
+                ? 'p95 exceeds SMALL limit (max cpu:1) — consider increasing SIZE to MEDIUM'
+                : 'p95 exceeds MEDIUM limit (max cpu:4) — consider increasing SIZE to LARGE')
+            : '';
+          const sizeCell = sizeCapped
+            ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:3px;color:#991b1b;font-weight:600;">'
+              + (s.ya_size || '') + ' <span style="font-size:11px;background:#fee2e2;border:1px solid #fca5a5;border-radius:4px;padding:0 4px;">cap!</span></span>'
+            : String(s.ya_size ?? '');
           return [
             String(i + 1),
-            '<span style="max-width:400px;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;" title="' + (s.suite_path || '').replace(/"/g, '&quot;') + '">' + (s.suite_path || '') + '</span>',
+            '<label style="display:inline-flex;align-items:center;gap:5px;max-width:420px;">' +
+            '<input type="checkbox" class="suite-marker-cb" style="flex-shrink:0;cursor:pointer;" data-suite="' + (s.suite_path || '').replace(/"/g, '&quot;') + '" onchange="toggleSuiteMarkers(this.dataset.suite, this.checked)">' +
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (s.suite_path || '').replace(/"/g, '&quot;') + '">' + (s.suite_path || '') + '</span>' +
+            '</label>',
             String(s.ya_ram_gb ?? ''),
             String(s.ya_cpu_cores ?? ''),
-            String(s.ya_size ?? ''),
+            sizeCell,
             String(s.chunks_count || 0),
             (s.median_cores != null ? Number(s.median_cores).toFixed(3) : ''),
             (s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : ''),
@@ -591,6 +643,14 @@ def build_html_dashboard(
             String(s.chunk_muted || 0),
             String(s.chunk_muted_timeouts || 0),
             String(s.chunk_fails_total || 0),
+            String(s.max_parallel_self || 0),
+            s.max_parallel_self_at_sec != null ? Number(s.max_parallel_self_at_sec).toFixed(1) : '',
+            String(s.peak_others_during_suite || 0),
+            s.peak_others_during_suite_at_sec != null ? Number(s.peak_others_during_suite_at_sec).toFixed(1) : '',
+            s.peak_self_cpu_cores_during_suite != null ? Number(s.peak_self_cpu_cores_during_suite).toFixed(1) : '',
+            s.peak_self_cpu_at_sec != null ? Number(s.peak_self_cpu_at_sec).toFixed(1) : '',
+            s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '',
+            s.peak_self_ram_at_sec != null ? Number(s.peak_self_ram_at_sec).toFixed(1) : '',
           ];
         }});
 
@@ -615,6 +675,10 @@ def build_html_dashboard(
           '<th colspan="2">decision</th>' +
           '<th colspan="5">status tests</th>' +
           '<th colspan="5">status chunks</th>' +
+          '<th colspan="2">suite parallelism</th>' +
+          '<th colspan="2">others during suite</th>' +
+          '<th colspan="2">cpu_self_peak during suite</th>' +
+          '<th colspan="2">cpu_ram_peak during suite</th>' +
           '</tr>';
         const subHeader =
           '<tr>' +
@@ -639,9 +703,17 @@ def build_html_dashboard(
           '<th data-col="20" style="cursor:pointer;user-select:none;">muted' + marker(20) + '</th>' +
           '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
           '<th data-col="22" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(22) + '</th>' +
+          '<th data-col="23" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(23) + '</th>' +
+          '<th data-col="24" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) when suite parallelism peaked">at (s)' + marker(24) + '</th>' +
+          '<th data-col="25" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(25) + '</th>' +
+          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak others">at (s)' + marker(26) + '</th>' +
+          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(27) + '</th>' +
+          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak suite CPU">at (s)' + marker(28) + '</th>' +
+          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(29) + '</th>' +
+          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak suite RAM">at (s)' + marker(30) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([4, 5, 8, 9, 10, 12, 17, 22]);
+        const groupEnds = new Set([4, 5, 8, 9, 10, 12, 17, 22, 24, 26, 28, 30]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');
@@ -674,6 +746,11 @@ def build_html_dashboard(
           }}
           renderSuggestionsTable();
         }}));
+
+        // Restore checkbox state for suites that still have markers.
+        document.querySelectorAll('.suite-marker-cb').forEach(cb => {{
+          if (_suiteMarkerData[cb.dataset.suite]) cb.checked = true;
+        }});
         refreshCpuScriptHint();
       }}
 
@@ -814,12 +891,183 @@ def build_html_dashboard(
       if (window.renderSuggestionsTable) {{
         window.renderSuggestionsTable();
       }}
+      // Plot restyle/recolor can drop layout overlays; re-apply selected markers.
+      applyMarkersToCharts();
     }}
 
     function clearSuiteSearch() {{
       const el = document.getElementById('suiteSearch');
       if (el) el.value = '';
       applySuiteSearch();
+    }}
+
+
+    function _hexToRgba(hex, alpha) {{
+      if (!hex || hex.length < 7) return 'rgba(100,100,200,' + alpha + ')';
+      const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }}
+
+    function _updateMarkersLegend() {{
+      const suites = Object.keys(_suiteMarkerData);
+      const legend = document.getElementById('markersLegend');
+      if (!legend) return;
+      if (suites.length === 0) {{ legend.style.display = 'none'; return; }}
+      legend.style.display = '';
+      const badges = suites.map(sp => {{
+        const color = (data.suite_color && data.suite_color[sp]) || '#6366f1';
+        const short = sp.split('/').slice(-2).join('/');
+        const markers = ((_suiteMarkerData[sp] || {{}}).markers || []);
+        const errN = markers.filter(m => m.kind === 'error').length;
+        const toN = markers.filter(m => m.kind === 'timeout').length;
+        return '<span style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:' + color + ';color:#fff;font-size:10px;" title="' + sp + ' | errors:' + errN + ' | timeouts:' + toN + '">' + short + '</span>';
+      }});
+      document.getElementById('markersLegendSuites').innerHTML = badges.join('');
+      const st = _countEventMarkers();
+      const statsEl = document.getElementById('markersLegendStats');
+      if (statsEl) {{
+        statsEl.textContent =
+          'errors visible/all: ' + st.errorVisible + '/' + st.errorAll +
+          ', timeouts visible/all: ' + st.timeoutVisible + '/' + st.timeoutAll;
+      }}
+    }}
+
+    function _enabledMarkerKinds() {{
+      const byId = {{
+        start: 'mkStart',
+        end: 'mkEnd',
+        par: 'mkPar',
+        others: 'mkOthers',
+        cpu: 'mkCpu',
+        ram: 'mkRam',
+        error: 'mkError',
+        timeout: 'mkTimeout',
+      }};
+      const enabled = new Set();
+      Object.entries(byId).forEach(([kind, id]) => {{
+        const el = document.getElementById(id);
+        if (!el || el.checked) enabled.add(kind);
+      }});
+      return enabled;
+    }}
+
+    function _countEventMarkers() {{
+      const enabledKinds = _enabledMarkerKinds();
+      let errorAll = 0, timeoutAll = 0, errorVisible = 0, timeoutVisible = 0;
+      Object.values(_suiteMarkerData).forEach(d => {{
+        (d.markers || []).forEach(m => {{
+          if (m.kind === 'error') {{
+            errorAll += 1;
+            if (enabledKinds.has('error')) errorVisible += 1;
+          }} else if (m.kind === 'timeout') {{
+            timeoutAll += 1;
+            if (enabledKinds.has('timeout')) timeoutVisible += 1;
+          }}
+        }});
+      }});
+      return {{ errorAll, timeoutAll, errorVisible, timeoutVisible }};
+    }}
+
+    function _displayedPeakTime(chartId, suitePath) {{
+      const el = document.getElementById(chartId);
+      if (!el || !el.data || !Array.isArray(el.data)) return null;
+      const tr = el.data.find(t => t && t.name === suitePath && Array.isArray(t.x) && Array.isArray(t.y));
+      if (!tr) return null;
+      let bestY = -Infinity;
+      let bestX = null;
+      for (let i = 0; i < tr.y.length; i++) {{
+        const y = Number(tr.y[i]);
+        if (!Number.isFinite(y)) continue;
+        if (y > bestY) {{
+          bestY = y;
+          bestX = Number(tr.x[i]);
+        }}
+      }}
+      if (!Number.isFinite(bestY) || bestY <= 0 || !Number.isFinite(Number(bestX))) return null;
+      return Number(bestX);
+    }}
+
+    function applyMarkersToCharts() {{
+      const enabledKinds = _enabledMarkerKinds();
+      const allShapes = [];
+      const allAnnotations = [];
+      Object.values(_suiteMarkerData).forEach(d => {{
+        (d.markers || []).forEach(m => {{
+          if (!enabledKinds.has(m.kind)) return;
+          allShapes.push({{
+            type: 'line', x0: m.x, x1: m.x, y0: 0, y1: 1, yref: 'paper',
+            line: {{ color: m.color, width: m.width, dash: m.dash }},
+          }});
+          allAnnotations.push({{
+            x: m.x, y: m.yAnchor, yref: 'paper',
+            text: '<b>' + m.label + '</b><br><span style="font-size:10px">' + m.shortName + '</span>',
+            showarrow: true, arrowhead: 3, arrowsize: 0.8, arrowcolor: m.color,
+            ax: 0, ay: -28,
+            bgcolor: m.color, bordercolor: m.color, borderwidth: 1, borderpad: 3,
+            font: {{ color: '#fff', size: 10 }},
+            hovertext: m.title + ' (' + m.shortName + ')',
+            captureevents: true,
+            opacity: 0.85,
+          }});
+        }});
+      }});
+      _markerChartIds.forEach(id => {{
+        const el = document.getElementById(id);
+        if (el && el.layout) Plotly.relayout(el, {{ shapes: allShapes, annotations: allAnnotations }});
+      }});
+      _updateMarkersLegend();
+    }}
+
+    function toggleSuiteMarkers(suitePath, enabled) {{
+      if (!enabled) {{
+        delete _suiteMarkerData[suitePath];
+        applyMarkersToCharts();
+        return;
+      }}
+      const s = data.cpu_suggestions.find(x => x.suite_path === suitePath);
+      if (!s) return;
+      const color = (data.suite_color && data.suite_color[suitePath]) || '#6366f1';
+      const shortName = suitePath.split('/').slice(-2).join('/');
+      const markers = [];
+      // yAnchor offsets so labels for different suites don't overlap.
+      const suiteIdx = Object.keys(_suiteMarkerData).length;
+      const yAnchor = Math.max(0.05, 0.95 - suiteIdx * 0.12);
+      const addLine = (t, dash, width, label, title, kind, lineColor) => {{
+        if (t == null || !Number.isFinite(Number(t))) return;
+        const x = Number(t);
+        markers.push({{
+          x, dash, width, label, title, kind,
+          color: lineColor || color,
+          shortName,
+          yAnchor,
+        }});
+      }};
+      addLine(s.suite_start_sec,                 'solid',    2,   'start',   'Suite start', 'start');
+      addLine(s.suite_end_sec,                   'dash',     2,   'end',     'Suite end', 'end');
+      addLine(s.max_parallel_self_at_sec,        'dot',      1.5, 'par\u2191', 'Peak parallel self chunks', 'par');
+      addLine(s.peak_others_during_suite_at_sec, 'dot',      1.5, 'others\u2191', 'Peak parallel others', 'others');
+      // Prefer visible chart peak times so markers match what user sees after downsampling/filtering.
+      const visCpuAt = _displayedPeakTime('cpuLayerSuite', suitePath);
+      const visRamAt = _displayedPeakTime('ramLayerSuite', suitePath);
+      addLine(visCpuAt != null ? visCpuAt : s.peak_self_cpu_at_sec, 'dashdot', 1.5, 'cpu\u2191', 'Peak suite CPU', 'cpu');
+      addLine(visRamAt != null ? visRamAt : s.peak_self_ram_at_sec, 'dashdot', 1.5, 'ram\u2191', 'Peak suite RAM', 'ram');
+      const events = (data.suite_event_times && data.suite_event_times[suitePath]) || {{}};
+      const errColor = '#b00020';
+      const timeoutColor = '#e65100';
+      (events.error_sec || []).forEach((t, i) => {{
+        addLine(t, 'longdash', 2, 'err' + (i + 1), 'Test error end', 'error', errColor);
+      }});
+      (events.timeout_sec || []).forEach((t, i) => {{
+        addLine(t, 'longdashdot', 2, 'to' + (i + 1), 'Test timeout end', 'timeout', timeoutColor);
+      }});
+      _suiteMarkerData[suitePath] = {{ markers }};
+      applyMarkersToCharts();
+    }}
+
+    function clearAllMarkers() {{
+      Object.keys(_suiteMarkerData).forEach(k => delete _suiteMarkerData[k]);
+      document.querySelectorAll('.suite-marker-cb').forEach(cb => {{ cb.checked = false; }});
+      applyMarkersToCharts();
     }}
 
     function updateStackedPlotTracks(divId, tracks) {{
@@ -867,7 +1115,7 @@ def build_html_dashboard(
       return (sec / 3600).toFixed(2) + ' h';
     }}
 
-    function stackedArea(divId, xs, tracks, title, yTitle) {{
+    function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
       const names = Object.keys(tracks);
       const traces = names.map((n) => {{
         const c = colorForTrack(n);
@@ -875,7 +1123,7 @@ def build_html_dashboard(
           x: xs,
           y: tracks[n],
           mode: 'lines',
-          line: {{width: 1, color: c}},
+          line: {{width: 1, color: c, shape: stepMode ? 'hv' : 'linear'}},
           fillcolor: c,
           opacity: n === 'other' ? 0.45 : 0.75,
           name: n,
@@ -959,7 +1207,7 @@ def build_html_dashboard(
       y: data.ys_active,
       mode: 'lines',
       name: 'active_chunks',
-      line: {{color: '#444', width: 2}},
+      line: {{color: '#444', width: 2, shape: 'hv'}},
       hoverinfo: 'none',
     }}], {{
       title: 'Concurrent running chunks',
@@ -969,7 +1217,7 @@ def build_html_dashboard(
     }}, {{responsive: true}});
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
-      stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks');
+      stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
       attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
       attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
       stackedArea('cpuLayer', data.xs_cpu, data.cpu_tracks, 'Layered CPU (estimated cores) by suite+chunk', 'cores');
@@ -980,7 +1228,7 @@ def build_html_dashboard(
       attachSortedClick('ramLayer', 'ramClick', 'GB');
     }}
 
-    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks');
+    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
     attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
     attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
 

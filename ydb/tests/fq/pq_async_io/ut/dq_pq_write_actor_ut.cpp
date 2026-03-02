@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
         const std::vector<TString> data = { "1", "2", "3" };
 
-        auto future = CaSetup->AsyncOutputPromises.ResumeExecution.GetFuture();
+        auto future = CaSetup->AsyncOutputPromises->ResumeExecution.GetFuture();
         AsyncOutputWrite(data);
         auto result = PQReadUntil(topicName, 3);
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         InitAsyncOutput(topicName);
 
         const std::vector<TString> data = { "1" };
-        auto future = CaSetup->AsyncOutputPromises.Issue.GetFuture();
+        auto future = CaSetup->AsyncOutputPromises->Issue.GetFuture();
         AsyncOutputWrite(data);
 
         UNIT_ASSERT(future.Wait(WaitTimeout));
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
             const std::vector<TString> data2 = { "2", "3" };
             auto checkpoint = CreateCheckpoint();
-            auto future = setup.CaSetup->AsyncOutputPromises.StateSaved.GetFuture();
+            auto future = setup.CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
             setup.AsyncOutputWrite(data2, checkpoint);
 
             UNIT_ASSERT(future.Wait(WaitTimeout));
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
             const std::vector<TString> data = {};
             auto checkpoint = CreateCheckpoint();
-            auto future = CaSetup->AsyncOutputPromises.StateSaved.GetFuture();
+            auto future = CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
             AsyncOutputWrite(data, checkpoint);
 
             UNIT_ASSERT(future.Wait(WaitTimeout));

@@ -111,6 +111,7 @@ class TUringRouterTest : public TPerfTest {
     const bool UseAlignedData;
     const ui32 NumberOfRandomRefills;
     const bool UseWriteFixed;
+    const bool UseSharedSQPoll;
 
     TVector<THolder<TDeviceState>> DeviceStates;
 
@@ -127,6 +128,7 @@ public:
         , UseAlignedData(testProto.GetUseAlignedData())
         , NumberOfRandomRefills(testProto.GetNumberOfRandomRefills())
         , UseWriteFixed(testProto.GetUseWriteFixed())
+        , UseSharedSQPoll(testProto.GetUseSharedSQPoll())
     {
     }
 
@@ -216,6 +218,7 @@ private:
         cfg.QueueDepth = QueueDepth * 2; // sq + cq
         cfg.UseSQPoll = true;
         cfg.UseIOPoll = false;
+        cfg.UseSharedSQPoll = UseSharedSQPoll;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
         Y_VERIFY_S(dev.Router->RegisterFile(), "TUringRouter::RegisterFile failed for device " << deviceIdx);
 
@@ -343,6 +346,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
         Printer->AddResult("IOPS", ui64(iops));
         Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
@@ -377,6 +381,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", totalSpeed));
         Printer->AddResult("IOPS", ui64(totalIops));
         Printer->AddSpeedAndIops(TSpeedAndIops(totalSpeed, totalIops));

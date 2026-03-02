@@ -114,14 +114,35 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
-        if (!UringRouter && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
-            UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
-            if (const auto result = UringRouter->RegisterFile(); !result) {
-                STLOG(PRI_WARN, BS_DDISK, BSDD17,
-                    "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
-                    (DDiskId, DDiskId), (Errno, result.error()));
+        if (!UringRouter) {
+            if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+                UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
+                if (const auto result = UringRouter->RegisterFile(); !result) {
+                    STLOG(PRI_WARN, BS_DDISK, BSDD17,
+                        "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
+                        (DDiskId, DDiskId), (Errno, result.error()));
+                }
+                UringRouter->Start();
             }
-            UringRouter->Start();
+        }
+
+        if (UringRouter) {
+            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
+            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
+            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
+            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
+            *Counters.DirectIO.FallbackPDiskCount = 0;
+            if (actualFavor != requestedFavor) {
+                STLOG(PRI_INFO, BS_DDISK, BSDD17,
+                    "TDDiskActor::StartHandlingQueries io_uring mode fallback",
+                    (DDiskId, DDiskId),
+                    (RequestedFavor, requestedFavor),
+                    (ActualFavor, actualFavor));
+            }
+        } else {
+            *Counters.DirectIO.RegularUringCount = 0;
+            *Counters.DirectIO.FallbackUringCount = 0;
+            *Counters.DirectIO.FallbackPDiskCount = 1;
         }
 #endif
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvHandleSingleQuery, 0, SelfId(), SelfId(), nullptr, 0));

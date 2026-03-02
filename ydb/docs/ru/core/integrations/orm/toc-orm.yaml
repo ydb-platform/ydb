@@ -7,6 +7,10 @@ items:
   href: jooq.md
 - name: Dapper
   href: dapper.md
+- name: Entity Framework
+  href: entity-framework.md
+- name: Linq To Db
+  href: linq2db.md
 - name: SQLAlchemy
   href: sqlalchemy.md
 - name: Django

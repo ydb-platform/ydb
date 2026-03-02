@@ -6,7 +6,7 @@
 | [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Инструкция](../spring-data-jdbc.md) |
 | [JOOQ](https://www.jooq.org/)                                   | [Инструкция](../jooq.md)             |
 | [Dapper](https://www.learndapper.com/)                          | [Инструкция](../dapper.md)           |
-| [Entity Framework](https://docs.microsoft.com/ef/core/index)    | Инструкция |
-| [Linq To DB](https://linq2db.github.io/)                        | Инструкция |
+| [Entity Framework](https://docs.microsoft.com/ef/core/index)    | [Инструкция](../entity-framework.md) |
+| [Linq To DB](https://linq2db.github.io/)                        | [Инструкция](../linq2db.md)          |
 | [SQLAlchemy](https://www.sqlalchemy.org/)                       | [Инструкция](../sqlalchemy.md)       |
 | [Django](https://www.djangoproject.com/)                        | [Инструкция](../django.md)           |

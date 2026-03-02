@@ -342,7 +342,6 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
 
         TServices services;
         RegisterSampleTables(services);
-        auto pgm = ProgramText2Bin(programText, services);
         Y_DO_NOT_OPTIMIZE_AWAY(ProgramText2Bin(programText, services));
     }
 }

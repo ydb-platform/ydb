@@ -129,10 +129,10 @@ def do(args):
             row['CapacityAlert'] = None
 
             if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
-                row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage
+                row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage / 100
 
             if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
-                row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage / 100
             elif pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
                 # VDiskRawUsage metric was added in 26.1.1
                 # For older versions we calculate it on client side

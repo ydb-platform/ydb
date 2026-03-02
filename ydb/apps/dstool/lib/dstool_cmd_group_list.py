@@ -135,11 +135,11 @@ def do(args):
 
         # Aggregate capacity metrics - use max values
         if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
-            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage)
+            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage / 100)
 
         pdisk = pdisk_map[common.get_pdisk_id(vslot.VSlotId)]
         if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
-            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage)
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage / 100)
         elif pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
             # VDiskRawUsage metric was added in 26.1.1
             # For older versions we calculate it on client side

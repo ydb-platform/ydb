@@ -3,6 +3,8 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -64,9 +66,9 @@ protected:
 
 class TUpdateByValues: public TModifySourceBase {
 public:
-    TUpdateByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values)
+    TUpdateByValues(TPosition pos, TString operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName_(operationHumanName)
+        , OperationHumanName_(std::move(operationHumanName))
         , Values_(values)
     {
     }
@@ -113,9 +115,9 @@ protected:
 
 class TModifyByValues: public TModifySourceBase {
 public:
-    TModifyByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values)
+    TModifyByValues(TPosition pos, TString operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName_(operationHumanName)
+        , OperationHumanName_(std::move(operationHumanName))
         , Values_(values)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -177,9 +179,9 @@ private:
 
 class TModifyBySource: public TModifySourceBase {
 public:
-    TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
+    TModifyBySource(TPosition pos, TString operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName_(operationHumanName)
+        , OperationHumanName_(std::move(operationHumanName))
         , Source_(std::move(source))
     {
     }
@@ -289,7 +291,7 @@ public:
     TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped,
                       const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
         : TAstListNode(pos)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
         , Table_(table)
         , Mode_(mode)
         , Values_(std::move(values))

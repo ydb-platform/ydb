@@ -22,6 +22,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace NKikimr::NMiniKQL {
@@ -361,7 +362,7 @@ struct TComputationNodeFactoryContext {
     const TNodePushBack NodePushBack;
 
     TComputationNodeFactoryContext(
-        const TNodeLocator& nodeLocator,
+        TNodeLocator nodeLocator,
         const IFunctionRegistry& functionRegistry,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
@@ -378,10 +379,10 @@ struct TComputationNodeFactoryContext {
         TComputationMutables& mutables,
         TComputationNodeOnNodeMap& elementsCache,
         TNodePushBack&& nodePushBack)
-        : NodeLocator(nodeLocator)
+        : NodeLocator(std::move(nodeLocator))
         , FunctionRegistry(functionRegistry)
         , Env(env)
-        , TypeInfoHelper(typeInfoHelper)
+        , TypeInfoHelper(std::move(typeInfoHelper))
         , CountersProvider(countersProvider)
         , SecureParamsProvider(secureParamsProvider)
         , LogProvider(logProvider)
@@ -418,7 +419,7 @@ struct TComputationPatternOpts {
         const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode,
         NUdf::EValidatePolicy validatePolicy,
-        const TString& optLLVM,
+        TString optLLVM,
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr,
@@ -427,11 +428,11 @@ struct TComputationPatternOpts {
         NYql::TLangVersion langver = NYql::UnknownLangVersion)
         : AllocState(allocState)
         , Env(env)
-        , Factory(factory)
+        , Factory(std::move(factory))
         , FunctionRegistry(functionRegistry)
         , ValidateMode(validateMode)
         , ValidatePolicy(validatePolicy)
-        , OptLLVM(optLLVM)
+        , OptLLVM(std::move(optLLVM))
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)

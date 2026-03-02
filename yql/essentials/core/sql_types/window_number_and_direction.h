@@ -9,6 +9,7 @@
 #include <util/system/yassert.h>
 #include <util/generic/hash.h>
 
+#include <utility>
 #include <variant>
 
 namespace NYql::NWindow {
@@ -124,7 +125,7 @@ public:
 private:
     struct TPrivateTag {};
     TNumberAndDirection(TValueType value, EDirection direction, TPrivateTag)
-        : Value_(value)
+        : Value_(std::move(value))
         , Direction_(direction)
     {
         if constexpr (std::is_floating_point_v<TNumberType>) {

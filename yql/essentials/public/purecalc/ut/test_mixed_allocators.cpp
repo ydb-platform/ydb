@@ -6,6 +6,8 @@
 #include <yql/essentials/public/purecalc/io_specs/protobuf/spec.h>
 #include <yql/essentials/public/purecalc/ut/protos/test_structs.pb.h>
 
+#include <utility>
+
 using namespace NYql::NPureCalc;
 
 namespace {
@@ -71,8 +73,8 @@ class TStatelessConsumer: public IConsumer<NPureCalcProto::TStringMessage*> {
     ui64 RowId_ = 0;
 
 public:
-    TStatelessConsumer(const TString& expectedData, ui64 expectedRows)
-        : ExpectedData_(expectedData)
+    TStatelessConsumer(TString expectedData, ui64 expectedRows)
+        : ExpectedData_(std::move(expectedData))
         , ExpectedRows_(expectedRows)
     {
     }

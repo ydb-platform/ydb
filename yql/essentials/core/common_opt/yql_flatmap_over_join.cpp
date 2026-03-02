@@ -10,6 +10,7 @@
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
 #include <ranges>
+#include <utility>
 
 namespace NYql {
 
@@ -901,7 +902,7 @@ public:
     TJoinTreeRebuilder(const TJoinLabels& labels, TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
         TExprContext& ctx, bool rotateJoinTree)
         : JoinLabels_(labels)
-        , JoinTree_(joinTree)
+        , JoinTree_(std::move(joinTree))
         , Labels_{ label1, label2 }
         , Columns_{ column1, column2 }
         , Ctx_(ctx)

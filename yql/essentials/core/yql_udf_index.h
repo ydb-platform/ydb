@@ -8,6 +8,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 struct TFunctionInfo {
@@ -34,10 +36,10 @@ struct TDownloadLink {
 
     }
 
-    TDownloadLink(bool isUrl, const TString& path, const TString& md5)
+    TDownloadLink(bool isUrl, TString path, TString md5)
         : IsUrl(isUrl)
-        , Path(path)
-        , Md5(md5)
+        , Path(std::move(path))
+        , Md5(std::move(md5))
     {
     }
 

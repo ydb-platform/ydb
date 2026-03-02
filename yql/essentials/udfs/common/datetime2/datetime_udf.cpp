@@ -10,6 +10,7 @@
 #include <util/datetime/base.h>
 
 #include <concepts>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -2833,7 +2834,7 @@ private:
 
         TImpl(TSourcePosition pos, TUnboxedValue format, bool alwaysWriteFractionalSeconds, bool writeOffsetWithColon)
             : Pos_(pos)
-            , Format_(format)
+            , Format_(std::move(format))
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();

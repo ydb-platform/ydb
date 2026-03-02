@@ -18,7 +18,7 @@ struct TTableRef {
     TSourcePtr Source;
 
     TTableRef() = default;
-    TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys);
+    TTableRef(TString refName, const TString& service, TDeferredAtom cluster, TNodePtr keys);
     TTableRef(const TTableRef&) = default;
     TTableRef& operator=(const TTableRef&) = default;
 

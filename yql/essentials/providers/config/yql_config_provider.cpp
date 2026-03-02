@@ -23,6 +23,7 @@
 #include <util/generic/utility.h>
 #include <util/string/builder.h>
 
+#include <utility>
 #include <vector>
 
 namespace NYql {
@@ -134,13 +135,13 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                    const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
-        , Username_(username)
-        , Policy_(policy)
+        , Username_(std::move(username))
+        , Policy_(std::move(policy))
     {
     }
 

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace NYql {
 
@@ -1995,9 +1996,9 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, const TMapType& mapping)
+TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, TMapType mapping)
     : TConstraintNode(ctx, Name())
-    , Mapping_(mapping)
+    , Mapping_(std::move(mapping))
 {
     Hash_ = MurmurHash<ui64>(Mapping_.data(), Mapping_.size() * sizeof(TMapType::value_type), Hash_);
     YQL_ENSURE(!Mapping_.empty());

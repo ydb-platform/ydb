@@ -9,6 +9,8 @@
 #include <util/stream/null.h>
 #include <util/generic/scope.h>
 
+#include <utility>
+
 #ifdef GetMessage
     #undef GetMessage
 #endif
@@ -92,19 +94,19 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
-                   const NSQLTranslation::TSQLHints& hints,
+                   NSQLTranslation::TSQLHints hints,
                    TIssues& issues,
-                   const TString& query)
-    : Lexers(lexers)
-    , Parsers(parsers)
+                   TString query)
+    : Lexers(std::move(lexers))
+    , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
-    , SqlHints_(hints)
+    , SqlHints_(std::move(hints))
     , Settings(settings)
-    , Query(query)
+    , Query(std::move(query))
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)

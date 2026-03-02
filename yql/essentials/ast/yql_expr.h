@@ -49,6 +49,7 @@
 #include <unordered_map>
 #include <span>
 #include <stack>
+#include <utility>
 
 // #define YQL_CHECK_NODES_CONSISTENCY
 #ifdef YQL_CHECK_NODES_CONSISTENCY
@@ -1506,9 +1507,9 @@ class TErrorExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
-    TErrorExprType(ui64 hash, const TIssue& error)
+    TErrorExprType(ui64 hash, TIssue error)
         : TTypeAnnotationNode(KindValue, TypeHasError, hash, 0)
-        , Error_(error)
+        , Error_(std::move(error))
     {
     }
 

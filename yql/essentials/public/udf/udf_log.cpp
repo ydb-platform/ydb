@@ -4,6 +4,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 namespace NYql::NUdf {
 
 namespace {
@@ -39,8 +41,8 @@ public:
 
 class TSynchronizedLogger: public ILogger {
 public:
-    explicit TSynchronizedLogger(const TLoggerPtr& inner)
-        : Inner_(inner)
+    explicit TSynchronizedLogger(TLoggerPtr inner)
+        : Inner_(std::move(inner))
     {
     }
 
@@ -82,7 +84,7 @@ private:
 class TLogger: public ILogger {
 public:
     TLogger(TLogProviderFunc func, TMaybe<ELogLevel> filter)
-        : Func_(func)
+        : Func_(std::move(func))
         , Filter_(filter)
     {
     }
@@ -142,7 +144,7 @@ private:
 class TLogProvider: public ILogProvider {
 public:
     TLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter)
-        : Func_(func)
+        : Func_(std::move(func))
         , Filter_(filter)
     {
     }

@@ -12,6 +12,8 @@
 #include <util/system/env.h>
 #include <util/generic/queue.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -43,7 +45,7 @@ public:
         TOperationProgressWriter writer,
         bool withFinalize)
         : Types_(types)
-        , Writer_(writer)
+        , Writer_(std::move(writer))
         , WithFinalize_(withFinalize)
         , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     {

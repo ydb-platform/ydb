@@ -1,5 +1,8 @@
 #include "yql_expr_builder.h"
+
 #include "yql_expr.h"
+
+#include <utility>
 
 namespace NYql {
 
@@ -20,7 +23,7 @@ TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtAr
     , Container_(nullptr)
     , Pos_(pos)
     , CurrentNode_(nullptr)
-    , ExtArgsFunc_(extArgsFunc)
+    , ExtArgsFunc_(std::move(extArgsFunc))
 {
 }
 

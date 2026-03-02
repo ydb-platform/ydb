@@ -4,6 +4,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 template <NYql::TExprNode::EType Type>
@@ -48,7 +50,7 @@ public:
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

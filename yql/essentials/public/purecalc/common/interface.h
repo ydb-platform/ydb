@@ -21,6 +21,8 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
+#include <utility>
+
 class ITimeProvider;
 
 namespace NKikimr::NMiniKQL {
@@ -1071,8 +1073,8 @@ public:
         TInputSpec inputSpec,
         TOutputSpec outputSpec,
         std::shared_ptr<WorkerFactory> workerFactory)
-        : InputSpec_(inputSpec)
-        , OutputSpec_(outputSpec)
+        : InputSpec_(std::move(inputSpec))
+        , OutputSpec_(std::move(outputSpec))
         , WorkerFactory_(std::move(workerFactory))
     {
     }

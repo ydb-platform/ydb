@@ -151,7 +151,7 @@ public:
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
         , StatementResultIndex(statementResultIndex)
-        , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
+        , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())

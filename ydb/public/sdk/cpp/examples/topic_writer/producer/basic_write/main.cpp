@@ -20,19 +20,23 @@ std::string GetResultStatus(const T& writeResult) {
     return std::string(NEnumSerializationRuntime::ToStringBuf(writeResult.Status));
 }
 
-template<typename T>
-std::string GetErrorMessage(const T& result) {
+std::string GetFlushResultErrorMessage(const NYdb::NTopic::TFlushResult& result) {
     std::string errorMessage = "error occurred while writing message";
-    if constexpr (std::is_same_v<T, NYdb::NTopic::TWriteResult>) {
-        errorMessage += ", write status: " + GetResultStatus(result);
-        if (result.ErrorMessage) {
-            errorMessage += ", reason: ";
-            errorMessage += result.ErrorMessage.value();
-        }
+    errorMessage += ", flush status: " + GetResultStatus(result);
+    errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
+    if (result.ClosedDescription) {
+        errorMessage += ", producer is closed: ";
+        errorMessage += result.ClosedDescription.value().DebugString();
     }
-    if constexpr (std::is_same_v<T, NYdb::NTopic::TFlushResult>) {
-        errorMessage += ", flush status: " + GetResultStatus(result);
-        errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
+    return errorMessage;
+}
+
+std::string GetWriteResultErrorMessage(const NYdb::NTopic::TWriteResult& result) {
+    std::string errorMessage = "error occurred while writing message";
+    errorMessage += ", write status: " + GetResultStatus(result);
+    if (result.ErrorMessage) {
+        errorMessage += ", reason: ";
+        errorMessage += result.ErrorMessage.value();
     }
     if (result.ClosedDescription) {
         errorMessage += ", producer is closed: ";
@@ -54,7 +58,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
         if (writeResult.IsError()) {
             // this means that some non retryable error occurred, for example, producer was closed due to user error
             // in this case we need to stop retrying and see the close description (to simplify the example, we just print it to standard error)
-            std::cerr << GetErrorMessage(writeResult) << std::endl;
+            std::cerr << GetWriteResultErrorMessage(writeResult) << std::endl;
             return;
         }
 
@@ -75,7 +79,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
     if (flushResult.IsClosed()) {
         // if flush was not successful, this means that producer was closed due to non retryable error
         // in this case we should see the close description (to simplify the example, we just print it to standard error)
-        std::cerr << GetErrorMessage(flushResult) << std::endl;
+        std::cerr << GetFlushResultErrorMessage(flushResult) << std::endl;
     }
 }
 

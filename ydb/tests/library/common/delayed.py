@@ -147,8 +147,8 @@ def wait_tablets_are_active(client, tablet_ids=(), timeout_seconds=120, cluster=
             return False
         return True
 
-    wait_for(predicate, timeout_seconds)
-    predicate(raise_error=True)
+    if not wait_for(predicate, timeout_seconds):
+        predicate(raise_error=True)
     logger.info(
         "%d tablet(s) are active now." % len(
             tablet_ids

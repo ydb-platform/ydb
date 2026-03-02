@@ -146,7 +146,7 @@ private:
         for (auto& reader: readers) {
             TransferData(reader.Get(), &fileOutput);
         }
-
+        fileOutput.Flush();
         // move resulting file with table content to file storage
         return FileStorage_->PutFile(file.Name());
     }

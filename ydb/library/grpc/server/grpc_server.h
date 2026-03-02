@@ -324,15 +324,23 @@ public:
         ReportSdkBuildInfo_ = true;
     }
 
-    TString GetSdkBuildInfoIfNeeded(NYdbGrpc::IRequestContextBase* reqCtx) const {
+    static TString GetSdkBuildInfoIfNeeded(NYdbGrpc::IRequestContextBase* reqCtx, bool reportSdkBuildInfo) {
         TString result;
-        if (ReportSdkBuildInfo_) {
+        if (reportSdkBuildInfo) {
             const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
             if (!res.empty()) {
                 result = res[0];
             }
         }
         return result;
+    }
+
+    TString GetSdkBuildInfoIfNeeded(NYdbGrpc::IRequestContextBase* reqCtx) const {
+        return GetSdkBuildInfoIfNeeded(reqCtx, ReportSdkBuildInfo_);
+    }
+
+    bool GetReportSdkBuildInfo() const {
+        return ReportSdkBuildInfo_;
     }
 
 private:

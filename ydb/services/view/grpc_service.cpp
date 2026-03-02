@@ -16,7 +16,7 @@ void TGRpcViewService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_VIEW_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, view, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, view, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_VIEW_METHOD(DescribeView, DoDescribeView, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
 

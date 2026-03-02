@@ -66,7 +66,7 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
 #error SETUP_LOCAL_DISCOVERY_METHOD macro already defined
 #endif
 
-#define SETUP_LOCAL_DISCOVERY_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, operationCallClass) \
+#define SETUP_LOCAL_DISCOVERY_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, operationCallClass,...) \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                    \
         YDB_API_DEFAULT_REQUEST_TYPE(methodName),             \
         YDB_API_DEFAULT_RESPONSE_TYPE(methodName),            \
@@ -80,11 +80,12 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
         GRpcRequestProxyId_,                                  \
         CQ_,                                                  \
         nullptr,                                              \
-        nullptr)
+        nullptr, ##__VA_ARGS__                                \
+    )
 
     SETUP_LOCAL_DISCOVERY_METHOD(WhoAmI, DoWhoAmIRequest, RLMODE(Rps), DISCOVERY_WHOAMI, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
     SETUP_LOCAL_DISCOVERY_METHOD(NodeRegistration, DoNodeRegistrationRequest, RLMODE(Rps), DISCOVERY_NODEREGISTRATION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration), TGrpcRequestOperationCall);
-    SETUP_LOCAL_DISCOVERY_METHOD(ListEndpoints, std::bind(&TGRpcLocalDiscoveryService::DoListEndpointsRequest, this, _1, _2), RLMODE(Rps), DISCOVERY_LISTENDPOINTS, TAuditMode::NonModifying(), TGrpcRequestFunctionCall);
+    SETUP_LOCAL_DISCOVERY_METHOD(ListEndpoints, callback, RLMODE(Rps), DISCOVERY_LISTENDPOINTS, TAuditMode::NonModifying(), TGrpcRequestFunctionCall, callback = std::bind(&TGRpcLocalDiscoveryService::DoListEndpointsRequest, this, _1, _2)); // XXX unsafe
 
 #undef SETUP_LOCAL_DISCOVERY_METHOD
 }

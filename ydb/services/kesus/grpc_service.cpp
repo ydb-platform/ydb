@@ -668,7 +668,8 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             GRpcRequestProxyId_,                                                       \
             cq,                                                                        \
             nullptr,                                                                   \
-            nullptr);                                                                  \
+            nullptr,                                                                   \
+            isRlAllowed = IsRlAllowed());                                                                  \
     }
 
 #define GET_LIMITER_BY_PATH(ICB_PATH) \

@@ -1737,10 +1737,10 @@ protected:
         if (!StreamingQueryCounters) {
             StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
         }
-        if (!LastStreamingQueryUpdateCounters) {
-            LastStreamingQueryUpdateCounters = TInstant::Now() + TDuration::Seconds(5); // skip first update to prevent...
-        }
         auto now = TInstant::Now();
+        if (!LastStreamingQueryUpdateCounters) {
+            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+        }
         if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
             TAggExecStat stats;
             Stats->ExportAggExecStats(&stats);

@@ -6,13 +6,13 @@ This section describes the basic information about working with the external Cli
 
 To work with the external ClickHouse database, the following steps must be completed:
 
-1. Create a [secret](../../../datamodel/secrets.md) containing the password to connect to the database.
+1. Create a [secret](../datamodel/secrets.md) containing the password to connect to the database.
 
     ```yql
     CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (

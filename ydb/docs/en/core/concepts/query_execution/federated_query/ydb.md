@@ -4,7 +4,7 @@
 
 To connect to an external {{ ydb-short-name }} database from another {{ ydb-short-name }} database acting as the federated query engine, the following steps need to be performed on the latter:
 
-1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../../datamodel/secrets.md):
+1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../../datamodel/secrets.md):
 
     ```yql
     CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
@@ -57,7 +57,7 @@ There are several limitations when working with external {{ ydb-short-name }} da
     |---|---|---|
     |`NULL` checks|`WHERE column1 IS NULL` or `WHERE column1 IS NOT NULL`||
     |Logical conditions `OR`, `NOT`, `AND` and parentheses for controlling calculation priority. |`WHERE column1 IS NULL OR (column2 IS NOT NULL AND column3 > 10)`.||
-    |[Comparison operators](../../yql/reference/syntax/expressions.md#comparison-operators) with other columns or constants. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |[Comparison operators](../../../yql/reference/syntax/expressions.md#comparison-operators) with other columns or constants. |`WHERE column1 > column2 OR column3 <= 10`.||
     |String pattern matching operator `LIKE`.|`WHERE column1 LIKE '_abc%'`|Currently only supports pushdown of simple patterns based on prefixes (`'abc_'`, `'abc%'`), suffixes (`'_abc'`, `'%abc'`) or substring search (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). For more complex pattern pushdown, it is recommended to use `REGEXP`.|
     |String pattern matching operator `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
 

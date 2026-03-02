@@ -31,5 +31,5 @@ PEERDIR(
     yql/essentials/tests/common/test_framework
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 END()

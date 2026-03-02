@@ -20,5 +20,5 @@ DEPENDS(
     ydb/apps/ydb
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 END()

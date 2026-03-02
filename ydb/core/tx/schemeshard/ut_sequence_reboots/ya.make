@@ -28,5 +28,5 @@ SRCS(
     ut_sequence_reboots.cpp
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 END()

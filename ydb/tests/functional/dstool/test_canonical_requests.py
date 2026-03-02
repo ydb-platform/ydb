@@ -237,6 +237,9 @@ class Test(TestBase):
         ]
 
     def test_capacity_metrics(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+
         vdisk_columns = [
             'VDiskId',
             'NodeId:PDiskId',
@@ -257,7 +260,6 @@ class Test(TestBase):
             'UsedSize',
             'TotalSize',
             'CapacityAlert',
-            'SizeInUnits',
         ]
 
         return [

@@ -194,6 +194,7 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
+            system_tablet_backup_config=None,
             protected_mode=False,  # Authentication
             enable_pool_encryption=False,
             tiny_mode=False,
@@ -656,6 +657,9 @@ class KikimrConfigGenerator(object):
 
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
+
+        if system_tablet_backup_config:
+            self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

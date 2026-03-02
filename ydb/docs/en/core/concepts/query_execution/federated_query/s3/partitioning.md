@@ -62,7 +62,7 @@ then during the query execution, not all data will be read from S3 ({{ objstorag
 
 {% note info %}
 
-The example above shows working with data at the level of [connections](../../datamodel/external_data_source.md). This example is chosen for illustrative purposes only. We strongly recommend using "data bindings" to work with data and not using direct work with connections.
+The example above shows working with data at the level of [connections](../../../datamodel/external_data_source.md). This example is chosen for illustrative purposes only. We strongly recommend using "data bindings" to work with data and not using direct work with connections.
 
 {% endnote %}
 

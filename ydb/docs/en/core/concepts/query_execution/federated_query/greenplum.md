@@ -4,13 +4,13 @@ This section provides basic information on working with external [Greenplum](htt
 
 Follow these steps to work with an external Greenplum database:
 
-1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
+1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific database within the Greenplum cluster. In the `LOCATION` parameter, pass the network address of the [master node](https://greenplum.org/introduction-to-greenplum-architecture/) of Greenplum. By default, the [namespace](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific database within the Greenplum cluster. In the `LOCATION` parameter, pass the network address of the [master node](https://greenplum.org/introduction-to-greenplum-architecture/) of Greenplum. By default, the [namespace](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (

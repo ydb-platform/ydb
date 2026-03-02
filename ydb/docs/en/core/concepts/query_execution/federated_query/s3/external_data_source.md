@@ -40,7 +40,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 
 ## Using an External Connection to an S3 Bucket {#external-data-source-settings}
 
-When working with {{ objstorage-full-name }} using [external data sources](../../datamodel/external_data_source.md), it is convenient to perform prototyping and initial data connection setup.
+When working with {{ objstorage-full-name }} using [external data sources](../../../datamodel/external_data_source.md), it is convenient to perform prototyping and initial data connection setup.
 
 An example query to read data:
 

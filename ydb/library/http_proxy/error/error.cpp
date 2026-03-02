@@ -1,5 +1,6 @@
 #include "error.h"
-#include "util/generic/maybe.h"
+#include <util/generic/maybe.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NSQS {
 

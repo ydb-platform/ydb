@@ -53,15 +53,15 @@ public:
     }
 
     TNodeResult Build(const TRule_select_subexpr& rule, EColumnRefState state) {
-        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
-        if (!rule.GetBlock2().empty()) {
-            return Unsupported("(union_op select_subexpr_intersect)*");
+        if (!IsOnlySubExpr(rule)) {
+            return Finalize(BuildUnion(rule, TYqlSelectArgs()));
         }
 
+        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
+        YQL_ENSURE(rule.GetBlock2().empty(), "Unexpected (union_op select_subexpr_intersect)*");
+
         const auto& select_or_expr = intersect.GetRule_select_or_expr1();
-        if (!intersect.GetBlock2().empty()) {
-            return Unsupported("(intersect_op select_or_expr)*");
-        }
+        YQL_ENSURE(intersect.GetBlock2().empty(), "Unexpected (intersect_op select_or_expr)*");
 
         return Build(select_or_expr, state);
     }
@@ -84,6 +84,10 @@ private:
             return rule.GetRule_select_unparenthesized_stmt_intersect1();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect>) {
             return rule.GetRule_select_kind_partial1();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr>) {
+            return rule.GetRule_select_subexpr_intersect1();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect>) {
+            return rule.GetRule_select_or_expr1();
         } else {
             static_assert(false);
         }
@@ -100,6 +104,10 @@ private:
             return block.GetRule_select_stmt_intersect2();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect::TBlock2>) {
             return block.GetRule_select_kind_parenthesis2();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr::TBlock2>) {
+            return block.GetRule_select_subexpr_intersect2();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect::TBlock2>) {
+            return block.GetRule_select_or_expr2();
         } else {
             static_assert(false);
         }
@@ -107,7 +115,8 @@ private:
 
     template <class TRule>
         requires std::is_same_v<TRule, TRule_select_stmt> ||
-                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt>
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt> ||
+                 std::is_same_v<TRule, TRule_select_subexpr>
     TSQLResult<TYqlSelectArgs>
     BuildUnion(const TRule& rule, TYqlSelectArgs&& select) {
         {
@@ -136,7 +145,8 @@ private:
 
     template <class TRule>
         requires std::is_same_v<TRule, TRule_select_stmt_intersect> ||
-                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect>
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect> ||
+                 std::is_same_v<TRule, TRule_select_subexpr_intersect>
     TSQLResult<TYqlSelectArgs>
     BuildIntersection(const TRule& rule, TYqlSelectArgs&& select) {
         {
@@ -233,6 +243,22 @@ private:
         select.Limit = std::move(next.Limit);
         select.Offset = std::move(next.Offset);
         return select;
+    }
+
+    TSQLResult<TYqlSelectArgs> Build(
+        const TRule_select_or_expr& rule,
+        TYqlSelectArgs&& select)
+    {
+        switch (rule.GetAltCase()) {
+            case TRule_select_or_expr::kAltSelectOrExpr1: {
+                const auto& alt = rule.GetAlt_select_or_expr1();
+                return Build(alt.GetRule_select_kind_partial1(), std::move(select));
+            }
+            case TRule_select_or_expr::kAltSelectOrExpr2:
+                return Unsupported("tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+            case TRule_select_or_expr::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
     }
 
     TNodeResult Build(const TRule_exists_expr::TBlock3& block) {

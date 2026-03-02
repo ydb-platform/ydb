@@ -94,6 +94,7 @@ oidc:
         TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_oidc_proxy_empty_secret_info", ".yaml");
 
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TMVP(3, argv), yexception, "has empty value in auth token config secret_info");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TMVP(3, argv), yexception, "requires either secret or secret_file");
     }
+
 }

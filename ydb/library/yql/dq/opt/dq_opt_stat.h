@@ -50,6 +50,29 @@ struct TOrderingInfo {
     TVector<TJoinColumn> Ordering{};
 };
 
+enum class ELogicalOperator : ui8 { And, Or, Leaf };
+
+struct TPredicateRange {
+    TMaybe<NNodes::TExprBase> Left;
+    TMaybe<NNodes::TExprBase> Right;
+    TMaybe<std::pair<TMaybe<TString>, TMaybe<TString>>> RangeBound;
+    TMaybe<EInequalityPredicateType> CompareSign;
+};
+
+struct TTreeNode {
+    ELogicalOperator Operator;
+
+    // For And / Or
+    TVector<std::shared_ptr<TTreeNode>> Children;
+
+    // For Leaf
+    TString Column;
+    TString TableAlias;
+    double Selectivity = 0.0;
+    bool CollectMembers = false;
+    TMaybe<TVector<TPredicateRange>> AllRanges;
+};
+
 TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
 TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
 TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
@@ -113,28 +136,63 @@ public:
     }
 
 protected:
-    double ComputeImpl(
+    std::shared_ptr<TTreeNode> ComputeImpl(
         const NNodes::TExprBase& input,
         bool underNot,
         bool collectConstantMembers
     );
 
     double ComputeEqualitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
         bool collectConstantMembers
     );
 
     double ComputeInequalitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
         bool collectConstantMembers,
         EInequalityPredicateType predicate
     );
 
     double ComputeComparisonSelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool is_contain_str
+    );
+
+    std::shared_ptr<TTreeNode> ConvertEqualityToRange(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessSetPredicate(
+        const NNodes::TExprBase& left,
+        const TExprNode::TPtr list,
+        bool underNot,bool collectMembers
+    );
+
+    std::shared_ptr<TTreeNode> ConvertInequalityToRange(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectMembers,
+        EInequalityPredicateType inequalitySign
+    );
+
+    std::shared_ptr<TTreeNode> ProcessRegexPredicte(
+        bool underNot,
+        bool collectMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessStringPredicate(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectMembers,
+        bool is_contain_str
     );
 
 private:

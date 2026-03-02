@@ -18,7 +18,7 @@ inputs:
     description: "small or small-medium or all"
   test_threads:
     required: false
-    default: "56"
+    default: "14"
     description: "Test threads count"
   link_threads:
     required: false
@@ -211,7 +211,7 @@ runs:
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
-          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          --test-threads "14" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
         )
 

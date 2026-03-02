@@ -21,3 +21,46 @@ def test_kikimr_config_generator_generic_connector_config():
     ]
     assert yaml_config["feature_flags"]["enable_external_data_sources"] is True
     assert yaml_config["feature_flags"]["enable_script_execution_operations"] is True
+
+
+def test_kikimr_config_generator_nbs_config():
+    nbs_database = "/Root/NBS"
+    cfg_gen = KikimrConfigGenerator(
+        enable_nbs=True,
+        nbs_database=nbs_database
+    )
+    yaml_config = cfg_gen.yaml_config
+
+    # Check that NBS config is present and enabled
+    assert "nbs_config" in yaml_config
+    assert yaml_config["nbs_config"]["enabled"] is True
+
+    # Check NBS storage config
+    nbs_storage_config = yaml_config["nbs_config"]["nbs_storage_config"]
+    assert nbs_storage_config["scheme_shard_dir"] == nbs_database
+    assert nbs_storage_config["folder_id"] == "testFolder"
+    assert nbs_storage_config["ssd_system_channel_pool_kind"] == "hdd"
+    assert nbs_storage_config["ssd_log_channel_pool_kind"] == "hdd"
+    assert nbs_storage_config["ssd_index_channel_pool_kind"] == "hdd"
+    assert nbs_storage_config["pipe_client_retry_count"] == 3
+    assert nbs_storage_config["pipe_client_min_retry_time"] == 1
+    assert nbs_storage_config["pipe_client_max_retry_time"] == 10
+
+
+def test_kikimr_config_generator_nbs_config_default_database():
+    # Test with default nbs_database value
+    cfg_gen = KikimrConfigGenerator(enable_nbs=True)
+    yaml_config = cfg_gen.yaml_config
+
+    # Check that NBS config uses default database path
+    assert "nbs_config" in yaml_config
+    assert yaml_config["nbs_config"]["enabled"] is True
+    assert yaml_config["nbs_config"]["nbs_storage_config"]["scheme_shard_dir"] == "/Root/NBS"
+
+
+def test_kikimr_config_generator_nbs_disabled():
+    cfg_gen = KikimrConfigGenerator()
+    yaml_config = cfg_gen.yaml_config
+
+    # Check that NBS config is not present when disabled
+    assert "nbs_config" not in yaml_config

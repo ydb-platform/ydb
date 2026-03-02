@@ -3596,6 +3596,95 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "test-data\"Data\"\n\"test-data\"\n\"Data\"\n\"test-data\"\n");
     }
+
+    Y_UNIT_TEST(TestFilesCreationWithS3BlockInsert) {
+        constexpr char bucket[] = "testFilesCreationWithS3BlockInsertBucket";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char tableName[] = "olapTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE TABLE `{table}` (
+                    time Timestamp NOT NULL,
+                    class String NOT NULL,
+                    PRIMARY KEY (time, class)
+                ) WITH (
+                    STORE = COLUMN
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "table"_a = tableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        constexpr ui64 size = 1'000'000;
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                UPSERT INTO `{table}`
+                    (time, class)
+                SELECT
+                    CurrentUtcTimestamp(TableRow()) AS time,
+                    CAST(RandomUuid(TableRow()) AS String) AS class
+                FROM AS_TABLE(ListReplicate(<|A: 1|>, {size}));)",
+                "size"_a = size,
+                "table"_a = tableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        constexpr ui64 tasks = 10;
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                PRAGMA s3.UseBlocksSink = "true";
+                PRAGMA ydb.MaxTasksPerStage = "{tasks}";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": {tasks} }}
+                ] @@;
+
+                INSERT INTO `{external_source}`.`tests/`
+                WITH (FORMAT = parquet)
+                SELECT * FROM `{table}`;)",
+                "external_source"_a = externalDataSourceName,
+                "table"_a = tableName,
+                "tasks"_a = tasks
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        UNIT_ASSERT_GE(tasks, GetObjectKeys(bucket).size());
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                SELECT COUNT(*) FROM `{external_source}`.`tests/`
+                WITH (
+                    FORMAT = parquet,
+                    SCHEMA (
+                        time Timestamp,
+                        class String
+                    )
+                );)",
+                "external_source"_a = externalDataSourceName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), size);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

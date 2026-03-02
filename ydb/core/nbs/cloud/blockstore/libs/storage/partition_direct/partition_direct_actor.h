@@ -12,11 +12,21 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/blockstore/core/blockstore.h>
+
+#include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TDiskIds
+{
+    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
+    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
+};
+using TPartitionIds = TVector<TDiskIds>;
 
 class TPartitionActor
     : public NActors::TActor<TPartitionActor>
@@ -38,9 +48,10 @@ private:
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
-
+    bool DdiskBlockGroupAllocated = false;
 
 public:
+    static constexpr size_t NumDirectBlockGroups = 32;
     TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);
 
 private:
@@ -81,6 +92,20 @@ private:
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
+    void Start(
+        const NActors::TActorContext& ctx,
+        TPartitionIds ids);
+
+    bool HaveStoredTabletInfo();
+
+    void LoadTabletInfo(const NActors::TActorContext& ctx,
+                        TPartitionIds &ids);
+
+    void StoreTabletInfo(
+        const NActors::TActorContext& ctx,
+        const TPartitionIds& ids);
+
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

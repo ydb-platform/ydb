@@ -792,7 +792,6 @@
         "FoundGroups": 5,
         "StorageGroups": [
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -894,7 +893,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -998,7 +996,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -13614,7 +13611,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "monitoring"
     },
     "test.TestViewer.test_whoami_root": {
@@ -13635,7 +13631,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "root"
     },
     "test.TestViewer.test_whoami_viewer": {
@@ -13649,7 +13644,6 @@
         "IsMonitoringAllowed": false,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "viewer"
     }
 }

@@ -16,7 +16,12 @@
 - [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
 - [векторный индекс](../../../../concepts/glossary.md#vector-index);
-- [топик](../../../../concepts/datamodel/topic.md) (только схема).
+- [топик](../../../../concepts/datamodel/topic.md) (только схема);
+- [представление (view)](../../../../concepts/datamodel/view.md);
+- [асинхронная репликация](../../../../concepts/async-replication.md);
+- [трансфер](../../../../concepts/transfer.md);
+- [внешний источник данных](../../../../concepts/datamodel/external_data_source.md);
+- [внешняя таблица](../../../../concepts/datamodel/external_table.md).
 
 Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 

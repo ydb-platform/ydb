@@ -42,8 +42,8 @@ void TMvpStartupOptions::ValidateOAuth2ExchangeTokenEndpointScheme(
     }
 }
 
-void TMvpStartupOptions::ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride) {
-    if (AccessServiceType != NMvp::nebius_v1) {
+void TMvpStartupOptions::ValidateTokensFromConfig(const NMvp::TTokensConfig& tokensOverride) {
+    if (AccessServiceTypeFromConfig && *AccessServiceTypeFromConfig != NMvp::nebius_v1) {
         ythrow yexception() << CONFIG_ERROR_PREFIX << "auth.tokens overrides are only supported for Nebius access service type";
     }
     ValidateOAuth2ExchangeTokenNames(tokensOverride.GetOAuth2Exchange(), "'auth.tokens.oauth2_exchange'");

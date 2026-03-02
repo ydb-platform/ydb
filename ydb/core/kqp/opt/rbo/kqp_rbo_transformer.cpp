@@ -324,39 +324,18 @@ void TKqpNewRBOTransformer::Rewind() {
 }
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
-    output = input;
     TOptimizeExprSettings settings(&TypeCtx);
-
     Y_UNUSED(ctx);
+    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(input), ctx) << Endl;
 
-    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(output), ctx) << Endl;
-
-
-    if (output->IsList() && output->ChildrenSize() >= 1) {
-        auto child_level_1 = output->Child(0);
-        YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
-
-        if (child_level_1->IsList() && child_level_1->ChildrenSize() >= 1) {
-            auto child_level_2 = child_level_1->Child(0);
-            YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
-
-            if (child_level_2->IsList() && child_level_2->ChildrenSize() >= 1) {
-                auto child_level_3 = child_level_2->Child(0);
-                YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
-
-                if (child_level_3->IsList() && child_level_2->ChildrenSize() >= 1) {
-                    auto maybeQuery = child_level_3->Child(0);
-
-                    if (TKqpPhysicalQuery::Match(maybeQuery)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Found query node";
-                        output = maybeQuery;
-                    }
-                }
-            }
-        }
+    // We just need to find a physical query callable.
+    auto physicalQueries = FindNodes(input, [](const TExprNode::TPtr& node) { return TKqpPhysicalQuery::Match(node.Get()); });
+    if (physicalQueries.size() == 1) {
+        output = physicalQueries.front();
+        return IGraphTransformer::TStatus::Ok;
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    return IGraphTransformer::TStatus::Error;
 }
 
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,

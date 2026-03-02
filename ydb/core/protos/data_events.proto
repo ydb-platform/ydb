@@ -245,6 +245,7 @@ message TEvLockRowsResult {
         STATUS_SCHEME_ERROR = 6;
         STATUS_SCHEME_CHANGED = 7;
         STATUS_INTERNAL_ERROR = 8;
+        STATUS_DEADLOCK = 9;
     }
 
     // TabletId of the replying shard

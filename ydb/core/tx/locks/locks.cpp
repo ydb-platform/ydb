@@ -217,10 +217,7 @@ void TLockInfo::OnRemoved() {
         Ranges.clear();
     }
 
-    while (!OnRemovedCallbacks.Empty()) {
-        auto* callback = OnRemovedCallbacks.PopFront();
-        callback->Run();
-    }
+    OnRemovedEvent.NotifyAll();
 }
 
 void TLockInfo::PersistLock(ILocksDb* db) {
@@ -631,7 +628,7 @@ void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
     WriteLocks.erase(lock);
 }
 
-TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell> key) {
+TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock) {
     auto it = RuntimeLocks.find(key);
     if (it == RuntimeLocks.end()) {
         auto res = RuntimeLocks.emplace(
@@ -641,23 +638,21 @@ TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell
         Y_ENSURE(res.second);
         it = res.first;
     }
-    TRuntimeLockHolder holder(this, it);
+    TRuntimeLockHolder holder(this, it, std::move(lock));
     it->second.PushBack(&holder);
     return holder;
 }
 
 void TTableLocks::RemoveRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder) {
     Y_ENSURE(key->second);
-    const bool wasFirst = key->second.Front() == holder;
+    TRuntimeLockHolder* next = key->second.Back() != holder ? holder->Next()->Node() : nullptr;
     holder->Unlink();
-    if (wasFirst) {
-        if (key->second) {
-            // Activate the next lock holder
-            key->second.Front()->Activate();
-        } else {
-            // This key has no holders, remove
-            RuntimeLocks.erase(key);
-        }
+    if (next) {
+        // Activate the next lock holder (predecessor changed)
+        next->OnChangedEvent.NotifyAll();
+    } else if (!key->second) {
+        // This key has no holders, remove
+        RuntimeLocks.erase(key);
     }
 }
 
@@ -1753,9 +1748,10 @@ bool TSysLocks::RestorePersistentState(ILocksDb* db) {
 }
 
 TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArrayRef<TCell> key) {
+    Y_ENSURE(Update && Update->Lock);
     auto* table = Locker.FindTablePtr(tableId);
     Y_ENSURE(table, "Cannot find table " << tableId);
-    return table->AddRuntimeLock(key);
+    return table->AddRuntimeLock(key, Update->Lock);
 }
 
 }}

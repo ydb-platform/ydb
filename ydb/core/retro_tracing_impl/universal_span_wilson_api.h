@@ -110,7 +110,7 @@ public:
     TUniversalSpanWilsonApi& Attribute(T&& name, T1&& value) {
         std::visit(TOverloaded{
             [&](NWilson::TSpan& span) -> void {
-                span.Attribute(std::move(name), std::move(value));
+                span.Attribute(std::forward<T>(name), std::forward<T1>(value));
             },
             [&](const TRetroSpanType&) -> void {},
             [&](const std::monostate&) -> void {},
@@ -123,7 +123,7 @@ public:
     TUniversalSpanWilsonApi& Event(T&& name, T1&& attributes) {
         std::visit(TOverloaded{
             [&](NWilson::TSpan& span) -> void {
-                span.Event(std::move(name), std::move(attributes));
+                span.Event(std::forward<T>(name), std::forward<T1>(attributes));
             },
             [&](const TRetroSpanType&) -> void {},
             [&](const std::monostate&) -> void {},
@@ -143,7 +143,7 @@ public:
     template<typename T = std::initializer_list<std::pair<TString, NWilson::TAttributeValue>>>
     TUniversalSpanWilsonApi& Link(const NWilson::TTraceId& traceId, T&& attributes) {
         std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void { span.Link(traceId, std::move(attributes)); },
+            [&](NWilson::TSpan& span) -> void { span.Link(traceId, std::forward<T>(attributes)); },
             [&](const TRetroSpanType&) -> void {},
             [&](const std::monostate&) -> void {},
         }, this->Span);

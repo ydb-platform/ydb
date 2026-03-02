@@ -94,7 +94,8 @@ def _init_stress_utils():
                 "--endpoint", "grpc://{node_host}:2135",
                 "--owner-idx", "{global_run_id}",
                 "--tsserver-port", "31313",
-                "--tsserver-host", "{node_host}"
+                "--tsserver-host", "{node_host}",
+                "--monitoring-port", "8765"
             ],
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
             'nodes_percentage': 1

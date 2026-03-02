@@ -8,10 +8,10 @@ Provides:
 - Decorators: @report_*_exception for automatic tracking
 """
 
+import time
 import functools
 import os
 import sys
-import time
 import traceback
 import json
 import threading
@@ -97,6 +97,30 @@ class MetricsPublisher:
                 print(f"Error: Could not save event: {traceback.format_exc()}",
                       file=sys.stderr)
 
+    def publish_many(self, events: list[ErrorEvent]):
+        """
+        Publishes multiple events according to configured mode.
+
+        Args:
+            events: List of events to publish
+        """
+        if not events:
+            return
+
+        if self.mode in ['send', 'both']:
+            try:
+                self._send_to_server_many(events)
+            except Exception:
+                print(f"Error: Could not send events: {traceback.format_exc()}",
+                      file=sys.stderr)
+
+        if self.mode in ['save', 'both']:
+            try:
+                self._save_to_file_many(events)
+            except Exception:
+                print(f"Error: Could not save events: {traceback.format_exc()}",
+                      file=sys.stderr)
+
     def _save_to_file(self, event: ErrorEvent):
         """Saves event to file."""
         event_data = {
@@ -131,7 +155,7 @@ class MetricsPublisher:
             "metrics": [
                 {
                     "labels": labels,
-                    "value": 0 if event.type == 'success' else 1
+                    "value": 1
                 }
             ]
         }
@@ -151,6 +175,79 @@ class MetricsPublisher:
             print(f"HTTP Error: {err}", file=sys.stderr)
         except requests.exceptions.RequestException as err:
             print(f"An error occurred: {err}", file=sys.stderr)
+
+    def _send_to_server_many(self, events: list[ErrorEvent]):
+        """Sends multiple events to metrics server in a single request."""
+        # Aggregate events by their labels
+        aggregated_metrics = {}
+
+        for event in events:
+            labels = {
+                "sensor": "test_metric",
+                "name": "stress_util_error",
+                "stress_util": event.stress_util_name,
+                "type": event.type,
+                "kind": event.kind,
+            }
+
+            if hasattr(event, 'operation') and event.operation:
+                labels['operation'] = event.operation
+
+            # Create a unique key for aggregation
+            key = tuple(sorted(labels.items()))
+
+            if key not in aggregated_metrics:
+                aggregated_metrics[key] = {
+                    "labels": labels,
+                    "count": 0
+                }
+
+            aggregated_metrics[key]["count"] += 1
+
+        # Convert aggregated metrics to the required format
+        metrics = []
+        for metric_data in aggregated_metrics.values():
+            metrics.append({
+                "labels": metric_data["labels"],
+                "ts": int(time.time()),
+                "value": metric_data["count"]
+            })
+
+        payload = {"metrics": metrics[:10000]}
+        headers = {'Content-Type': 'application/json'}
+
+        try:
+            response = requests.post(self.server_url, json=payload,
+                                     headers=headers, timeout=5)
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            print(f"Error: Could not connect to {self.server_url}. "
+                  f"Is the server running?", file=sys.stderr)
+        except requests.exceptions.Timeout:
+            print(f"Error: Request to {self.server_url} timed out.",
+                  file=sys.stderr)
+        except requests.exceptions.HTTPError as err:
+            print(f"HTTP Error: {err}", file=sys.stderr)
+        except requests.exceptions.RequestException as err:
+            print(f"An error occurred: {err}", file=sys.stderr)
+
+    def _save_to_file_many(self, events: list[ErrorEvent]):
+        """Saves multiple events to file."""
+        with self.save_lock:
+            with open(self.file_path, "a") as f:
+                for event in events:
+                    event_data = {
+                        "timestamp": time.time(),
+                        "kind": event.kind,
+                        "type": event.type,
+                        "stress_util_name": event.stress_util_name,
+                    }
+
+                    if hasattr(event, 'operation') and event.operation:
+                        event_data['operation'] = event.operation
+
+                    json.dump(event_data, f)
+                    f.write('\n')
 
 
 _global_publisher = MetricsPublisher(__event_process_mode)

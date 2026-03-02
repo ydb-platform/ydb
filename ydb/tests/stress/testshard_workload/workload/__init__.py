@@ -1,13 +1,18 @@
+from dataclasses import dataclass, field
+import json
 import logging
 import subprocess
 import tempfile
 import os
 import stat
 import time
+from typing import Optional
+import urllib
 from library.python import resource
 
 
 from ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.stress.common.publish_metrics import ErrorEvent, get_metrics_publisher
 
 logger = logging.getLogger("YdbTestShardWorkload")
 
@@ -47,8 +52,158 @@ validation:
 """
 
 
+@dataclass
+class OperationCounters:
+    ok: int = 0
+    fail: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.ok + self.fail
+
+    @property
+    def success_rate(self) -> float:
+        return self.ok / self.total if self.total > 0 else 1.0
+
+    def __add__(self, other: 'OperationCounters') -> 'OperationCounters':
+        return OperationCounters(
+            ok=self.ok + other.ok,
+            fail=self.fail + other.fail
+        )
+
+
+@dataclass
+class TestShardStats:
+    tablet_id: int
+    write: OperationCounters = field(default_factory=OperationCounters)
+    patch: OperationCounters = field(default_factory=OperationCounters)
+    delete: OperationCounters = field(default_factory=OperationCounters)
+    read: OperationCounters = field(default_factory=OperationCounters)
+    overall_success_rate: float = 1.0
+    error: Optional[str] = None
+
+
+class TestShardStatsCollector:
+    def __init__(self, monitoring_url: str):
+        self.publisher = get_metrics_publisher()
+        self.monitoring_url = monitoring_url
+
+    def fetch_tablet_stats(self, tablet_id: int, timeout: int = 5) -> TestShardStats:
+        url = f"{self.monitoring_url}/tablets/app?TabletID={tablet_id}&json=1"
+        stats = TestShardStats(tablet_id=tablet_id)
+
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                data = json.loads(response.read().decode('utf-8'))
+
+            def parse_counters(name: str) -> OperationCounters:
+                counters_data = data.get(name, {})
+                return OperationCounters(
+                    ok=counters_data.get('ok', 0),
+                    fail=counters_data.get('fail', 0)
+                )
+
+            stats.write = parse_counters('writeCounters')
+            stats.patch = parse_counters('patchCounters')
+            stats.delete = parse_counters('deleteCounters')
+            stats.read = parse_counters('readCounters')
+            stats.overall_success_rate = data.get('overallSuccessRate', 1.0)
+
+        except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as e:
+            stats.error = str(e)
+            logger.debug(f"Failed to fetch stats for tablet {tablet_id}: {e}")
+
+        return stats
+
+    def aggregate_stats(self, stats_list: list[TestShardStats]) -> dict:
+        total_write = OperationCounters()
+        total_patch = OperationCounters()
+        total_delete = OperationCounters()
+        total_read = OperationCounters()
+
+        successful_tablets = 0
+        failed_tablets = 0
+
+        for stats in stats_list:
+            if stats.error:
+                failed_tablets += 1
+                continue
+
+            successful_tablets += 1
+            total_write += stats.write
+            total_patch += stats.patch
+            total_delete += stats.delete
+            total_read += stats.read
+
+        total_overall = total_write + total_patch + total_delete + total_read
+
+        return {
+            'tablets': {
+                'total': len(stats_list),
+                'successful': successful_tablets,
+                'failed': failed_tablets,
+            },
+            'write': total_write,
+            'patch': total_patch,
+            'delete': total_delete,
+            'read': total_read,
+            'overall': total_overall,
+        }
+
+    def print_stats(self, aggregated: dict):
+        tablets = aggregated['tablets']
+        logger.info(f"Tablets: {tablets['successful']}/{tablets['total']} responding")
+        if tablets['failed'] > 0:
+            logger.warning(f"{tablets['failed']} tablets failed to respond")
+
+        def format_counters(name: str, data: OperationCounters) -> str:
+            rate_pct = data.success_rate * 100
+            return f"{name:10s}: {data.ok:>10d} ok / {data.fail:>10d} fail / {data.total:>10d} total = {rate_pct:>7.3f}%"
+
+        logger.info(format_counters("Write", aggregated['write']))
+        logger.info(format_counters("Patch", aggregated['patch']))
+        logger.info(format_counters("Delete", aggregated['delete']))
+        logger.info(format_counters("Read", aggregated['read']))
+        logger.info("-" * 70)
+        logger.info(format_counters("Overall", aggregated['overall']))
+
+    def publish_stats(self, stats_list: list[TestShardStats]):
+        if self.publisher.mode is None:
+            return
+        
+        events = []
+        stress_util_name = 'ydb.tests.stress.testshard_workload.workload'
+        
+        def create_event(operation: str, type: str, count: int):
+            """Helper function to create a single event with count."""
+            if count <= 0:
+                return
+            e = ErrorEvent()
+            e.stress_util_name = stress_util_name
+            e.operation = operation
+            e.type = type
+            e.kind = 'query'
+            # Add the event multiple times (will be aggregated by _send_to_server_many)
+            for _ in range(count):
+                events.append(e)
+        
+        for stat_item in stats_list:
+            create_event('write', 'success', stat_item.write.ok)
+            create_event('write', 'fail', stat_item.write.fail)
+            create_event('read', 'success', stat_item.read.ok)
+            create_event('read', 'fail', stat_item.read.fail)
+            create_event('patch', 'success', stat_item.patch.ok)
+            create_event('patch', 'fail', stat_item.patch.fail)
+            create_event('delete', 'success', stat_item.delete.ok)
+            create_event('delete', 'fail', stat_item.delete.fail)
+        
+        self.publisher.publish_many(events)
+
+
 class YdbTestShardWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_port=35000, tsserver_host='localhost'):
+    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_host='localhost',
+                 tsserver_port=35000, stats_interval=10, monitoring_port=8765):
         self.tsserver_process = None
         self.tempdir = None
         super().__init__(None, '', 'testshard', None)
@@ -61,6 +216,9 @@ class YdbTestShardWorkload(WorkloadBase):
         self.channels = channels
         self.tsserver_port = tsserver_port
         self.tsserver_host = tsserver_host
+        self.stats_interval = stats_interval
+        self.monitoring_port = monitoring_port
+        self.tablet_ids = []
         self._unpack_resource('ydb_cli')
         self._unpack_resource('tsserver')
         self._prepare_config()
@@ -116,9 +274,47 @@ class YdbTestShardWorkload(WorkloadBase):
             '--database={}'.format(self.database),
         ]
 
-    def cmd_run(self, cmd):
+    def _get_monitoring_url(self) -> str:
+        host = self.endpoint.replace('grpc://', '').replace('grpcs://', '').split(':')[0]
+        return f"http://{host}:{self.monitoring_port}"
+
+    def cmd_run(self, cmd) -> str:
         logger.info(f"Executing: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True, text=True)
+        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        return result.stdout
+
+    def _parse_tablet_ids(self, output: str) -> list[int]:
+        tablet_ids = []
+        for line in output.split('\n'):
+            if 'Tablet IDs:' in line:
+                ids_part = line.split('Tablet IDs:')[1].strip()
+                for id_str in ids_part.split(','):
+                    id_str = id_str.strip()
+                    if id_str:
+                        try:
+                            tablet_ids.append(int(id_str))
+                        except ValueError:
+                            logger.warning(f"Failed to parse tablet ID: {id_str}")
+        return tablet_ids
+
+    def _fetch_and_print_stats(self):
+        if not self.tablet_ids:
+            logger.warning("No tablet IDs available for stats collection")
+            return
+
+        monitoring_url = self._get_monitoring_url()
+        collector = TestShardStatsCollector(monitoring_url)
+        stats_list = []
+
+        for tablet_id in self.tablet_ids:
+            stats = collector.fetch_tablet_stats(tablet_id)
+            stats_list.append(stats)
+            if stats.error:
+                logger.debug(f"Failed to fetch stats for tablet {tablet_id}: {stats.error}")
+
+        aggregated = collector.aggregate_stats(stats_list)
+        collector.print_stats(aggregated)
+        collector.publish_stats(stats_list)
 
     def _start_tsserver(self):
         if self.tsserver_process is not None:
@@ -168,10 +364,25 @@ class YdbTestShardWorkload(WorkloadBase):
             ]
             if self.channels:
                 cmd.extend(['--channels', ','.join(self.channels)])
-            self.cmd_run(cmd)
+
+            output = self.cmd_run(cmd)
+            self.tablet_ids = self._parse_tablet_ids(output)
+            logger.info(f"Created tablets: {self.tablet_ids}")
 
             logger.info(f"Running testshard workload for {self.duration} seconds...")
-            time.sleep(self.duration)
+            logger.info(f"Stats will be printed every {self.stats_interval} seconds")
+
+            elapsed = 0
+            while elapsed < self.duration:
+                sleep_time = min(self.stats_interval, self.duration - elapsed)
+                time.sleep(sleep_time)
+                elapsed += sleep_time
+
+                logger.info(f"=== Stats at {elapsed}s / {self.duration}s ===")
+                self._fetch_and_print_stats()
+
+            logger.info("=== Final statistics ===")
+            self._fetch_and_print_stats()
 
             self.cmd_run([
                 *self._get_cli_common_args(),

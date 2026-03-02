@@ -61,7 +61,7 @@ public:
         return true;
     }
 
-    size_t Size() const {
+    ui64 Size() const {
         const auto head = ProducerState.Head.load(std::memory_order_acquire);
         const auto tail = ConsumerState.Tail.load(std::memory_order_acquire);
         return head - tail;
@@ -82,19 +82,19 @@ public:
 private:
     struct alignas(64) TProducerState
     {
-        std::atomic<size_t> Head = 0;
-        size_t CachedTail = 0;
+        std::atomic<ui64> Head = 0;
+        ui64 CachedTail = 0;
     };
 
     struct alignas(64) TConsumerState
     {
-        std::atomic<size_t> Tail = 0;
-        size_t CachedHead = 0;
+        std::atomic<ui64> Tail = 0;
+        ui64 CachedHead = 0;
     };
 
     std::vector<T> Queue;
-    size_t Capacity = 0;
-    size_t CapacityMask = 0;
+    ui64 Capacity = 0;
+    ui64 CapacityMask = 0;
     TProducerState ProducerState;
     TConsumerState ConsumerState;
 };

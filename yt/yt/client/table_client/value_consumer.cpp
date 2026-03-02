@@ -343,7 +343,7 @@ TFuture<void> TWritingValueConsumer::Flush()
 
     return
         BIND([writer = Writer_, rowBuffer = RowBuffer_, rows = std::move(Rows_)] {
-            while (!writer->GetReadyEvent().IsSet() || !writer->GetReadyEvent().BlockingGet().IsOK()) {
+            while (!writer->GetReadyEvent().IsSet() || !writer->GetReadyEvent().GetOrCrash().IsOK()) {
                 WaitFor(writer->GetReadyEvent())
                     .ThrowOnError();
             }

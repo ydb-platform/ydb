@@ -130,7 +130,7 @@ void RunAndTrackFiber(TClosure closure)
 
     // Do not silence errors thrown in tests.
     if (result.IsSet()) {
-        result.BlockingGet().ThrowOnError();
+        result.GetOrCrash().ThrowOnError();
     }
 
     SUCCEED();

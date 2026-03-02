@@ -57,7 +57,7 @@ private:
         if (!OpenResult_ || !OpenResult_.IsSet()) {
             THROW_ERROR_EXCEPTION("Cannot read from an unopened journal reader");
         }
-        OpenResult_.BlockingGet().ThrowOnError();
+        OpenResult_.GetOrCrash().ThrowOnError();
     }
 };
 

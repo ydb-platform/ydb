@@ -149,7 +149,7 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
     Consumer_->Flush();
     auto buffer = Buffer_.Flush();
     Result_ = Stream_->Write(buffer);
-    return Result_.IsSet() && Result_.BlockingGet().IsOK();
+    return Result_.IsSet() && Result_.GetOrCrash().IsOK();
 }
 
 TFuture<void> TVersionedWriter::GetReadyEvent()

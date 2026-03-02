@@ -587,11 +587,11 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
 
     if (auto valueFuture = DoLookup(shard, key)) {
         if (GhostCachesEnabled_.load()) {
-            if (valueFuture.IsSet() && valueFuture.BlockingGet().IsOK()) {
+            if (valueFuture.IsSet() && valueFuture.GetOrCrash().IsOK()) {
                 bool smallInserted = shard->SmallGhost.BeginInsert(key, cookieWeight);
                 bool largeInserted = shard->LargeGhost.BeginInsert(key, cookieWeight);
                 if (smallInserted || largeInserted) {
-                    const auto& value = valueFuture.BlockingGet().Value();
+                    const auto& value = valueFuture.GetOrCrash().Value();
                     i64 weight = GetWeight(value);
                     if (smallInserted) {
                         shard->SmallGhost.EndInsert(value, weight);

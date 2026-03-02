@@ -12,7 +12,6 @@ Supports:
 from __future__ import annotations
 
 import argparse
-import bisect
 import json
 import re
 import sys
@@ -24,11 +23,13 @@ from typing import Any, Optional
 if __name__ != "__main__":
     from . import ya_make_requirements
     from .dashboard_cpu_suggestions import build_cpu_suggestions
+    from .dashboard_html_payload import build_dashboard_payload
     from .dashboard_report_table import build_report_table_html
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import ya_make_requirements
     from dashboard_cpu_suggestions import build_cpu_suggestions
+    from dashboard_html_payload import build_dashboard_payload
     from dashboard_report_table import build_report_table_html
 
 # Supports both:
@@ -516,119 +517,6 @@ def build_trace(
     return out, stats, enriched_runs
 
 
-def _palette() -> list[str]:
-    return [
-        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2",
-        "#7f7f7f", "#bcbd22", "#17becf", "#4e79a7", "#f28e2b", "#59a14f", "#e15759",
-        "#76b7b2", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ab",
-    ]
-
-
-def _topn_other_map(values: dict[str, float], top_n: int) -> list[str]:
-    return [k for k, _ in sorted(values.items(), key=lambda x: x[1], reverse=True)[:top_n]]
-
-
-def _build_step_series(runs: list[dict[str, Any]], value_key: str, top_labels: set[str], label_mode: str = "suite_chunk") -> tuple[list[float], dict[str, list[float]]]:
-    by_label = defaultdict(float)
-    events: list[tuple[float, int, str, float]] = []
-    for r in runs:
-        if label_mode == "suite":
-            label = str(r["suite_path"])
-        else:
-            group = normalize_chunk_group(r.get("chunk_group"))
-            label = f"{r['suite_path']}::{group}/chunk{r['chunk']}" if group else f"{r['suite_path']}::chunk{r['chunk']}"
-        v = float(r.get(value_key, 0.0) or 0.0)
-        events.append((float(r["start_us"]), +1, label, v))
-        events.append((float(r["end_us"]), -1, label, v))
-    events.sort(key=lambda x: (x[0], -x[1]))
-
-    tracks = {lb: [] for lb in top_labels}
-    tracks["other"] = []
-    xs: list[float] = []
-    i = 0
-    while i < len(events):
-        ts = events[i][0]
-        while i < len(events) and events[i][0] == ts:
-            _, sign, label, val = events[i]
-            by_label[label] += sign * val
-            i += 1
-        xs.append(ts / 1_000_000.0)
-        other = 0.0
-        for lb, cur in by_label.items():
-            if cur <= 0:
-                continue
-            if lb in top_labels:
-                tracks[lb].append(cur)
-            else:
-                other += cur
-        for lb in top_labels:
-            if len(tracks[lb]) < len(xs):
-                tracks[lb].append(0.0)
-        tracks["other"].append(other)
-    return xs, tracks
-
-
-def _build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[float]]:
-    events: list[tuple[float, float]] = []
-    for r in runs:
-        events.append((float(r["start_us"]), +1.0))
-        events.append((float(r["end_us"]), -1.0))
-    events.sort(key=lambda x: x[0])
-    xs: list[float] = []
-    ys: list[float] = []
-    cur = 0.0
-    i = 0
-    while i < len(events):
-        ts = events[i][0]
-        while i < len(events) and events[i][0] == ts:
-            cur += events[i][1]
-            i += 1
-        xs.append(ts / 1_000_000.0)
-        ys.append(cur)
-    return xs, ys
-
-
-def _downsample_step_series(
-    xs: list[float], tracks: dict[str, list[float]], max_points: int
-) -> tuple[list[float], dict[str, list[float]]]:
-    """Reduce step series to at most max_points by sampling uniformly in time."""
-    if not xs or max_points <= 0 or len(xs) <= max_points:
-        return xs, tracks
-    t_min, t_max = xs[0], xs[-1]
-    if t_max <= t_min:
-        return xs, tracks
-    xs_sampled = [
-        t_min + (t_max - t_min) * i / (max_points - 1) if max_points > 1 else t_min
-        for i in range(max_points)
-    ]
-    tracks_sampled: dict[str, list[float]] = {}
-    for lb, vals in tracks.items():
-        tracks_sampled[lb] = [
-            vals[bisect.bisect_right(xs, t) - 1] if xs[0] <= t else 0.0
-            for t in xs_sampled
-        ]
-    return xs_sampled, tracks_sampled
-
-
-def _downsample_active_series(
-    xs: list[float], ys: list[float], max_points: int
-) -> tuple[list[float], list[float]]:
-    """Reduce (xs, ys) to at most max_points by sampling uniformly in time."""
-    if not xs or max_points <= 0 or len(xs) <= max_points:
-        return xs, ys
-    t_min, t_max = xs[0], xs[-1]
-    if t_max <= t_min:
-        return xs, ys
-    xs_sampled = [
-        t_min + (t_max - t_min) * i / (max_points - 1) if max_points > 1 else t_min
-        for i in range(max_points)
-    ]
-    ys_sampled = [
-        ys[bisect.bisect_right(xs, t) - 1] if xs[0] <= t else 0.0 for t in xs_sampled
-    ]
-    return xs_sampled, ys_sampled
-
-
 def build_html_dashboard(
     suite_filter: Optional[str],
     runs: list[dict[str, Any]],
@@ -640,184 +528,16 @@ def build_html_dashboard(
     cpu_suggestions: Optional[list[dict[str, Any]]] = None,
     run_config: Optional[dict[str, Any]] = None,
 ) -> None:
-    cpu_by_suite: dict[str, float] = defaultdict(float)
-    ram_by_suite: dict[str, float] = defaultdict(float)
-    active_time_by_suite: dict[str, float] = defaultdict(float)
-    suite_set = sorted({str(r["suite_path"]) for r in runs})
-
-    for r in runs:
-        cpu_by_suite[str(r["suite_path"])] += float(r.get("cpu_sec_report", 0.0) or 0.0)
-        ram_by_suite[str(r["suite_path"])] += float(r.get("ram_kb_report", 0.0) or 0.0)
-        active_time_by_suite[str(r["suite_path"])] += float(r.get("dur_us", 0.0) or 0.0) / 1_000_000.0
-
-    top_cpu_suite = _topn_other_map(cpu_by_suite, top_n)
-    top_ram_suite = _topn_other_map(ram_by_suite, top_n)
-    top_active_suite = _topn_other_map(active_time_by_suite, top_n)
-
-    enriched = []
-    for r in runs:
-        rr = dict(r)
-        dur_s = float(rr["dur_us"]) / 1_000_000.0 if float(rr["dur_us"]) > 0 else 0.0
-        rr["cpu_cores_est"] = (float(rr.get("cpu_sec_report", 0.0) or 0.0) / dur_s) if dur_s > 0 else 0.0
-        rr["ram_gb"] = float(rr.get("ram_kb_report", 0.0) or 0.0) / (1024.0 * 1024.0)
-        rr["active_one"] = 1.0
-        enriched.append(rr)
-
-    xs_cpu_suite, cpu_tracks_suite = _build_step_series(enriched, "cpu_cores_est", set(top_cpu_suite), label_mode="suite")
-    xs_ram_suite, ram_tracks_suite = _build_step_series(enriched, "ram_gb", set(top_ram_suite), label_mode="suite")
-    xs_active_suite, active_tracks_suite = _build_step_series(enriched, "active_one", set(top_active_suite), label_mode="suite")
-    xs_active, ys_active = _build_active_series(enriched)
-
-    xs_cpu_suite, cpu_tracks_suite = _downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)
-    xs_ram_suite, ram_tracks_suite = _downsample_step_series(xs_ram_suite, ram_tracks_suite, max_points)
-    xs_active_suite, active_tracks_suite = _downsample_step_series(xs_active_suite, active_tracks_suite, max_points)
-    xs_active, ys_active = _downsample_active_series(xs_active, ys_active, max_points)
-
-    has_synthetic = (stats.get("runs_with_synthetic_metrics") or 0) > 0
-
-    if by_chunk:
-        cpu_by_label = defaultdict(float)
-        ram_by_label = defaultdict(float)
-        active_time_by_label = defaultdict(float)
-        for r in runs:
-            group = normalize_chunk_group(r.get("chunk_group"))
-            lb = f"{r['suite_path']}::{group}/chunk{r['chunk']}" if group else f"{r['suite_path']}::chunk{r['chunk']}"
-            cpu_by_label[lb] += float(r.get("cpu_sec_report", 0.0) or 0.0)
-            ram_by_label[lb] += float(r.get("ram_kb_report", 0.0) or 0.0)
-            active_time_by_label[lb] += float(r.get("dur_us", 0.0) or 0.0) / 1_000_000.0
-
-        def suite_of_label(lb: str) -> str:
-            return lb.split("::", 1)[0]
-
-        top_cpu = [lb for lb, _ in sorted(cpu_by_label.items(), key=lambda x: x[1], reverse=True) if suite_of_label(lb) in set(top_cpu_suite)]
-        top_ram = [lb for lb, _ in sorted(ram_by_label.items(), key=lambda x: x[1], reverse=True) if suite_of_label(lb) in set(top_ram_suite)]
-        top_active = [lb for lb, _ in sorted(active_time_by_label.items(), key=lambda x: x[1], reverse=True) if suite_of_label(lb) in set(top_active_suite)]
-
-        xs_cpu, cpu_tracks = _build_step_series(enriched, "cpu_cores_est", set(top_cpu), label_mode="suite_chunk")
-        xs_ram, ram_tracks = _build_step_series(enriched, "ram_gb", set(top_ram), label_mode="suite_chunk")
-        xs_active_chunk, active_tracks_chunk = _build_step_series(enriched, "active_one", set(top_active), label_mode="suite_chunk")
-        xs_cpu, cpu_tracks = _downsample_step_series(xs_cpu, cpu_tracks, max_points)
-        xs_ram, ram_tracks = _downsample_step_series(xs_ram, ram_tracks, max_points)
-        xs_active_chunk, active_tracks_chunk = _downsample_step_series(xs_active_chunk, active_tracks_chunk, max_points)
-    else:
-        xs_cpu = []
-        cpu_tracks = {}
-        xs_ram = []
-        ram_tracks = {}
-        xs_active_chunk = []
-        active_tracks_chunk = {}
-        cpu_by_label = {}
-        ram_by_label = {}
-        active_time_by_label = {}
-        top_cpu = []
-        top_ram = []
-        top_active = []
-
-    cpu_tracks_suite_no_synthetic = cpu_tracks_suite
-    ram_tracks_suite_no_synthetic = ram_tracks_suite
-    cpu_tracks_no_synthetic = cpu_tracks if by_chunk else {}
-    ram_tracks_no_synthetic = ram_tracks if by_chunk else {}
-    if has_synthetic:
-        enriched_no_synth = []
-        for r in enriched:
-            rr = dict(r)
-            if rr.get("synthetic_metrics"):
-                rr["cpu_sec_report"] = 0.0
-                rr["ram_kb_report"] = 0.0
-                rr["cpu_cores_est"] = 0.0
-                rr["ram_gb"] = 0.0
-            enriched_no_synth.append(rr)
-        _xs, cpu_tracks_suite_no_synthetic = _build_step_series(
-            enriched_no_synth, "cpu_cores_est", set(top_cpu_suite), label_mode="suite"
-        )
-        _, cpu_tracks_suite_no_synthetic = _downsample_step_series(
-            _xs, cpu_tracks_suite_no_synthetic, max_points
-        )
-        _xs, ram_tracks_suite_no_synthetic = _build_step_series(
-            enriched_no_synth, "ram_gb", set(top_ram_suite), label_mode="suite"
-        )
-        _, ram_tracks_suite_no_synthetic = _downsample_step_series(
-            _xs, ram_tracks_suite_no_synthetic, max_points
-        )
-        if by_chunk:
-            _xs, cpu_tracks_no_synthetic = _build_step_series(
-                enriched_no_synth, "cpu_cores_est", set(top_cpu), label_mode="suite_chunk"
-            )
-            _, cpu_tracks_no_synthetic = _downsample_step_series(
-                _xs, cpu_tracks_no_synthetic, max_points
-            )
-            _xs, ram_tracks_no_synthetic = _build_step_series(
-                enriched_no_synth, "ram_gb", set(top_ram), label_mode="suite_chunk"
-            )
-            _, ram_tracks_no_synthetic = _downsample_step_series(
-                _xs, ram_tracks_no_synthetic, max_points
-            )
-
-    pal = _palette()
-    suite_color = {s: pal[i % len(pal)] for i, s in enumerate(suite_set)}
-
-    track_suite = {}
-    for lb in set(
-        list(cpu_tracks.keys())
-        + list(ram_tracks.keys())
-        + list(active_tracks_chunk.keys())
-        + list(cpu_tracks_suite.keys())
-        + list(ram_tracks_suite.keys())
-        + list(active_tracks_suite.keys())
-    ):
-        if lb == "other":
-            track_suite[lb] = "other"
-        elif "::" not in lb:
-            track_suite[lb] = lb
-        else:
-            track_suite[lb] = lb.split("::", 1)[0]
-
-    synthetic_suites = {str(r["suite_path"]) for r in runs if bool(r.get("synthetic_metrics"))}
-    track_has_synthetic = {
-        lb: (track_suite.get(lb) in synthetic_suites) for lb in track_suite.keys()
-    }
-
-    payload = {
-        "suite_filter": suite_filter,
-        "stats": stats,
-        "by_chunk": by_chunk,
-        "has_synthetic_metrics": has_synthetic,
-        "cpu_tracks_suite_no_synthetic": cpu_tracks_suite_no_synthetic,
-        "ram_tracks_suite_no_synthetic": ram_tracks_suite_no_synthetic,
-        "cpu_tracks_no_synthetic": cpu_tracks_no_synthetic,
-        "ram_tracks_no_synthetic": ram_tracks_no_synthetic,
-        "cpu_suggestions": cpu_suggestions or [],
-        "run_config": run_config or {},
-        "xs_cpu": xs_cpu,
-        "cpu_tracks": cpu_tracks,
-        "xs_ram": xs_ram,
-        "ram_tracks": ram_tracks,
-        "xs_active_chunk": xs_active_chunk,
-        "active_tracks_chunk": active_tracks_chunk,
-        "xs_cpu_suite": xs_cpu_suite,
-        "cpu_tracks_suite": cpu_tracks_suite,
-        "xs_ram_suite": xs_ram_suite,
-        "ram_tracks_suite": ram_tracks_suite,
-        "xs_active_suite": xs_active_suite,
-        "active_tracks_suite": active_tracks_suite,
-        "xs_active": xs_active,
-        "ys_active": ys_active,
-        "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
-        "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu] + ([sum(v for k, v in cpu_by_label.items() if k not in set(top_cpu))] if len(cpu_by_label) > len(top_cpu) else []),
-        "pie_ram_labels": top_ram + (["other"] if len(ram_by_label) > len(top_ram) else []),
-        "pie_ram_vals": [ram_by_label.get(lb, 0.0) for lb in top_ram] + ([sum(v for k, v in ram_by_label.items() if k not in set(top_ram))] if len(ram_by_label) > len(top_ram) else []),
-        "pie_active_labels": top_active + (["other"] if len(active_time_by_label) > len(top_active) else []),
-        "pie_active_vals": [active_time_by_label.get(lb, 0.0) for lb in top_active] + ([sum(v for k, v in active_time_by_label.items() if k not in set(top_active))] if len(active_time_by_label) > len(top_active) else []),
-        "pie_cpu_suite_labels": top_cpu_suite + (["other"] if len(cpu_by_suite) > len(top_cpu_suite) else []),
-        "pie_cpu_suite_vals": [cpu_by_suite.get(lb, 0.0) for lb in top_cpu_suite] + ([sum(v for k, v in cpu_by_suite.items() if k not in set(top_cpu_suite))] if len(cpu_by_suite) > len(top_cpu_suite) else []),
-        "pie_ram_suite_labels": top_ram_suite + (["other"] if len(ram_by_suite) > len(top_ram_suite) else []),
-        "pie_ram_suite_vals": [ram_by_suite.get(lb, 0.0) for lb in top_ram_suite] + ([sum(v for k, v in ram_by_suite.items() if k not in set(top_ram_suite))] if len(ram_by_suite) > len(top_ram_suite) else []),
-        "pie_active_suite_labels": top_active_suite + (["other"] if len(active_time_by_suite) > len(top_active_suite) else []),
-        "pie_active_suite_vals": [active_time_by_suite.get(lb, 0.0) for lb in top_active_suite] + ([sum(v for k, v in active_time_by_suite.items() if k not in set(top_active_suite))] if len(active_time_by_suite) > len(top_active_suite) else []),
-        "suite_color": suite_color,
-        "track_suite": track_suite,
-        "track_has_synthetic": track_has_synthetic,
-    }
+    payload = build_dashboard_payload(
+        suite_filter=suite_filter,
+        runs=runs,
+        stats=stats,
+        top_n=top_n,
+        max_points=max_points,
+        by_chunk=by_chunk,
+        cpu_suggestions=cpu_suggestions,
+        run_config=run_config,
+    )
 
     html = f"""<!doctype html>
 <html>

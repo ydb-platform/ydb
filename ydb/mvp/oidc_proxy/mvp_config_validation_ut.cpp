@@ -97,35 +97,4 @@ oidc:
         UNIT_ASSERT_EXCEPTION_CONTAINS(TMVP(3, argv), yexception, "requires either secret or secret_file");
     }
 
-    Y_UNIT_TEST(SecretInfoValueCanBeLoadedFromSecretFile) {
-        TTempFileHandle tmpSecretFile = MakeTestFile("secret-from-file", "mvp_oidc_proxy_secret_value", ".txt");
-        TString tokenFile = TStringBuilder()
-            << "OAuthInfo {\n"
-            << "  Name: \"service-account-jwt\"\n"
-            << "  Endpoint: \"grpc://localhost:8655\"\n"
-            << "  Token: \"oauth-token\"\n"
-            << "}\n"
-            << "SecretInfo {\n"
-            << "  Name: \"secret-name\"\n"
-            << "  SecretFile: \"" << tmpSecretFile.Name() << "\"\n"
-            << "}\n";
-        TTempFileHandle tmpTokenFile = MakeTestFile(tokenFile, "mvp_oidc_proxy_secret_info_file", ".pb.txt");
-
-        TString yaml = TStringBuilder() << R"(
-generic:
-  access_service_type: "yandex_v2"
-  auth:
-    token_file: )" << tmpTokenFile.Name() << R"(
-oidc:
-  client_id: "test-client"
-  secret_name: "secret-name"
-  session_service_endpoint: "localhost:8655"
-  session_service_token_name: "service-account-jwt"
-  authorization_server_address: "http://auth.test.net"
-)";
-        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_oidc_proxy_secret_info_file_yaml", ".yaml");
-
-        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_NO_EXCEPTION(TMVP(3, argv));
-    }
 }

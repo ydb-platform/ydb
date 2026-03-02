@@ -194,4 +194,28 @@ SecretInfo {
             "mvp_validation_secret_missing",
             "requires either secret or secret_file");
     }
+
+    Y_UNIT_TEST(SecretInfoWithUnreadableSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+  SecretFile: "/definitely/not/existing/secret.txt"
+}
+)pb",
+            "mvp_validation_secret_unreadable",
+            "unable to read secret_file for secret_info 'secret-name'");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithWhitespaceSecretFileThrows) {
+        TTempFileHandle secretFile = MakeTestFile("   \n\t  ", "mvp_validation_empty_secret", ".txt");
+        AssertTokenFileConfigThrows(TStringBuilder()
+                << "AccessServiceType: nebius_v1\n"
+                << "SecretInfo {\n"
+                << "  Name: \"secret-name\"\n"
+                << "  SecretFile: \"" << secretFile.Name() << "\"\n"
+                << "}\n",
+            "mvp_validation_secret_empty_after_strip",
+            "resolved to empty secret");
+    }
 }

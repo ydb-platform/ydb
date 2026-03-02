@@ -5,6 +5,7 @@
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
+#include "meta_support_links.h"
 #include "meta_cache.h"
 #include <util/system/hostname.h>
 #include <ydb/mvp/core/http_check.h>
@@ -207,6 +208,12 @@ void TMVP::InitMeta() {
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cloud",
                          ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
+                         )
+                     );
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/meta/support_links",
+                         ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation))
                          )
                      );
 

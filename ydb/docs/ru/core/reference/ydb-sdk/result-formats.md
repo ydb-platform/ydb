@@ -42,54 +42,74 @@
   |---------|-----------|------------|
   | `Bool` | `uint8` | Значения `true`/`false` кодируются как `1`/`0` |
   | `Int8` | `int8` | |
-  | `Uint8` | `uint8` | |
   | `Int16` | `int16` | |
-  | `Uint16` | `uint16` | |
   | `Int32` | `int32` | |
-  | `Uint32` | `uint32` | |
   | `Int64` | `int64` | |
+  | `Uint8` | `uint8` | |
+  | `Uint16` | `uint16` | |
+  | `Uint32` | `uint32` | |
   | `Uint64` | `uint64` | |
-  | `Float` | `float32` | |
-  | `Double` | `float64` | |
-  | `Decimal(p, s)` | `decimal128(p, s)` | Точность и масштаб сохраняются |
+  | `Float` | `float` | |
+  | `Double` | `double` | |
+  | `Decimal(p, s)` | `fixed_size_binary(16)` | Используются 120 бит, есть маркеры ±inf и NaN |
+  | `DyNumber` | `string` | Строковое представление числа |
 
   *Строковые типы*
 
   | Тип YQL | Тип Arrow | Примечание |
   |---------|-----------|------------|
-  | `Utf8` | `utf8` | Строки в кодировке UTF-8 |
-  | `Json` | `utf8` | Строковое представление JSON |
-
-  *Бинарные типы*
-
-  | Тип YQL | Тип Arrow | Примечание |
-  |---------|-----------|------------|
-  | `String` | `binary` | Произвольные байтовые данные |
-  | `Yson` | `binary` | Двоичное представление YSON |
-  | `JsonDocument` | `utf8` | Декодированное строковое представление JSON |
-  | `DyNumber` | `binary` | Строковое представление числа |
-  | `Uuid` | `binary` | 16 байт в little-endian порядке |
+  | `String` | `binary` | |
+  | `Utf8` | `string` | |
+  | `Json` | `string` | |
+  | `JsonDocument` | `string` | Строкое представление бинарного [JSON](https://en.wikipedia.org/wiki/JSON) |
+  | `Yson` | `binary` | |
+  | `Uuid` | `fixed_size_binary(16)` | 16 байт в mixed-endian порядке |
 
   *Временные типы*
 
   | Тип YQL | Тип Arrow | Примечание |
   |---------|-----------|------------|
-  | `Date` | `uint16` | Количество дней с 1 января 1970 года |
-  | `Datetime` | `uint32` | Количество секунд с 1 января 1970 года |
-  | `Timestamp` | `uint64` | Количество микросекунд с 1 января 1970 года |
-  | `Interval` | `int64` | Длительность в микросекундах |
+  | `Date` | `uint16` | |
+  | `Date32` | `int32` | |
+  | `Datetime` | `uint32` | |
+  | `Datetime64` | `int64` | |
+  | `Timestamp` | `uint64` | |
+  | `Timestamp64` | `int64` | |
+  | `Interval` | `int64` | |
+  | `Interval64` | `int64` | |
+  | `TzDate` | `struct<datetime: uint16, timezone: string>` | Включает строковое имя метки таймзоны |
+  | `TzDate32` | `struct<datetime: int32, timezone: string>` | Включает строковое имя метки таймзоны |
+  | `TzDatetime` | `struct<datetime: uint32, timezone: string>` | Включает строковое имя метки таймзоны |
+  | `TzDatetime64` | `struct<datetime: int64, timezone: string>` | Включает строковое имя метки таймзоны |
+  | `TzTimestamp` | `struct<datetime: uint64, timezone: string>` | Включает строковое имя метки таймзоны |
+  | `TzTimestamp64` | `struct<datetime: int64, timezone: string>` | Включает строковое имя метки таймзоны |
+
+  *Сингулярные типы*
+
+  | Тип YQL | Тип Arrow | Примечание |
+  |---------|-----------|------------|
+  | `Null` | `null` | |
+  | `Void` | `struct<>` | |
+  | `EmptyList` | `struct<>` | |
+  | `EmptyDict` | `struct<>` | |
 
   *Составные типы*
 
   | Тип YQL | Тип Arrow | Примечание |
   |---------|-----------|------------|
-  | `Optional<T>` | `struct<opt: T>` | Обёртка с одним nullable-полем |
-  | `Optional<Optional<T>>` | `struct<opt: struct<opt: T>>` | Каждый уровень Optional добавляет уровень вложенности |
-  | `List<T>` | `list<T>` | Список элементов типа T |
-  | `Tuple<T1, T2, ...>` | `struct<T1, T2, ...>` | Структура с позиционными полями |
-  | `Struct<name: T, ...>` | `struct<name: T, ...>` | Структура с именованными полями |
-  | `Dict<K, V>` | `list<struct<key: K, value: V>>` | Список пар ключ-значение |
-  | `Variant<name: T, ...>` | `dense_union<name: T, ...>` | Дискриминируемое объединение |
+  | `Optional<T>` | `struct<opt: T>` | Если T является `Variant`, `Optional`, `Pg` или сингулярным типом |
+  | `Optional<T>` | `T` | Для всех остальных типов |
+  | `List<T>` | `list<T>` | |
+  | `Tuple<T1, T2, ...>` | `struct<field0: T1, field1: T2, ...>` | |
+  | `Struct<name: T, ...>` | `struct<name: T, ...>` | |
+  | `Dict<K, V>` | `list<struct<key: K, payload: V>>` | |
+  | `Variant<T1, ..., Tn>` | `dense_union<field0: T1, ...>` | Для n <= 128 |
+  | `Variant<T1, ..., Tn>` | `dense_union<dense_union<field0: T1, ...>, ...>` | Для 128 < n <= 16384, не поддерживается для n > 16384 |
+  | `Tagged<T>` | `T` | |
+
+  *Типы семейства pg*
+
+  Все типы семейства `pg` возвращаются как Arrow тип `string` в формате текстового представления значений.
 
 {% endlist %}
 

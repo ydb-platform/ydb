@@ -11,6 +11,7 @@ IF (NOT WITH_VALGRIND)
         REQUIREMENTS(ram:9)
     ELSE()
         SIZE(MEDIUM)
+        REQUIREMENTS(cpu:1)
     ENDIF()
 
     PEERDIR(

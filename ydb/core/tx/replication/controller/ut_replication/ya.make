@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/replication/controller)
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 TIMEOUT(60)
 

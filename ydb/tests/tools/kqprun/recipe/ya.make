@@ -9,4 +9,5 @@ PEERDIR(
     ydb/tests/library
 )
 
+REQUIREMENTS(cpu:1)
 END()

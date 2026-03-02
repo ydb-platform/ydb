@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/graph)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRC(
     graph_ut.cpp

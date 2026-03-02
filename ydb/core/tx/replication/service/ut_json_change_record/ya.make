@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/replication/service)
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/testlib/pg

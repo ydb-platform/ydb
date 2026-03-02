@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/grpc_services/tablet)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     rpc_change_schema_ut.cpp

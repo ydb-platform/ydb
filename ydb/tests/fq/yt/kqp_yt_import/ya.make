@@ -11,6 +11,7 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 DEPENDS(
     ydb/tests/tools/kqprun

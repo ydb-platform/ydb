@@ -5,6 +5,7 @@ SPLIT_FACTOR(30)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

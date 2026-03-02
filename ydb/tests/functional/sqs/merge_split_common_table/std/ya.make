@@ -11,6 +11,7 @@ IF (SANITIZER_TYPE == "thread")
     REQUIREMENTS(ram:32 cpu:4)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 DEPENDS(

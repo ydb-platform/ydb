@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/tx_allocator)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/unittest

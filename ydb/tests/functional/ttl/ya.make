@@ -6,6 +6,7 @@ TEST_SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 DEPENDS(
 )

@@ -19,4 +19,5 @@ PEERDIR(
     ydb/core/testlib/default
 )
 
+REQUIREMENTS(cpu:1)
 END()

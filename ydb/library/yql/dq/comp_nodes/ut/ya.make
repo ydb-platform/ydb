@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/library/yql/dq/comp_nodes

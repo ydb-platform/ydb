@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/load_test)
 FORK_SUBTESTS(MODULO)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib

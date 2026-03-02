@@ -9,6 +9,7 @@ IF (SANITIZER_TYPE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(

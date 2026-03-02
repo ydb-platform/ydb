@@ -151,7 +151,14 @@ class SqsACLTest(KikimrSqsTestBase):
             '&Permission.1=ModifyPermissions'
         )
 
-        result = self._sqs_api.modify_permissions('Grant', berkanavt_sid, self._username, ['SendMessage', 'DescribePath'])
+        retries = 10
+        result = None
+        while retries > 0:
+            retries -= 1
+            result = self._sqs_api.modify_permissions('Grant', berkanavt_sid, self._username, ['SendMessage', 'DescribePath'])
+            if result is not None:
+                break
+            time.sleep(0.5)
         assert_that(result, is_not(none()))
 
         __send_message_with_retries(queue_url, 'utradata', is_not(none()))  # has access

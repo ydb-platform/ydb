@@ -331,7 +331,7 @@ class SqsHttpApi(object):
             'Subject': subject
         }
         for i, permission in enumerate(permissions):
-            args['Permission.' + str(i)] = permission
+            args['Permission.' + str(i + 1)] = permission
 
         return self.execute_request(
             action=action + 'Permissions',

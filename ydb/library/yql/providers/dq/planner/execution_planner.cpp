@@ -266,8 +266,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        // TODO switch from `PRAGMA dq.WatermarksIdleTimeoutMs` to `... WITH Watermarks IDLE TIMEOUT ....`
-        BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleTimeoutMs.Get().Transform([](auto t) { return TDuration::MilliSeconds(t).MicroSeconds();}));
+        BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
@@ -287,7 +286,7 @@ namespace NYql::NDqs {
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs) {
+    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
         std::stack<TDqsTasksGraph::TTaskType*> tasksStack;
         std::vector<bool> processedTasks(TasksGraph.GetTasks().size());
         // TODO use toposort instead of Dreadful O(n^2)
@@ -349,10 +348,9 @@ namespace NYql::NDqs {
             if (enableWatermarks) {
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
-                        if (IsInfiniteSourceType(input.SourceType)) {
+                        if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            Y_DEBUG_ABORT_UNLESS(IsInfiniteSourceType(input.SourceType));
                             watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs; // TODO extract from source settings
-                            input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {
@@ -364,6 +362,12 @@ namespace NYql::NDqs {
                         }
                     }
                     task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, input.WatermarksIdleTimeoutUs);
+                }
+            } else {
+                for (auto& input : task.Inputs) {
+                    input.WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+                    input.WatermarksIdleTimeoutUs.Clear();
+                    /* note: GetChannel().WatermarksMode default-initialized to DISABLED */
                 }
             }
 
@@ -558,9 +562,11 @@ namespace NYql::NDqs {
             _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
+            TMaybe<IDqIntegration::TSourceWatermarksSettings> sourceWatermarksSettings;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
                 dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
+                sourceWatermarksSettings = dqIntegration->ExtractSourceWatermarksSettings(*read, *sourceSettings, sourceType);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -571,6 +577,10 @@ namespace NYql::NDqs {
                 if (dqSource) {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
+                    if (sourceWatermarksSettings) {
+                        task.Inputs[dqSourceInputIndex].WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
+                        task.Inputs[dqSourceInputIndex].WatermarksIdleTimeoutUs = sourceWatermarksSettings->IdleTimeoutUs;
+                    }
                 }
             }
         }

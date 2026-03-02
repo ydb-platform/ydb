@@ -130,8 +130,7 @@ protected:
                 input.Cast(),
                 false,              // analyticsHopping
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                false,               // defaultWatermarksMode
-                true);              // syncActor
+                false);              // defaultWatermarksMode
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());

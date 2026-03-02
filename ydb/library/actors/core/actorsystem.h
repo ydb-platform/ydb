@@ -8,6 +8,7 @@
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "cpu_manager.h"
+#include "tracer.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -189,6 +190,7 @@ namespace NActors {
         std::atomic_bool CleanupExecuted = false;
 
         std::deque<std::function<void()>> DeferredPreStop;
+        THolder<NTracing::IActorTracer> Tracer;
     public:
         TActorSystem(THolder<TActorSystemSetup>& setup, void* appData = nullptr,
                      TIntrusivePtr<NLog::TSettings> loggerSettings = TIntrusivePtr<NLog::TSettings>(nullptr));
@@ -342,5 +344,7 @@ namespace NActors {
         IRcBufAllocator* GetRcBufAllocator() const {
             return RcBufAllocator;
         }
+
+        NTracing::IActorTracer* GetActorTracer() const;
     };
 }

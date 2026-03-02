@@ -703,6 +703,7 @@ namespace NActors {
 
         NInterconnect::TInterconnectZcProcessor ZcProcessor;
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        std::atomic<ui32> InterconnectSequenceId;
 
         void UpdateState(std::optional<EState> newState = std::nullopt) {
             if (!newState || *newState != State) {

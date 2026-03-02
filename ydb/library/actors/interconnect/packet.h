@@ -70,6 +70,7 @@ struct TEventData {
 #if IC_FORCE_HARDENED_PACKET_CHECKS
     ui32 Len;
 #endif
+    ui32 InterconnectSequenceId;
 };
 
 #pragma pack(push, 1)
@@ -85,6 +86,7 @@ struct TEventDescr2 {
 #if IC_FORCE_HARDENED_PACKET_CHECKS
     ui32 Len;
 #endif
+    ui32 InterconnectSequenceId;
 };
 
 #pragma pack(pop)

@@ -587,8 +587,9 @@ namespace NActors {
                     NWilson::TTraceId(v2.TraceId),
                     v2.Checksum,
 #if IC_FORCE_HARDENED_PACKET_CHECKS
-                    v2.Len
+                    v2.Len,
 #endif
+                    v2.InterconnectSequenceId
                 };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
@@ -940,6 +941,9 @@ namespace NActors {
                 descr.Cookie,
                 Params.PeerScopeId,
                 std::move(descr.TraceId));
+            if (auto tracer = TlsActivationContext->ActorSystem()->GetActorTracer()) {
+                tracer->HandleInterconnectRecieve(*ev, descr.InterconnectSequenceId);
+            }
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
                 Metrics->IncScopeErrors();
                 LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"

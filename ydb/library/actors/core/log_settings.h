@@ -1,6 +1,8 @@
 #pragma once
 
 #include "log_iface.h"
+
+#include "tracer.h"
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
@@ -95,6 +97,8 @@ namespace NActors {
             TString TenantName;
             TString MessagePrefix;
             ui32 NodeId;
+
+            NTracing::TSettings TracerSettings;
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc

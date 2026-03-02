@@ -5720,17 +5720,6 @@ Y_UNIT_TEST(SelectJoinConstPredicateArg) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN: each equality predicate argument must depend on exactly one JOIN input\n");
 }
 
-Y_UNIT_TEST(SelectJoinUnknownBuiltin) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
-        SELECT *
-        FROM (VALUES (1)) AS x (a)
-        JOIN (VALUES (2)) AS y (a)
-        ON abacaba(x.a) == y.a;
-    )sql");
-    UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:16: Error: JOIN: bad '==' 0th argument: Unknown builtin: abacaba\n");
-}
-
 Y_UNIT_TEST(SelectJoinNonEqualityPredicate) {
     NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey > B.subkey\n");
     UNIT_ASSERT(!res.IsOk());

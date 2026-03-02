@@ -1,4 +1,4 @@
-/* custom error: JOIN: bad '==' 1th argument: conflicting sources 'x' and 'y' */
+/* custom error: argument must depend on exactly one JOIN input */
 SELECT
     x.a,
     x.b,

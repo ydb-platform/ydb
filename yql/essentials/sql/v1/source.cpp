@@ -138,7 +138,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
             }
         }
         if (columnNamePtr) {
-            const auto sourceName = *expr->GetSourceName();
+            const auto& sourceName = *expr->GetSourceName();
             auto columnName = *columnNamePtr;
             if (sourceName) {
                 columnName = DotJoin(sourceName, columnName);

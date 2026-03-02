@@ -41,6 +41,7 @@ RECURSE(
     nodewarden
     other
     pdisk
+    rocksdisk
     storagepoolmon
     testing
     vdisk

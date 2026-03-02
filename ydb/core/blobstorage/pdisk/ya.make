@@ -11,6 +11,8 @@ IF (YDB_DISABLE_PDISK_ENCRYPTION)
     )
 ENDIF()
 
+DEFAULT(PDISK_LOCAL_ROCKSDB_A /home/va-kuznecov/rocksdb/librocksdb.a)
+
 PEERDIR(
     contrib/libs/lz4
     ydb/library/actors/core

@@ -13,6 +13,7 @@ SRCS(
     env.h
     huge.cpp
     compaction.cpp
+    put_perf.cpp
 )
 
 PEERDIR(

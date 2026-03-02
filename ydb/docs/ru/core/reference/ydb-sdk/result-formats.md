@@ -1,6 +1,6 @@
-# Форматы данных в результатах запросов
+# Формат данных в результате запроса
 
-{{ ydb-short-name }} поддерживает несколько форматов представления данных в результатах выполнения запросов через QueryService. Формат и режим возвращения схемы задаются при выполнении запроса.
+{{ ydb-short-name }} поддерживает несколько форматов представления данных и режимов возвращения схемы в результате выполнения запроса через QueryService. Формат и режим возвращения схемы задаются при выполнении запроса и распространяются на каждую инструкцию, которая возвращает данные (например, инструкция SELECT или ключевое слово RETURNING). Конфигурация данных настроек напрямую зависит от SDK.
 
 ## Форматы результатов {#result-format}
 
@@ -8,18 +8,18 @@
 
 - Value
 
-  Формат по умолчанию. Данные возвращаются в виде типизированных значений {{ ydb-short-name }}.
+  Формат по умолчанию. Данные возвращаются в виде типизированных значений {{ ydb-short-name }} и преобразовываются на стороне SDK.
 
   Этот формат подходит для большинства задач, когда данные обрабатываются построчно в клиентском приложении.
 
 - Apache Arrow
 
-  Данные возвращаются в виде [Apache Arrow](https://arrow.apache.org/) RecordBatch (формат IPC версии 5.0). Apache Arrow — это колоночный формат данных в памяти, оптимизированный для аналитических операций и обмена данными между системами.
+  Данные возвращаются в виде списка сериализованных [Apache Arrow](https://arrow.apache.org/) RecordBatch (формат IPC версии 5.0) и не преобразовываются на стороне SDK. Apache Arrow — это колоночный формат данных в памяти, оптимизированный для аналитических операций и обмена данными между системами.
 
   Этот формат рекомендуется для:
 
   * Аналитических задач, где данные обрабатываются колоночно;
-  * Систем, которые нативно работают с Apache Arrow (например, Pandas, DuckDB, Apache Spark);
+  * Систем, которые нативно работают с Apache Arrow;
   * Задач, где важна высокая производительность при передаче больших объёмов данных.
 
   **Сжатие данных**
@@ -29,8 +29,8 @@
   | Кодек | Описание |
   |-------|----------|
   | Без сжатия (по умолчанию) | Данные передаются без сжатия |
-  | `ZSTD` | Сжатие [Zstandard](https://facebook.github.io/zstd/). Поддерживает настройку уровня сжатия |
-  | `LZ4_FRAME` | Сжатие [LZ4](https://lz4.github.io/lz4/). Настройка уровня сжатия не поддерживается |
+  | `ZSTD` | Сжатие [Zstandard](https://github.com/facebook/zstd). Поддерживает настройку уровня сжатия |
+  | `LZ4_FRAME` | Сжатие [LZ4](https://github.com/lz4/lz4). Настройка уровня сжатия не поддерживается |
 
   **Конвертация типов данных YQL в Apache Arrow**
 
@@ -100,15 +100,17 @@
 * **Always (по умолчанию)** — схема данных возвращается в каждой части потока ответов. Это удобно для простой обработки результатов, когда каждая часть обрабатывается независимо.
 * **First only** — схема данных возвращается только в первой части потока для каждого результирующего набора. В последующих частях схема отсутствует. Этот режим позволяет уменьшить объём передаваемых данных при потоковой обработке больших результатов.
 
+Поведение режима возвращения схемы в том числе зависит от указанного формата данных в результате запроса.
+
 {% list tabs %}
 
 - Value
 
-  Схема содержит список столбцов с YQL-типами.
+  Результат содержит только схему со списком столбцов с YQL-типами.
 
 - Apache Arrow
 
-  Схема содержит список столбцов с YQL-типами, а также бинарную схему Arrow RecordBatch.
+  Результат содержит 2 схемы: список столбцов с YQL-типами и сериализованную схему Arrow RecordBatch.
 
 {% endlist %}
 
@@ -116,24 +118,54 @@
 
 {% list tabs group=lang %}
 
-- C++
+- Python
 
-  TODO
+  ```python
+  pool = ydb.QuerySessionPool(driver)
 
-- Go
+  query = """
+      SELECT * FROM example ORDER BY Key LIMIT 100;
+  """
 
-  TODO
+  format_settings = ydb.ArrowFormatSettings(
+      compression_codec=ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.ZSTD, 10)
+  )
+
+  result = pool.execute_with_retries(
+      query,
+      result_set_format=ydb.QueryResultSetFormat.ARROW,
+      schema_inclusion_mode=ydb.QuerySchemaInclusionMode.FIRST_ONLY,
+      arrow_format_settings=format_settings,
+  )
+
+  for result_set in result:
+      schema = pyarrow.ipc.read_schema(pyarrow.py_buffer(result_set.arrow_format_meta.schema))
+      batch = pyarrow.ipc.read_record_batch(pyarrow.py_buffer(result_set.data), schema)
+      print(f"Record batch with {batch.num_rows} rows and {batch.num_columns} columns")
+  ```
 
 - Java
 
-  TODO
+  ```java
+  BatchAssert ba = new BatchAssert(COLUMN_TABLE, COLUMN_BATCH);
 
-- Python
+  String query = selectTableYql(COLUMN_TABLE_NAME);
+  ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+          .useApacheArrowFormat(ApacheArrowFormat.zstd())
+          .build();
 
-  TODO
-
-- C#
-
-  TODO
+  try (QuerySession session = client.createSession(Duration.ofSeconds(5)).join().getValue()) {
+      QueryStream stream = session.createQuery(query, TxMode.SNAPSHOT_RO, Params.empty(), settings);
+      assertStatusOK(stream.execute(new ApacheArrowCompressedPartsHandler(allocator) {
+          @Override
+          public void onNextPart(QueryResultPart part) {
+              Assert.assertTrue(part instanceof ApacheArrowQueryResultPart);
+              Assert.assertEquals(0, part.getResultSetIndex());
+              ba.assertResultSetReader(part.getResultSetReader());
+          }
+      }).join().getStatus());
+      ba.assertFinish();
+  }
+  ```
 
 {% endlist %}

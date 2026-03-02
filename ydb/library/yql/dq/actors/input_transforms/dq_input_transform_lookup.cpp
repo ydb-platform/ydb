@@ -395,14 +395,12 @@ private:
 #if 0 // TODO
             // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
 #endif
-#if 0 // TODO
             // Opportunistially populate LRU cache with partial fullscan results
             // (again, in case of MultiMatches, we cannot use partial results)
             for (auto& [k, v]: *lookupResult) {
                 Y_DEBUG_ABORT_UNLESS(v);
                 LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
             }
-#endif
         }
         if (fullscan) {
             Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
@@ -414,9 +412,7 @@ private:
             } else {
                 FullscanExpireTime = now + CacheTtl;
                 FullscanReady = true;
-#if 0 // TODO
                 LruCache->Clear(); // Erase now-useless LRU cache
-#endif
             }
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);

@@ -8,8 +8,6 @@
 #include <thread>
 #include <unordered_map>
 
-#include <util/generic/bitops.h>
-
 namespace NRetroTracing {
 
 class TSpanCircleBuffer {

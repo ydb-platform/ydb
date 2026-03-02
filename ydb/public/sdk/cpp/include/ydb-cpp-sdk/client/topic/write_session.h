@@ -5,7 +5,6 @@
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"
-#include "control_plane.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>

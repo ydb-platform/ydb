@@ -22,6 +22,14 @@ namespace {
         {"<>", EInequalityPredicateType::NotEqual},
         {"!=", EInequalityPredicateType::NotEqual}};
 
+    THashMap<EInequalityPredicateType, TString> ComparisonOperatorToStringMap{
+        {EInequalityPredicateType::Less, "<"},
+        {EInequalityPredicateType::LessOrEqual, "<="},
+        {EInequalityPredicateType::Greater, ">"},
+        {EInequalityPredicateType::GreaterOrEqual, ">="},
+        {EInequalityPredicateType::Equal, "="},
+        {EInequalityPredicateType::NotEqual, "<>"}};
+
     /**
      * Check if a callable is an attribute of some table
      * Currently just return a boolean and cover only basic cases
@@ -136,6 +144,26 @@ namespace {
                 return EInequalityPredicateType::GreaterOrEqual;
             case EInequalityPredicateType::GreaterOrEqual:
                 return EInequalityPredicateType::LessOrEqual;
+            case EInequalityPredicateType::Equal:
+                return EInequalityPredicateType::NotEqual;
+            case EInequalityPredicateType::NotEqual:
+                return EInequalityPredicateType::Equal;
+            default:
+                Y_ABORT();
+        }
+    }
+
+    // Returns an opposite range direction.
+    EInequalityPredicateType GetOppositeRangeDirection(EInequalityPredicateType predicate) {
+        switch (predicate) {
+            case EInequalityPredicateType::Less:
+                return EInequalityPredicateType::GreaterOrEqual;
+            case EInequalityPredicateType::Greater:
+                return EInequalityPredicateType::LessOrEqual;
+            case EInequalityPredicateType::LessOrEqual:
+                return EInequalityPredicateType::Greater;
+            case EInequalityPredicateType::GreaterOrEqual:
+                return EInequalityPredicateType::Less;
             case EInequalityPredicateType::Equal:
                 return EInequalityPredicateType::NotEqual;
             case EInequalityPredicateType::NotEqual:
@@ -376,10 +404,11 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
 
 double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     const TExprBase& left,
-    const TExprBase& right
+    const TExprBase& right,
+    bool is_contain_str
 ) {
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeComparisonSelectivity(right, left);
+        return ComputeComparisonSelectivity(right, left, is_contain_str);
     }
 
     if (IsAttribute(left)) {
@@ -390,6 +419,9 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         // Currently, with the basic statistics we just return 0.5
         else if (IsConstantExprWithParams(right.Ptr())) {
+            if (is_contain_str && IsConstantExpr(right.Ptr())) { 
+                return 0.1;
+            }
             return 0.5;
         }
     }
@@ -397,28 +429,293 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     return 1.0;
 }
 
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate(
+    const TExprBase& left,
+    const TExprBase& right,
+    bool underNot,
+    bool collectMembers,
+    bool is_contain_str
+) {
+    // left is column and right is constant expression
+    auto leftAttr = IsAttribute(left);
+    auto rightAttr = IsAttribute(right);
+
+    double resSelectivity = ComputeComparisonSelectivity(left, right, is_contain_str);
+    resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
+
+    TVector<TPredicateRange> ranges;
+
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+    node->Selectivity = resSelectivity;
+    node->CollectMembers = collectMembers;
+    node->AllRanges = std::move(ranges);
+
+    TString ref = leftAttr.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
+
+    return node;
+}
+
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
+    bool underNot,
+    bool collectMembers
+) {
+    // NOTE: TCoAtom is not a Callable and consider NOT
+    double resSelectivity = underNot ? 1.0 - 0.5 : 0.5;
+
+    TVector<TPredicateRange> ranges;
+
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+    node->Selectivity = resSelectivity;
+    node->CollectMembers = collectMembers;
+    node->AllRanges = std::move(ranges);
+    node->Column = "Re2"; // TODO: temporal column naming
+
+    return node;
+}
+
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRange(
+    const TExprBase& left,
+    const TExprBase& right,
+    bool underNot,
+    bool collectMembers,
+    EInequalityPredicateType inequalitySign
+) {
+    auto leftAttr = IsAttribute(left);
+    auto rightAttr = IsAttribute(right);
+
+    if (leftAttr.Defined() && rightAttr.Defined()) {
+        return nullptr;
+    }
+
+    auto leftConstParam = IsConstantExprWithParams(left.Ptr());
+    auto rightConstParam = IsConstantExprWithParams(right.Ptr());
+
+    if (leftConstParam && rightConstParam) {
+        return nullptr;
+    }
+
+    auto leftConst = IsConstantExpr(left.Ptr());
+    auto rightConst = IsConstantExpr(right.Ptr());
+
+    if (leftConst && rightConst) {
+        return nullptr;
+    }
+
+    const TExprBase* leftPtr = &left;
+    const TExprBase* rightPtr = &right;
+
+    if (rightAttr) {
+        std::swap(leftPtr, rightPtr);
+        std::swap(leftAttr, rightAttr);
+    }
+
+    if (underNot) {
+        inequalitySign = GetOppositeRangeDirection(inequalitySign);
+    }
+    double resSelectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
+
+    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
+    std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), Nothing()};
+    TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, inequalitySign);
+
+    TVector<TPredicateRange> ranges;
+    ranges.push_back(std::move(rangeNode));
+
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+    node->Selectivity = resSelectivity;
+    node->CollectMembers = collectMembers;
+    node->AllRanges = std::move(ranges);
+
+    TString ref = leftAttr.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
+
+    return node;
+}
+
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange(
+    const TExprBase& left,
+    const TExprBase& right,
+    bool underNot,
+    bool collectMembers
+) {
+    auto leftAttr = IsAttribute(left);
+    auto rightAttr = IsAttribute(right);
+
+    if (leftAttr.Defined() && rightAttr.Defined()) {
+        return nullptr;
+    }
+
+    auto leftConstParam = IsConstantExprWithParams(left.Ptr());
+    auto rightConstParam = IsConstantExprWithParams(right.Ptr());
+
+    if (leftConstParam && rightConstParam) {
+        return nullptr;
+    }
+
+    auto leftConst = IsConstantExpr(left.Ptr());
+    auto rightConst = IsConstantExpr(right.Ptr());
+
+    if (leftConst && rightConst) {
+        return nullptr;
+    }
+
+    const TExprBase* leftPtr = &left;
+    const TExprBase* rightPtr = &right;
+
+    if (rightAttr) {
+        std::swap(leftPtr, rightPtr);
+        std::swap(leftAttr, rightAttr);
+    }
+
+    double resSelectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
+
+    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
+    TVector<TPredicateRange> ranges;
+    if (underNot) {
+        resSelectivity = 1.0 - resSelectivity;
+
+        std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), literal.GetRef()};
+        EInequalityPredicateType equalitySign = EInequalityPredicateType::Equal;
+        equalitySign = GetOppositeRangeDirection(equalitySign);
+        TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, equalitySign);
+        ranges.push_back(std::move(rangeNode));
+
+        // std::pair<TMaybe<TString>, TMaybe<TString>> rangePairOne {literal.GetRef(), literal.GetRef()};
+        // TPredicateRange rangeNodeOne(*leftPtr, *rightPtr, rangePairOne, EInequalityPredicateType::Less); // OR
+        // ranges.push_back(std::move(rangeNodeOne));
+
+        // std::pair<TMaybe<TString>, TMaybe<TString>> rangePairTwo {literal.GetRef(), literal.GetRef()};
+        // TPredicateRange rangeNodeTwo(*leftPtr, *rightPtr, rangePairTwo, EInequalityPredicateType::Greater); // OR
+        // ranges.push_back(std::move(rangeNodeTwo));
+    } else {
+        std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), literal.GetRef()};
+        EInequalityPredicateType equalitySign = EInequalityPredicateType::Equal;
+        // equalitySign = EInequalityPredicateType::LessOrEqual;
+        TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, equalitySign); // AND
+        ranges.push_back(std::move(rangeNode));
+    }
+
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+    node->Selectivity = resSelectivity;
+    node->CollectMembers = collectMembers;
+    node->AllRanges = std::move(ranges);
+
+    TString ref = leftAttr.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
+
+    return node;
+}
+
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
+    const TExprBase& left,
+    const TExprNode::TPtr list,
+    bool underNot,
+    bool collectMembers
+) {
+    TMaybe<TString> attribute;
+    TVector<TPredicateRange> setRanges;
+    double resSelectivity = 0.0;
+
+    for (const auto& child : list->Children()) {
+        TExprBase right = TExprBase(child);
+        auto tempSetRanges = ConvertEqualityToRange(left, right, false, collectMembers);
+        if (tempSetRanges) {
+            if (attribute.Defined() && attribute.GetRef() != tempSetRanges->Column) {
+                Y_ENSURE(false, "Unsupported Set selection predicate format");
+            }
+            attribute = tempSetRanges->Column;
+            resSelectivity += tempSetRanges->Selectivity;
+            setRanges.insert(setRanges.end(), tempSetRanges->AllRanges->begin(), tempSetRanges->AllRanges->end());
+        }
+    }
+
+    resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
+
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+    node->Column = attribute.GetRef();
+    node->Selectivity = resSelectivity;
+    node->CollectMembers = collectMembers;
+    node->AllRanges = std::move(setRanges);
+
+    return node;
+}
+
+double ComputeSelectivity(const std::shared_ptr<TTreeNode>& node) {
+    if (!node) { // it is empty tree, i.e. no selection predicates
+        return 1.0;
+    }
+
+    else if (node->Operator == ELogicalOperator::Leaf) {
+        return node->Selectivity;
+    }
+
+    else if (node->Operator == ELogicalOperator::And) {
+        double resSelectivity = 1.0;
+        for (auto& child : node->Children) {
+            resSelectivity *= ComputeSelectivity(child);
+        }
+        return resSelectivity;
+    }
+
+    else if (node->Operator == ELogicalOperator::Or) {
+        double resSelectivity = 0.0;
+        for (auto& child : node->Children) {
+            resSelectivity += ComputeSelectivity(child);
+        }
+        // cap at 1.0 to stop error propagation
+        return resSelectivity = std::min(1.0, resSelectivity);
+    }
+
+    return 1.0; // fallback
+}
+
 double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
-    return ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
+    std::shared_ptr<TTreeNode> rootNode = ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
+
+    double resSelectivity = ComputeSelectivity(rootNode);
+    return std::min(1.0, resSelectivity);
 }
 
 /**
  * ComputeImpl - traverses (depth-first post-order) the predicate tree and computes the selectivity of a predicate using available statistics.
  */
-double TPredicateSelectivityComputer::ComputeImpl(
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     const TExprBase& input,
     bool underNot,
     bool collectMembers
 ) {
-    TMaybe<double> resSelectivity;
-
     // Process OptionalIf, just return the predicate statistics
     if (auto optIf = input.Maybe<TCoOptionalIf>()) {
-        resSelectivity = ComputeImpl(optIf.Cast().Predicate(), underNot, collectMembers);
+        return ComputeImpl(optIf.Cast().Predicate(), underNot, collectMembers);
     }
 
     // Same with Coalesce
     else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
-        resSelectivity = ComputeImpl(coalesce.Cast().Predicate(), underNot, collectMembers);
+        return ComputeImpl(coalesce.Cast().Predicate(), underNot, collectMembers);
     }
 
     else if (
@@ -429,7 +726,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         input.Ptr()->IsCallable("Udf")
     ) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
-        resSelectivity = ComputeImpl(child, underNot, collectMembers);
+        return ComputeImpl(child, underNot, collectMembers);
     }
 
     // Process AND, OR and NOT logical operators.
@@ -438,60 +735,79 @@ double TPredicateSelectivityComputer::ComputeImpl(
     // In case of NOT we subtract the argument's selectivity from 1.0
 
     else if (auto andNode = input.Maybe<TCoAnd>()) {
-        double tmpSelectivity = 1.0;
+        auto logicalOperator = underNot ? ELogicalOperator::Or : ELogicalOperator::And;
+        auto node = std::make_shared<TTreeNode>();
+        node->Operator = logicalOperator;
+
+        TMap<TString, TVector<TPredicateRange>> tempAttributePredicates;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
-            tmpSelectivity *= ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectMembers);
+            // collect all conjunctions of a column
+            const auto& child = ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectMembers);
+            if (child) {
+                node->Children.push_back(child);
+            }
         }
-        resSelectivity = tmpSelectivity;
-    } else if (auto orNode = input.Maybe<TCoOr>()) {
-        double tmpSelectivity = 0.0;
+        return node;
+    }
+
+    else if (auto orNode = input.Maybe<TCoOr>()) {
+        auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
+        auto node = std::make_shared<TTreeNode>();
+        node->Operator = logicalOperator;
+
         for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
-            tmpSelectivity += ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectMembers);
+            // collect all disjunctions of a column
+            auto child = ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectMembers);
+            if (child) {
+                node->Children.push_back(child);
+            }
         }
-        resSelectivity = tmpSelectivity;
-    } else if (auto notNode = input.Maybe<TCoNot>()) {
-        double argSel = ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
-        resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
+        return node;
+    }
+
+    else if (auto notNode = input.Maybe<TCoNot>()) {
+        // resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
+        return ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
     }
 
     // Process equality predicate
     else if (auto equality = input.Maybe<TCoCmpEqual>()) {
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
-        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
+        return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
     }
 
     // Process not equality predicate
     else if (auto notEquality = input.Maybe<TCoCmpNotEqual>()) {
         auto left = notEquality.Cast().Left();
         auto right = notEquality.Cast().Right();
-        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
-        resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+        // resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+        return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
     }
 
     // Process all inequality predicates
     else if (auto less = input.Maybe<TCoCmpLess>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
-        resSelectivity = ComputeInequalitySelectivity(left, right, collectMembers, EInequalityPredicateType::Less);
+        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Less);
     }
 
     else if (auto greater = input.Maybe<TCoCmpGreater>()) {
         auto left = greater.Cast().Left();
         auto right = greater.Cast().Right();
-        resSelectivity = ComputeInequalitySelectivity(left, right, collectMembers, EInequalityPredicateType::Greater);
+        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Greater);
     }
 
     else if (auto lessOrEqual = input.Maybe<TCoCmpLessOrEqual>()) {
         auto left = lessOrEqual.Cast().Left();
         auto right = lessOrEqual.Cast().Right();
-        resSelectivity = ComputeInequalitySelectivity(left, right, collectMembers, EInequalityPredicateType::LessOrEqual);
+        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::LessOrEqual);
     }
 
     else if (auto greaterOrEqual = input.Maybe<TCoCmpGreaterOrEqual>()) {
         auto left = greaterOrEqual.Cast().Left();
         auto right = greaterOrEqual.Cast().Right();
-        resSelectivity = ComputeInequalitySelectivity(left, right, collectMembers, EInequalityPredicateType::GreaterOrEqual);
+        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::GreaterOrEqual);
     }
 
     // Process Pg operators
@@ -501,29 +817,26 @@ double TPredicateSelectivityComputer::ComputeImpl(
 
         EInequalityPredicateType compareSign = StringToComparisonOperatorMap[input.Ptr()->ChildPtr(0)->Content()];
         if (compareSign == EInequalityPredicateType::Equal) {
-            resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
+            return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
         } else if (compareSign == EInequalityPredicateType::NotEqual) {
-            double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
-            resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+            // resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+            return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
         } else {
-            resSelectivity = ComputeInequalitySelectivity(left, right, collectMembers, compareSign);
+            return ConvertInequalityToRange(left, right, underNot, collectMembers, compareSign);
         }
     }
 
     // Process string predicates
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
-        auto member =  TExprBase(input.Ptr()->ChildRef(0));
-        auto stringPred = TExprBase(input.Ptr()->ChildRef(1));
-
-        if (IsAttribute(member) && IsConstantExpr(stringPred.Ptr())) {
-            resSelectivity = 0.1;
-        }
+        auto left = TExprBase(input.Ptr()->ChildRef(0));
+        auto right = TExprBase(input.Ptr()->ChildRef(1));
+        return ProcessStringPredicate(left, right, underNot, collectMembers, true);
     }
 
     else if (auto comparison = input.Maybe<TCoCompare>()) {
         auto left = comparison.Cast().Left();
         auto right = comparison.Cast().Right();
-        resSelectivity = ComputeComparisonSelectivity(left, right);
+        return ProcessStringPredicate(left, right, underNot, collectMembers, false);
     }
 
     // Process regular expression
@@ -531,47 +844,35 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto atom = input.Cast<TCoAtom>();
         // regexp (all starts with Re2)
         if (atom.StringValue().StartsWith("Re2")) {
-            resSelectivity = 0.5;
+            return ProcessRegexPredicte(underNot, collectMembers);
         }
     }
 
     // Process SqlIn
     else if (input.Ptr()->IsCallable("SqlIn")) {
         auto list = input.Ptr()->ChildPtr(0);
-
-        double tmpSelectivity = 0.0;
-        auto lhs = TExprBase(input.Ptr()->ChildPtr(1));
-        for (const auto& child : list->Children()) {
-            TExprBase rhs = TExprBase(child);
-            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, false);
+        if (list != nullptr) {
+            TExprBase left = TExprBase(input.Ptr()->ChildPtr(1)); // left is always column
+            return ProcessSetPredicate(left, list, underNot, false);
         }
-        resSelectivity = tmpSelectivity;
     }
 
     else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
         auto ifExpr = maybeIfExpr.Cast();
-
         // attr in ('a', 'b', 'c' ...)
         if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
             auto list = FindNode<TExprList>(ifExpr.ThenValue());
-
             if (list != nullptr) {
-                double tmpSelectivity = 0.0;
-                TExprBase lhs = ifExpr.Predicate();
-                for (const auto& child: list->Children()) {
-                    TExprBase rhs = TExprBase(child);
-                    tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, false);
-                }
-                resSelectivity = tmpSelectivity;
+                TExprBase left = ifExpr.Predicate(); // left is always column
+                return ProcessSetPredicate(left, list, underNot, false);
             }
         }
     }
 
-    if (!resSelectivity.Defined()) {
+    else {
         auto dumped = input.Raw()->Dump();
         YQL_CLOG(TRACE, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
-        return 1.0;
     }
 
-    return std::min(1.0, resSelectivity.GetRef());
+    return nullptr;
 }

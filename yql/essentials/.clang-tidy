@@ -65,6 +65,7 @@ Checks: >
   modernize-deprecated-ios-base-aliases,
   modernize-loop-convert,
   modernize-pass-by-value,
+  modernize-redundant-void-arg,
   modernize-use-override
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays

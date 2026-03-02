@@ -1,4 +1,3 @@
-
 # Compares build graphs for two given refs in the current directory git repo
 # Creates ya.make in the current directory listing affected ydb targets
 # Parameters: base_commit_sha head_commit_sha

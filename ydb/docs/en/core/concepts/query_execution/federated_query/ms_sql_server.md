@@ -4,13 +4,13 @@ This section provides basic information about working with external [Microsoft S
 
 To work with an external Microsoft SQL Server database, you need to follow these steps:
 
-1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
+1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
     CREATE OBJECT ms_sql_server_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (

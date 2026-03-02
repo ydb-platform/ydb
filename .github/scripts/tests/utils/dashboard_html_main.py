@@ -648,6 +648,22 @@ def build_html_dashboard(
         document.getElementById('cpuSuggestionsTable').innerHTML =
           '<table id=\"cpuSuggestionsInner\" style=\"width:100%;border-collapse:collapse;\"><thead>' + topHeader + subHeader + '</thead><tbody>' + bodyHtml + '</tbody></table>';
 
+        // Fix sticky top for two-row thead: row 2 must sit below row 1.
+        const theadRows = document.querySelectorAll('#cpuSuggestionsInner thead tr');
+        if (theadRows.length >= 2) {{
+          theadRows[0].querySelectorAll('th').forEach(th => {{
+            th.style.position = 'sticky';
+            th.style.top = '0';
+            th.style.zIndex = '3';
+          }});
+          const row1H = theadRows[0].getBoundingClientRect().height;
+          theadRows[1].querySelectorAll('th').forEach(th => {{
+            th.style.position = 'sticky';
+            th.style.top = row1H + 'px';
+            th.style.zIndex = '2';
+          }});
+        }}
+
         const ths = document.querySelectorAll('#cpuSuggestionsInner thead th');
         ths.forEach(th => th.addEventListener('click', () => {{
           const col = Number(th.getAttribute('data-col'));

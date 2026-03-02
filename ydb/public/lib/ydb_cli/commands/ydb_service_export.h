@@ -52,9 +52,13 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+
+    template <typename TSettings, typename TResponse>
+    int Run(TConfig& config, TSettings& settings);
 
 protected:
+    void ParseItems(TConfig& config, const TString& optionName);
+
     struct TItemFields {
         TString Source;
         TString Destination;
@@ -85,12 +89,9 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
-
-    template <typename TSettings, typename TResponse>
-    int Run(TConfig& config, TSettings& settings);
+    virtual int Run(TConfig& config) override;
 
 private:
-    void ParseItems(TConfig& config, const TString& optionName);
     TString AwsEndpoint;
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     EStorageClass AwsStorageClass = EStorageClass::NOT_SET;

@@ -130,6 +130,9 @@ namespace NKikimr::NDDisk {
             hFunc(TEvBatchErasePersistentBuffer, handleQuery)
             hFunc(TEvListPersistentBuffer, handleQuery)
 
+            hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
+            hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)
+
             hFunc(TEvents::TEvUndelivered, Handle)
 
             hFunc(TEvReadResult, Handle)

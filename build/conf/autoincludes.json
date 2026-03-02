@@ -2,7 +2,6 @@
     "devtools/ya",
     "library/cpp/geo",
     "util",
-    "yql/essentials",
-    "ydb/core/nbs"
+    "yql/essentials"
 ]
 

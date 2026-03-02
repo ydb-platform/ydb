@@ -64,4 +64,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
+
 END()

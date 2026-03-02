@@ -9,6 +9,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     backup_path_ut.cpp
     encrypted_backup_ut.cpp

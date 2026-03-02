@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(5)
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     kqp_arrow_in_channels_ut.cpp
     kqp_types_arrow_ut.cpp

@@ -10,6 +10,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     kqp_flowcontrol_ut.cpp
     kqp_scan_ut.cpp

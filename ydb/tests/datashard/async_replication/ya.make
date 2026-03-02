@@ -19,4 +19,6 @@ DEPENDS(
     ydb/apps/ydb
 )
 
+REQUIREMENTS(ram:32 cpu:4)
+
 END()

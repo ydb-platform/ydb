@@ -39,4 +39,6 @@ PY3TEST()
 
     SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 END()

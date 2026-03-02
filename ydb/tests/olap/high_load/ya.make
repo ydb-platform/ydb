@@ -9,6 +9,7 @@ ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     read_update_write.cpp
 )

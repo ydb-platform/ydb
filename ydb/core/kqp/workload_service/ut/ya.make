@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     kqp_workload_service_actors_ut.cpp
     kqp_workload_service_tables_ut.cpp

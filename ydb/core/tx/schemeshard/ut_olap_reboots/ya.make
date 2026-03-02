@@ -24,6 +24,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_olap_reboots.cpp
 )

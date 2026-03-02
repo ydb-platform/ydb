@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/base
 )
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     ut_background_cleaning.cpp
 )

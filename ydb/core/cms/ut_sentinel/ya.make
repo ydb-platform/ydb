@@ -12,6 +12,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     cms_ut_common.cpp
     cms_ut_common.h

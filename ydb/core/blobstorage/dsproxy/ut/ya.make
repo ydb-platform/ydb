@@ -19,6 +19,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     dsproxy_put_ut.cpp
     dsproxy_quorum_tracker_ut.cpp

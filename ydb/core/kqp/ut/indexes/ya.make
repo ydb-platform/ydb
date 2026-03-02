@@ -10,6 +10,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:32 cpu:4)
 SRCS(
     kqp_indexes_ut.cpp
     kqp_indexes_multishard_ut.cpp

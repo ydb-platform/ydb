@@ -22,4 +22,6 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 END()

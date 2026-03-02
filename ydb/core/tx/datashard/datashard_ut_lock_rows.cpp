@@ -822,6 +822,179 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             "");
     }
 
+    Y_UNIT_TEST(LockOverUncommittedChangeThenCommitBreaksLock) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        NLongTxService::TLockHandle lock1(123, runtime.GetActorSystem(0));
+
+        // Write an uncommitted row at key 1
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 101);
+                SELECT key, value FROM `/Root/table` WHERE key = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock key 1 by lock 1
+        {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(1);
+            req->Record.SetLockId(lock1.GetLockId());
+            req->Record.SetLockNodeId(lock1.GetLockNodeId());
+            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->SetTableId(tableId);
+            req->Record.AddColumnIds(1);
+            req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TVector<TCell> cells({
+                TCell::Make(i32(1)),
+            });
+            req->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            pipe.Send(sender, req.release());
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRequestId(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
+        }
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock key 2 by lock 1 (lock must be broken now)
+        {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(2);
+            req->Record.SetLockId(lock1.GetLockId());
+            req->Record.SetLockNodeId(lock1.GetLockNodeId());
+            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->SetTableId(tableId);
+            req->Record.AddColumnIds(1);
+            req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TVector<TCell> cells({
+                TCell::Make(i32(2)),
+            });
+            req->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            pipe.Send(sender, req.release());
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRequestId(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+        }
+    }
+
+    Y_UNIT_TEST(UncommittedChangeOverLockThenCommitBreaksLock) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        NLongTxService::TLockHandle lock1(123, runtime.GetActorSystem(0));
+
+        // Lock key 1 by lock 1
+        {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(1);
+            req->Record.SetLockId(lock1.GetLockId());
+            req->Record.SetLockNodeId(lock1.GetLockNodeId());
+            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->SetTableId(tableId);
+            req->Record.AddColumnIds(1);
+            req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TVector<TCell> cells({
+                TCell::Make(i32(1)),
+            });
+            req->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            pipe.Send(sender, req.release());
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRequestId(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
+        }
+
+        // Write an uncommitted row at key 1
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 101);
+                SELECT key, value FROM `/Root/table` WHERE key = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock key 2 by lock 1 (lock not broken yet)
+        {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(2);
+            req->Record.SetLockId(lock1.GetLockId());
+            req->Record.SetLockNodeId(lock1.GetLockNodeId());
+            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->SetTableId(tableId);
+            req->Record.AddColumnIds(1);
+            req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TVector<TCell> cells({
+                TCell::Make(i32(2)),
+            });
+            req->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            pipe.Send(sender, req.release());
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRequestId(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
+        }
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock key 3 by lock 1 (lock must be broken now)
+        {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(3);
+            req->Record.SetLockId(lock1.GetLockId());
+            req->Record.SetLockNodeId(lock1.GetLockNodeId());
+            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->SetTableId(tableId);
+            req->Record.AddColumnIds(1);
+            req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TVector<TCell> cells({
+                TCell::Make(i32(3)),
+            });
+            req->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            pipe.Send(sender, req.release());
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRequestId(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)
 
 } // namespace NKikimr

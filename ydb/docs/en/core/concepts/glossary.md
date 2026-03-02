@@ -121,7 +121,7 @@ Logical "connections" to the database that maintains the context needed to execu
 
 ### Multi-version concurrency control {#mvcc}
 
-[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
+[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
 ### Topology {#topology}
 
@@ -163,13 +163,13 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](query_execution/secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [Secondary indexes](query_execution/secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
 A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 
 #### Vector Index {#vector-index}
 
-**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+**Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
 The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
 **Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
@@ -265,7 +265,7 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 **Federated queries** is a feature that allows querying data stored in systems external to the {{ ydb-short-name }} cluster.
 
-A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [{#T}](federated_query/index.md).
+A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [Federated query](query_execution/federated_query/index.md).
 
 #### External data source {#external-data-source}
 
@@ -393,7 +393,7 @@ Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that ar
 
 ### Query optimizer {#optimizer}
 
-[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](query_execution/optimizer.md) section.
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -514,7 +514,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 **Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
 
-For more details on spilling, see [{#T}](spilling.md).
+For more details on spilling, see [{#T}](query_execution/spilling.md).
 
 ### Tablet types {#tablet-types}
 

@@ -18,7 +18,7 @@
   - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../reference/kafka-api/index.md).
   - [**Change Data Capture (CDC)**](cdc.md): built-in stream of table data changes published as a topic.
   - **Transfers**: automated data delivery from topics to tables.
-- [**Federated queries**](federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data import to {{ ydb-short-name }} storage.
+- [**Federated queries**](query_execution/federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data import to {{ ydb-short-name }} storage.
 - [**Vector indexes**](vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
 - [**Observability**](../reference/observability/index.md): built-in metrics, logs, and dashboards.
 - **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../security/index.md).

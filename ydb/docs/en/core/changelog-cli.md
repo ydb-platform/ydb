@@ -374,7 +374,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 
 * Improved query logical plan tables: added colors, more information, fixed some bugs.
 * The verbose option `-v` is supported for the `{{ ydb-cli }} workload` commands to provide debug information.
-* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
+* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/query_execution/federated_query/index.md) performance.
 * Added the `--rate` option for `{{ ydb-cli }} workload` commands to control the transactions (or requests) per second limit.
 * Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
 * Improved the `{{ ydb-cli }} scheme ls` command performance due to listing directories in parallel.

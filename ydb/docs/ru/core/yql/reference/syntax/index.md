@@ -42,6 +42,8 @@
 
 {% endif %}
 
+* [BATCH UPDATE](batch-update.md)
+* [BATCH DELETE](batch-delete.md)
 * [GROUP BY](group_by.md)
 
 {% if feature_join %}
@@ -127,3 +129,33 @@
 * [DROP TRANSFER](drop-transfer.md)
 
 {% endif %}
+
+* [ANALYZE](analyze.md)
+* [COMMIT](commit.md)
+* [CREATE VIEW](create-view.md)
+* [ALTER VIEW](alter-view.md)
+* [DROP VIEW](drop-view.md)
+* [CREATE EXTERNAL DATA SOURCE](create-external-data-source.md)
+* [CREATE EXTERNAL TABLE](create-external-table.md)
+* [DROP EXTERNAL DATA SOURCE](drop-external-data-source.md)
+* [DROP EXTERNAL TABLE](drop-external-table.md)
+* [CREATE OBJECT (TYPE SECRET)](create-object-type-secret.md)
+* [CREATE OBJECT (TYPE SECRET_ACCESS)](create-object-type-secret-access.md)
+* [DROP OBJECT (TYPE SECRET)](drop-object-type-secret.md)
+* [DROP OBJECT (TYPE SECRET_ACCESS)](drop-object-type-secret-access.md)
+* [UPSERT OBJECT (TYPE SECRET)](upsert-object-type-secret.md)
+* [CREATE RESOURCE POOL](create-resource-pool.md)
+* [ALTER RESOURCE POOL](alter-resource-pool.md)
+* [DROP RESOURCE POOL](drop-resource-pool.md)
+* [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
+* [ALTER RESOURCE POOL CLASSIFIER](alter-resource-pool-classifier.md)
+* [DROP RESOURCE POOL CLASSIFIER](drop-resource-pool-classifier.md)
+* [CREATE USER](create-user.md)
+* [ALTER USER](alter-user.md)
+* [DROP USER](drop-user.md)
+* [CREATE GROUP](create-group.md)
+* [ALTER GROUP](alter-group.md)
+* [DROP GROUP](drop-group.md)
+* [GRANT](grant.md)
+* [REVOKE](revoke.md)
+* [Неподдерживаемые конструкции](not_yet_supported.md)

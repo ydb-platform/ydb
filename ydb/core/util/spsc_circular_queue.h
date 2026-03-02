@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-// cache unfriendly, because
+// Single-producer / single-consumer circular queue
 template <typename T>
 class TSpscCircularQueue {
 public:

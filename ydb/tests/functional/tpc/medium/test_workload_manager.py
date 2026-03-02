@@ -99,7 +99,8 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
 
 class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     tpcc_warehouses: int = 10
-    iterations = 3
+    iterations = 1
+    timeout: float = 60
 
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:

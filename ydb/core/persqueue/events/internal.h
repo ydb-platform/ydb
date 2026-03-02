@@ -50,6 +50,7 @@ namespace NPQ {
         {}
     };
 
+    // this struct is not used concurrently
     struct TRequestedBlob {
         mutable TKey Key;
         mutable TString RawValue;
@@ -60,14 +61,15 @@ namespace NPQ {
         ui32 Size;
         bool Cached;
         ui64 CreationUnixTime;
-        mutable std::shared_ptr<TVector<TBatch>> Batches;
+        // mutable is needed for lazy initialization
+        mutable std::shared_ptr<const TVector<TBatch>> Batches;
 
         TRequestedBlob() = delete;
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
 
         bool Empty() const;
         void Clear();
-        std::shared_ptr<TVector<TBatch>> GetBatches() const;
+        std::shared_ptr<const TVector<TBatch>> GetBatches() const;
     };
 
     struct TDataKey {

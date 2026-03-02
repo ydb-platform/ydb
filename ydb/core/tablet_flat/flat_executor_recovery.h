@@ -26,11 +26,13 @@ enum EEv {
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR));
 
 struct TEvRestoreBackup : public TEventLocal<TEvRestoreBackup, EvRestoreBackup> {
-    TEvRestoreBackup(const TString& backupPath)
+    TEvRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false)
         : BackupPath(backupPath)
+        , SkipChecksumValidation(skipChecksumValidation)
     {}
 
     TString BackupPath;
+    bool SkipChecksumValidation = false;
 };
 
 struct TEvRestoreCompleted : public TEventLocal<TEvRestoreCompleted, EvRestoreCompleted> {
@@ -108,6 +110,8 @@ enum class ERestoreState : ui8 {
 };
 
 IActor* CreateRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info);
-IActor* CreateBackupReader(TActorId owner, const TString& backupPath);
+IActor* CreateBackupReader(TActorId owner, const TString& backupPath,
+                           TTabletTypes::EType tabletType, ui64 tabletId,
+                           bool skipChecksumValidation = false);
 
 } // namespace NKikimr::NTabletFlatExecutor::NRecovery

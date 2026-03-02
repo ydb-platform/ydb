@@ -140,6 +140,7 @@ private:
             RestoredFromSavedCheckpoint = subgroup->GetCounter("RestoredFromSavedCheckpoint", true);
             StartedFromEmptyCheckpoint = subgroup->GetCounter("StartedFromEmptyCheckpoint", true);
             RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
+            FailedBySkippedCheckpoints = subgroup->GetCounter("FailedBySkippedCheckpoints", true);
         }
 
         ::NMonitoring::TDynamicCounters::TCounterPtr InProgress;
@@ -158,6 +159,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FailedBySkippedCheckpoints;
         NMonitoring::THistogramPtr CheckpointBarrierDeliveryTimeMillis;
         NMonitoring::THistogramPtr CheckpointDurationMillis;
         NMonitoring::THistogramPtr CheckpointSizeBytes;

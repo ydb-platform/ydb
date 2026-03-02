@@ -26,6 +26,8 @@ namespace NFq {
 
 using namespace NActors;
 
+constexpr ui64 SKIPPED_CHECKPOINTS_LIMIT = 10;
+
 TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings() {
     ui64 ms = 0;
     if (!TryFromString<ui64>(GetEnv("YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"), ms)) {
@@ -374,9 +376,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleC
     ScheduleNextCheckpoint();
     const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
     if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
-        CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << Settings.GetMaxInflight());
         Metrics.SkippedDueToInFlightLimit->Inc();
         ++SkippedDueToInFlightLimitCounter;
+        if (SkippedDueToInFlightLimitCounter >= SKIPPED_CHECKPOINTS_LIMIT) {
+            CC_LOG_E("Too many skipped checkpoints, abort query");
+            OnInternalError("Too many skipped checkpoints; there might be a problem with the output (topics/logbroker/monitoring/...)");
+            Metrics.FailedBySkippedCheckpoints->Inc();
+        }
+        CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << Settings.GetMaxInflight());
         return;
     }
     FailedZeroCheckpoint = false;

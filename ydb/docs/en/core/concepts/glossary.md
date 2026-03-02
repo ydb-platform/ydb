@@ -117,7 +117,7 @@ The term **interactive transactions** refers to transactions that are split into
 
 ### Sessions
 
-Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution.md#sessions).
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution/index.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -163,7 +163,7 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](query_execution/secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
 A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 

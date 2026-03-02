@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} uses two types of query optimizers: a rule-based optimizer and a cost-based optimizer. The cost-based optimizer is used for complex queries, typically analytical ([OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)), while rule-based optimization works on all queries.
 
-A query plan is a graph of operations, such as reading data from a source, filtering a data stream by a predicate, or performing more complex operations such as [JOIN](../yql/reference/syntax/select/join.md) and [GROUP BY](../yql/reference/syntax/select/group-by.md). Optimizers in {{ ydb-short-name }} take an initial query plan as input and transform it into a more efficient plan that is equivalent to the initial one in terms of the returned result.
+A query plan is a graph of operations, such as reading data from a source, filtering a data stream by a predicate, or performing more complex operations such as [JOIN](../../yql/reference/syntax/select/join.md) and [GROUP BY](../../yql/reference/syntax/select/group-by.md). Optimizers in {{ ydb-short-name }} take an initial query plan as input and transform it into a more efficient plan that is equivalent to the initial one in terms of the returned result.
 
 ## Rule-Based Optimizer
 
@@ -10,7 +10,7 @@ A significant part of the optimizations in {{ ydb-short-name }} applies to almos
 
 ## Cost-Based Query Optimizer
 
-The cost-based optimizer is used for more complex optimizations, such as choosing an optimal join order and join algorithms. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. Currently, this optimizer only works with plans that contain [JOIN](../yql/reference/syntax/select/join.md) operations. It chooses the best order for these operations and the most efficient algorithm implementation for each join operation in the plan.
+The cost-based optimizer is used for more complex optimizations, such as choosing an optimal join order and join algorithms. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. Currently, this optimizer only works with plans that contain [JOIN](../../yql/reference/syntax/select/join.md) operations. It chooses the best order for these operations and the most efficient algorithm implementation for each join operation in the plan.
 
 The cost-optimizer consists of three main components:
 
@@ -66,7 +66,7 @@ To compare plans, the optimizer needs to estimate their costs. The cost function
 
 ### Statistics for the Cost-Based Optimizer {#statistics}
 
-The cost-based optimizer relies on table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains these statistics in the background. You can manually force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) query.
+The cost-based optimizer relies on table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains these statistics in the background. You can manually force statistics collection using the [ANALYZE](../../yql/reference/syntax/analyze.md) query.
 
 The current set of table statistics includes:
 
@@ -79,6 +79,6 @@ The current set of column statistics includes:
 
 ### Cost Optimization Levels
 
-In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../yql/reference/syntax/pragma.md#costbasedoptimizationlevel) pragma.
+In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../../yql/reference/syntax/pragma.md#costbasedoptimizationlevel) pragma.
 
 To force the cost-based optimizer to be enabled for the current query, set the pragma `PRAGMA ydb.CostBasedOptimization = "on";`. To disable the cost-based optimizer, set the pragma to `off`.

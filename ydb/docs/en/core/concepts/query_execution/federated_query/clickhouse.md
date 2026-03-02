@@ -6,13 +6,13 @@ This section describes the basic information about working with the external Cli
 
 To work with the external ClickHouse database, the following steps must be completed:
 
-1. Create a [secret](../datamodel/secrets.md) containing the password to connect to the database.
+1. Create a [secret](../../../datamodel/secrets.md) containing the password to connect to the database.
 
     ```yql
     CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
@@ -72,7 +72,7 @@ There are several limitations when working with ClickHouse clusters:
 
 ## Supported Data Types
 
-By default, ClickHouse columns cannot physically contain `NULL` values. However, users can create tables with columns of optional or [nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable) types. The column types displayed in {{ ydb-short-name }} when extracting data from the external ClickHouse database will depend on whether primitive or optional types are used in the ClickHouse table. Due to the previously discussed limitations of {{ ydb-short-name }} types used to store dates and times, all similar ClickHouse types are displayed in {{ ydb-short-name }} as [optional](../../yql/reference/types/optional.md).
+By default, ClickHouse columns cannot physically contain `NULL` values. However, users can create tables with columns of optional or [nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable) types. The column types displayed in {{ ydb-short-name }} when extracting data from the external ClickHouse database will depend on whether primitive or optional types are used in the ClickHouse table. Due to the previously discussed limitations of {{ ydb-short-name }} types used to store dates and times, all similar ClickHouse types are displayed in {{ ydb-short-name }} as [optional](../../../../yql/reference/types/optional.md).
 
 Below are the mapping tables for ClickHouse and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

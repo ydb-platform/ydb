@@ -8,7 +8,7 @@ To use a similar feature with any field or combination of fields, additional ind
 
 In transactional systems, indexes are used to limit or avoid performance degradation and increase of query cost as your data grows.
 
-This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/secondary_indexes.md) in the Concepts section.
+This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/query_execution/secondary_indexes.md) in the Concepts section.
 
 ## Creating secondary indexes {#create}
 

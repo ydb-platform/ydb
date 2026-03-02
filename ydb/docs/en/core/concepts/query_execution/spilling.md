@@ -27,7 +27,7 @@ When memory usage approaches the limit, the system:
 
 ## Spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](glossary.md#database-node). Detailed technical information about it is available in [{#T}](../contributor/spilling-service.md).
+{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](../glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](../glossary.md#database-node). Detailed technical information about it is available in [{#T}](../../contributor/spilling-service.md).
 
 ### Types of Spilling in {{ ydb-short-name }}
 
@@ -75,11 +75,11 @@ The data transfer system continuously monitors its state:
 
 ## Interaction with Memory Controller
 
-When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../reference/configuration/memory_controller_config.md). To continue fitting within this limit as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../reference/configuration/table_service_config.md#memory-management).
+When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/memory_controller_config.md). To continue fitting within this limit as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../../reference/configuration/table_service_config.md#memory-management).
 
 ## See Also
 
-- [Spilling Service](../contributor/spilling-service.md)
-- [Spilling configuration](../reference/configuration/table_service_config.md)
-- [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
-- [Performance diagnostics](../troubleshooting/performance/index.md)
+- [Spilling Service](../../contributor/spilling-service.md)
+- [Spilling configuration](../../reference/configuration/table_service_config.md)
+- [{{ ydb-short-name }} monitoring](../../devops/observability/monitoring.md)
+- [Performance diagnostics](../../troubleshooting/performance/index.md)

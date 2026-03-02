@@ -4,9 +4,13 @@ Contains OIDC proxy service code.
 
 ## Config Examples
 
-Use `examples/` for ready-to-run configs:
+Generic auth/access_service_type examples are shared in:
 
-- `examples/simple_config.yaml` - minimal config with direct token usage from token file.
-- `examples/static_config.yaml` - config with static OAuth2 token exchange credentials in YAML.
-- `examples/federated_config.yaml` - config with federated-style subject/actor credentials in YAML.
-- `examples/token_file.pb.txt` - protobuf text example for `generic.auth.token_file`.
+- `../core/examples/simple_config.yaml`
+- `../core/examples/static_config.yaml`
+- `../core/examples/federated_config.yaml`
+- `../core/examples/token_file.pb.txt`
+
+OIDC proxy-specific examples from `examples/`:
+- `examples/y_config.yaml`
+- `examples/n_config.yaml`

@@ -1,6 +1,7 @@
 #include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -150,6 +151,9 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (ev->Get()->Finished) {
         state->State = EShardState::PostRunning;
     }
+
+    ev->Get()->ArrowBatch = NArrow::ClaimMemoryOwnership(ev->Get()->ArrowBatch);
+
     PendingScanData.emplace_back(std::make_pair(ev, startTime));
 
     ProcessScanData();

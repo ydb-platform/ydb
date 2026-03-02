@@ -311,23 +311,6 @@ TRuntimeNode BuildDqYtInputCall(
     NYT::TNode samplingSpec;
     const ui64 nativeTypeCompat = state->Configuration->NativeYtTypeCompatibility.Get(clusterName).GetOrElse(NTCF_LEGACY);
 
-    auto updateFlags = [nativeTypeCompat](NYT::TNode& spec) {
-        if (spec.HasKey(YqlRowSpecAttribute)) {
-            auto& rowSpec = spec[YqlRowSpecAttribute];
-            ui64 nativeYtTypeFlags = 0;
-            if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
-            } else {
-                if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                }
-            }
-            rowSpec[RowSpecAttrNativeYtTypeFlags] = ui64(nativeYtTypeFlags & nativeTypeCompat);
-        }
-    };
-
     TVector<TRuntimeNode> groups;
     for (size_t i: xrange(sectionList.Size())) {
         auto section = sectionList.Item(i);
@@ -373,7 +356,9 @@ TRuntimeNode BuildDqYtInputCall(
             if (!sysColumns.IsUndefined()) {
                 specNode[YqlSysColumnPrefix] = sysColumns;
             }
-            updateFlags(specNode);
+            if (pathInfo.Table->IsTemp) {
+                UpdateNativeYtTypeFlags(specNode, nativeTypeCompat);
+            }
             TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {

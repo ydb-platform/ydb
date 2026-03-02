@@ -21,6 +21,7 @@ def do(args):
     base_config = base_config_and_storage_pools['BaseConfig']
     group_map = common.build_group_map(base_config)
     vslot_map = common.build_vslot_map(base_config)
+    pdisk_map = common.build_pdisk_map(base_config)
 
     storage_pools = base_config_and_storage_pools['StoragePools']
     sp_name = common.build_storage_pool_names_map(storage_pools)
@@ -135,8 +136,23 @@ def do(args):
         if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
             group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'], vslot.VDiskMetrics.VDiskSlotUsage)
 
+        pdisk = pdisk_map[common.get_pdisk_id(vslot.VSlotId)]
         if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
             group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'], vslot.VDiskMetrics.VDiskRawUsage)
+        elif pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+            # VDiskRawUsage metric was added in 26.1.1
+            # For older versions we calculate it on client side
+            #
+            # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+            #   VDiskRawUsage = 100.0 * (used / hardLimit)
+            # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+            #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+            #
+            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
+            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vdisk_raw_usage = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'], vdisk_raw_usage)
 
         if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
             group_stat['NormalizedOccupancy'] = max(group_stat['NormalizedOccupancy'], vslot.VDiskMetrics.NormalizedOccupancy)

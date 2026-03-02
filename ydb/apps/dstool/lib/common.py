@@ -11,6 +11,7 @@ import os
 import os.path
 import ssl
 import socket
+import math
 from google.protobuf import text_format
 from argparse import FileType
 from functools import wraps
@@ -296,6 +297,12 @@ def get_pdisk_inferred_settings(pdisk):
         return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
+def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
+    vu = group_size_in_units if group_size_in_units > 0 else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units > 0 else 1
+    return math.ceil(vu / pu)
 
 
 class Location(typing.NamedTuple):

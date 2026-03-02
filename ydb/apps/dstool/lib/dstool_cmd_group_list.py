@@ -64,6 +64,7 @@ def do(args):
         'ErasureSpecies',
         'SizeInUnits',
         'OperatingStatus',
+        'CapacityAlert',
         'VDisks_TOTAL',
     ]
     col_units = {
@@ -78,7 +79,7 @@ def do(args):
         visible_columns.extend(['VDisks_READY', 'VDisks_ERROR', 'VDisks_REPLICATING', 'VDisks_INIT_PENDING'])
 
     if args.show_vdisk_usage or args.all_columns:
-        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage', 'VDiskRawUsage', 'NormalizedOccupancy', 'CapacityAlert'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage'])
 
     if args.virtual_groups_only:
         visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])

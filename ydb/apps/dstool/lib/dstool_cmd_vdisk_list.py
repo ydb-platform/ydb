@@ -72,6 +72,7 @@ def do(args):
         'VSlotId',
         'VSlotStatus',
         'GroupSizeInUnits',
+        'CapacityAlert',
         'IsDonor',
         'ReadOnly',
     ]
@@ -87,7 +88,7 @@ def do(args):
         visible_columns.extend(['PDiskDriveStatus', 'PDiskDecommitStatus'])
 
     if args.show_vdisk_usage:
-        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage', 'VDiskRawUsage', 'NormalizedOccupancy', 'CapacityAlert'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage'])
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 

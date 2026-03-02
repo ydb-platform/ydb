@@ -26,7 +26,7 @@ TKikimrRunner Kikimr() {
     return TKikimrRunner(settings);
 }
 
-void CreateTestTable(NQuery::TQueryClient& db, const char* type = "String") {
+void CreateTestTable(NQuery::TQueryClient& db, const char* type = "Json") {
     TString query = std::format(R"sql(
         CREATE TABLE `/Root/TestTable` (
             Key Uint64,
@@ -75,9 +75,6 @@ void DoTestAddJsonIndex(const TString& type, bool nullable, bool covered) {
         )sql", castStart.c_str(), castEnd.c_str());
         if (nullable) {
             query += ", (17, NULL, \"null data 8\")";
-        }
-        if (type == "String") {
-            query += ", (18, \"[invalid json\", \"invalid data 9\")";
         }
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -147,20 +144,12 @@ Y_UNIT_TEST(AddJsonIndexJsonDocument) {
     DoTestAddJsonIndex("JsonDocument", true, false);
 }
 
-Y_UNIT_TEST(AddJsonIndexString) {
-    DoTestAddJsonIndex("String", true, false);
-}
-
 Y_UNIT_TEST(AddJsonIndexJsonNotNull) {
     DoTestAddJsonIndex("Json", false, false);
 }
 
 Y_UNIT_TEST(AddJsonIndexJsonDocumentNotNull) {
     DoTestAddJsonIndex("JsonDocument", false, false);
-}
-
-Y_UNIT_TEST(AddJsonIndexStringNotNull) {
-    DoTestAddJsonIndex("String", false, false);
 }
 
 Y_UNIT_TEST(AddJsonIndexCoveringJson) {
@@ -171,20 +160,12 @@ Y_UNIT_TEST(AddJsonIndexCoveringJsonDocument) {
     DoTestAddJsonIndex("JsonDocument", true, true);
 }
 
-Y_UNIT_TEST(AddJsonIndexCoveringString) {
-    DoTestAddJsonIndex("String", true, true);
-}
-
 Y_UNIT_TEST(AddJsonIndexCoveringJsonNotNull) {
     DoTestAddJsonIndex("Json", false, true);
 }
 
 Y_UNIT_TEST(AddJsonIndexCoveringJsonDocumentNotNull) {
     DoTestAddJsonIndex("JsonDocument", false, true);
-}
-
-Y_UNIT_TEST(AddJsonIndexCoveringStringNotNull) {
-    DoTestAddJsonIndex("String", false, true);
 }
 
 }

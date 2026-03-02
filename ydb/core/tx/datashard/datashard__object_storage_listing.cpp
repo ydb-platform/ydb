@@ -16,6 +16,7 @@ private:
 
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
+    NWilson::TSpan ListingSpan;
 
     // Used to continue iteration from last known position instead of restarting from the beginning
     // This greatly improves performance for the cases with many deletion markers but sacrifices
@@ -40,9 +41,10 @@ private:
     };
 
 public:
-    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev, NWilson::TTraceId &&traceId)
-        : TBase(ds, std::move(traceId))
+    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev, NWilson::TSpan &&listingSpan)
+        : TBase(ds, listingSpan.GetTraceId())
         , Ev(ev)
+        , ListingSpan(std::move(listingSpan))
         , RestartCount(0)
     {}
 
@@ -460,10 +462,9 @@ public:
                     << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
         ctx.Send(Ev->Sender, Result.Release());
 
-        NWilson::TSpan& listingSpan = Ev->Get()->ListingSpan;
-        if (listingSpan) {
+        if (ListingSpan) {
             // If there was an error, it was already reported in SetError.
-            listingSpan.EndOk();
+            ListingSpan.EndOk();
         }
     }
 
@@ -513,9 +514,8 @@ private:
 
         FillSpan(execSpan, stats, descr);
 
-        NWilson::TSpan& listingSpan = Ev->Get()->ListingSpan;
-        if (listingSpan) {
-            listingSpan.EndError(descr);
+        if (ListingSpan) {
+            ListingSpan.EndError(descr);
         }
     }
 
@@ -556,16 +556,16 @@ private:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
-    auto* request = ev->Get();
-    
+    NWilson::TSpan listingSpan;
+
     if (ev->TraceId) {
-        request->ListingSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.ObjectStorageListing", NWilson::EFlags::AUTO_END);
-        if (request->ListingSpan) {
-            request->ListingSpan.Attribute("Shard", std::to_string(TabletID()));
+        listingSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.ObjectStorageListing", NWilson::EFlags::AUTO_END);
+        if (listingSpan) {
+            listingSpan.Attribute("Shard", std::to_string(TabletID()));
         }
     }
 
-    Executor()->Execute(new TTxObjectStorageListing(this, ev, request->ListingSpan.GetTraceId()), ctx);
+    Executor()->Execute(new TTxObjectStorageListing(this, ev, std::move(listingSpan)), ctx);
 }
 
 } // namespace NDataShard

@@ -358,10 +358,10 @@ public:
         });
     }
 
-    void MockNoSession(NActors::TActorId coordinatorId, ui64 generation) const {
+    void MockNoSession(NActors::TActorId rowDispatcherId, ui64 generation) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNoSession();
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0, generation));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 

@@ -20,7 +20,7 @@ std::string GetResultStatus(const T& writeResult) {
     return std::string(NEnumSerializationRuntime::ToStringBuf(writeResult.Status));
 }
 
-std::string GetFlushResultErrorMessage(const NYdb::NTopic::TFlushResult& result) {
+std::string GetErrorMessage(const NYdb::NTopic::TFlushResult& result) {
     std::string errorMessage = "error occurred while writing message";
     errorMessage += ", flush status: " + GetResultStatus(result);
     errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
@@ -31,7 +31,7 @@ std::string GetFlushResultErrorMessage(const NYdb::NTopic::TFlushResult& result)
     return errorMessage;
 }
 
-std::string GetWriteResultErrorMessage(const NYdb::NTopic::TWriteResult& result) {
+std::string GetErrorMessage(const NYdb::NTopic::TWriteResult& result) {
     std::string errorMessage = "error occurred while writing message";
     errorMessage += ", write status: " + GetResultStatus(result);
     if (result.ErrorMessage) {
@@ -58,7 +58,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
         if (writeResult.IsError()) {
             // this means that some non retryable error occurred, for example, producer was closed due to user error
             // in this case we need to stop retrying and see the close description (to simplify the example, we just print it to standard error)
-            std::cerr << GetWriteResultErrorMessage(writeResult) << std::endl;
+            std::cerr << GetErrorMessage(writeResult) << std::endl;
             return;
         }
 
@@ -79,7 +79,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
     if (flushResult.IsClosed()) {
         // if flush was not successful, this means that producer was closed due to non retryable error
         // in this case we should see the close description (to simplify the example, we just print it to standard error)
-        std::cerr << GetFlushResultErrorMessage(flushResult) << std::endl;
+        std::cerr << GetErrorMessage(flushResult) << std::endl;
     }
 }
 

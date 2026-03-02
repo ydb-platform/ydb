@@ -26,7 +26,9 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
-    virtual void EstablishConnections(NWilson::TTraceId traceId, ui32 vChunkIndex) = 0;
+    virtual void EstablishConnections(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -106,8 +108,9 @@ public:
 
     ~TDirectBlockGroup() override;
 
-    void EstablishConnections(NWilson::TTraceId traceId,
-                              ui32 vChunkIndex) override;
+    void EstablishConnections(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -147,8 +150,10 @@ private:
             result);
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
-    void RequestBlockFlush(const NWilson::TTraceId& parentTrace,
-                           ui64 blockIndex, ui32 vChunkIndex);
+    void RequestBlockFlush(
+        const NWilson::TTraceId& parentTrace,
+        ui64 blockIndex,
+        ui32 vChunkIndex);
 
     void ProcessSyncQueue(size_t ddiskId);
 
@@ -174,8 +179,9 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
-    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId,
-                                     ui32 vChunkIndex);
+    void RestoreFromPersistentBuffer(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex);
     void DoRestoreFromPersistentBuffer(
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
     void HandleListPersistentBufferResultOnRestore(
@@ -183,7 +189,9 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
-    void RestoreFromPersistentBufferFinised(NWilson::TTraceId traceId, ui32 vChunkIndex);
+    void RestoreFromPersistentBufferFinised(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

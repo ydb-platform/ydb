@@ -415,9 +415,7 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     ui64 tabletId,
     ui32 vChunkIndex,
     ui8 requiredAckCount)
-    : TBaseRequestHandler(
-        actorSystem,
-        vChunkIndex)
+    : TBaseRequestHandler(actorSystem, vChunkIndex)
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {

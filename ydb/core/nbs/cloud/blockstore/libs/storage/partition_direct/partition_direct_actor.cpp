@@ -17,6 +17,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <util/system/fs.h>
+
 #include <unistd.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -26,7 +27,8 @@ using namespace NActors;
 
 namespace {
 
-TString GetDDiskConnectionsFilePath(ui64 tabletId) {
+TString GetDDiskConnectionsFilePath(ui64 tabletId)
+{
     TString res = "/tmp/partition_actor_ddisk_connections";
     res += "_" + ToString(tabletId);
     res += "_" + ToString(getpid());
@@ -74,7 +76,8 @@ TString SerializeTabletInfo(
 }
 
 void DeserializeTabletInfo(
-    const TString& serialized, TPartitionIds& ids,
+    const TString& serialized,
+    TPartitionIds& ids,
     NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
     NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
@@ -103,16 +106,18 @@ void DeserializeTabletInfo(
     }
 }
 
-} // namespace
+}   // namespace
 
-TPartitionActor::TPartitionActor(const TActorId& tablet,
-                                 NKikimr::TTabletStorageInfo* info)
+TPartitionActor::TPartitionActor(
+    const TActorId& tablet,
+    NKikimr::TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NKikimr::NMiniKQL::TMiniKQLFactory)
 {
-    LOG_INFO(NActors::TActivationContext::AsActorContext(),
-             NKikimrServices::NBS_PARTITION,
-             "TPartitionActor: initialization started");
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "TPartitionActor: initialization started");
 }
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
@@ -132,23 +137,30 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-        "Started NBS partition: actor id %s", SelfId().ToString().data());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Started NBS partition: actor id %s",
+        SelfId().ToString().data());
 
     // Initialize StorageConfig from NBS service
     if (auto nbsService = GetNbsService()) {
         const auto& nbsConfig = nbsService->GetConfig();
         if (nbsConfig.has_nbsstorageconfig()) {
             StorageConfig.CopyFrom(nbsConfig.nbsstorageconfig());
-            LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
+            LOG_INFO(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
                 "Initialized StorageConfig from NBS service config");
         }
     }
 
     if (HaveStoredTabletInfo()) {
         DdiskBlockGroupAllocated = true;
-        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-                "DDisks connection info has been found");
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "DDisks connection info has been found");
 
         TPartitionIds ids;
         LoadTabletInfo(ctx, ids);
@@ -241,16 +253,16 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto persistentBufferDDiskIds =
             std::move(ids[i].PersistentBufferDDiskIds);
 
-        directBlockGroups.emplace_back(
-            std::make_shared<TDirectBlockGroup>(
-                TActivationContext::ActorSystem(),
-                TabletID(),
-                1,   // generation
-                i,   // directBlockGroupIndex
-                std::move(ddiskIds), std::move(persistentBufferDDiskIds),
-                VolumeConfig.GetBlockSize(),
-                VolumeConfig.GetPartitions(0).GetBlockCount(),
-                StorageConfig.GetSyncRequestsBatchSize()));
+        directBlockGroups.emplace_back(std::make_shared<TDirectBlockGroup>(
+            TActivationContext::ActorSystem(),
+            TabletID(),
+            1,   // generation
+            i,   // directBlockGroupIndex
+            std::move(ddiskIds),
+            std::move(persistentBufferDDiskIds),
+            VolumeConfig.GetBlockSize(),
+            VolumeConfig.GetPartitions(0).GetBlockCount(),
+            StorageConfig.GetSyncRequestsBatchSize()));
     }
 
     return directBlockGroups;
@@ -258,21 +270,28 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
 void TPartitionActor::LoadTabletInfo(
     const NActors::TActorContext& ctx,
-    TPartitionIds &ids)
+    TPartitionIds& ids)
 {
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "Trying to restore DDisks Ids");
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Trying to restore DDisks Ids");
 
     TFileInput input(GetDDiskConnectionsFilePath(TabletID()));
     TString serialized = input.ReadAll();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::NBS_PARTITION,
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
         "TabletInfo serialized size on load: " << serialized.size());
 
     DeserializeTabletInfo(serialized, ids, StorageConfig, VolumeConfig);
 
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "Restored %d DDisks Ids", ids[0].DdiskIds.size());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Restored %d DDisks Ids",
+        ids[0].DdiskIds.size());
 }
 
 // TODO заменить на работу с локальной базой таблетки
@@ -282,21 +301,27 @@ void TPartitionActor::StoreTabletInfo(
 {
     Y_UNUSED(ctx);
 
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-        "Trying to Store %d DDisks Ids", ids[0].DdiskIds.size());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Trying to Store %d DDisks Ids",
+        ids[0].DdiskIds.size());
 
     TString serialized = SerializeTabletInfo(ids, StorageConfig, VolumeConfig);
-    LOG_DEBUG_S(ctx, NKikimrServices::NBS_PARTITION,
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
         "TabletInfo serialized size on store: " << serialized.size());
 
     TFileOutput output(GetDDiskConnectionsFilePath(TabletID()));
     output.Write(serialized);
 
-
     // TODO вынести в юнит тест
     {
-        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-                 "Trying to test store/load code");
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "Trying to test store/load code");
         TPartitionIds helpIds;
         DeserializeTabletInfo(serialized, helpIds, StorageConfig, VolumeConfig);
 
@@ -316,8 +341,10 @@ void TPartitionActor::StoreTabletInfo(
                 Y_ASSERT((pb1[j] <=> pb2[j]) == 0);
             }
         }
-        LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-                 "test store/load code was successful");
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "test store/load code was successful");
     }
 }
 
@@ -359,16 +386,18 @@ void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TPartitionIds ids)
 {
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-                "starting partition_direct");
+    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-    TVector<IDirectBlockGroupPtr> directBlockGroups = CreateDirectBlockGroups(std::move(ids));
+    TVector<IDirectBlockGroupPtr> directBlockGroups =
+        CreateDirectBlockGroups(std::move(ids));
     auto region = std::make_shared<TRegion>(std::move(directBlockGroups));
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
         1,   // generation
-        std::move(region), StorageConfig, AppData()->Counters);
+        std::move(region),
+        StorageConfig,
+        AppData()->Counters);
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 
@@ -383,18 +412,23 @@ void TPartitionActor::Start(
         }
 
         TString socketPath = "/tmp/" + diskId + ".sock";
-        NVhost::TStorageOptions options{.DiskId = diskId,
-                                        .ClientId = "client-1",
-                                        .BlockSize = blockSize,
-                                        .BlocksCount = blockCount,
-                                        .VhostQueuesCount = 1};
-        service->VhostServer->StartEndpoint(std::move(socketPath),
-                                            fastPathService, options);
+        NVhost::TStorageOptions options{
+            .DiskId = diskId,
+            .ClientId = "client-1",
+            .BlockSize = blockSize,
+            .BlocksCount = blockCount,
+            .VhostQueuesCount = 1};
+        service->VhostServer->StartEndpoint(
+            std::move(socketPath),
+            fastPathService,
+            options);
     }
 
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION,
-             "Started NBS partition LoadActorAdapter: actor id %s",
-             LoadActorAdapter.ToString().data());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Started NBS partition LoadActorAdapter: actor id %s",
+        LoadActorAdapter.ToString().data());
 }
 
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
@@ -410,7 +444,8 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         msg->Record.DebugString().data());
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
-        Y_ABORT_UNLESS(msg->Record.GetResponses().size() == NumDirectBlockGroups);
+        Y_ABORT_UNLESS(
+            msg->Record.GetResponses().size() == NumDirectBlockGroups);
 
         TPartitionIds ids;
         ids.resize(NumDirectBlockGroups);
@@ -472,9 +507,10 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             << ", version: " << msg->Record.GetVolumeConfig().GetVersion());
 
     if (DdiskBlockGroupAllocated) {
-        LOG_ERROR_S(TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "PartitionDirectActor already has ddisk connections");
+        LOG_ERROR_S(
+            TActivationContext::AsActorContext(),
+            NKikimrServices::NBS_PARTITION,
+            "PartitionDirectActor already has ddisk connections");
 
         auto response = std::make_unique<
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();

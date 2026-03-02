@@ -1733,9 +1733,7 @@ public:
                         auto columnDesc = Y();
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                        TString columnEncoding = col.TypeOfChange == TColumnSchema::ETypeOfChange::SetLowCardinality
-                                                 ? "set_lowcardinality"
-                                                 : "drop_lowcardinality";
+                        TString columnEncoding = col.TypeOfChange == TColumnSchema::ETypeOfChange::SetLowCardinality ? "set_lowcardinality" : "drop_lowcardinality";
                         columnDesc = L(columnDesc, Q(Y(Q("changeLowCardinality"), Q(Y(Q(Y(Q(columnEncoding))))))));
                         columns = L(columns, Q(columnDesc));
 

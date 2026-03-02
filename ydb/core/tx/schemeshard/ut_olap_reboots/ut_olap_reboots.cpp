@@ -416,6 +416,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CopyWithRebootsAtCommit) {
         TTestWithReboots t(true);
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
             {
@@ -451,6 +452,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(DropCopyWithRebootsAtCommit) {
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -490,6 +492,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(AlterCopyWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -531,6 +534,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(CopyAlterWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -572,6 +576,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(CopyTableAndDropWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -602,6 +607,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(CopyTableAndDropWithReboots2) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -639,6 +645,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(ChainedCopyTableAndDropWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int maxTableIdx = 4;
 

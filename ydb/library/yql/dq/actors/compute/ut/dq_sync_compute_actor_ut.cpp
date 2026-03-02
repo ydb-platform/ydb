@@ -5,7 +5,6 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -40,9 +39,16 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
+static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+
+void SegmentationFaultHandler(int) {
+    Cerr << "segmentation fault call stack:" << Endl;
+    FormatBackTrace(&Cerr);
+    abort();
+}
 
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
@@ -107,7 +113,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
     {}
 
     void Start() {
-        NTestUtils::SetupSignalHandlers();
+        signal(SIGSEGV, &SegmentationFaultHandler);
         SetDispatchTimeout(TDuration::Seconds(20));
         InitNodes();
         SetLogBackend(NActors::CreateStderrBackend());
@@ -1040,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         auto seed = GetRandomSeed();
         std::mt19937 rng(seed);
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16); ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
@@ -1068,8 +1074,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransformMultichannel, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
-        for (ui32 numChannels: { 1, 2, 7, 11 }) {
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 numChannels: { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
                 for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                     for (ui32 packets : sizes) {

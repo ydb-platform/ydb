@@ -198,6 +198,7 @@ class KikimrConfigGenerator(object):
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            http_proxy_config=None,
             enable_nbs=False,
             nbs_database="/Root/NBS",
     ):
@@ -463,6 +464,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
         if deduplication_grouped_memory_limiter_config:
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
+        if http_proxy_config:
+            self.yaml_config["http_proxy_config"] = http_proxy_config
 
         self.__build()
         if self.grpc_ssl_enable:
@@ -770,6 +773,10 @@ class KikimrConfigGenerator(object):
     @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
+
+    @property
+    def http_proxy_enabled(self):
+        return self.yaml_config.get('http_proxy_config', {}).get('enabled')
 
     @property
     def working_dir(self):

@@ -47,14 +47,15 @@ namespace NActors {
     struct TActivationContext {
     public:
         TMailbox& Mailbox;
-        TExecutorThread& ExecutorThread;
         const NHPTimer::STime EventStart;
+
+        TActivationContext(const TActivationContext&) = default;
 
     protected:
         explicit TActivationContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
-            , ExecutorThread(executorThread)
             , EventStart(eventStart)
+            , ExecutorThread(executorThread)
         {
         }
 
@@ -139,6 +140,37 @@ namespace NActors {
         static void SetOverwrittenEventsPerMailbox(ui32 value);
         static ui64 GetOverwrittenTimePerMailboxTs();
         static void SetOverwrittenTimePerMailboxTs(ui64 value);
+
+        // Instance methods mirroring TExecutorThread — use instead of accessing ExecutorThread directly
+
+        template <ESendingType SendingType = ESendingType::Common>
+        TActorId RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId = TActorId()) const;
+
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) const;
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) const;
+
+        void UnregisterActor(TMailbox* mailbox, TActorId actorId) const;
+
+        TActorSystem* GetActorSystem() const;
+
+        TActorContext MakeFor(TActorId id) const;
+
+    protected:
+        // Instance primitives — use the executor thread bound to this context.
+        // Static methods delegate through TlsActivationContext; TActorContext
+        // methods call these directly via inheritance so they use `this`.
+        template <ESendingType SendingType = ESendingType::Common>
+        bool DoSend(TAutoPtr<IEventHandle> ev) const;
+
+        void DoSchedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
+        void DoSchedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
+        void DoSchedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
+
+        template <ESendingType SendingType = ESendingType::Common>
+        TActorId DoRegister(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const;
+
+    private:
+        TExecutorThread& ExecutorThread;
     };
 
     struct TActorContext: public TActivationContext {
@@ -146,6 +178,12 @@ namespace NActors {
         using TEventFlags = IEventHandle::TEventFlags;
         explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
+            , SelfID(selfID)
+        {
+        }
+
+        TActorContext(const TActivationContext& ctx, const TActorId& selfID)
+            : TActivationContext(ctx)
             , SelfID(selfID)
         {
         }
@@ -206,7 +244,7 @@ namespace NActors {
         void Schedule(TDuration delta, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
 
         TActorContext MakeFor(const TActorId& otherId) const {
-            return TActorContext(Mailbox, ExecutorThread, EventStart, otherId);
+            return TActorContext(*this, otherId);
         }
 
         // register new actor in ActorSystem on new fresh mailbox.
@@ -222,6 +260,10 @@ namespace NActors {
 
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
     };
+
+    inline TActorContext TActivationContext::MakeFor(TActorId id) const {
+        return TActorContext(*this, id);
+    }
 
     struct TActorIdentity: public TActorId {
         using TEventFlags = IEventHandle::TEventFlags;
@@ -973,8 +1015,7 @@ namespace NActors {
     }
 
     inline TActorContext TActivationContext::ActorContextFor(TActorId id) {
-        auto& tls = *TlsActivationContext;
-        return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
+        return TActorContext(*TlsActivationContext, id);
     }
 
     class TDecorator : public IActorCallback {

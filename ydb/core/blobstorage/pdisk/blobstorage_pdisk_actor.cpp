@@ -14,7 +14,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/html.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -39,17 +38,17 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-void CreatePDiskActor(TExecutorThread& executorThread,
+void CreatePDiskActor(const TActorContext& ctx,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<TPDiskConfig> &cfg,
         const NPDisk::TMainKey &mainKey,
         ui32 pDiskID, ui32 poolId, ui32 nodeId) {
-    TActorId actorId = executorThread.RegisterActor(CreatePDisk(cfg, mainKey, cfg->MetadataOnly
+    TActorId actorId = ctx.Register(CreatePDisk(cfg, mainKey, cfg->MetadataOnly
         ? MakeIntrusive<NMonitoring::TDynamicCounters>() : counters), TMailboxType::ReadAsFilled, poolId);
 
     TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
 
-    executorThread.ActorSystem->RegisterLocalService(pDiskServiceId, actorId);
+    ctx.GetActorSystem()->RegisterLocalService(pDiskServiceId, actorId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1308,11 +1307,9 @@ public:
 
             auto& counters = AppData(actorCtx)->Counters;
 
-            TExecutorThread& executorThread = actorCtx.ExecutorThread;
-
             PassAway();
 
-            CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
+            CreatePDiskActor(actorCtx, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));
         }
@@ -1629,7 +1626,7 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 
 void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
         const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
+    CreatePDiskActor(ctx, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
 }
 
 } // NKikimr

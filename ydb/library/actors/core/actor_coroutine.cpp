@@ -1,5 +1,4 @@
 #include "actor_coroutine.h"
-#include "executor_thread.h"
 
 #include <util/system/sanitizers.h>
 #include <util/system/type_name.h>
@@ -46,7 +45,7 @@ namespace NActors {
     }
 
     bool TActorCoroImpl::Send(TAutoPtr<IEventHandle> ev) {
-        return GetActorContext().ExecutorThread.Send(ev);
+        return GetActorContext().Send(ev);
     }
 
     THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
@@ -83,7 +82,7 @@ namespace NActors {
 
         // prepare actor context for in-coroutine use
         TActivationContext *ac = TlsActivationContext;
-        TActorContext actorContext(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
+        TActorContext actorContext = ac->MakeFor(SelfActorId);
         TlsActivationContext = &actorContext;
 
         Resume(std::move(ev));
@@ -171,7 +170,7 @@ namespace NActors {
     }
 
     TActorSystem *TActorCoroImpl::GetActorSystem() const {
-        return GetActorContext().ExecutorThread.ActorSystem;
+        return GetActorContext().GetActorSystem();
     }
 
     TActorCoro::~TActorCoro() {

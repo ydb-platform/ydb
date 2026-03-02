@@ -1,16 +1,22 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
+#include <ydb/core/tx/general_cache/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
+
+// Type for column data: maps global column addresses to chunked arrays
+using TColumnData = THashMap<NKikimr::NOlap::NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
 
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {

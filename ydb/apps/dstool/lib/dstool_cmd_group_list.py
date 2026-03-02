@@ -137,7 +137,7 @@ def do(args):
         if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
             group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage / 100)
 
-        pdisk = pdisk_map[common.get_pdisk_id(vslot.VSlotId)]
+        pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
         if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
             group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage / 100)
         elif pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:

@@ -204,6 +204,7 @@ public:
     /*!
      *  \deprecated Use #BlockingGet instead.
      */
+    [[deprecated("Use BlockingGet() instead")]]
     const TErrorOr<T>& Get() const;
 
     //! Gets the value, blocking until it's set.
@@ -423,6 +424,7 @@ public:
     /*!
      *  \deprecated Use #BlockingGet instead.
      */
+    [[deprecated("Use BlockingGet() instead")]]
     TErrorOr<T> Get() const;
 
     //! Gets the value by moving it out of the future state, blocking until it's set.
@@ -554,6 +556,7 @@ public:
     /*!
      *  \deprecated Use #BlockingGet instead.
      */
+    [[deprecated("Use BlockingGet() instead")]]
     const TErrorOr<T>& Get() const;
 
     //! Gets the value, blocking until it's set.

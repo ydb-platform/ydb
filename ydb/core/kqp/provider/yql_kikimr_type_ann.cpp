@@ -1179,6 +1179,10 @@ private:
                 }
                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
             } else if (type == "globalJson") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {

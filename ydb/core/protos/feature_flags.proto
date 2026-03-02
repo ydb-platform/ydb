@@ -262,4 +262,5 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
+    optional bool EnableJsonIndex = 238 [default = false];
 }

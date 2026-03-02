@@ -220,7 +220,7 @@ public:
         FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
-    bool TryRegister(const IPollablePtr& pollable, TString poolName) override
+    bool TryRegister(const IPollablePtr& pollable, const std::string poolName) override
     {
         // FIXME(lukyan): Enqueueing in register queue may happen after stopping.
         // Create cookie when dequeueing from register queue?
@@ -241,7 +241,7 @@ public:
         return true;
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
     {
         SetPollableInvoker(pollable, poolName);
     }
@@ -560,12 +560,12 @@ public:
         Poller_->Shutdown();
     }
 
-    bool TryRegister(const IPollablePtr& pollable, TString poolName = "default") override
+    bool TryRegister(const IPollablePtr& pollable, const std::string poolName = "default") override
     {
         return Poller_->TryRegister(pollable, std::move(poolName));
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
     {
         Poller_->SetExecutionPool(pollable, std::move(poolName));
     }

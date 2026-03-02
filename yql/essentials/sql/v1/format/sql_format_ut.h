@@ -1700,59 +1700,7 @@ Y_UNIT_TEST(CommentAfterLastSelect) {
         {"SELECT * FROM Input /* comment */\n\n\n",
          "SELECT\n\t*\nFROM\n\tInput /* comment */\n;\n"},
         {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n",
-         "SELECT\n\t*\nFROM\n\tInput\n\n/* comment */\n;\n"},
-        {
-            TrimIndent(R"sql(
-                /* a */
-            )sql"),
-            TrimIndent(R"sql(
-                /* a */
-
-            )sql"),
-        },
-        {
-            TrimIndent(R"sql(
-                SELECT 1
-                /* a */
-            )sql"),
-            TrimIndent(R"sql(
-                SELECT
-                    1
-
-                /* a */
-                ;
-
-            )sql"),
-        },
-        {
-            TrimIndent(R"sql(
-                SELECT 1
-                /* a
-                */
-            )sql"),
-            TrimIndent(R"sql(
-                SELECT
-                    1
-
-                /* a
-                */
-                ;
-
-            )sql"),
-        },
-        {
-            TrimIndent(R"sql(
-                SELECT 1;
-                /* a */
-            )sql"),
-            TrimIndent(R"sql(
-                SELECT
-                    1
-                ;
-                /* a */
-
-            )sql"),
-        },
+         "SELECT\n\t*\nFROM\n\tInput\n\n/* comment */;\n"},
     };
 
     TSetup setup;

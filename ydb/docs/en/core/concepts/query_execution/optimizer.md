@@ -44,7 +44,7 @@ GROUP BY
 
 In this query graph, all `Dim...` tables are joined to the `Fact_Sales` fact table:
 
-![Join graph](_assets/star-schema.png)
+![Join graph](_assets/star_schema.png)
 
 Common topologies also include chains and cliques. A "chain" is a topology where tables are connected to each other sequentially and each table participates in no more than one join. A "clique" is a fully connected graph where each table is connected to every other table.
 

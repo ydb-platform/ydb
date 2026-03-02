@@ -189,6 +189,7 @@ def parse_report_chunks(
     dict[tuple[str, Optional[str], int], dict[str, Any]],
     dict[str, dict[str, dict[str, int]]],
     dict[str, dict[str, set[Any]]],
+    dict[str, dict[Any, int]],
 ]:
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -278,29 +279,62 @@ def parse_report_chunks(
             alias_meta = dict(meta)
             alias_meta["_fallback_alias"] = True
             chunks[(suite, None, idx)] = alias_meta
+    # Build suite-local map: report chunk hid -> chunk idx.
+    hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]] = defaultdict(dict)
+    for suite, _group, idx, meta in parsed_chunk_rows:
+        hid = meta.get("hid")
+        if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite]:
+            hid_to_chunk_idx_by_suite[suite][hid] = idx
+
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
         by_kind["tests"]["fails_total"] = by_kind["tests"]["errors"] + by_kind["tests"]["timeouts"]
-    return chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite
+    return chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite
 
 
 def build_test_event_times_by_suite(
-    enriched_runs: list[dict[str, Any]], report_test_fail_chunk_hids_by_suite: dict[str, dict[str, set[Any]]]
+    enriched_runs: list[dict[str, Any]],
+    report_test_fail_chunk_hids_by_suite: dict[str, dict[str, set[Any]]],
+    hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]],
 ) -> dict[str, dict[str, list[float]]]:
     """Map test-level failures to chart times via report chunk hid -> run end_us."""
     end_sec_by_suite_hid: dict[tuple[str, Any], float] = {}
+    end_sec_by_hid: dict[Any, float] = {}
+    end_sec_by_suite_chunk: dict[tuple[str, int], float] = {}
+    end_sec_by_suite_uid: dict[tuple[str, str], float] = {}
+    end_sec_by_uid: dict[str, float] = {}
     for r in enriched_runs:
         hid = r.get("report_hid")
-        if hid is None:
-            continue
         suite = normalize_suite_path(str(r.get("suite_path", "")))
         if not suite:
             continue
         end_sec = float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
-        key = (suite, hid)
-        prev = end_sec_by_suite_hid.get(key)
-        if prev is None or end_sec > prev:
-            end_sec_by_suite_hid[key] = end_sec
+        uid = r.get("uid")
+        if isinstance(uid, str) and uid:
+            key_su = (suite, uid)
+            prev_su = end_sec_by_suite_uid.get(key_su)
+            if prev_su is None or end_sec > prev_su:
+                end_sec_by_suite_uid[key_su] = end_sec
+            prev_u = end_sec_by_uid.get(uid)
+            if prev_u is None or end_sec > prev_u:
+                end_sec_by_uid[uid] = end_sec
+        if hid is not None:
+            key = (suite, hid)
+            prev = end_sec_by_suite_hid.get(key)
+            if prev is None or end_sec > prev:
+                end_sec_by_suite_hid[key] = end_sec
+            prev_h = end_sec_by_hid.get(hid)
+            if prev_h is None or end_sec > prev_h:
+                end_sec_by_hid[hid] = end_sec
+        try:
+            chunk_idx = int(r.get("chunk"))
+        except (TypeError, ValueError):
+            chunk_idx = None
+        if chunk_idx is not None:
+            key_sc = (suite, chunk_idx)
+            prev_sc = end_sec_by_suite_chunk.get(key_sc)
+            if prev_sc is None or end_sec > prev_sc:
+                end_sec_by_suite_chunk[key_sc] = end_sec
 
     out: dict[str, dict[str, list[float]]] = {}
     for suite, by_kind in report_test_fail_chunk_hids_by_suite.items():
@@ -308,10 +342,25 @@ def build_test_event_times_by_suite(
         tos: list[float] = []
         for hid in by_kind.get("error_hids", set()):
             t = end_sec_by_suite_hid.get((suite, hid))
+            if t is None:
+                # Fallback for suite-key mismatches (e.g. path normalization drift).
+                t = end_sec_by_hid.get(hid)
+            if t is None:
+                # Deterministic fallback: map failing test chunk_hid -> report chunk idx (e.g. chunk115),
+                # then use evlog end time of that suite/chunk.
+                idx = (hid_to_chunk_idx_by_suite.get(suite) or {}).get(hid)
+                if idx is not None:
+                    t = end_sec_by_suite_chunk.get((suite, idx))
             if t is not None:
                 errs.append(round(t, 1))
         for hid in by_kind.get("timeout_hids", set()):
             t = end_sec_by_suite_hid.get((suite, hid))
+            if t is None:
+                t = end_sec_by_hid.get(hid)
+            if t is None:
+                idx = (hid_to_chunk_idx_by_suite.get(suite) or {}).get(hid)
+                if idx is not None:
+                    t = end_sec_by_suite_chunk.get((suite, idx))
             if t is not None:
                 tos.append(round(t, 1))
         out[suite] = {
@@ -319,6 +368,168 @@ def build_test_event_times_by_suite(
             "timeout_sec": sorted(set(tos)),
         }
     return out
+
+
+def build_test_event_times_direct(
+    report_path: Path,
+    suite_filter: Optional[str],
+    enriched_runs: list[dict[str, Any]],
+    evlog_path: Optional[Path] = None,
+) -> dict[str, dict[str, list[float]]]:
+    """
+    Build test-level error/timeout marker times directly from report rows (chunk=false),
+    mapping test chunk_hid -> run end_us. Falls back to suite/chunk index mapping.
+    """
+    report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+    results = report.get("results", []) if isinstance(report, dict) else []
+
+    # suite+chunk index mapping from chunk rows in report
+    hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]] = defaultdict(dict)
+    for item in results:
+        if not isinstance(item, dict) or item.get("type") != "test" or not item.get("chunk"):
+            continue
+        suite = normalize_suite_path(str(item.get("path", "")))
+        if not suite:
+            continue
+        if suite_filter and suite != suite_filter:
+            continue
+        sub = str(item.get("subtest_name", ""))
+        m = CHUNK_FROM_SUBTEST_RE.search(sub)
+        if m:
+            idx = int(m.group(1))
+        elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
+            idx = 0
+        else:
+            continue
+        hid = item.get("hid")
+        if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite]:
+            hid_to_chunk_idx_by_suite[suite][hid] = idx
+
+    end_sec_by_suite_hid: dict[tuple[str, Any], float] = {}
+    end_sec_by_hid: dict[Any, float] = {}
+    end_sec_by_suite_chunk: dict[tuple[str, int], float] = {}
+    end_sec_by_suite_uid: dict[tuple[str, str], float] = {}
+    end_sec_by_uid: dict[str, float] = {}
+    for r in enriched_runs:
+        hid = r.get("report_hid")
+        suite = normalize_suite_path(str(r.get("suite_path", "")))
+        if not suite:
+            continue
+        end_sec = float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        uid = r.get("uid")
+        if isinstance(uid, str) and uid:
+            key_su = (suite, uid)
+            prev_su = end_sec_by_suite_uid.get(key_su)
+            if prev_su is None or end_sec > prev_su:
+                end_sec_by_suite_uid[key_su] = end_sec
+            prev_u = end_sec_by_uid.get(uid)
+            if prev_u is None or end_sec > prev_u:
+                end_sec_by_uid[uid] = end_sec
+        if hid is not None:
+            key = (suite, hid)
+            prev = end_sec_by_suite_hid.get(key)
+            if prev is None or end_sec > prev:
+                end_sec_by_suite_hid[key] = end_sec
+            prev_h = end_sec_by_hid.get(hid)
+            if prev_h is None or end_sec > prev_h:
+                end_sec_by_hid[hid] = end_sec
+        try:
+            chunk_idx = int(r.get("chunk"))
+        except (TypeError, ValueError):
+            chunk_idx = None
+        if chunk_idx is not None:
+            key_sc = (suite, chunk_idx)
+            prev_sc = end_sec_by_suite_chunk.get(key_sc)
+            if prev_sc is None or end_sec > prev_sc:
+                end_sec_by_suite_chunk[key_sc] = end_sec
+
+    out: dict[str, dict[str, list[float]]] = defaultdict(lambda: {"error_sec": [], "timeout_sec": []})
+    evlog_uid_end_by_suite: dict[tuple[str, str], float] = {}
+    evlog_uid_end: dict[str, float] = {}
+    if evlog_path is not None:
+        events = load_json_or_jsonl(evlog_path)
+        run_begin_by_uid: dict[str, tuple[str, float]] = {}
+        for ev in events:
+            if ev.get("ph") != "B":
+                continue
+            args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
+            arg_name = str(args.get("name", ""))
+            if arg_name.startswith("Run("):
+                m_uid = RUN_UID_RE.search(arg_name)
+                if not m_uid:
+                    continue
+                suite, _group, _chunk = extract_suite_group_chunk_from_run_name(arg_name)
+                if not suite:
+                    continue
+                if suite_filter and suite != suite_filter:
+                    continue
+                run_begin_by_uid[m_uid.group(1)] = (suite, float(ev.get("ts", 0.0)))
+                continue
+            m_res = RESULT_UID_RE.search(arg_name)
+            if not m_res:
+                continue
+            uid = m_res.group(1)
+            begin = run_begin_by_uid.get(uid)
+            if not begin:
+                continue
+            suite, start_ts = begin
+            end_ts = float(ev.get("ts", 0.0))
+            if end_ts <= start_ts:
+                continue
+            end_sec = end_ts / 1_000_000.0
+            key_su = (suite, uid)
+            prev_su = evlog_uid_end_by_suite.get(key_su)
+            if prev_su is None or end_sec > prev_su:
+                evlog_uid_end_by_suite[key_su] = end_sec
+            prev_u = evlog_uid_end.get(uid)
+            if prev_u is None or end_sec > prev_u:
+                evlog_uid_end[uid] = end_sec
+    for item in results:
+        if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
+            continue
+        suite = normalize_suite_path(str(item.get("path", "")))
+        if not suite:
+            continue
+        if suite_filter and suite != suite_filter:
+            continue
+        status = str(item.get("status", ""))
+        error_type = str(item.get("error_type", "") or "")
+        is_muted = bool(item.get("is_muted") or item.get("muted"))
+        timeout, muted, failedish = _classify_failure(status, error_type, is_muted)
+        if not (timeout or (failedish and not muted)):
+            continue
+        hid = item.get("chunk_hid")
+        if hid is None:
+            continue
+        t = end_sec_by_suite_hid.get((suite, hid))
+        if t is None:
+            t = end_sec_by_hid.get(hid)
+        if t is None:
+            idx = (hid_to_chunk_idx_by_suite.get(suite) or {}).get(hid)
+            if idx is not None:
+                t = end_sec_by_suite_chunk.get((suite, idx))
+        if t is None:
+            uid = item.get("uid")
+            if isinstance(uid, str) and uid:
+                t = end_sec_by_suite_uid.get((suite, uid))
+                if t is None:
+                    t = end_sec_by_uid.get(uid)
+                if t is None:
+                    t = evlog_uid_end_by_suite.get((suite, uid))
+                if t is None:
+                    t = evlog_uid_end.get(uid)
+        if t is None:
+            continue
+        bucket = "timeout_sec" if timeout else "error_sec"
+        out[suite][bucket].append(round(t, 1))
+
+    return {
+        s: {
+            "error_sec": sorted(set(v.get("error_sec", []))),
+            "timeout_sec": sorted(set(v.get("timeout_sec", []))),
+        }
+        for s, v in out.items()
+    }
 
 
 def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict[str, Any]]:
@@ -689,7 +900,9 @@ def main() -> None:
     if out_cpu_sugg_r and out_trace_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --out-trace and --out-cpu-suggestions must be different files")
 
-    chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite = parse_report_chunks(args.report, args.suite_path)
+    chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite = parse_report_chunks(
+        args.report, args.suite_path
+    )
     runs = parse_evlog_runs(args.evlog, args.suite_path)
 
     requirements_cache = None
@@ -714,7 +927,9 @@ def main() -> None:
         report_status_by_suite=report_status_by_suite,
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
     )
-    suite_test_event_times = build_test_event_times_by_suite(enriched_runs, report_test_fail_chunk_hids_by_suite)
+    suite_test_event_times = build_test_event_times_direct(
+        args.report, args.suite_path, enriched_runs, args.evlog
+    )
     if args.out_cpu_suggestions:
         args.out_cpu_suggestions.write_text(json.dumps(cpu_suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
 

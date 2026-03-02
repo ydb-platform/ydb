@@ -32,6 +32,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         multipath: bool = False,  # noqa: FBT001, FBT002
         opinion: bool = True,  # noqa: FBT001, FBT002
         ensure_exists: bool = False,  # noqa: FBT001, FBT002
+        use_site_for_root: bool = False,  # noqa: FBT001, FBT002
     ) -> None:
         """
         Create a new platform directory.
@@ -43,6 +44,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         :param multipath: See `multipath`.
         :param opinion: See `opinion`.
         :param ensure_exists: See `ensure_exists`.
+        :param use_site_for_root: See `use_site_for_root`.
 
         """
         self.appname = appname  #: The name of the application.
@@ -91,6 +93,14 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         Optionally create the directory (and any missing parents) upon access if it does not exist.
 
         By default, no directories are created.
+
+        """
+        self.use_site_for_root = use_site_for_root
+        """
+        Whether to redirect ``user_*_dir`` calls to their ``site_*_dir`` equivalents when running as root (uid 0).
+
+        Only has an effect on Unix. Disabled by default for backwards compatibility. When enabled, XDG user environment
+        variables (e.g. ``XDG_DATA_HOME``) are bypassed for the redirected directories.
 
         """
 
@@ -151,8 +161,18 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
 
     @property
     @abstractmethod
+    def site_state_dir(self) -> str:
+        """:return: state directory shared by users"""
+
+    @property
+    @abstractmethod
     def user_log_dir(self) -> str:
         """:return: log directory tied to the user"""
+
+    @property
+    @abstractmethod
+    def site_log_dir(self) -> str:
+        """:return: log directory shared by users"""
 
     @property
     @abstractmethod
@@ -183,6 +203,26 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     @abstractmethod
     def user_desktop_dir(self) -> str:
         """:return: desktop directory tied to the user"""
+
+    @property
+    @abstractmethod
+    def user_bin_dir(self) -> str:
+        """:return: bin directory tied to the user"""
+
+    @property
+    @abstractmethod
+    def site_bin_dir(self) -> str:
+        """:return: bin directory shared by users"""
+
+    @property
+    @abstractmethod
+    def user_applications_dir(self) -> str:
+        """:return: applications directory tied to the user"""
+
+    @property
+    @abstractmethod
+    def site_applications_dir(self) -> str:
+        """:return: applications directory shared by users"""
 
     @property
     @abstractmethod
@@ -230,9 +270,19 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         return Path(self.user_state_dir)
 
     @property
+    def site_state_path(self) -> Path:
+        """:return: state path shared by users"""
+        return Path(self.site_state_dir)
+
+    @property
     def user_log_path(self) -> Path:
         """:return: log path tied to the user"""
         return Path(self.user_log_dir)
+
+    @property
+    def site_log_path(self) -> Path:
+        """:return: log path shared by users"""
+        return Path(self.site_log_dir)
 
     @property
     def user_documents_path(self) -> Path:
@@ -265,6 +315,26 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         return Path(self.user_desktop_dir)
 
     @property
+    def user_bin_path(self) -> Path:
+        """:return: bin path tied to the user"""
+        return Path(self.user_bin_dir)
+
+    @property
+    def site_bin_path(self) -> Path:
+        """:return: bin path shared by users"""
+        return Path(self.site_bin_dir)
+
+    @property
+    def user_applications_path(self) -> Path:
+        """:return: applications path tied to the user"""
+        return Path(self.user_applications_dir)
+
+    @property
+    def site_applications_path(self) -> Path:
+        """:return: applications path shared by users"""
+        return Path(self.site_applications_dir)
+
+    @property
     def user_runtime_path(self) -> Path:
         """:return: runtime path tied to the user"""
         return Path(self.user_runtime_dir)
@@ -289,6 +359,16 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         yield self.user_cache_dir
         yield self.site_cache_dir
 
+    def iter_state_dirs(self) -> Iterator[str]:
+        """:yield: all user and site state directories."""
+        yield self.user_state_dir
+        yield self.site_state_dir
+
+    def iter_log_dirs(self) -> Iterator[str]:
+        """:yield: all user and site log directories."""
+        yield self.user_log_dir
+        yield self.site_log_dir
+
     def iter_runtime_dirs(self) -> Iterator[str]:
         """:yield: all user and site runtime directories."""
         yield self.user_runtime_dir
@@ -307,6 +387,16 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     def iter_cache_paths(self) -> Iterator[Path]:
         """:yield: all user and site cache paths."""
         for path in self.iter_cache_dirs():
+            yield Path(path)
+
+    def iter_state_paths(self) -> Iterator[Path]:
+        """:yield: all user and site state paths."""
+        for path in self.iter_state_dirs():
+            yield Path(path)
+
+    def iter_log_paths(self) -> Iterator[Path]:
+        """:yield: all user and site log paths."""
+        for path in self.iter_log_dirs():
             yield Path(path)
 
     def iter_runtime_paths(self) -> Iterator[Path]:

@@ -118,6 +118,25 @@ class XDGMixin(PlatformDirsABC):
             return os.path.expanduser(path)  # noqa: PTH111
         return super().user_desktop_dir
 
+    @property
+    def user_applications_dir(self) -> str:
+        """:return: applications directory tied to the user, from ``$XDG_DATA_HOME`` if set, else platform default"""
+        if path := os.environ.get("XDG_DATA_HOME", "").strip():
+            return os.path.join(os.path.expanduser(path), "applications")  # noqa: PTH111, PTH118
+        return super().user_applications_dir
+
+    @property
+    def _site_applications_dirs(self) -> list[str]:
+        if xdg_dirs := os.environ.get("XDG_DATA_DIRS", "").strip():
+            return [os.path.join(p, "applications") for p in xdg_dirs.split(os.pathsep) if p.strip()]  # noqa: PTH118
+        return super()._site_applications_dirs  # type: ignore[misc]
+
+    @property
+    def site_applications_dir(self) -> str:
+        """:return: applications directories shared by users, from ``$XDG_DATA_DIRS`` if set, else platform default"""
+        dirs = self._site_applications_dirs
+        return os.pathsep.join(dirs) if self.multipath else dirs[0]
+
 
 __all__ = [
     "XDGMixin",

@@ -50,29 +50,36 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
     for (size_t retries = 0; retries < MAX_RETRIES; retries++) {
         auto writeResult = producer->Write(std::move(writeMessage));
         if (writeResult.IsSuccess()) {
-            return;
+            // if write was successful, we can continue writing messages
+            continue;
         }
 
         if (writeResult.IsError()) {
-            // this means that some non retryable error occurred, so we are unable to send messages
-            throw std::runtime_error(GetErrorMessage(writeResult));
+            // this means that some non retryable error occurred, for example, producer was closed due to user error
+            // in this case we need to stop retrying and see the close description (to simplify the example, we just print it to standard error)
+            std::cerr << GetErrorMessage(writeResult) << std::endl;
+            return;
         }
 
         if (writeResult.IsTimeout()) {
-            try {
-                auto flushResult = producer->Flush().GetValue(TDuration::Seconds(1));
-                if (flushResult.IsSuccess()) {
-                    break;
-                }
-                if (flushResult.IsClosed()) {
-                    // this means producer is closed due to non retryable error, so we are unable to send messages
-                    throw std::runtime_error(GetErrorMessage(flushResult));
-                }
-            } catch (const std::exception& error) {
-                // do some work while waiting for buffer is free
-                Sleep(TDuration::Seconds(10));
-            }
+            // when timeout occurs this means that producer's buffer is overloaded by memory (see MaxMemoryUsage setting)
+            // so we need to wait for some time and try to write again later
+            Sleep(TDuration::MilliSeconds(100));
+            continue;
         }
+    }
+
+    auto flushResult = producer->Flush().GetValueSync();
+    if (flushResult.IsSuccess()) {
+        // if flush was successful, we can return, because all messages were written to the server
+        return;
+    }
+
+    if (flushResult.IsClosed()) {
+        // if flush was not successful, this means that producer was closed due to non retryable error
+        // in this case we should see the close description (to simplify the example, we just print it to standard error)
+        std::cerr << GetErrorMessage(flushResult) << std::endl;
+        return;
     }
 }
 

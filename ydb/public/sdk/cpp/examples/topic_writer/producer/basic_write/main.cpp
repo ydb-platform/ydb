@@ -21,7 +21,7 @@ std::string GetResultStatus(const T& writeResult) {
 }
 
 std::string GetErrorMessage(const NYdb::NTopic::TFlushResult& result) {
-    std::string errorMessage = "error occurred while writing message";
+    std::string errorMessage = "error occurred while flushing messages";
     errorMessage += ", flush status: " + GetResultStatus(result);
     errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
     if (result.ClosedDescription) {

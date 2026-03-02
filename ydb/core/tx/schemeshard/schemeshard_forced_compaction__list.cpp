@@ -77,7 +77,7 @@ public:
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxList DoComplete");
+        LOG_N("TForcedCompaction::TTxList DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

@@ -53,7 +53,7 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxGet DoComplete");
+        LOG_N("TForcedCompaction::TTxGet DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

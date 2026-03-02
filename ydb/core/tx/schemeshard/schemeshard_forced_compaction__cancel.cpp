@@ -68,6 +68,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
                 Self->InProgressForcedCompactionsByShard.erase(shardId);
                 Self->PersistForcedCompactionDoneShard(db, shardId);
                 shardsQueue->PopFront();
+                --Self->ForcedCompactionTotalInQueues;
             }
             Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo.TablePathId);
             Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo.TablePathId);
@@ -90,7 +91,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxCancel DoComplete");
+        LOG_N("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
         Self->ForcedCompactionProgressStartTime = ctx.Now();
         Self->Execute(Self->CreateTxProgressForcedCompaction());

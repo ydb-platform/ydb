@@ -6,35 +6,32 @@
 std::shared_ptr<NYdb::NTopic::IProducer> CreateProducer(const std::string& topic, NYdb::NTopic::TTopicClient& topicClient) {
     NYdb::NTopic::TProducerSettings producerSettings;
     producerSettings.Path(topic);
-    producerSettings.Codec(NYdb::NTopic::ECodec::RAW);
+    producerSettings.Codec(NYdb::NTopic::ECodec::GZIP);
     producerSettings.ProducerIdPrefix("producer_basic");
     producerSettings.PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound);
     producerSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
     producerSettings.MaxBlock(TDuration::Seconds(30));
-    producerSettings.MaxMemoryUsage(1_KB);
+    producerSettings.MaxMemoryUsage(100_MB);
     return topicClient.CreateProducer(producerSettings);
 }
 
-std::string GetWriteResultStatus(const NYdb::NTopic::TWriteResult& writeResult) {
+template<typename T>
+std::string GetResultStatus(const T& writeResult) {
     return std::string(NEnumSerializationRuntime::ToStringBuf(writeResult.Status));
-}
-
-std::string GetFlushResultStatus(const NYdb::NTopic::TFlushResult& flushResult) {
-    return std::string(NEnumSerializationRuntime::ToStringBuf(flushResult.Status));
 }
 
 template<typename T>
 std::string GetErrorMessage(const T& result) {
     std::string errorMessage = "error occurred while writing message";
     if constexpr (std::is_same_v<T, NYdb::NTopic::TWriteResult>) {
-        errorMessage += ", write status: " + GetWriteResultStatus(result);
+        errorMessage += ", write status: " + GetResultStatus(result);
         if (result.ErrorMessage) {
             errorMessage += ", reason: ";
             errorMessage += result.ErrorMessage.value();
         }
     }
     if constexpr (std::is_same_v<T, NYdb::NTopic::TFlushResult>) {
-        errorMessage += ", flush status: " + GetFlushResultStatus(result);
+        errorMessage += ", flush status: " + GetResultStatus(result);
         errorMessage += ", last written sequence number: " + ToString(result.LastWrittenSeqNo);
     }
     if (result.ClosedDescription) {
@@ -92,10 +89,6 @@ int main() {
     config.SetDatabase(DATABASE);
     NYdb::TDriver driver(config);
 
-    NYdb::NQuery::TQueryClient queryClient(driver);
-    auto getSessionResult = queryClient.GetSession().GetValueSync();
-    NYdb::NStatusHelpers::ThrowOnError(getSessionResult);
-    auto session = getSessionResult.GetSession();
     NYdb::NTopic::TTopicClient topicClient(driver);
 
     auto producer = CreateProducer(TOPIC, topicClient);

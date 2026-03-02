@@ -11,7 +11,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
-
 #include <util/generic/size_literals.h>
 
 namespace NYdb::inline Dev::NTopic {
@@ -227,7 +226,6 @@ private:
 
 public:
     TWriteMessage() = delete;
-
     TWriteMessage(std::string_view data)
         : Data(data)
     {}

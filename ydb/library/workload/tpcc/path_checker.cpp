@@ -156,12 +156,17 @@ void CheckIndexExistsAndReady(TDriver& driver, const TString& path, const TStrin
 
 int GetWarehouseCount(TDriver& driver, const TString& path) {
     // just check the warehouse table and assume that the rest is consistent
+    return GetTableSize(driver, path, TABLE_WAREHOUSE);
+}
 
+} // anonymous
+
+int GetTableSize(TDriver& driver, const TString& path, const char* table) noexcept {
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
 
         SELECT COUNT(*) FROM `{}`;
-    )", path.c_str(), TABLE_WAREHOUSE);
+    )", path.c_str(), table);
 
     NQuery::TQueryClient queryClient(driver);
     auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -180,8 +185,6 @@ int GetWarehouseCount(TDriver& driver, const TString& path) {
     }
 }
 
-} // anonymous
-
 void CheckPathForInit(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
     const TString& path) noexcept
@@ -195,28 +198,29 @@ void CheckPathForInit(
 
 void CheckPathForImport(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
-    const TString& path) noexcept
+    const TRunConfig& runConfig) noexcept
 {
     auto connectionConfigCopy = connectionConfig;
     TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
     // 1. Check tables exist
 
-    CheckTablesExist(driver, path, "Run 'init' first.");
+    CheckTablesExist(driver, runConfig.Path, "Run 'init' first.");
 
     // 2. Check no wh populated
-
-    int whCount = GetWarehouseCount(driver, path);
-    if (whCount != 0) {
-        Cerr << path << " already has " << whCount
-            << " warehouses. Are you importing to the already imported data?" << Endl;
-        std::exit(1);
+    if (runConfig.ProcessCount == 1) {
+        int whCount = GetWarehouseCount(driver, runConfig.Path);
+        if (whCount != 0) {
+            Cerr << runConfig.Path << " already has " << whCount
+                << " warehouses. Are you importing to the already imported data?" << Endl;
+            std::exit(1);
+        }
     }
 
     // 3. Check no indices
 
-    CheckNoIndexExists(driver, path, TABLE_CUSTOMER);
-    CheckNoIndexExists(driver, path, TABLE_OORDER);
+    CheckNoIndexExists(driver, runConfig.Path, TABLE_CUSTOMER);
+    CheckNoIndexExists(driver, runConfig.Path, TABLE_OORDER);
 }
 
 void CheckPathForRun(

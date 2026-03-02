@@ -783,7 +783,7 @@ private:
             Column_ = Nothing();
 
             const auto& expr = exprs.front();
-            if (const auto source = expr->GetSourceName()) {
+            if (const TString* source = expr->GetSourceName()) {
                 Source_ = *source;
             }
             if (const TString* column = expr->GetColumnName()) {

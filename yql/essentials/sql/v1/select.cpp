@@ -534,7 +534,7 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        const auto label = *column.GetSourceName();
+        const auto& label = *column.GetSourceName();
         const auto& source = GetLabel();
         if (!label.empty() && label != source && !(source.StartsWith(label) && source[label.size()] == ':')) {
             if (column.IsReliable()) {
@@ -2440,9 +2440,7 @@ private:
 
                         terms = L(terms, Y("let", "res", members));
                     }
-                    sqlProjectArgs = L(sqlProjectArgs, Y("SqlProjectStarItem", "projectCoreType",
-                                                         BuildQuotedAtom(Pos_, *sourceName),
-                                                         BuildLambda(Pos_, Y("row"), terms, "res"), Q(options)));
+                    sqlProjectArgs = L(sqlProjectArgs, Y("SqlProjectStarItem", "projectCoreType", BuildQuotedAtom(Pos_, *sourceName), BuildLambda(Pos_, Y("row"), terms, "res"), Q(options)));
                 }
                 ++column;
                 ++isNamedColumn;

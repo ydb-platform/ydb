@@ -172,8 +172,8 @@ bool INode::IsTableRow() const {
 void INode::AssumeColumn() {
 }
 
-TSourceNameResult INode::GetSourceName() const {
-    return std::unexpected(nullptr);
+const TString* INode::GetSourceName() const {
+    return nullptr;
 }
 
 const TString* INode::GetAtomContent() const {
@@ -504,7 +504,7 @@ void IProxyNode::AssumeColumn() {
     Inner_->AssumeColumn();
 }
 
-TSourceNameResult IProxyNode::GetSourceName() const {
+const TString* IProxyNode::GetSourceName() const {
     return Inner_->GetSourceName();
 }
 
@@ -857,7 +857,7 @@ void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVe
     }
 }
 
-TSourceNameResult TAstListNodeImpl::GetSourceName() const {
+const TString* TAstListNodeImpl::GetSourceName() const {
     return DeriveCommonSourceName(Nodes_);
 }
 
@@ -881,30 +881,22 @@ TString TCallNode::GetOpName() const {
     return OpName_;
 }
 
-TSourceNameResult DeriveCommonSourceName(const TVector<TNodePtr>& nodes) {
-    TSourceNameResult name = std::unexpected(nullptr);
+const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes) {
+    const TString* name = nullptr;
     for (auto& node : nodes) {
-        TSourceNameResult n = node->GetSourceName();
-        if (!n && std::holds_alternative<std::nullptr_t>(n.error())) {
+        auto n = node->GetSourceName();
+        if (!n) {
             continue;
         }
-        if (!n) {
-            return n;
-        }
-
         if (name && *n != *name) {
-            return std::unexpected(
-                TStringBuilder()
-                << "conflicting sources '"
-                << *n << "' and '" << *name << "'");
+            return nullptr;
         }
-
         name = n;
     }
     return name;
 }
 
-TSourceNameResult TCallNode::GetSourceName() const {
+const TString* TCallNode::GetSourceName() const {
     return DeriveCommonSourceName(Args_);
 }
 
@@ -1566,8 +1558,8 @@ const TString* TColumnNode::GetColumnName() const {
     return UseSourceAsColumn_ ? &Source_ : (ColumnExpr_ ? nullptr : &ColumnName_);
 }
 
-TSourceNameResult TColumnNode::GetSourceName() const {
-    return UseSourceAsColumn_ ? Empty : Source_;
+const TString* TColumnNode::GetSourceName() const {
+    return UseSourceAsColumn_ ? &Empty : &Source_;
 }
 
 TColumnNode* TColumnNode::GetColumnNode() {
@@ -1581,7 +1573,7 @@ const TColumnNode* TColumnNode::GetColumnNode() const {
 bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
     if (src) {
         YQL_ENSURE(!State_.Test(ENodeState::Initialized)); /// should be not initialized or Aggregated already invalid
-        if (src->ShouldUseSourceAsColumn(TString(*GetSourceName()))) {
+        if (src->ShouldUseSourceAsColumn(*GetSourceName())) {
             if (!IsAsterisk() && IsReliable()) {
                 SetUseSourceAsColumn();
             }
@@ -2426,7 +2418,7 @@ void TTupleNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<I
     }
 }
 
-TSourceNameResult TTupleNode::GetSourceName() const {
+const TString* TTupleNode::GetSourceName() const {
     return DeriveCommonSourceName(Exprs_);
 }
 
@@ -2480,7 +2472,7 @@ void TStructNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<
     }
 }
 
-TSourceNameResult TStructNode::GetSourceName() const {
+const TString* TStructNode::GetSourceName() const {
     return DeriveCommonSourceName(Exprs_);
 }
 
@@ -2622,7 +2614,7 @@ public:
         return false;
     }
 
-    TSourceNameResult GetSourceName() const override {
+    const TString* GetSourceName() const override {
         return Ids_[0].Expr->GetSourceName();
     }
 

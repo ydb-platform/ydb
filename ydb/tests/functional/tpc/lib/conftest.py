@@ -52,10 +52,10 @@ class FunctionalTestBase:
 
     def teardown_method(self, method):
         for node in self.cluster.nodes.values():
-            if node.is_alive():
+            if not node.is_alive():
                 node.stop()
         for slot in self.cluster.slots.values():
-            if slot.is_alive():
+            if not slot.is_alive():
                 slot.stop()
 
     def teardown_class(cls):

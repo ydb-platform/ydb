@@ -158,8 +158,9 @@ def _delete_stale_pk_rows(ydb_wrapper, table_path, primary_keys, pk_type_map, st
                 ) + ")"
             )
 
+        declare_block = "\n".join(declare_lines)
         delete_query = f"""
-            {'\n'.join(declare_lines)}
+            {declare_block}
 
             DELETE FROM `{table_path}`
             WHERE {' OR '.join(predicates)};

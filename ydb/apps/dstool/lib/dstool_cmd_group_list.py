@@ -109,10 +109,10 @@ def do(args):
         group_stat['UsedSize'] = 0
         group_stat['TotalSize'] = 0
         group_stat['AvailableSize'] = 0
-        group_stat['VDiskSlotUsage'] = 0.0
-        group_stat['VDiskRawUsage'] = 0.0
-        group_stat['NormalizedOccupancy'] = 0.0
-        group_stat['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.GREEN
+        group_stat['VDiskSlotUsage'] = None
+        group_stat['VDiskRawUsage'] = None
+        group_stat['NormalizedOccupancy'] = None
+        group_stat['CapacityAlert'] = None
 
     for vslot_id, vslot in vslot_map.items():
         group_id = vslot.GroupId
@@ -134,11 +134,11 @@ def do(args):
 
         # Aggregate capacity metrics - use max values
         if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
-            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'], vslot.VDiskMetrics.VDiskSlotUsage)
+            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage)
 
         pdisk = pdisk_map[common.get_pdisk_id(vslot.VSlotId)]
         if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
-            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'], vslot.VDiskMetrics.VDiskRawUsage)
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage)
         elif pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
             # VDiskRawUsage metric was added in 26.1.1
             # For older versions we calculate it on client side
@@ -152,14 +152,14 @@ def do(args):
             weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
             vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
             vdisk_raw_usage = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
-            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'], vdisk_raw_usage)
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vdisk_raw_usage)
 
         if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
-            group_stat['NormalizedOccupancy'] = max(group_stat['NormalizedOccupancy'], vslot.VDiskMetrics.NormalizedOccupancy)
+            group_stat['NormalizedOccupancy'] = max(group_stat['NormalizedOccupancy'] or 0, vslot.VDiskMetrics.NormalizedOccupancy)
 
         if vslot.VDiskMetrics.HasField('CapacityAlert'):
             # Take the worst (maximum) alert level across all VDisks
-            group_stat['CapacityAlert'] = max(group_stat['CapacityAlert'], vslot.VDiskMetrics.CapacityAlert)
+            group_stat['CapacityAlert'] = max(group_stat['CapacityAlert'] or 0, vslot.VDiskMetrics.CapacityAlert)
 
         for key in ['VDisks_TOTAL', 'VDisks_' + vslot.Status]:
             group_stat[key] += 1

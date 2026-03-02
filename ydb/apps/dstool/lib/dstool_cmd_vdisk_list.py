@@ -122,6 +122,10 @@ def do(args):
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
+            row['VDiskSlotUsage'] = None
+            row['VDiskRawUsage'] = None
+            row['NormalizedOccupancy'] = None
+            row['CapacityAlert'] = None
 
             if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
                 row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage

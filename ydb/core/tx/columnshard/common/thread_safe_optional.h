@@ -63,23 +63,20 @@ public:
     }
 
     std::optional<T> Take() {
-        if (!Defined.load(std::memory_order_acquire)) {
+        if (!Defined.exchange(false, std::memory_order_acq_rel)) {
             return {};
         }
 
         T value(*Ptr());
-        Defined.store(false, std::memory_order_release);
         Ptr()->~T();
-
         return value;
     }
 
     void Reset() {
-        if (!Defined.load(std::memory_order_acquire)) {
+        if (!Defined.exchange(false, std::memory_order_acq_rel)) {
             return;
         }
 
-        Defined.store(false, std::memory_order_release);
         Ptr()->~T();
     }
 

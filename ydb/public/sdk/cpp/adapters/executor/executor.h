@@ -14,4 +14,4 @@ IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> thr
 // Thread pool is expected to have been started and stopped by user.
 IExecutor::TPtr CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool);
 
-} // namespace NYdb
+} // namespace NYdb::NAdapters

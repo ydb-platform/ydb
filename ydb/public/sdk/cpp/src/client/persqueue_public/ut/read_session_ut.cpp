@@ -600,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateExternalThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }

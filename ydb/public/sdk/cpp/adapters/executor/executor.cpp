@@ -14,4 +14,4 @@ std::shared_ptr<IExecutor> CreateExternalThreadPoolExecutorAdapter(std::shared_p
     return std::make_shared<TThreadPoolExecutor>(threadPool);
 }
 
-}
+} // namespace NYdb::NAdapters

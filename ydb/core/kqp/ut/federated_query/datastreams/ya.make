@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     datastreams_ut.cpp

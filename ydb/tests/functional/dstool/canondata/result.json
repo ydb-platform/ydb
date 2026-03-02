@@ -1,4 +1,12 @@
 {
+    "test_canonical_requests.Test.test_capacity_metrics": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.0"
+        }
+    ],
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"

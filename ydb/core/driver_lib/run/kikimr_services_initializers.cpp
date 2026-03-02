@@ -469,6 +469,7 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
 
     result.BindOnAllAddresses = config.GetBindOnAllAddresses();
+    result.InterfaceName = config.GetInterfaceName();
 
     auto readFile = [](std::optional<TString> value, std::optional<TString> path, const char *name) {
         if (value) {

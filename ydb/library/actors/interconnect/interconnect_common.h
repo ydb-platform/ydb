@@ -47,6 +47,7 @@ namespace NActors {
         TDuration LostConnection;
         TDuration BatchPeriod;
         bool BindOnAllAddresses = true;
+        TString InterfaceName;
         EEncryptionMode EncryptionMode = EEncryptionMode::DISABLED;
         bool TlsAuthOnly = false;
         TString Certificate; // certificate data in PEM format

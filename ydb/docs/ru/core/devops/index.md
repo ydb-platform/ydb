@@ -14,5 +14,6 @@
     * **[Вручную](deployment-options/manual/index.md)**: развертывание кластера вручную.
 
 * [{#T}](observability/index.md) — инструменты для наблюдения за кластерами {{ ydb-short-name }}.
+* [{#T}](enterprise-manager/index.md) — веб-интерфейс и система управления кластерами {{ ydb-short-name }}.
 * [{#T}](backup-and-recovery.md) — резервное копирование и восстановление кластеров {{ ydb-short-name }}.
 

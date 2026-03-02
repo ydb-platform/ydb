@@ -8,4 +8,6 @@ using namespace NSQLv1Generated;
 
 TToken Beginning(const TRule_select_stmt& rule);
 
+TToken Beginning(const TRule_select_kind& rule);
+
 } // namespace NSQLTranslationV1

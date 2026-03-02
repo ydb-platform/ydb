@@ -2457,6 +2457,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                                     continue;
                                                 }
 
+                                                if (isYql && !x.Order) {
+                                                    continue;
+                                                }
+
                                                 YQL_ENSURE(x.Order);
                                                 for (const auto& [col, _] : *x.Order) {
                                                     if (!col.StartsWith("_yql_")) {

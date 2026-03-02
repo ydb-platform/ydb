@@ -12862,6 +12862,47 @@ Y_UNIT_TEST(SelectOpIntersect) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
 }
 
+Y_UNIT_TEST(SelectOpUnionSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT 1 AS a UNION SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSetItem"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSetItem"], 3);
+}
+
+Y_UNIT_TEST(SelectOpUnionSubqueryParenthesis) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res;
+
+    res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT ((SELECT 1 AS a) UNION SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT 1 AS a UNION (SELECT 2 AS a));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+}
+
 Y_UNIT_TEST(TopLevelHintIsNotAvailable) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 02);

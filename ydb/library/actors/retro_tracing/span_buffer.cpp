@@ -7,7 +7,8 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
-#include <util/system/spinlock.h>
+
+#include <util/generic/bitops.h>
 
 namespace NRetroTracing {
 
@@ -15,17 +16,13 @@ class TSpanCircleBuffer {
 public:
     TSpanCircleBuffer()
         : Head(0)
+        , Capacity(BufferSize / CellSize)
+        , CapacityMask(FastClp2(Capacity) - 1)
     {
         std::fill(Buffer, Buffer + BufferSize, 0);
     }
 
     void WriteSpan(const TRetroSpan* span) {
-        std::unique_lock guard(Lock, std::try_to_lock);
-        if (!guard.owns_lock()) {
-            // read is in progress, reject span
-            return;
-        }
-
         if (!span->IsEnded()) {
             // unable to write non-ended span
             return;
@@ -36,11 +33,17 @@ public:
             // invalid span size, reject span
             return;
         }
-        if (Head + CellSize >= BufferSize) {
-            Head = 0;
+
+        { // critical section
+            std::unique_lock guard(Lock, std::try_to_lock);
+            if (!guard.owns_lock()) {
+                // read is in progress, reject span
+                return;
+            }
+            ui64 head = Head & CapacityMask;
+            std::memcpy(static_cast<void*>(Buffer + head * CellSize), static_cast<const void*>(span), spanSize);
+            ++Head;
         }
-        std::memcpy(static_cast<void*>(Buffer + Head), static_cast<const void*>(span), spanSize);
-        Head += CellSize;
     }
 
     std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
@@ -64,11 +67,16 @@ private:
     static constexpr ui32 CellSize = 1_KB;
     static constexpr ui32 BufferSize = 5_MB;
     char Buffer[BufferSize] = {0};
-    // TODO: more effective locking mechanism, remove second tmp buffer
-    char TmpBuffer[BufferSize] = {0};
-    ui32 Head = 0;
-    TSpinLock Lock;
+    static char TmpBuffer[BufferSize];
+
+    ui64 Head = 0;
+    const ui64 Capacity = 0;
+    const ui64 CapacityMask = 0;
+
+    std::mutex Lock;
 };
+
+char TSpanCircleBuffer::TmpBuffer[BufferSize] = {0};
 
 static thread_local std::shared_ptr<TSpanCircleBuffer> SpanBuffer;
 static std::mutex Mutex;

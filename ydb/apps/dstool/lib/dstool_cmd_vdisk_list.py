@@ -122,10 +122,37 @@ def do(args):
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
-            row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage
-            row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage
-            row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy
-            row['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(vslot.VDiskMetrics.CapacityAlert)
+
+            if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
+                row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage
+
+            if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage
+            elif pdisk.PDiskMetrics.HasField('EnforcedDynamicSlotSize') and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+                # VDiskRawUsage metric was added in 26.1.1
+                # For older versions we calculate it on client side
+                # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+                #   VDiskRawUsage = 100.0 * (used / hardLimit)
+                # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+                #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+                # Weight is calculated per blobstorage_pdisk_config.h TPDiskConfig::GetOwnerWeight() as:
+                #   Weight = ceil(GroupSizeInUnits / PDiskSlotSizeInUnits)
+                import math
+                group_size_in_units = row['GroupSizeInUnits']
+                pdisk_slot_size_in_units = row['PDiskSlotSizeInUnits']
+                vu = group_size_in_units if group_size_in_units > 0 else 1
+                pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units > 0 else 1
+                weight = math.ceil(vu / pu)
+
+                vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+
+            if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
+                row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy
+
+            if vslot.VDiskMetrics.HasField('CapacityAlert'):
+                row['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(vslot.VDiskMetrics.CapacityAlert)
+
             row['PDiskPage'] = 'actors/pdisks/pdisk%09u' % (vslot_data.PDiskId)
             row['VDiskPage'] = 'actors/vdisks/vdisk%09u_%09u' % (vslot_data.PDiskId, vslot_data.VSlotId)
             rows.append(row)

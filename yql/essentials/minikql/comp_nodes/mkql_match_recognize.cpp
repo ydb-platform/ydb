@@ -622,18 +622,10 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     }
     const auto& streamingMode = callable.GetInput(inputIndex++);
     NYql::NMatchRecognize::TAfterMatchSkipTo skipTo = {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""};
-    if (inputIndex + 2 <= callable.GetInputsCount()) {
-        skipTo.To = static_cast<EAfterMatchSkipTo>(AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().Get<i32>());
-        skipTo.Var = AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().AsStringRef();
-    }
-    NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch = NYql::NMatchRecognize::ERowsPerMatch::OneRow;
-    TOutputColumnOrder outputColumnOrder;
-    if (inputIndex + 2 <= callable.GetInputsCount()) {
-        rowsPerMatch = static_cast<ERowsPerMatch>(AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().Get<i32>());
-        outputColumnOrder = IRowsFormatter::GetOutputColumnOrder(callable.GetInput(inputIndex++));
-    } else {
-        outputColumnOrder = GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes);
-    }
+    skipTo.To = static_cast<EAfterMatchSkipTo>(AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().Get<i32>());
+    skipTo.Var = AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().AsStringRef();
+    NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch = static_cast<ERowsPerMatch>(AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().Get<i32>());
+    TOutputColumnOrder outputColumnOrder = IRowsFormatter::GetOutputColumnOrder(callable.GetInput(inputIndex++));
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
 
     const auto& [varNames, varNamesLookup] = ConvertListOfStrings(defineNames);

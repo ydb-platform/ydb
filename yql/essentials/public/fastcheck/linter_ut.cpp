@@ -139,7 +139,7 @@ Y_UNIT_TEST(GoodFormatYqlWithWinEOLInComment) {
 
 Y_UNIT_TEST(UnparsedFormatYql) {
     TChecksRequest request = MakeCheckRequest();
-    request.Program = "select1;\n";
+    request.Program = "select1\n";
     request.Syntax = ESyntax::YQL;
     request.Filters.ConstructInPlace();
     request.Filters->push_back(TCheckFilter{.CheckNameGlob = "format"});

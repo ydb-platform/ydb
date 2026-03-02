@@ -7,14 +7,13 @@
 
 namespace NKikimr {
 
+// cache unfriendly, because
 template <typename T>
 class TSpscCircularQueue {
 public:
     TSpscCircularQueue()
-        : FirstEmpty(0)
-        , FirstUsed(0)
-        , Capacity(0)
-        , Size_(0)
+        : Capacity(0)
+        , CapacityMask(0)
     {
     }
 
@@ -22,54 +21,82 @@ public:
     // All items in the queue are lost.
     void Resize(size_t capacity) {
         Capacity = capacity ? FastClp2(capacity) : 0;
-        FirstEmpty = 0;
-        FirstUsed = 0;
+        CapacityMask = Capacity ? (Capacity - 1) : 0;
         Queue.resize(Capacity);
-        Size_.store(0, std::memory_order_release);
+        ProducerState.Head.store(0, std::memory_order_release);
+        ConsumerState.Tail.store(0, std::memory_order_release);
+        ProducerState.CachedTail = 0;
+        ConsumerState.CachedHead = 0;
     }
 
     bool TryPush(T&& item) {
-        const auto currentSize = Size_.load(std::memory_order_acquire);
-        if (currentSize == Capacity) {
-            return false;
+        const auto head = ProducerState.Head.load(std::memory_order_relaxed);
+        if (head - ProducerState.CachedTail == Capacity) {
+            ProducerState.CachedTail = ConsumerState.Tail.load(std::memory_order_acquire);
+            if (head - ProducerState.CachedTail == Capacity) {
+                return false;
+            }
         }
 
-        Queue[FirstEmpty] = std::move(item);
-        FirstEmpty = (FirstEmpty + 1) & (Capacity - 1);
-        Size_.fetch_add(1, std::memory_order_release);
+        Queue[head & CapacityMask] = std::move(item);
+        ProducerState.Head.store(head + 1, std::memory_order_release);
         return true;
     }
 
     bool TryPop(T& item) {
-        const auto currentSize = Size_.load(std::memory_order_acquire);
-        if (currentSize == 0) {
+        if (Capacity == 0) {
             return false;
         }
 
-        item = std::move(Queue[FirstUsed]);
-        FirstUsed = (FirstUsed + 1) & (Capacity - 1);
-        Size_.fetch_sub(1, std::memory_order_release);
+        const auto tail = ConsumerState.Tail.load(std::memory_order_relaxed);
+        if (tail == ConsumerState.CachedHead) {
+            ConsumerState.CachedHead = ProducerState.Head.load(std::memory_order_acquire);
+            if (tail == ConsumerState.CachedHead) {
+                return false;
+            }
+        }
+
+        item = std::move(Queue[tail & CapacityMask]);
+        ConsumerState.Tail.store(tail + 1, std::memory_order_release);
         return true;
     }
 
     size_t Size() const {
-        return Size_.load(std::memory_order_acquire);
+        const auto head = ProducerState.Head.load(std::memory_order_acquire);
+        const auto tail = ConsumerState.Tail.load(std::memory_order_acquire);
+        return head - tail;
     }
 
     bool Empty() const {
-        return Size_.load(std::memory_order_acquire) == 0;
+        return Size() == 0;
     }
 
     bool IsFull() const {
-        return Size_.load(std::memory_order_acquire) == Capacity;
+        if (Capacity == 0) {
+            return false;
+        }
+
+        return Size() == Capacity;
     }
 
 private:
+    struct alignas(64) TProducerState
+    {
+        std::atomic<size_t> Head = 0;
+        size_t CachedTail = 0;
+    };
+
+    struct alignas(64) TConsumerState
+    {
+        std::atomic<size_t> Tail = 0;
+        size_t CachedHead = 0;
+    };
+
     std::vector<T> Queue;
-    size_t FirstEmpty;
-    size_t FirstUsed;
     size_t Capacity = 0;
-    std::atomic<size_t> Size_;
+    size_t CapacityMask = 0;
+    TProducerState ProducerState;
+    TConsumerState ConsumerState;
 };
 
 } // namespace NKikimr

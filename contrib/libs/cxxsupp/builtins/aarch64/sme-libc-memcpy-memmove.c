@@ -14,9 +14,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <stddef.h>
+#include "sme-compat.h"
 
 static void *__arm_sc_memcpy_fwd(void *dest, const void *src,
-                                 size_t n) __arm_streaming_compatible {
+                                 size_t n) ARM_STREAMING_COMPATIBLE {
   unsigned char *destp = (unsigned char *)dest;
   const unsigned char *srcp = (const unsigned char *)src;
 
@@ -26,7 +27,7 @@ static void *__arm_sc_memcpy_fwd(void *dest, const void *src,
 }
 
 static void *__arm_sc_memcpy_rev(void *dest, const void *src,
-                                 size_t n) __arm_streaming_compatible {
+                                 size_t n) ARM_STREAMING_COMPATIBLE {
   unsigned char *destp = (unsigned char *)dest;
   const unsigned char *srcp = (const unsigned char *)src;
 
@@ -38,12 +39,12 @@ static void *__arm_sc_memcpy_rev(void *dest, const void *src,
 }
 
 extern void *__arm_sc_memcpy(void *__restrict dest, const void *__restrict src,
-                             size_t n) __arm_streaming_compatible {
+                             size_t n) ARM_STREAMING_COMPATIBLE {
   return __arm_sc_memcpy_fwd(dest, src, n);
 }
 
 extern void *__arm_sc_memmove(void *dest, const void *src,
-                              size_t n) __arm_streaming_compatible {
+                              size_t n) ARM_STREAMING_COMPATIBLE {
   unsigned char *destp = (unsigned char *)dest;
   const unsigned char *srcp = (const unsigned char *)src;
 

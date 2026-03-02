@@ -14,9 +14,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <stddef.h>
+#include "sme-compat.h"
 
 extern void *__arm_sc_memset(void *dest, int c,
-                             size_t n) __arm_streaming_compatible {
+                             size_t n) ARM_STREAMING_COMPATIBLE {
   unsigned char *destp = (unsigned char *)dest;
   unsigned char c8 = (unsigned char)c;
   for (size_t i = 0; i < n; ++i)
@@ -26,7 +27,7 @@ extern void *__arm_sc_memset(void *dest, int c,
 }
 
 extern const void *__arm_sc_memchr(const void *src, int c,
-                                   size_t n) __arm_streaming_compatible {
+                                   size_t n) ARM_STREAMING_COMPATIBLE {
   const unsigned char *srcp = (const unsigned char *)src;
   unsigned char c8 = (unsigned char)c;
   for (size_t i = 0; i < n; ++i)

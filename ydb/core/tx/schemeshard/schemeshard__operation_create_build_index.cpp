@@ -79,6 +79,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+            if (!context.SS->EnableJsonIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "JSON index support is disabled")};
+            }
             break;
         }
         default:

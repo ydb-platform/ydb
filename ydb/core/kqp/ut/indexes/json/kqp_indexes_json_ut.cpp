@@ -6,29 +6,23 @@ using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
-TKikimrRunner Kikimr(NKikimrConfig::TFeatureFlags&& featureFlags) {
-    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    return TKikimrRunner(settings);
-}
-
 TKikimrRunner Kikimr() {
     NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     return TKikimrRunner(settings);
 }
 
-void CreateTestTable(NQuery::TQueryClient& db, const char* type = "Json") {
+void CreateTestTable(NQuery::TQueryClient& db, const char* type = "Json", bool withIndex = false) {
     TString query = std::format(R"sql(
         CREATE TABLE `/Root/TestTable` (
             Key Uint64,
             Text {0},
             Data Utf8,
             PRIMARY KEY (Key)
+            {1}
         );
-    )sql", type);
+    )sql", type, withIndex ? ", INDEX `json_idx` GLOBAL USING json ON (Text)" : "");
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -162,6 +156,17 @@ Y_UNIT_TEST(AddJsonIndexCoveringJsonDocumentNotNull) {
     DoTestAddJsonIndex("JsonDocument", false, true);
 }
 
+Y_UNIT_TEST(OnCreate) {
+    auto kikimr = Kikimr();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTestTable(db, "Json", true);
+
+    // TODO: Test it with update after implementing update
+}
+
 Y_UNIT_TEST(UnsupportedType) {
     auto kikimr = Kikimr();
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -175,7 +180,47 @@ Y_UNIT_TEST(UnsupportedType) {
                 GLOBAL USING json ON (Text)
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(DisabledFlagRejectAlter) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(false);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    auto kikimr = TKikimrRunner(settings);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTestTable(db, "Json");
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/TestTable` ADD INDEX json_idx
+                GLOBAL USING json ON (Text)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(DisabledFlagRejectCreate) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(false);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    auto kikimr = TKikimrRunner(settings);
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/TestTable` (
+                Key Uint64,
+                Text Json,
+                Data Utf8,
+                PRIMARY KEY (Key),
+                INDEX `json_idx` GLOBAL USING json ON (Text)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     }
 }
 

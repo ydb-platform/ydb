@@ -316,6 +316,10 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex: {
+            if (!Self->EnableJsonIndex) {
+                explain = "JSON index support is disabled";
+                return false;
+            }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
             break;

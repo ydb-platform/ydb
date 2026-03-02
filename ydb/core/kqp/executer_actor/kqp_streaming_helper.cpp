@@ -11,12 +11,12 @@ struct TStreamingQueryCounters : public IStreamingQueryCounters {
     {
         SubGroup = counters->GetSubgroup("subsystem", "streaming_queries");
         auto queryGroup = SubGroup->GetSubgroup("path", Path);
-        CpuMs = queryGroup->GetCounter("streaming.query.cpu.usage.milliseconds");
+        CpuMs = queryGroup->GetCounter("streaming.query.cpu.usage.milliseconds", true);
         MemoryUsageBytes = queryGroup->GetCounter("streaming.query.memory.usage.bytes");
         UptimeSeconds = queryGroup->GetCounter("streaming.query.uptime.seconds");
         TaskCount = queryGroup->GetCounter("streaming.query.tasks.count");
-        InputBytes = queryGroup->GetCounter("streaming.query.input.bytes");
-        OutputBytes = queryGroup->GetCounter("streaming.query.output.bytes");
+        InputBytes = queryGroup->GetCounter("streaming.query.input.bytes", true);
+        OutputBytes = queryGroup->GetCounter("streaming.query.output.bytes", true);
     }
 
     ~TStreamingQueryCounters() {

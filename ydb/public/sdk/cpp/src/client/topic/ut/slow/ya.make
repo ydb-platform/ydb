@@ -2,11 +2,13 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 REQUIREMENTS(ram:32 cpu:4)
 
+SIZE(LARGE)
+TAG(ya:fat)
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
+    TIMEOUT(3600)
 ELSE()
-    SIZE(MEDIUM)
+    TIMEOUT(1200)
 ENDIF()
 
 FORK_SUBTESTS()

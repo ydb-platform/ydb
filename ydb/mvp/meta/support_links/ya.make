@@ -1,9 +1,15 @@
-LIBRARY()
+UNITTEST_FOR(ydb/mvp/meta)
 
-SRCS()
+SIZE(SMALL)
+
+SRCS(
+    resolver_factory_ut.cpp
+    grafana_dashboard_resolver_ut.cpp
+    grafana_dashboard_search_resolver_ut.cpp
+)
+
+PEERDIR(
+    ydb/library/actors/testlib
+)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

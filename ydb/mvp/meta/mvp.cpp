@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/meta/support_links/support_links_config_validation.h>
+#include <ydb/mvp/meta/support_links/resolver_validation.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -49,22 +49,22 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     }
 }
 
-void NMVP::ValidateMetaBaseConfig(const TMetaSettings& settings) {
-    if (settings.HasMetaConfigBlock) {
-        if (settings.MetaApiEndpoint.empty()) {
+void NMVP::ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius) {
+    if (hasMetaConfigBlock) {
+        if (metaApiEndpoint.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
         }
-        if (settings.MetaDatabase.empty()) {
+        if (metaDatabase.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
         }
     }
 
-    if (settings.AccessServiceType == NMvp::nebius_v1) {
-        if (settings.MetaApiEndpoint.empty()) {
+    if (isNebius) {
+        if (metaApiEndpoint.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX
                                 << "meta.meta_api_endpoint must be specified for access_service_type=nebius_v1.";
         }
-        if (settings.MetaDatabase.empty()) {
+        if (metaDatabase.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX
                                 << "meta.meta_database must be specified for access_service_type=nebius_v1.";
         }
@@ -192,25 +192,20 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
-    MetaSettings.MetaApiEndpoint = config.GetMetaApiEndpoint();
-    MetaSettings.MetaDatabase = config.GetMetaDatabase();
-    MetaSettings.HasMetaConfigBlock = true;
-    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
-
-    MetaApiEndpoint = MetaSettings.MetaApiEndpoint;
-    MetaDatabase = MetaSettings.MetaDatabase;
+    MetaApiEndpoint = config.GetMetaApiEndpoint();
+    MetaDatabase = config.GetMetaDatabase();
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    MetaSettings.GrafanaConfig = {};
-    MetaSettings.SupportLinksConfig = {};
+    GrafanaSupportConfig = {};
+    SupportLinksConfig = {};
 
     auto parseGrafana = [this](const YAML::Node& node) {
-        MetaSettings.GrafanaConfig.Endpoint = node["endpoint"].as<std::string>("");
-        MetaSettings.GrafanaConfig.SecretName = node["secret_name"].as<std::string>("");
+        GrafanaSupportConfig.Endpoint = node["endpoint"].as<std::string>("");
+        GrafanaSupportConfig.SecretName = node["secret_name"].as<std::string>("");
     };
 
     auto parseSupportLinks = [this](const YAML::Node& node) {
@@ -227,10 +222,10 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
         };
 
         if (node["cluster"]) {
-            parseEntity(node["cluster"], MetaSettings.SupportLinksConfig.Cluster);
+            parseEntity(node["cluster"], SupportLinksConfig.Cluster);
         }
         if (node["database"]) {
-            parseEntity(node["database"], MetaSettings.SupportLinksConfig.Database);
+            parseEntity(node["database"], SupportLinksConfig.Database);
         }
     };
 
@@ -243,8 +238,6 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
             parseSupportLinks(meta["support_links"]);
         }
     }
-
-    MetaSettings.HasMetaConfigBlock = static_cast<bool>(config["meta"]);
 
     ValidateSupportLinksConfig();
 }
@@ -261,8 +254,12 @@ void TMVP::TryGetMetaOptionsFromConfig() {
             TryGetMetaOptionsFromConfig(appConfig.GetMeta());
         }
         TryGetMetaOptionsFromConfig(config);
-        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
-        ValidateMetaBaseConfig(MetaSettings);
+        ValidateMetaBaseConfig(
+            MetaApiEndpoint,
+            MetaDatabase,
+            static_cast<bool>(config["meta"]),
+            false
+        );
     } catch (const YAML::Exception& e) {
         std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
@@ -270,17 +267,17 @@ void TMVP::TryGetMetaOptionsFromConfig() {
 }
 
 void TMVP::ValidateSupportLinksConfig() const {
-    const auto& sourceValidators = NSupportLinks::TConfigValidation::Default();
+    const auto& sourceValidators = NSupportLinks::TLinkSourceConfigValidators::Default();
     auto validateEntityLinks = [&](const TVector<TSupportLinkEntryConfig>& links, TStringBuf entityName) {
         for (size_t i = 0; i < links.size(); ++i) {
             const auto& link = links[i];
             const TString where = TStringBuilder() << "support_links." << entityName << "[" << i << "]";
-            sourceValidators.Validate(link, MetaSettings.GrafanaConfig, where);
+            sourceValidators.Validate(link, GrafanaSupportConfig, where);
         }
     };
 
-    validateEntityLinks(MetaSettings.SupportLinksConfig.Cluster, "cluster");
-    validateEntityLinks(MetaSettings.SupportLinksConfig.Database, "database");
+    validateEntityLinks(SupportLinksConfig.Cluster, "cluster");
+    validateEntityLinks(SupportLinksConfig.Database, "database");
 }
 
 
@@ -289,6 +286,11 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
     TryGetMetaOptionsFromConfig();
+
+    const bool isNebius = StartupOptions.AccessServiceType == NMvp::nebius_v1;
+    if (isNebius) {
+        ValidateMetaBaseConfig(MetaApiEndpoint, MetaDatabase, false, isNebius);
+    }
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

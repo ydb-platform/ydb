@@ -103,9 +103,9 @@ public:
 
     const TVector<TSupportLinkEntryConfig>& GetEntityLinks() const {
         if (EntityType && *EntityType == EEntityType::Database) {
-            return InstanceMVP->MetaSettings.SupportLinksConfig.Database;
+            return InstanceMVP->SupportLinksConfig.Database;
         }
-        return InstanceMVP->MetaSettings.SupportLinksConfig.Cluster;
+        return InstanceMVP->SupportLinksConfig.Cluster;
     }
 
     virtual void RequestClusterInfo(const NActors::TActorContext& ctx) {

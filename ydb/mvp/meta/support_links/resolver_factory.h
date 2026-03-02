@@ -1,40 +1,87 @@
 #pragma once
 
-#include "common.h"
-#include "events.h"
+#include "grafana_dashboard_resolver.h"
+#include "grafana_dashboard_search_resolver.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
+#include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 
 namespace NMVP::NSupportLinks {
 
-class TUnsupportedSourceResolver
-    : public NActors::TActorBootstrapped<TUnsupportedSourceResolver> {
+class TLinkSourceCollections {
 public:
-    explicit TUnsupportedSourceResolver(TLinkResolveContext context)
-        : Context(std::move(context))
-    {}
+    using TBuilderFn = NActors::IActor* (*)(TLinkResolveContext);
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
-        TVector<TSupportError> errors;
-        errors.emplace_back(TSupportError{
-            .Source = Context.LinkConfig.Source,
-            .Message = TStringBuilder() << "unsupported support_links source: " << Context.LinkConfig.Source
-        });
-        ctx.Send(Context.Parent, new TEvPrivate::TEvSourceResponse(Context.Place, {}, std::move(errors)));
-        Die(ctx);
+    struct TResolverRegistration {
+        TString SourceName;
+        TBuilderFn Build = nullptr;
+    };
+
+    class TResolverBuilder {
+    public:
+        TResolverBuilder() = default;
+
+        TResolverBuilder(TString sourceName, TBuilderFn builder)
+            : SourceName(std::move(sourceName))
+            , Builder(builder)
+        {}
+
+        NActors::IActor* Build(TLinkResolveContext context) const {
+            context.SourceName = SourceName;
+            return Builder(std::move(context));
+        }
+
+    private:
+        TString SourceName;
+        TBuilderFn Builder = nullptr;
+    };
+
+    struct TSourceEntry {
+        TResolverBuilder Builder;
+    };
+
+    void Register(TResolverRegistration registration) {
+        TString normalizedSourceName = registration.SourceName;
+        Builders[std::move(registration.SourceName)] = TSourceEntry{
+            .Builder = TResolverBuilder(std::move(normalizedSourceName), registration.Build),
+        };
+    }
+
+    NActors::IActor* Build(TLinkResolveContext context) const {
+        const TString sourceName = context.LinkConfig.Source;
+        if (sourceName.empty()) {
+            ythrow yexception() << "support_links source is empty";
+        }
+
+        auto it = Builders.find(sourceName);
+        if (it == Builders.end()) {
+            ythrow yexception() << "unsupported support_links source: " << sourceName;
+        }
+        return it->second.Builder.Build(std::move(context));
+    }
+
+    static const TLinkSourceCollections& Default() {
+        static const TLinkSourceCollections collections = [] {
+            TLinkSourceCollections c;
+            c.Register(TResolverRegistration{
+                .SourceName = SOURCE_GRAFANA_DASHBOARD,
+                .Build = &BuildGrafanaDashboardResolver,
+            });
+            c.Register(TResolverRegistration{
+                .SourceName = SOURCE_GRAFANA_DASHBOARD_SEARCH,
+                .Build = &BuildGrafanaDashboardSearchResolver,
+            });
+            return c;
+        }();
+        return collections;
     }
 
 private:
-    TLinkResolveContext Context;
+    THashMap<TString, TSourceEntry> Builders;
 };
 
 inline NActors::IActor* BuildSourceHandler(TLinkResolveContext context) {
-    if (context.LinkConfig.Source.empty()) {
-        ythrow yexception() << "support_links source is empty";
-    }
-    return new TUnsupportedSourceResolver(std::move(context));
+    return TLinkSourceCollections::Default().Build(std::move(context));
 }
 
 } // namespace NMVP::NSupportLinks

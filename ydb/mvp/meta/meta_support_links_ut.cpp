@@ -76,19 +76,19 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             TVector<NMVP::NSupportLinks::TResolvedLink> links;
             TVector<NMVP::NSupportLinks::TSupportError> errors;
 
-            if (sourceContext.LinkConfig.Source == "mock/cluster") {
+            if (sourceContext.LinkConfig.Source == "grafana/dashboard") {
                 links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
                     .Title = sourceContext.LinkConfig.Title,
                     .Url = TStringBuilder() << "mock://dashboard/" << sourceContext.LinkConfig.Title
                 });
-            } else if (sourceContext.LinkConfig.Source == "mock/database") {
+            } else if (sourceContext.LinkConfig.Source == "grafana/dashboard/search") {
                 links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
                     .Title = "Search mock link",
                     .Url = "mock://search/result"
                 });
                 if (sourceContext.LinkConfig.Tag == "emit_error") {
                     errors.emplace_back(NMVP::NSupportLinks::TSupportError{
-                        .Source = "mock/database",
+                        .Source = "grafana/dashboard/search",
                         .Message = "Search mock error"
                     });
                 }
@@ -167,12 +167,12 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     static NMVP::TSupportLinksConfig MakeConfig() {
         NMVP::TSupportLinksConfig cfg;
         cfg.Cluster.push_back(NMVP::TSupportLinkEntryConfig{
-            .Source = "mock/cluster",
+            .Source = "grafana/dashboard",
             .Title = "Cluster CPU",
             .Url = "/d/cluster-cpu",
         });
         cfg.Database.push_back(NMVP::TSupportLinkEntryConfig{
-            .Source = "mock/database",
+            .Source = "grafana/dashboard/search",
             .Title = "",
             .Url = "/api/search?limit=100&type=dash-db",
             .Tag = "emit_error",
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["url"].GetStringRobust(), "mock://search/result");
         UNIT_ASSERT(json.Has("errors"));
         UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "mock/database");
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "grafana/dashboard/search");
         UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["message"].GetStringRobust(), "Search mock error");
     }
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeEmptyConfig();
+        NMVP::InstanceMVP->SupportLinksConfig = MakeEmptyConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=missing-cluster");
         auto result = MakeEmptyClusterInfoResult();

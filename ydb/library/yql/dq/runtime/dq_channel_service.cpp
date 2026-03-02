@@ -508,6 +508,10 @@ bool TOutputDescriptor::IsFinished() {
     return result;
 }
 
+bool TOutputDescriptor::IsEmpty() {
+    return PushBytes.load() == RemotePopBytes.load();
+}
+
 bool TOutputDescriptor::IsEarlyFinished() {
     return EarlyFinished.load();
 }
@@ -615,7 +619,7 @@ bool TOutputBuffer::IsEarlyFinished() {
 }
 
 bool TOutputBuffer::IsEmpty() {
-    return false;
+    return Descriptor->IsEmpty();
 }
 
 bool TOutputBuffer::Pop(TDataChunk&) {

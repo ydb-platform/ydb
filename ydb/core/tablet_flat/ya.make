@@ -119,6 +119,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
+    library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/control/lib
     ydb/core/protos

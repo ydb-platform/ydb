@@ -19,12 +19,14 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
+#include <util/string/hex.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
 
@@ -175,18 +177,25 @@ public:
     struct TTableFile {
         TString Name;
         TFile File;
+        std::unique_ptr<NOpenSsl::NSha256::TCalcer> Sha256;
     };
 
     TSnapshotWriter(TActorId owner, const TFsPath& path,
                     const THashMap<ui32, TScheme::TTableInfo>& tables,
+                    TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                     TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
-        , SnapshotPath(path.Child("snapshot"))
+        , SnapshotPath(path.Child("snapshot.tmp"))
+        , FinalSnapshotPath(path.Child("snapshot"))
+        , TabletType(tabletType)
+        , TabletId(tabletId)
+        , Generation(generation)
+        , Step(step)
         , Schema(schema)
         , Exclusion(exclusion)
     {
         for (const auto& [tableId, table] : tables) {
-            Tables.emplace(tableId, TTableFile(table.Name, {}));
+            Tables.emplace(tableId, TTableFile{table.Name, {}, std::make_unique<NOpenSsl::NSha256::TCalcer>()});
         }
     }
 
@@ -209,13 +218,14 @@ public:
                 .MapAsObject = true,
             });
             SchemaFile.Write(stringOut.Data(), stringOut.Size());
+            SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
         } catch (const TIoException& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            return ReplyAndDie();
+            return Finalize();
         }
 
         for (auto& [tableId, table] : Tables) {
@@ -262,6 +272,7 @@ public:
         if (!msg->SnapshotData.Empty()) {
             try {
                 it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
+                it->second.Sha256->Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
                 WrittenBytes += msg->SnapshotData.Size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
@@ -291,22 +302,92 @@ public:
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
         if (DoneTables.size() == Tables.size()) {
-            try {
-                SchemaFile.Flush();
-            } catch (const TIoException& e) {
-                return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot schema " << SchemaFile.GetName() << ": " << e.what());
-            }
-
-            for (auto& [_, table] : Tables) {
-                try {
-                    table.File.Flush();
-                } catch (const TIoException& e) {
-                    return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot table data " << table.File.GetName() << ": " << e.what());
-                }
-            }
-
-            return ReplyAndDie();
+            return Finalize();
         }
+    }
+
+    static TString FinalizeDigest(NOpenSsl::NSha256::TCalcer& calcer) {
+        auto digest = calcer.Final();
+        return to_lower(HexEncode(digest.data(), digest.size()));
+    }
+
+    static NJson::TJsonValue MakeFileEntry(const TString& name, NOpenSsl::NSha256::TCalcer& calcer) {
+        NJson::TJsonValue entry;
+        entry["name"] = name;
+        entry["sha256"] = FinalizeDigest(calcer);
+        return entry;
+    }
+
+    void Finalize() {
+        try {
+            SchemaFile.Flush();
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot schema " << SchemaFile.GetName() << ": " << e.what());
+        }
+
+        for (auto& [_, table] : Tables) {
+            try {
+                table.File.Flush();
+            } catch (const TIoException& e) {
+                return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot table data " << table.File.GetName() << ": " << e.what());
+            }
+        }
+
+        try {
+            NJson::TJsonValue manifest;
+            TString tabletTypeName = TTabletTypes::EType_Name(TabletType);
+            NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
+            manifest["tablet_type"] = tabletTypeName;
+            manifest["tablet_id"] = TabletId;
+            manifest["generation"] = Generation;
+            manifest["step"] = Step;
+
+            auto& files = manifest["files"];
+            files.SetType(NJson::JSON_ARRAY);
+            files.AppendValue(MakeFileEntry("schema.json", SchemaSha256));
+            for (auto& [_, table] : Tables) {
+                files.AppendValue(MakeFileEntry(table.Name + ".json", *table.Sha256));
+            }
+
+            const TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/ false);
+
+            auto manifestPath = SnapshotPath.Child("manifest.json");
+            TFile manifestFile(manifestPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+            manifestFile.Write(manifestStr.data(), manifestStr.size());
+            manifestFile.Flush();
+
+            const auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
+            const TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+
+            auto checksumPath = SnapshotPath.Child("manifest.json.sha256");
+            TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+            checksumFile.Write(manifestChecksum.data(), manifestChecksum.size());
+            checksumFile.Flush();
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to write manifest: " << e.what());
+        }
+
+        try {
+            TFile snapshotDir(SnapshotPath, EOpenModeFlag::RdOnly);
+            snapshotDir.Flush();
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to flush temporary snapshot dir " << SnapshotPath << ": " << e.what());
+        }
+
+        try {
+            SnapshotPath.RenameTo(FinalSnapshotPath);
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to rename snapshot " << SnapshotPath << " to " << FinalSnapshotPath << ": " << e.what());
+        }
+
+        try {
+            TFile parentDir(FinalSnapshotPath.Parent(), EOpenModeFlag::RdOnly);
+            parentDir.Flush();
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to flush parent dir after rename " << FinalSnapshotPath.Parent() << ": " << e.what());
+        }
+
+        return ReplyAndDie();
     }
 
     void ScanFailed(const TString& tableName, const TString& error) {
@@ -317,11 +398,18 @@ private:
     TActorId Owner;
 
     TFsPath SnapshotPath;
+    TFsPath FinalSnapshotPath;
+
+    TTabletTypes::EType TabletType;
+    ui64 TabletId;
+    ui32 Generation;
+    ui32 Step;
 
     THashMap<ui32, TTableFile> Tables;
     THashSet<ui32> DoneTables;
 
     TFile SchemaFile;
+    NOpenSsl::NSha256::TCalcer SchemaSha256;
     TAutoPtr<TSchemeChanges> Schema;
 
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
@@ -818,7 +906,7 @@ IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletB
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TSnapshotWriter(owner, path, tables, schema, exclusion);
+        return new TSnapshotWriter(owner, path, tables, tabletType, tabletId, generation, step, schema, exclusion);
     } else {
         return nullptr;
     }

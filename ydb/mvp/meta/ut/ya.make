@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     meta_cache_ut.cpp
+    meta_support_links_ut.cpp
 )
 
 PEERDIR(

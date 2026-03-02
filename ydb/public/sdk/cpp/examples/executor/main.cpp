@@ -11,13 +11,8 @@
 
 void ExecutorExample(const std::string& endpoint, const std::string& database) {
     auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database)
-        .SetExecutor(NYdb::CreateThreadPoolExecutorAdapter(
-            std::make_shared<TThreadPool>(TThreadPool::TParams()
-                .SetBlocking(true)
-                .SetCatching(false)
-                .SetForkAware(false)),
-            std::thread::hardware_concurrency())
-        );
+        .SetExecutor(NYdb::CreateThreadPoolExecutor(std::thread::hardware_concurrency(), 0)
+    );
 
     NYdb::TDriver driver(driverConfig);
     NYdb::NQuery::TQueryClient client(driver);

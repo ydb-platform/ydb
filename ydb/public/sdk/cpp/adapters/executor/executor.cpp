@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
+#include "executor.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/executor/executor_impl.h>

@@ -4,8 +4,6 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <util/thread/pool.h>
-
 #include <thread>
 
 

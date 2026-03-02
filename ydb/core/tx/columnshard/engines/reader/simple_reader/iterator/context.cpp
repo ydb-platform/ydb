@@ -122,7 +122,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
-    AFL_VERIFY(!DuplicatesManager);
+    AFL_VERIFY(!DuplicatesManager.Has());
     if (NeedDuplicateFiltering()) {
         const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
         AFL_VERIFY(casted_sources);
@@ -135,7 +135,8 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
                 portionsToDuplicateFilter.emplace_back(std::move(info));
             }
         });
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
+
+        DuplicatesManager.Set(NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter)));
     }
 }
 
@@ -143,9 +144,10 @@ void TSpecialReadContext::UnregisterActors() {
     if (NActors::TActorSystem::IsStopped()) {
         return;
     }
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
-        DuplicatesManager = TActorId();
+
+    const auto toPoison = DuplicatesManager.Take();
+    if (toPoison) {
+        NActors::TActivationContext::AsActorContext().Send(*toPoison, new NActors::TEvents::TEvPoison);
     }
 }
 

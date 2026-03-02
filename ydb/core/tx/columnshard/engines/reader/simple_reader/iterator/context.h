@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -21,7 +23,7 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    TActorId DuplicatesManager = TActorId();
+    ::NKikimr::NOlap::TThreadSafeOptional<NActors::TActorId> DuplicatesManager;
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -75,9 +77,10 @@ public:
     void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    const TActorId& GetDuplicatesManagerVerified() const {
-        AFL_VERIFY(DuplicatesManager);
-        return DuplicatesManager;
+    NActors::TActorId GetDuplicatesManagerVerified() const {
+        const auto opt = DuplicatesManager.GetOptional();
+        AFL_VERIFY(opt);
+        return *opt;
     }
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
@@ -88,7 +91,8 @@ public:
         if (NActors::TActorSystem::IsStopped()) {
             return;
         }
-        AFL_VERIFY(!DuplicatesManager);
+
+        AFL_VERIFY(!DuplicatesManager.Has());
     }
 };
 

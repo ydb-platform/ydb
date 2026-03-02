@@ -62,7 +62,26 @@ public:
         return *this;
     }
 
-    void Reset() = delete;
+    std::optional<T> Take() {
+        if (!Defined.load(std::memory_order_acquire)) {
+            return {};
+        }
+
+        T value(*Ptr());
+        Defined.store(false, std::memory_order_release);
+        Ptr()->~T();
+
+        return value;
+    }
+
+    void Reset() {
+        if (!Defined.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        Defined.store(false, std::memory_order_release);
+        Ptr()->~T();
+    }
 
     void Set(const T& value) {
         AFL_VERIFY(!Has());

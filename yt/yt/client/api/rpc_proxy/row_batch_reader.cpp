@@ -35,7 +35,7 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 {
     StoredRows_.clear();
 
-    if (!ReadyEvent_.IsSet() || !ReadyEvent_.BlockingGet().IsOK()) {
+    if (!ReadyEvent_.IsSet() || !ReadyEvent_.GetOrCrash().IsOK()) {
         return CreateEmptyUnversionedRowBatch();
     }
 

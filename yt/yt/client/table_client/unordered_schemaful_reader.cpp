@@ -65,7 +65,7 @@ public:
                     continue;
                 }
 
-                const auto& error = session.ReadyEvent->BlockingGet();
+                const auto& error = session.ReadyEvent->GetOrCrash();
                 if (!error.IsOK()) {
                     auto guard = WriterGuard(SpinLock_);
                     ReadyEvent_ = MakePromise<void>(error);

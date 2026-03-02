@@ -1869,7 +1869,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
     if (Authenticator_->CanAuthenticate(authenticationContext)) {
         auto asyncAuthResult = Authenticator_->AsyncAuthenticate(authenticationContext);
         if (asyncAuthResult.IsSet()) {
-            OnRequestAuthenticated(timer, std::move(incomingRequest), asyncAuthResult.BlockingGet());
+            OnRequestAuthenticated(timer, std::move(incomingRequest), asyncAuthResult.GetOrCrash());
         } else {
             asyncAuthResult.Subscribe(
                 BIND(&TServiceBase::OnRequestAuthenticated, MakeStrong(this), timer, Passed(std::move(incomingRequest))));

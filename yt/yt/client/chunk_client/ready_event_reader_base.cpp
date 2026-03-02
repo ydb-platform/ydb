@@ -22,7 +22,7 @@ TFuture<void> TReadyEventReaderBase::ReadyEvent() const
 bool TReadyEventReaderBase::IsReadyEventSetAndOK() const
 {
     auto guard = Guard(SpinLock_);
-    return ReadyEvent_.IsSet() && ReadyEvent_.BlockingGet().IsOK();
+    return ReadyEvent_.IsSet() && ReadyEvent_.GetOrCrash().IsOK();
 }
 
 void TReadyEventReaderBase::SetReadyEvent(TFuture<void> readyEvent)

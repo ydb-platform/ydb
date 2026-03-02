@@ -19,7 +19,7 @@ TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invok
 
     WaitUntilSet(future.AsVoid(), std::move(invoker));
 
-    return future.BlockingGet();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>
@@ -32,7 +32,7 @@ TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
         WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
     }
 
-    return future.BlockingGet();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>

@@ -9,3 +9,4 @@ Main subsections:
 * [{#T}](minidumps.md)
 * [{#T}](../../reference/observability/tracing/setup.md)
 * [{#T}](system-views.md)
+* [{#T}](alerting.md)

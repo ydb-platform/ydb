@@ -3626,6 +3626,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     srcPath->DbRefCount++;
                 }
 
+                if (txState.TxType == TTxState::TxCopySequence && txState.SourcePathId) {
+                    Y_ABORT_UNLESS(Self->PathsById.contains(txState.SourcePathId));
+                    TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
+                    Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
+                    srcPath->DbRefCount++;
+                }
+
                 if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
                     TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);

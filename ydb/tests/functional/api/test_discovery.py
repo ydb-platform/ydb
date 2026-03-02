@@ -11,6 +11,11 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+from ydb.public.api.grpc.ydb_discovery_v1_pb2_grpc import DiscoveryServiceStub
+from ydb.public.api.protos import ydb_discovery_pb2 as discovery
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import grpc
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,3 +289,104 @@ class TestMirror3DCDiscovery(object):
             time.sleep(1)
 
         ensure_locality("Test finish")
+
+
+class TestLoadFactor(object):
+    """Test that load_factor is returned and updated in ListEndpoints"""
+
+    @classmethod
+    def setup_class(cls):
+        cls.cluster = KiKiMR()
+        cls.cluster.start()
+        cls.database_name = '/Root'
+        cls.logger = logger.getChild(cls.__name__)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, 'cluster'):
+            cls.cluster.stop()
+
+    def list_endpoints(self, channel):
+        stub = DiscoveryServiceStub(channel)
+        request = discovery.ListEndpointsRequest(database="/Root")
+        response = stub.ListEndpoints(request)
+
+        assert_that(response.operation.status, is_(StatusIds.SUCCESS))
+
+        result = discovery.ListEndpointsResult()
+        response.operation.result.Unpack(result)
+
+        return result
+
+    def test_load_factor_updates(self):
+        """Test that load_factor changes over time"""
+        import random
+        
+        endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].grpc_port)
+        channel = grpc.insecure_channel(endpoint)
+
+        driver_config = ydb.DriverConfig(endpoint, self.database_name)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        try:
+            pool = ydb.SessionPool(driver)
+
+            result1 = self.list_endpoints(channel)
+            assert_that(len(result1.endpoints) > 0, "Expected at least one endpoint")
+
+            initial_load_factors = {}
+            for ep in result1.endpoints:
+                key = "%s:%d" % (ep.address, ep.port)
+                initial_load_factors[key] = ep.load_factor
+                self.logger.info("Initial load_factor for %s: %f", key, ep.load_factor)
+
+            start_time = time.time()
+            while time.time() - start_time < 20:
+                try:
+                    random_numbers = [random.randint(0, int(1e3)) for _ in range(int(1e3))]
+                    values_str = ', '.join('({})'.format(n) for n in random_numbers)
+
+                    def sort_query(session):
+                        session.transaction().execute(
+                            'SELECT value FROM (VALUES {}) AS t(value) ORDER BY value'.format(values_str),
+                            commit_tx=True
+                        )
+
+                    pool.retry_operation_sync(sort_query)
+                except Exception as e:
+                    self.logger.debug("Load generation error: %s", e)
+
+            result2 = self.list_endpoints(channel)
+            assert_that(len(result2.endpoints) > 0, "Expected at least one endpoint")
+
+            load_factor_has_changed = False
+            for ep in result2.endpoints:
+                key = "%s:%d" % (ep.address, ep.port)
+                self.logger.info("Updated load_factor for %s: %f", key, ep.load_factor)
+                assert_that(
+                    ep.load_factor > 0.0,
+                    "Expected load_factor > 0, got %f" % ep.load_factor
+                )
+
+                if key in initial_load_factors:
+                    delta = ep.load_factor - initial_load_factors[key]
+                    self.logger.info(
+                        "Load factor change for %s: %f -> %f (delta: %f)",
+                        key,
+                        initial_load_factors[key],
+                        ep.load_factor,
+                        delta
+                    )
+
+                    if abs(delta) > 0:
+                        load_factor_has_changed = True
+
+            assert_that(
+                load_factor_has_changed,
+                "Expected at least one endpoint's load_factor to change under load"
+            )
+
+        finally:
+            driver.stop()
+            channel.close()

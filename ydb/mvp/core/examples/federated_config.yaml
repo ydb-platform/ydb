@@ -1,23 +1,13 @@
 generic:
   access_service_type: "nebius_v1"
 
-  mlock: false
-
-  logging:
-    stderr: false
-
-  server:
-    http_port: 8788
-    https_port: 8789
-    ca_cert_file: path/to/ca.crt
-    ssl_cert_file: path/to/ssl.crt
-
   auth:
-    token_file: ydb/mvp/meta/examples/token_file.pb.txt
+    # Path to file with tokens for service authorization and token exchange endpoint.
+    token_file: ydb/mvp/core/examples/token_file.pb.txt
 
     tokens:
       oauth2_exchange:
-        # Token name. Must match meta.meta_database_token_name below.
+        # Token name for service authorization.
         - name: "federated-token"
           # IAM token exchange endpoint (gRPC).
           token_endpoint: "grpcs://tokens.net:443"
@@ -33,12 +23,3 @@ generic:
             type: FIXED
             token_type: "urn:ietf:params:oauth:token-type:jwt"
             token_file: "/var/run/secrets/tokens/jwt"
-
-meta:
-  # Meta API endpoint.
-  meta_api_endpoint: grpc://meta.ydb.example.net:2135
-  # Meta database path.
-  meta_database: /Root/meta
-  # Name of token from oauth2_exchange used for Meta DB authorization.
-  # Must match one of token names in auth.tokens.oauth2_exchange.
-  meta_database_token_name: "federated-token"

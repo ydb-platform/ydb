@@ -44,7 +44,7 @@ protected:
     TExportFilesUploader(const TSettings& settings, const TString& destinationPrefix)
         : Settings(settings)
         , DestinationPrefix(destinationPrefix)
-        , ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings, AppData()->Counters))
+        , ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings))
     {
         if (Settings.has_encryption_settings()) {
             Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());

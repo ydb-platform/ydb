@@ -17,7 +17,7 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
         if (settings) {
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings->GetSettings(), AppData()->Counters);
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings->GetSettings());
             WrapperId = Self->Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
             BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
             Bucket = settings->GetSettings().GetBucket();

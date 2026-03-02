@@ -213,7 +213,7 @@ private:
         dev.File = MakeHolder<TFileHandle>(path.c_str(), openFlags);
 
         NPDisk::TUringRouterConfig cfg;
-        cfg.QueueDepth = QueueDepth;
+        cfg.QueueDepth = QueueDepth * 2; // sq + cq
         cfg.UseSQPoll = true;
         cfg.UseIOPoll = false;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);

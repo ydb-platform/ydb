@@ -81,6 +81,7 @@ public:
         if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
             if (info->State != EVolatileTxState::Aborting) {
                 VolatileVersion = Max(VolatileVersion, info->Version);
+                Self.SysLocksTable().AddVolatileDependency(txId);
             }
         } else {
             Self.SysLocksTable().AddReadConflict(txId);
@@ -306,6 +307,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         auto it = LockRowsRequests.find(requestId);
         Y_ABORT_UNLESS(it != LockRowsRequests.end());
         Y_ABORT_UNLESS(&it->second == &state);
+        state.Scope.Cancel();
         state.Finished.NotifyAll();
         LockRowsRequests.erase(it);
         // Note: update counters unless actor system is shutting down
@@ -493,13 +495,21 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
     for (;;) {
         bool reschedule = false;
-        std::optional<ui64> waitForLock;
+        TLockInfo::TPtr waitForLock;
 
         // We need to run each iteration in a transaction
         co_await TTxLockRows::Run(this, [&](TTransactionContext& txc) {
             if (lock && lock->IsBroken()) {
                 state.Result = makeError(NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN, TStringBuilder()
-                    << "Lock " << lockId << " is broken or cannot be created at shard " << TabletID());
+                    << "Lock " << lockId << " is broken at shard " << TabletID());
+                state.Result->AddLock(
+                    lockId,
+                    TabletID(),
+                    lock->GetGeneration(),
+                    lock->GetCounter(),
+                    tableId.PathId.OwnerId,
+                    tableId.PathId.LocalPathId,
+                    lock->IsWriteLock());
                 return ETxLockRows::Rollback;
             }
 
@@ -529,8 +539,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                         Y_ENSURE(lock == guardLocks.Lock);
                     } else {
                         lock = guardLocks.Lock;
+                        lock->SetPessimistic();
+                        StartLockRowsLockWatcher(requestId, tableId, lock);
                     }
-                    guardLocks.PreserveEmptyLock = true;
                     SubscribeNewLocks();
                     break;
 
@@ -628,7 +639,17 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 if (row.LockMode != NTable::ELockMode::None) {
                     auto currentOwner = SysLocksTable().GetRawLock(row.LockTxId);
-                    if (currentOwner) {
+                    auto* info = GetVolatileTxManager().FindByCommitTxId(row.LockTxId);
+                    // Note: when current owner is broken we assume the row is
+                    // unlocked. In reality the transaction may be waiting for
+                    // the volatile commit decision at the moment, so it may be
+                    // neither committed nor aborted, and we would overwrite
+                    // uncommitted changes by another transaction. However, it
+                    // would have performed all checks and applied all side-
+                    // effects, which we track as volatile dependencies anyway.
+                    // Locks are advisory and the transaction no longer needs
+                    // them, so overwriting it is OK.
+                    if (currentOwner && !currentOwner->IsBroken() && !info) {
                         if (skipLocked) {
                             success->Record.AddSkippedKeys(processedKeys);
                             runtimeLock.Reset();
@@ -636,7 +657,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                             continue;
                         }
 
-                        waitForLock = row.LockTxId;
+                        waitForLock = currentOwner;
 
                         applyLocks();
 
@@ -696,28 +717,21 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, runtimeLock.Predecessor().GetLock());
                 // Wait until lock predecessor changes
                 co_await runtimeLock.OnChangedEvent.Wait([&]{
-                    // TODO: we need to somehow notify the service about new waiting graph edges,
-                    // which must also take into account that earlier requests may be cancelled while
-                    // we wait, and the previous runtime lock in the waiting list might change.
                     setWaiting(true);
                 });
             }
 
             if (waitForLock) {
-                // Wait until current row's persistent owner is removed
-                auto currentOwner = SysLocksTable().GetRawLock(*waitForLock);
-                if (currentOwner) {
+                // Wait until current row's persistent owner is broken or removed
+                if (!waitForLock->IsBroken()) {
                     // Notify long tx service abour waiting for the predecessor
-                    TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, currentOwner);
-                    // Wake up when current row owner is removed entirely
-                    // TODO: we probably want to wait until it is broken in the future
-                    co_await currentOwner->OnRemovedEvent.Wait([&]{
-                        // TODO: we need to somehow notify the service about new waiting graph edge
-                        // between our lockId and *waitForLock id.
+                    TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, waitForLock);
+                    // Wake up when current row owner is broken (removing it also breaks)
+                    co_await waitForLock->OnBrokenEvent.Wait([&]{
                         setWaiting(true);
                     });
                 }
-                waitForLock.reset();
+                waitForLock.Reset();
             }
         }
 
@@ -735,7 +749,7 @@ void TDataShard::HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::T
     auto it = LockRowsRequests.find(requestId);
     if (it != LockRowsRequests.end()) {
         it->second.Scope.Cancel();
-            // Note: awaiter queue size may change when Cancel is called
+        // Note: awaiter queue size may change when Cancel is called
         UpdateProposeQueueSize();
     }
 }
@@ -752,6 +766,46 @@ void TDataShard::HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock
                 NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK,
                 TStringBuilder() << "Deadlock with another transaction detected at shard " << TabletID());
             state.Scope.Cancel();
+            // Note: awaiter queue size may change when Cancel is called
+            UpdateProposeQueueSize();
+        }
+    }
+}
+
+void TDataShard::StartLockRowsLockWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock) {
+    // Note: this watcher uses unstructured concurrency to watch when an
+    // acquired lock breaks while the request is waiting. This function starts
+    // recursively while inside the transaction, so we can be sure the request
+    // is still valid and lock is not broken yet. However the request may exit
+    // at any time, invalidating the state.
+    TLockRowsRequestState* state = LockRowsRequests.FindPtr(requestId);
+    Y_ENSURE(state, "TEvLockRows request state must be wait in StartLockRowsLockWatcher");
+    Y_ENSURE(!lock->IsBroken(), "Unexpected broken lock in StartLockRowsLockWatcher");
+    // We attach to the same scope, which will cancel the wait along with the
+    // request. The return value will be true when the callback returns
+    // normally, i.e. when the lock becomes broken or is removed.
+    bool ok = co_await state->Scope.Wrap([&]() -> async<void> {
+        co_await lock->OnBrokenEvent.Wait();
+    });
+    if (ok && lock->IsBroken()) {
+        // Even when this coroutine is resumed because the lock becomes broken,
+        // the request may have been destroyed concurrently. Make sure we don't
+        // try working with the missing request.
+        state = LockRowsRequests.FindPtr(requestId);
+        if (state && !state->Result) {
+            state->Result = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
+                TabletID(), requestId.RequestId,
+                NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN,
+                TStringBuilder() << "Lock " << lock->GetLockId() << " is broken at shard " << TabletID());
+            state->Result->AddLock(
+                lock->GetLockId(),
+                TabletID(),
+                lock->GetGeneration(),
+                lock->GetCounter(),
+                tableId.PathId.OwnerId,
+                tableId.PathId.LocalPathId,
+                lock->IsWriteLock());
+            state->Scope.Cancel();
             // Note: awaiter queue size may change when Cancel is called
             UpdateProposeQueueSize();
         }

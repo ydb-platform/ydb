@@ -107,7 +107,9 @@ private:
 
 protected:
     const TInstant Start = TInstant::Now();
-    std::optional<size_t> BytesWritten, BytesRead; // Metrics for some special methods
+    // Metrics for some special methods
+    std::optional<size_t> BytesWritten;
+    std::optional<size_t> BytesRead;
     TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> Counters;
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;

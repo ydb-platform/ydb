@@ -28,7 +28,7 @@ class TS3ExternalStorage: public IExternalStorageOperator {
 public:
     struct TS3CountersRoot;
 
-    struct TS3RequestCounters : public TAtomicRefCount<TS3RequestCounters> {
+    struct TS3RequestCounters: public TAtomicRefCount<TS3RequestCounters> {
         TS3RequestCounters(const TS3CountersRoot* parent, NMonitoring::TDynamicCounterPtr requestGroup)
             : Parent(parent)
             , RequestGroup(std::move(requestGroup))
@@ -52,7 +52,7 @@ public:
     struct TS3CountersRoot {
         TS3CountersRoot() = default;
 
-        TS3CountersRoot(NMonitoring::TDynamicCounterPtr root)
+        explicit TS3CountersRoot(NMonitoring::TDynamicCounterPtr root)
             : Root(std::move(root))
         {
         }

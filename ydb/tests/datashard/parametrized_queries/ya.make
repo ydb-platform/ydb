@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(19)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS(
     test_parametrized_queries.py

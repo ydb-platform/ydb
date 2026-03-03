@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(test.py)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 DEPENDS(
 )
 

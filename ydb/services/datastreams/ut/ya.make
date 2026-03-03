@@ -7,6 +7,7 @@ ADDINCL(
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     datastreams_ut.cpp

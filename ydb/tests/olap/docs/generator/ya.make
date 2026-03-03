@@ -10,4 +10,5 @@ PEERDIR(
     contrib/python/PyYAML
 )
 
+REQUIREMENTS(cpu:1)
 END()

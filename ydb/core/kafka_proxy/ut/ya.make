@@ -5,6 +5,7 @@ ADDINCL(
 )
 
 SIZE(medium)
+REQUIREMENTS(cpu:2)
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

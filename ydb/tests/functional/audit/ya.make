@@ -8,6 +8,7 @@ FORK_TEST_FILES()
 # and therefore some tests may affect neighbouring ones
 SPLIT_FACTOR(100)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

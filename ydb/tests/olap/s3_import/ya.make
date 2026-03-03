@@ -14,6 +14,7 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/tests/library

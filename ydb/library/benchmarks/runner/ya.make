@@ -1,6 +1,7 @@
 PY3TEST()
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 

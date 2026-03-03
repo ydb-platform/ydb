@@ -13,4 +13,5 @@ TEST_SRCS(
     test_timeout.py
 )
 
+REQUIREMENTS(cpu:1)
 END()

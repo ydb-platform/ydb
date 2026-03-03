@@ -2,6 +2,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 TAG(ya:fat)
 
 FORK_SUBTESTS()

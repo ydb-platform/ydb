@@ -23,4 +23,5 @@ RESOURCE(
     resources/stat.json      stat.json
 )
 
+REQUIREMENTS(cpu:1)
 END()

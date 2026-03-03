@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/mediator)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/testlib/default

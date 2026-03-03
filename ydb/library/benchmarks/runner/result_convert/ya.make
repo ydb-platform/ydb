@@ -7,4 +7,5 @@ PY_SRCS(
 PEERDIR(
 )
 
+REQUIREMENTS(cpu:1)
 END()

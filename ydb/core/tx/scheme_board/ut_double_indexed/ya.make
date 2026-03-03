@@ -10,4 +10,5 @@ SRCS(
     double_indexed_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

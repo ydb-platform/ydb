@@ -11,4 +11,5 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 )
 
+REQUIREMENTS(cpu:1)
 END()

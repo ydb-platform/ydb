@@ -9,6 +9,7 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 DEPENDS(
     ydb/apps/ydb

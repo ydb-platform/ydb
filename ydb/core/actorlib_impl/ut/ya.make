@@ -8,6 +8,7 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(

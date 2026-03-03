@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/security)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/testlib/default

@@ -5,6 +5,7 @@ SPLIT_FACTOR(50)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)
+    REQUIREMENTS(cpu:8)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)

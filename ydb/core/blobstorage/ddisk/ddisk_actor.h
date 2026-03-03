@@ -76,7 +76,7 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
         std::atomic<ui32> InFlightCount{0};
-        static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
+        static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
         struct TDirectIoOpBase;
         struct TSingleDirectIoOp;

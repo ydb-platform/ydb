@@ -91,6 +91,7 @@ message TEvLockStatus {
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
     optional EStatus Status = 3;
+    optional uint64 LockTimestamp = 4;
 }
 
 message TEvUnsubscribeLock {

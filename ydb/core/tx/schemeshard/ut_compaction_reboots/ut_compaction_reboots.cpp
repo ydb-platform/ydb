@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
         }
     }
     
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Test, 4, 4, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactBaseCase, 4, 4, false) {
         t.EnvOpts.EnableBackgroundCompaction(false);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCreateRequest);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvGetRequest);
@@ -63,8 +63,7 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table2");
             auto compaction2Id = txId;
 
-            t.TestEnv->TestWaitNotification(runtime, compaction1Id);
-            t.TestEnv->TestWaitNotification(runtime, compaction2Id);
+            t.TestEnv->TestWaitNotification(runtime, {compaction1Id, compaction2Id});
 
             {
                 auto response1 = TestGetCompaction(runtime, compaction1Id, "/MyRoot");

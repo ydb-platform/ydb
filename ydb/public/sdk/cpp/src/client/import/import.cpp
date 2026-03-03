@@ -354,6 +354,15 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
         settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
 
+    if (settings.DestinationPath_) {
+        settingsProto.set_destination_path(TStringType{settings.DestinationPath_.value()});
+    }
+
+    if (settings.SymmetricKey_) {
+        settingsProto.mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_.value());
+    }
+
+    
     settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
 
     for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {

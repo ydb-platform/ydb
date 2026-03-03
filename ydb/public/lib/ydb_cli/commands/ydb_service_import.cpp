@@ -34,52 +34,20 @@ TCommandImport::TCommandImport()
 {
     AddCommand(std::make_unique<TCommandImportFromS3>());
     AddCommand(std::make_unique<TCommandImportFromFile>());
+    AddCommand(std::make_unique<TCommandImportFromFs>());
 }
 
-/// S3
-TCommandImportFromS3::TCommandImportFromS3()
-    : TYdbOperationCommand("s3", {}, "Create import from S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3")
+TCommandImportBase::TCommandImportBase(const TString& name, const TString& description)
+    : TYdbOperationCommand(name, {}, description)
 {
     TItem::DefineFields({
-        {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
 }
 
-void TCommandImportFromS3::Config(TConfig& config) {
+void TCommandImportBase::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
-
-    config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
-        .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
-
     auto colors = NConsoleClient::AutoColors(Cout);
-    config.Opts->AddLongOption("scheme", TStringBuilder()
-            << "S3 endpoint scheme - "
-            << colors.BoldColor() << "http" << colors.OldColor()
-            << " or "
-            << colors.BoldColor() << "https" << colors.OldColor())
-        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
-
-    config.Opts->AddLongOption("bucket", "S3 bucket")
-        .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
-
-    config.Opts->AddLongOption("access-key", "AWS access key id")
-        .Env("AWS_ACCESS_KEY_ID", false)
-        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_access_key_id" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
-        .RequiredArgument("STRING");
-
-    config.Opts->AddLongOption("secret-key", "AWS secret key")
-        .Env("AWS_SECRET_ACCESS_KEY", false)
-        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_secret_access_key" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
-        .RequiredArgument("STRING");
-
-    config.Opts->AddLongOption("aws-profile", TStringBuilder() << "Named profile in AWS credentials file \"" << AwsCredentialsFile << "\"")
-        .RequiredArgument("STRING")
-        .Env("AWS_PROFILE", false)
-        .DefaultValue(AwsDefaultProfileName);
-
-    config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
-        .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
 
     config.Opts->AddLongOption("destination-path", "Destination folder in database for the objects being imported")
         .RequiredArgument("PATH").StoreResult(&CommonDestinationPath);
@@ -139,14 +107,6 @@ void TCommandImportFromS3::Config(TConfig& config) {
             .RequiredArgument("STRING").StoreResult(&IndexPopulationMode).DefaultValue(IndexPopulationMode);
     }
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
-            << "Sets bucket URL style. Value "
-            << colors.BoldColor() << "true" << colors.OldColor()
-            << " means use Virtual-Hosted-Style URL, "
-            << colors.BoldColor() << "false" << colors.OldColor()
-            << " - Path-Style URL.")
-        .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
-
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
         .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
 
@@ -168,13 +128,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("json", "format");
 }
 
-void TCommandImportFromS3::Parse(TConfig& config) {
+void TCommandImportBase::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseOutputFormats();
-
-    ParseAwsProfile(config, "aws-profile");
-    ParseAwsAccessKey(config, "access-key");
-    ParseAwsSecretKey(config, "secret-key");
 
     Items = TItem::Parse(config, "item");
     if (Items.empty() && !CommonSourcePrefix) {
@@ -194,7 +150,7 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     }
 }
 
-void TCommandImportFromS3::ExtractParams(TConfig& config) {
+void TCommandImportBase::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         if (item.Destination) {
@@ -206,13 +162,32 @@ void TCommandImportFromS3::ExtractParams(TConfig& config) {
     }
 }
 
+// Fill common settings for import operations (description, retries, index mode, ACL, checksum, encryption)
+template <typename TSettings>
+void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
+    if (Description) {
+        settings.Description(Description);
+    }
+
+    settings.NumberOfRetries(NumberOfRetries);
+    settings.IndexPopulationMode(IndexPopulationMode);
+    settings.NoACL(NoACL);
+    settings.SkipChecksumValidation(SkipChecksumValidation);
+
+    const bool encryption = !EncryptionKey.empty();
+    if (encryption) {
+        settings.SymmetricKey(EncryptionKey);
+    }
+}
+
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName);
 }
 
-void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& settings) const {
+template <typename TSettings>
+void TCommandImportBase::FillItems(TSettings& settings) const {
     if (!Items.empty()) {
         FillItemsFromItemParam(settings);
     } else {
@@ -226,12 +201,22 @@ void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& setti
     }
 }
 
-void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Settings& settings) const {
-#if defined(_win32_)
+template <typename TSettings>
+void TCommandImportBase::ApplyItems(TSettings& settings) const {
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
     }
+}
+
+template <typename TSettings>
+void TCommandImportBase::FillItemsFromItemParam(TSettings& settings) const {
+#if defined(_win32_)
+    ApplyItems(settings);
 #else
+    if constexpr (std::is_same_v<TSettings, NImport::TImportFromFsSettings>) {
+        ApplyItems(settings);
+    }
+    static_assert(std::is_same_v<TSettings, NImport::TImportFromS3Settings>, "Not implemented");
     InitAwsAPI();
     try {
         auto s3Client = CreateS3ClientWrapper(settings);
@@ -290,57 +275,119 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
 #endif
 }
 
-void TCommandImportFromS3::FillItemsFromIncludeParam(NYdb::NImport::TImportFromS3Settings& settings) const {
+template <typename TSettings>
+void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
     for (const TString& path : IncludePaths) {
         settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
     }
 }
 
-template <class TSettings>
-TSettings TCommandImportFromS3::MakeSettings() {
-    TSettings settings = FillSettings<TSettings>(TSettings());
+/// S3
+TCommandImportFromS3::TCommandImportFromS3()
+    : TCommandImportBase("s3", "Create import from S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3")
+{
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
+    });
+}
 
-    const bool encryption = !EncryptionKey.empty();
-    constexpr bool isListRequest = std::is_same_v<TSettings, NImport::TListObjectsInS3ExportSettings>;
+void TCommandImportFromS3::Config(TConfig& config) {
+    TCommandImportBase::Config(config);
 
+    config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
+        .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
+
+    auto colors = NConsoleClient::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
+        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
+
+    config.Opts->AddLongOption("bucket", "S3 bucket")
+        .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
+
+    config.Opts->AddLongOption("access-key", "AWS access key id")
+        .Env("AWS_ACCESS_KEY_ID", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_access_key_id" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
+        .RequiredArgument("STRING");
+
+    config.Opts->AddLongOption("secret-key", "AWS secret key")
+        .Env("AWS_SECRET_ACCESS_KEY", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_secret_access_key" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
+        .RequiredArgument("STRING");
+
+    config.Opts->AddLongOption("aws-profile", TStringBuilder() << "Named profile in AWS credentials file \"" << AwsCredentialsFile << "\"")
+        .RequiredArgument("STRING")
+        .Env("AWS_PROFILE", false)
+        .DefaultValue(AwsDefaultProfileName);
+
+    config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
+        .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
+
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
+        .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+}
+
+void TCommandImportFromS3::Parse(TConfig& config) {
+    TCommandImportBase::Parse(config);
+
+    ParseAwsProfile(config, "aws-profile");
+    ParseAwsAccessKey(config, "access-key");
+    ParseAwsSecretKey(config, "secret-key");
+}
+
+void TCommandImportFromS3::ExtractParams(TConfig& config) {
+    TCommandImportBase::ExtractParams(config);
+}
+
+// Fill S3-specific settings (endpoint, bucket, credentials)
+template <typename TSettings>
+void TCommandImportFromS3::FillS3Settings(TSettings& settings) {
     settings.Endpoint(AwsEndpoint);
     settings.Scheme(AwsScheme);
     settings.Bucket(AwsBucket);
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
+}
 
-    if (encryption) {
-        settings.SymmetricKey(EncryptionKey);
+NImport::TImportFromS3Settings TCommandImportFromS3::MakeImportSettings() {
+    auto settings = FillSettings<NImport::TImportFromS3Settings>(NImport::TImportFromS3Settings());
+
+    FillS3Settings(settings);
+    FillCommonImportSettings(settings);
+
+    if (CommonSourcePrefix) {
+        settings.SourcePrefix(CommonSourcePrefix);
     }
 
-    if constexpr (isListRequest) {
-        if (CommonSourcePrefix) {
-            settings.Prefix(CommonSourcePrefix);
-        }
+    if (CommonDestinationPath) {
+        settings.DestinationPath(CommonDestinationPath);
+    }
 
-        for (const TString& path : IncludePaths) {
-            settings.AppendItem({.Path = path});
-        }
-    } else {
-        if (CommonSourcePrefix) {
-            settings.SourcePrefix(CommonSourcePrefix);
-        }
+    FillItems(settings);
 
-        if (CommonDestinationPath) {
-            settings.DestinationPath(CommonDestinationPath);
-        }
+    return settings;
+}
 
-        if (Description) {
-            settings.Description(Description);
-        }
+NImport::TListObjectsInS3ExportSettings TCommandImportFromS3::MakeListObjectsSettings() {
+    auto settings = FillSettings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings());
 
-        settings.NumberOfRetries(NumberOfRetries);
-        settings.IndexPopulationMode(IndexPopulationMode);
-        settings.NoACL(NoACL);
-        settings.SkipChecksumValidation(SkipChecksumValidation);
+    FillS3Settings(settings);
 
-        FillItems(settings);
+    if (CommonSourcePrefix) {
+        settings.Prefix(CommonSourcePrefix);
+    }
+
+    for (const TString& path : IncludePaths) {
+        settings.AppendItem({.Path = path});
     }
 
     return settings;
@@ -396,18 +443,93 @@ int TCommandImportFromS3::Run(TConfig& config) {
 
     int returnCode = EXIT_SUCCESS;
     if (ListObjectsInExistingExport) {
-        TListObjectsInS3ExportSettings settings = MakeSettings<TListObjectsInS3ExportSettings>();
+        TListObjectsInS3ExportSettings settings = MakeListObjectsSettings();
         TListObjectsInS3ExportResult result = client.ListObjectsInS3Export(std::move(settings)).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         returnCode = PrintListObjectResult(result, OutputFormat);
     } else {
-        TImportFromS3Settings settings = MakeSettings<TImportFromS3Settings>();
+        TImportFromS3Settings settings = MakeImportSettings();
         TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();
         ThrowOnError(response);
         PrintOperation(response, OutputFormat);
     }
 
     return returnCode;
+}
+
+/// FS
+TCommandImportFromFs::TCommandImportFromFs()
+    : TCommandImportBase("fs", "Create import from file system.")
+{
+}
+
+void TCommandImportFromFs::Config(TConfig& config) {
+    TCommandImportBase::Config(config);
+
+    config.Opts->AddLongOption("base-path", "Base path for import in file system")
+        .RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
+}
+
+void TCommandImportFromFs::Parse(TConfig& config) {
+    TCommandImportBase::Parse(config);
+}
+
+void TCommandImportFromFs::ExtractParams(TConfig& config) {
+    TCommandImportBase::ExtractParams(config);
+}
+
+NImport::TImportFromFsSettings TCommandImportFromFs::MakeImportSettings() {
+    using namespace NImport;
+
+    TImportFromFsSettings settings = FillSettings<TImportFromFsSettings>(TImportFromFsSettings());
+
+    if (CommonSourcePrefix) {
+        settings.BasePath(CommonSourcePrefix);
+    } else {
+        throw TMisuseException() << "No base path was provided";
+    }
+
+    FillCommonImportSettings(settings);
+
+    if (CommonDestinationPath) {
+        if (Items.empty()) {
+            settings.AppendItem({.Src = {}, .Dst = CommonDestinationPath});
+        }
+    }
+
+    for (const auto& item : Items) {
+        settings.AppendItem({item.Source, item.Destination});
+    }
+
+    ExcludeItems(settings, ExclusionPatterns);
+
+    if (settings.Item_.empty()) {
+        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
+    }
+
+    return settings;
+}
+
+int TCommandImportFromFs::Run(TConfig& config) {
+    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+        try {
+            EncryptionKey = HexDecode(EncryptionKey);
+        } catch (const std::exception&) {
+            // Don't print error, it may contain secret.
+            Cerr << "Failed to decode encryption key from hex" << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    using namespace NImport;
+    TImportClient client(CreateDriver(config));
+
+    auto settings = MakeImportSettings();
+    auto response = client.ImportFromFs(std::move(settings)).GetValueSync();
+    ThrowOnError(response);
+    PrintOperation(response, OutputFormat);
+
+    return EXIT_SUCCESS;
 }
 
 /// File
@@ -648,5 +770,12 @@ int TCommandImportFromParquet::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+// Explicit template instantiations
+template void TCommandImportBase::FillCommonImportSettings<NImport::TImportFromS3Settings>(NImport::TImportFromS3Settings& settings);
+template void TCommandImportBase::FillCommonImportSettings<NImport::TImportFromFsSettings>(NImport::TImportFromFsSettings& settings);
+
+template void TCommandImportFromS3::FillS3Settings<NImport::TImportFromS3Settings>(NImport::TImportFromS3Settings& settings);
+template void TCommandImportFromS3::FillS3Settings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings& settings);
 
 }

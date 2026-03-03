@@ -169,6 +169,8 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(bool, NoACL);
     FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
+    FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
     FLUENT_SETTING_DEFAULT(EIndexPopulationMode, IndexPopulationMode, EIndexPopulationMode::Build);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };

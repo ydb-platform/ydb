@@ -1527,7 +1527,6 @@ message TEvCheckConstraintResponse {
     repeated Ydb.Issue.IssueMessage Issues = 4;
 }
 
-
 message TEvBuildIndexCreateRequest {
     optional uint64 Id = 1;          // unique id of build index process
 

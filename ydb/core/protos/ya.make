@@ -135,6 +135,7 @@ SRCS(
     scheme_type_operation.proto
     schemeshard_config.proto
     serverless_proxy_config.proto
+    set_column_constraint.proto
     shared_cache.proto
     sqs.proto
     statestorage.proto

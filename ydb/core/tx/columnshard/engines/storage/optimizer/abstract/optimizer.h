@@ -150,6 +150,7 @@ public:
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
     bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {

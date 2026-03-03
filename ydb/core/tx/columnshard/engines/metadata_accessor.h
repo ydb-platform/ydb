@@ -43,6 +43,9 @@ public:
         AFL_VERIFY(result);
         return *result;
     }
+    virtual TString GetOverridenScanType(const TString& defScanType) const {
+        return defScanType;
+    }
 
     std::vector<TNameTypeInfo> GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const;
 

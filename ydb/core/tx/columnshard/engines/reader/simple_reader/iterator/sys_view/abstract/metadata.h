@@ -35,6 +35,9 @@ public:
     virtual bool NeedStalenessChecker() const override {
         return false;
     }
+    virtual TString GetOverridenScanType(const TString& /*defScanType*/) const override {
+        return "SIMPLE";
+    }
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {

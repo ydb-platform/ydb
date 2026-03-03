@@ -125,12 +125,13 @@ bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsErr
 
 bool TestFormat(
     const TString& query,
+    const NYql::TAstParseResult& ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
     const bool checkDoubleFormatting)
 {
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, checkDoubleFormatting);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, checkDoubleFormatting);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -449,7 +450,7 @@ int BuildAST(int argc, char** argv) {
             }
 
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
-                hasError |= !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
+                hasError |= !TestFormat(query, parseRes, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && isSQLv1 && parseRes.IsOk()) {

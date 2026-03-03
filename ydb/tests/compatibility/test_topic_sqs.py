@@ -39,7 +39,7 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
         duration = 30
 
         # endpoint, database, duration, sqs_endpoint
-        utils = Workload(self.endpoint, self.database, duration, self.http_proxy_endpoint + "/Root")
+        utils = Workload(self.endpoint, self.database_path, duration, self.http_proxy_endpoint + self.database_path)
 
         utils.create_topics()
 

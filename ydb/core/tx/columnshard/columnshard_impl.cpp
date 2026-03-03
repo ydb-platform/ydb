@@ -623,12 +623,13 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     BackgroundController.ResetWaitingPriority();
 
     auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-    
+
     if (indexChangesList.empty()) {
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return;
     }
 
+    const ui64 compactionStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     for (const auto& indexChanges : indexChangesList) {
         auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
         compaction.SetActivityFlag(GetTabletActivity());
@@ -637,7 +638,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
         static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", NOlap::TGlobalLimits::GeneralCompactionMemoryLimit);
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
         auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
         NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
             NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
@@ -759,10 +760,11 @@ bool TColumnShard::SetupTtl() {
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+    const ui64 tieringStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringStageMemoryLimit() : 1000000000;
     for (auto&& i : indexChanges) {
         i->Start(*this);
         static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("TTL", 1000000000);
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("TTL", tieringStageMemoryLimit);
         auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
         NOlap::NDataFetcher::TRequestInput rInput(
             i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier(), processGuard);
@@ -791,6 +793,7 @@ void TColumnShard::SetupCleanupPortions() {
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
         ACFL_DEBUG("background", "cleanup_portions")("skip_reason", "in_progress");
+        Counters.GetCSCounters().OnSetupCleanupSkippedByInProgress();
         return;
     }
 
@@ -803,10 +806,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
     changes->Start(*this);
-
+    const ui64 cleanupPortionsStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCleanupPortionsStageMemoryLimit() : 1000000000;
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", 1000000000);
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", cleanupPortionsStageMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     NOlap::NDataFetcher::TRequestInput rInput(changes->GetPortionsToAccess(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard);

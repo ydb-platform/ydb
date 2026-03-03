@@ -5,6 +5,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from collections.abc import Iterable
+from enum import Enum, auto
 
 LOGO_BLOB_ID_RE = re.compile(r"\[(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)\]")
 LOCAL_VECTOR_RE = re.compile(r"\blocal:\s+([01](?:\s+[01])*)\b")
@@ -17,9 +18,21 @@ MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA = {
     "calculated_by_alex_rutkovsky": 259968 // 4 + 1
 }
 DEFAULT_BS_MEDIA = "calculated_by_alex_rutkovsky"
-ERASURE_BLOCK_4_2 = "block-4-2"
-ERASURE_MIRROR_3_DC = "mirror-3-dc"
-DEFAULT_ERASURE = ERASURE_BLOCK_4_2
+
+
+class Erasure(Enum):
+    BLOCK_4_2 = auto()
+    MIRROR_3_DC = auto()
+
+
+ERASURE_BY_NAME = {
+    "block-4-2": Erasure.BLOCK_4_2,
+    "mirror-3-dc": Erasure.MIRROR_3_DC,
+}
+DEFAULT_ERASURE_NAME = "block-4-2"
+
+
+DEFAULT_ERASURE = Erasure.BLOCK_4_2
 DEFAULT_BLOB_HEADER_SIZE_BYTES = 8
 
 
@@ -37,11 +50,12 @@ class Blob:
     def keep_and_local(self) -> bool:
         return self.not_keep == 0 and self.with_local > 0
 
-    def keep_and_full_local(self, erasure: str) -> bool:
-        if erasure == ERASURE_BLOCK_4_2:
-            return self.not_keep == 0 and self.local_union == 0b111111
-        if erasure == ERASURE_MIRROR_3_DC:
-            return self.not_keep == 0 and self.local_union == 0b111
+    def keep_and_full_local(self, erasure: Erasure) -> bool:
+        match erasure:
+            case Erasure.BLOCK_4_2:
+                return self.not_keep == 0 and self.local_union == 0b111111
+            case Erasure.MIRROR_3_DC:
+                return self.not_keep == 0 and self.local_union == 0b111
         raise ValueError(f"Unknown erasure: {erasure}")
 
     def add(self, record: "LBRecord") -> None:
@@ -56,7 +70,7 @@ class Blob:
 
 @dataclass
 class Channel:
-    erasure: str
+    erasure: Erasure
     _blobs: dict[str, Blob] = field(default_factory=dict)
     total: int = 0
     with_local: int = 0
@@ -81,9 +95,9 @@ class Channel:
             if blob.keep_and_local():
                 yield blob
     
-    def blobs_keep_and_full_local(self, erasure: str) -> Iterable[Blob]:
+    def blobs_keep_and_full_local(self) -> Iterable[Blob]:
         for blob in self._blobs.values():
-            if blob.keep_and_full_local(erasure):
+            if blob.keep_and_full_local(self.erasure):
                 yield blob
 
     def add(self, record: "LBRecord") -> None:
@@ -183,7 +197,7 @@ class Channel:
         self.print_blob_group(logger, "all", self.blobs(), total_channel_blobs, total_blobs, self.total, total_records)
         self.print_blob_group(logger, "keep", self.blobs_keep(), total_channel_blobs, total_blobs, self.total, total_records)
         self.print_blob_group(logger, "keep and local", self.blobs_keep_and_local(), total_channel_blobs, total_blobs, self.total, total_records)
-        self.print_blob_group(logger, "keep and full local", self.blobs_keep_and_full_local(self.erasure), total_channel_blobs, total_blobs, self.total, total_records)
+        self.print_blob_group(logger, "keep and full local", self.blobs_keep_and_full_local(), total_channel_blobs, total_blobs, self.total, total_records)
         left()
 
 @dataclass
@@ -201,7 +215,7 @@ class LBRecord:
     def from_logoblob_record(
         cls,
         logoblob_record: str,
-        erasure: str,
+        erasure: Erasure,
         media: str = DEFAULT_BS_MEDIA,
     ) -> "LBRecord":
         table_parts = logoblob_record.split(maxsplit=1)
@@ -247,7 +261,7 @@ class LBRecord:
 
 @dataclass
 class Report:
-    erasure: str = DEFAULT_ERASURE
+    erasure: Erasure = DEFAULT_ERASURE
     media: str = DEFAULT_BS_MEDIA
     channels: list[Channel] = field(default_factory=list)
     blocks_total: int = 0
@@ -354,40 +368,45 @@ def human_size(size_bytes: int) -> str:
     return f"{value:.1f} {units[unit_idx]}"
 
 
-def max_part_size(blob_size: int, erasure: str) -> int:
-    if erasure == ERASURE_BLOCK_4_2:
-        # Approximate one 4:2 part payload size from full logical blob size.
-        return (blob_size + 3) // 4
-    if erasure == ERASURE_MIRROR_3_DC:
-        # For mirror3dc, MaxPartSize is full blob size.
-        return blob_size
-    raise ValueError(f"Unknown erasure: {erasure}")
+def max_part_size(blob_size: int, erasure: Erasure) -> int:
+    match erasure:
+        case Erasure.BLOCK_4_2:
+            # Approximate one 4:2 part payload size from full logical blob size.
+            return (blob_size + 3) // 4
+        case Erasure.MIRROR_3_DC:
+            # For mirror3dc, MaxPartSize is full blob size.
+            return blob_size
+        case _:
+            raise ValueError(f"Unknown erasure: {erasure}")
 
 
-def estimate_blob_size(blob_size: int, erasure: str) -> int:
-    if erasure == ERASURE_BLOCK_4_2:
-        # Lower-bound physical payload estimate for one logical blob in 4:2:
-        # 6 parts, each roughly ceil(blob_size / 4).
-        return 6 * max_part_size(blob_size, erasure)
-    if erasure == ERASURE_MIRROR_3_DC:
-        # Lower-bound physical payload estimate for one logical blob in mirror3dc:
-        # 3 full copies.
-        return 3 * blob_size
-    raise ValueError(f"Unknown erasure: {erasure}")
+def estimate_blob_size(blob_size: int, erasure: Erasure) -> int:
+    match erasure:
+        case Erasure.BLOCK_4_2:
+            # Lower-bound physical payload estimate for one logical blob in 4:2:
+            # 6 parts, each roughly ceil(blob_size / 4).
+            return 6 * max_part_size(blob_size, erasure)
+        case Erasure.MIRROR_3_DC:
+            # Lower-bound physical payload estimate for one logical blob in mirror3dc:
+            # 3 full copies.
+            return 3 * blob_size
+        case _:
+            raise ValueError(f"Unknown erasure: {erasure}")
 
 
-def min_records_per_blob(erasure: str) -> int:
-    if erasure == ERASURE_BLOCK_4_2:
-        return 6
-    if erasure == ERASURE_MIRROR_3_DC:
-        return 3
+def min_records_per_blob(erasure: Erasure) -> int:
+    match erasure:
+        case Erasure.BLOCK_4_2:
+            return 6
+        case Erasure.MIRROR_3_DC:
+            return 3
     raise ValueError(f"Unknown erasure: {erasure}")
 
 
 def is_small(
     blob_size: int,
     media: str = DEFAULT_BS_MEDIA,
-    erasure: str = DEFAULT_ERASURE,
+    erasure: Erasure = DEFAULT_ERASURE,
     header_size_bytes: int = DEFAULT_BLOB_HEADER_SIZE_BYTES,
 ) -> bool:
     threshold = MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA[media]
@@ -481,8 +500,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Parse blobsan text output and calculate counters")
     parser.add_argument("input_path", nargs="?", default="group-dump.txt", help="Path to blobsan text dump")
     parser.add_argument("--disk-type", choices=MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA.keys(), default=DEFAULT_BS_MEDIA)
-    parser.add_argument("--erasure", choices=[ERASURE_BLOCK_4_2, ERASURE_MIRROR_3_DC], default=DEFAULT_ERASURE)
-    return parser.parse_args()
+    parser.add_argument("--erasure", choices=ERASURE_BY_NAME.keys(), default=DEFAULT_ERASURE_NAME)
+    args = parser.parse_args()
+    args.erasure = ERASURE_BY_NAME[args.erasure]
+    return args
 
 
 def main() -> None:

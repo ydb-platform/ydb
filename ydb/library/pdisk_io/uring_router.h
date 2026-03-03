@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
 #include <sys/uio.h>
@@ -27,13 +28,26 @@ enum class EUringFavor {
 };
 
 struct TUringRouterConfig {
-    ui32 QueueDepth = 128;          // max inflight I/O operations (SQ/CQ ring size)
-    ui32 SqThreadIdleMs = 5000;     // submission kernel thread idle timeout before sleeping (only when UseSQPoll)
-    bool UseSQPoll = true;          // kernel thread polls submissions (IORING_SETUP_SQPOLL)
-    bool UseIOPoll = true;          // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL)
+    // Target maximum number of in-flight I/O operations (SQ ring size).
+    // Typical devices have hardware queue depth around 128; using 256 entries
+    // gives additional headroom to reduce the risk of SQ exhaustion under load.
+    ui32 QueueDepth = 256;
 
-    // On Linux kernel 5.15 this option showed very poor performance in our benchmarks, so it is disabled by default.
-    bool UseSharedSQPoll = false;    // Share kernel poller and backend between uring instances (IORING_SETUP_ATTACH_WQ)
+    // Submission kernel thread idle timeout before sleeping (only when UseSQPoll)
+    ui32 SqThreadIdleMs = 1000;
+
+    // Kernel thread polls submissions (IORING_SETUP_SQPOLL)
+    bool UseSQPoll = true;
+
+    // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL).
+    // It requires support from both device and driver,
+    // according to our measurements the latency win is negligible.
+    bool UseIOPoll = false;
+
+    // Share kernel poller and backend between uring instances (IORING_SETUP_ATTACH_WQ)
+    // On Linux kernel 5.15 this option showed very poor performance in our benchmarks,
+    // so it is disabled by default.
+    bool UseSharedSQPoll = false;
 
     EUringFavor GetUringFavor() const {
         if (UseSQPoll && UseSharedSQPoll) {
@@ -50,6 +64,8 @@ struct TUringRouterConfig {
         }
         return EUringFavor::Uring;
     }
+
+    TString ToString() const;
 };
 
 // Our cookie passed through io_uring user_data.
@@ -83,6 +99,10 @@ class TUringRouter {
 public:
     TUringRouter(FHANDLE fd, NActors::TActorSystem* actorSystem, TUringRouterConfig config = {});
     ~TUringRouter();
+
+    const TUringRouterConfig& GetConfig() const {
+        return Config;
+    }
 
     // --- Setup (call before Start) ---
     //

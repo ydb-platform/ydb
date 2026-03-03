@@ -172,52 +172,49 @@ private:
             PRE() {
                 str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
                 str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
-                str << "MaxInFlight: " << MaxInFlight
-                    << ", IsAggregation: " << IsAggregationRequest << Endl;
                 str << "PendingScanData: " << PendingScanData.size()
                     << ", PendingShards: " << PendingShards.size()
-                    << ", PendingResolve: " << PendingResolveShards.size() << Endl;
-                str << "InFlightShards: " << InFlightShards.GetScansCount()
+                    << ", PendingResolveShards: " << PendingResolveShards.size() << Endl;
+                str << "InFlightShards(Scans/Shards): " << InFlightShards.GetScansCount()
                     << "/" << InFlightShards.GetShardsCount()
-                    << ", PacksToSend: " << InFlightComputes.GetPacksToSendCount() << Endl;
+                    << ", PacksToSendCount: " << InFlightComputes.GetPacksToSendCount() << Endl;
                 str << "BlocksReceived: " << BlocksReceived
                     << ", TotalBytesReceived: " << TotalBytesReceived << Endl;
-                str << "Stats: TotalRows=" << Stats.TotalReadRows
-                    << " TotalBytes=" << Stats.TotalReadBytes
+                str << "Stats: TotalReadRows=" << Stats.TotalReadRows
                     << " CompletedShards=" << Stats.CompletedShards << Endl;
 
                 str << Endl << "Compute Actor(s):" << Endl;
-                str << "  (FreeSpace: bytes available for next data pack, Queue: packs waiting to be sent)" << Endl;
+                str << "  (FreeSpace: bytes available for next data pack, DataQueue: packs waiting to be sent)" << Endl;
                 InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
                     str << "  ";
-                    HREF(TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId) {
+                    HREF(ActorLink(actorId)) {
                         str << actorId;
                     }
                     str << " FreeSpace=" << info.GetFreeSpace()
-                        << " Queue=" << info.GetPacksToSendCount() << Endl;
+                        << " DataQueue=" << info.GetPacksToSendCount() << Endl;
                 });
 
                 str << Endl << "Shard Scanner(s):" << Endl;
-                str << "  (InFlight: data chunks sent to compute but not yet acked back to shard)" << Endl;
-                str << "  (Pending: messages queued for compute actors, WaitOutput: cumulative time waiting for compute)" << Endl;
+                str << "  (DataChunksInFlightCount: data chunks sent to compute but not yet acked back to shard)" << Endl;
+                str << "  (PendingMessageCount: messages queued for compute actors)" << Endl;
+                str << "  (WaitOutputTime: cumulative time waiting for compute to consume data)" << Endl;
                 InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
-                    str << "  Tablet=";
-                    HREF(TStringBuilder() << "/tablets?TabletID=" << tabletId) {
+                    str << "  TabletId=";
+                    HREF(TabletLink(tabletId)) {
                         str << tabletId;
                     }
                     if (scanner.HasActorId()) {
-                        str << " Actor=";
-                        HREF(TStringBuilder() << "/node/" << scanner.GetActorId().NodeId() << "/actors?id=" << scanner.GetActorId()) {
+                        str << " ActorId=";
+                        HREF(ActorLink(scanner.GetActorId())) {
                             str << scanner.GetActorIdStr();
                         }
                     } else {
-                        str << " Actor=none";
+                        str << " ActorId=none";
                     }
-                    str << " Gen=" << scanner.GetGeneration()
-                        << " InFlight=" << scanner.GetDataChunksInFlightCount()
-                        << " Pending=" << scanner.GetPendingMessageCount()
+                    str << " DataChunksInFlightCount=" << scanner.GetDataChunksInFlightCount()
+                        << " PendingMessageCount=" << scanner.GetPendingMessageCount()
                         << " NeedAck=" << scanner.IsNeedAck()
-                        << " WaitOutput=" << scanner.GetWaitOutputTime()
+                        << " WaitOutputTime=" << scanner.GetWaitOutputTime()
                         << " Finished=" << scanner.IsFinished() << Endl;
                 });
             }

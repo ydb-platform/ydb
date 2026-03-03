@@ -168,7 +168,6 @@ public:
         TBase::ExtraMonitoringInfo(str);
         str << Endl << "Backpressure:" << Endl;
         str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
-        str << "  ChannelBufferSize: " << GetMemoryLimits().ChannelBufferSize << Endl;
         if (ScanData) {
             str << "  StoredBytes: " << ScanData->GetStoredBytes() << Endl;
             str << "  FreeSpace: " << CalculateFreeSpace() << Endl;
@@ -180,7 +179,7 @@ public:
                 str << Endl << "Fetcher(s): " << Fetchers.size();
                 for (auto& fetcherId : Fetchers) {
                     str << " ";
-                    HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ca=" << SelfId() << "&sf=" << fetcherId) {
+                    HREF(FetcherLink(SelfId(), fetcherId)) {
                         str << fetcherId;
                     }
                 }
@@ -190,12 +189,11 @@ public:
     }
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
         auto sf = cgi.Get("sf");
         if (sf) {
             for (auto& fetcherId : Fetchers) {
-                auto s = ToString(fetcherId);
-                if (sf == s) {
+                if (sf == ToString(fetcherId)) {
                     TActivationContext::Send(ev->Forward(fetcherId));
                     return;
                 }

@@ -67,7 +67,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitPlannedTasks(e, n);
         size_t completed = e->GetExecutedCount();
 
-        setup.GetServer().KillTopicPqrbTablet(JoinPath({"/Root", setup.GetTopicPath()}));
+        setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
         Sleep(TDuration::MilliSeconds(100));
 
         e->StartFuncs(tasks);

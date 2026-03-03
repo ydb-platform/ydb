@@ -2435,6 +2435,14 @@ public:
         }
     }
 
+    TExprNode(const TExprNode&) = delete;
+
+    TExprNode(TExprNode&&) = delete;
+
+    TExprNode& operator=(const TExprNode&) = delete;
+
+    TExprNode& operator=(TExprNode&&) = delete;
+
     ~TExprNode() {
         Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
                        UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
@@ -2479,11 +2487,6 @@ private:
         , CseeSafe_(1)
     {
     }
-
-    TExprNode(const TExprNode&) = delete;
-    TExprNode(TExprNode&&) = delete;
-    TExprNode& operator=(const TExprNode&) = delete;
-    TExprNode& operator=(TExprNode&&) = delete;
 
     bool Frozen() const {
         return ExprFlags_ & TExprFlags::Frozen;

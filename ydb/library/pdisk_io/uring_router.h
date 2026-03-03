@@ -28,9 +28,9 @@ enum class EUringFavor {
 };
 
 struct TUringRouterConfig {
-    // Max inflight I/O operations (SQ/CQ ring size).
-    // Most devices have queue depth 128, but here
-    // we have a queue for submission and a queue for completion.
+    // Target maximum number of in-flight I/O operations (SQ ring size).
+    // Typical devices have hardware queue depth around 128; using 256 entries
+    // gives additional headroom to reduce the risk of SQ exhaustion under load.
     ui32 QueueDepth = 256;
 
     // Submission kernel thread idle timeout before sleeping (only when UseSQPoll)

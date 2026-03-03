@@ -172,13 +172,22 @@ private:
             PRE() {
                 str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
                 str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
+                str << "MaxInFlight: " << MaxInFlight
+                    << ", IsAggregation: " << IsAggregationRequest << Endl;
                 str << "PendingScanData: " << PendingScanData.size()
-                    << ", PendingShards: " << PendingShards.size() << Endl;
+                    << ", PendingShards: " << PendingShards.size()
+                    << ", PendingResolve: " << PendingResolveShards.size() << Endl;
                 str << "InFlightShards: " << InFlightShards.GetScansCount()
                     << "/" << InFlightShards.GetShardsCount()
                     << ", PacksToSend: " << InFlightComputes.GetPacksToSendCount() << Endl;
+                str << "BlocksReceived: " << BlocksReceived
+                    << ", TotalBytesReceived: " << TotalBytesReceived << Endl;
+                str << "Stats: TotalRows=" << Stats.TotalReadRows
+                    << " TotalBytes=" << Stats.TotalReadBytes
+                    << " CompletedShards=" << Stats.CompletedShards << Endl;
 
                 str << Endl << "Compute Actor(s):" << Endl;
+                str << "  (FreeSpace: bytes available for next data pack, Queue: packs waiting to be sent)" << Endl;
                 InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
                     str << "  ";
                     HREF(TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId) {
@@ -189,11 +198,25 @@ private:
                 });
 
                 str << Endl << "Shard Scanner(s):" << Endl;
+                str << "  (InFlight: data chunks sent to compute but not yet acked back to shard)" << Endl;
+                str << "  (Pending: messages queued for compute actors, WaitOutput: cumulative time waiting for compute)" << Endl;
                 InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
-                    str << "  TabletId=" << tabletId
-                        << " ActorId=" << scanner.GetActorIdStr()
+                    str << "  Tablet=";
+                    HREF(TStringBuilder() << "/tablets?TabletID=" << tabletId) {
+                        str << tabletId;
+                    }
+                    if (scanner.HasActorId()) {
+                        str << " Actor=";
+                        HREF(TStringBuilder() << "/node/" << scanner.GetActorId().NodeId() << "/actors?id=" << scanner.GetActorId()) {
+                            str << scanner.GetActorIdStr();
+                        }
+                    } else {
+                        str << " Actor=none";
+                    }
+                    str << " Gen=" << scanner.GetGeneration()
                         << " InFlight=" << scanner.GetDataChunksInFlightCount()
                         << " Pending=" << scanner.GetPendingMessageCount()
+                        << " NeedAck=" << scanner.IsNeedAck()
                         << " WaitOutput=" << scanner.GetWaitOutputTime()
                         << " Finished=" << scanner.IsFinished() << Endl;
                 });
@@ -231,6 +254,9 @@ private:
     bool IsAggregationRequest = false;
     bool RegistrationFinished = false;
     TInstant RegistrationStartTime;
+
+    ui64 BlocksReceived = 0;
+    ui64 TotalBytesReceived = 0;
 };
 
 }   // namespace NKikimr::NKqp::NScanPrivate

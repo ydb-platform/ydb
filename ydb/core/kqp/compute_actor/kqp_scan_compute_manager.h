@@ -173,8 +173,20 @@ public:
         return Finished;
     }
 
+    bool IsNeedAck() const {
+        return NeedAck;
+    }
+
+    ui64 GetGeneration() const {
+        return Generation;
+    }
+
     bool HasActorId() const {
         return ActorId.has_value();
+    }
+
+    NActors::TActorId GetActorId() const {
+        return ActorId.value_or(NActors::TActorId());
     }
 
     TString GetActorIdStr() const {

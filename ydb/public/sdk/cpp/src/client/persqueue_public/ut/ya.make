@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/public/lib/json_value
     ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/persqueue_public/impl

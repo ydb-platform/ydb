@@ -1865,25 +1865,21 @@ public:
         Stack_.pop_back();
     }
 
-    void Down(const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> Down(const TUnboxedValue& keyValue, bool createIfNotExists) {
         auto key = keyValue.AsStringRef();
         if (key.empty()) {
             throw yexception() << "Empty key is not allowed";
         }
 
         char c = key.Data()[0];
-        if (c == '/') {
-            throw yexception() << "Key should be relative";
-        }
-
         if (c == '<' || c == '=' || c == '>') {
-            DownList(key, keyValue, createIfNotExists);
+            return DownList(key, keyValue, createIfNotExists);
         } else {
-            DownDict(key, keyValue, createIfNotExists);
+            return DownDict(key, keyValue, createIfNotExists);
         }
     }
 
-    void DownDict(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> DownDict(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
         TString unescaped;
         if (key.Contains('\\')) {
             unescaped = UnescapeC(key);
@@ -1892,11 +1888,11 @@ public:
 
         auto& node = *Stack_.back().second;
         if (node.IsInvalidOrDeleted() && !createIfNotExists) {
-            throw yexception() << "Current node is invalid or deleted";
+            return "Current node is invalid or deleted";
         }
 
         if (std::holds_alternative<TMutNodeList>(node.Storage)) {
-            throw yexception() << "Can't traverse list by key";
+            return "Can't traverse list by key";
         }
 
         if (!std::holds_alternative<TMutNodeMap>(node.Storage)) {
@@ -1918,21 +1914,23 @@ public:
         } else {
             auto iter = map.find(keyValue);
             if (iter == map.cend()) {
-                throw yexception() << "Key " << key << " not exists";
+                return TStringBuilder() << "Key " << key << " not exists";
             }
 
             Stack_.push_back({keyValue, &iter->second});
         }
+
+        return Nothing();
     }
 
-    void DownList(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> DownList(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
         auto& node = *Stack_.back().second;
         if (node.IsInvalidOrDeleted() && !createIfNotExists) {
-            throw yexception() << "Current node is invalid or deleted";
+            return "Current node is invalid or deleted";
         }
 
         if (std::holds_alternative<TMutNodeMap>(node.Storage)) {
-            throw yexception() << "Can't traverse dict by index";
+            return "Can't traverse dict by index";
         }
 
         if (!std::holds_alternative<TMutNodeList>(node.Storage)) {
@@ -1947,7 +1945,7 @@ public:
 
         auto compare = key.Data()[0];
         if (compare != '=' && !createIfNotExists) {
-            throw yexception() << "List resize is not allowed";
+            return "List resize is not allowed";
         }
 
         auto indexStr = key.substr(1);
@@ -1965,14 +1963,14 @@ public:
         if (compare == '=') {
             // traverse to the exact index
             if (effectiveIndex >= list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             Stack_.push_back({keyValue, &list[effectiveIndex]});
         } else if (compare == '<') {
             // insert before
             if (effectiveIndex > 0 && effectiveIndex > list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             list.insert(list.begin() + effectiveIndex, TMutNode{.Storage = TUnboxedValuePod::Invalid()});
@@ -1980,7 +1978,7 @@ public:
         } else {
             // insert after
             if (effectiveIndex > 0 && effectiveIndex >= list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             if (effectiveIndex + 1 < list.size()) {
@@ -1991,6 +1989,8 @@ public:
                 Stack_.push_back({keyValue, &list.back()});
             }
         }
+
+        return Nothing();
     }
 
     bool Exists() const {
@@ -2081,25 +2081,22 @@ SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*)
 
 SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    if (err) {
+        throw yexception() << *err;
+    }
+
     return args[0];
 }
 
 using TMutTryDownReturn = TTuple<TMutNodeLinear, bool>;
 SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    bool success = false;
-    try {
-        TMutNodeBuilder::From(args[0]).Down(args[1], false);
-        success = true;
-    } catch (const yexception&)
-    {
-    }
-
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
     items[0] = args[0];
-    items[1] = TUnboxedValuePod(success);
+    items[1] = TUnboxedValuePod(!err.Defined());
     return ret;
 }
 

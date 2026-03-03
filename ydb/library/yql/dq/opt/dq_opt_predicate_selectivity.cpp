@@ -305,7 +305,8 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     }
 
     if (auto attribute = IsAttribute(left)) {
-        // It seems like this is not possible in current version.
+        // It seems like this is not possible in current version ?!
+        // In case both arguments refer to an attribute, return 0.3
         if (IsAttribute(right)) {
             return 0.3;
         } else if (IsConstantExprWithParams(right.Ptr())) {
@@ -329,7 +330,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                 if (!estimation.Defined()) {
                     return DefaultInequalitySelectivity(Stats, attributeName);
                 }
-                // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that.
+                // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that ?!
                 Y_ASSERT(Stats->Nrows);
                 return estimation.GetRef() / Stats->Nrows;
             }
@@ -363,7 +364,6 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
         }
 
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
-        // Currently, with the basic statistics we just return 1/nRows
         else if (IsConstantExprWithParams(right.Ptr())) {
             const TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
@@ -417,7 +417,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
             return 0.3;
         }
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
-        // Currently, with the basic statistics we just return 0.5
+        // Currently, we just return 0.5 for LIKE str% and 0.1 for LIKE %str% string predicates
         else if (IsConstantExprWithParams(right.Ptr())) {
             if (is_contain_str && IsConstantExpr(right.Ptr())) { 
                 return 0.1;
@@ -443,13 +443,10 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     double resSelectivity = ComputeComparisonSelectivity(left, right, is_contain_str);
     resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
 
-    TVector<TPredicateRange> ranges;
-
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
     node->Selectivity = resSelectivity;
     node->CollectMembers = collectMembers;
-    node->AllRanges = std::move(ranges);
 
     TString ref = leftAttr.GetRef();
     size_t dotPos = ref.find('.');
@@ -470,13 +467,10 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
     // NOTE: TCoAtom is not a Callable and consider NOT
     double resSelectivity = underNot ? 1.0 - 0.5 : 0.5;
 
-    TVector<TPredicateRange> ranges;
-
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
     node->Selectivity = resSelectivity;
     node->CollectMembers = collectMembers;
-    node->AllRanges = std::move(ranges);
     node->Column = "Re2"; // TODO: temporal column naming
 
     return node;
@@ -656,10 +650,18 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
 
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
-    node->Column = attribute.GetRef();
     node->Selectivity = resSelectivity;
     node->CollectMembers = collectMembers;
     node->AllRanges = std::move(setRanges);
+
+    TString ref = attribute.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
 
     return node;
 }
@@ -723,15 +725,14 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
         input.Ptr()->IsCallable("Exists") ||
         input.Ptr()->IsCallable("AssumeStrict") ||
         input.Ptr()->IsCallable("Apply") ||
-        input.Ptr()->IsCallable("Udf")
-    ) {
+        input.Ptr()->IsCallable("Udf")) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
         return ComputeImpl(child, underNot, collectMembers);
     }
 
-    // Process AND, OR and NOT logical operators.
+    // Process AND, OR, and NOT logical operators.
     // In case of AND we multiply the selectivities, since we assume them to be independent
-    // In case of OR we sum them up, again assuming independence and disjointness, but make sure its at most 1.0
+    // In case of OR we sum them up, again assuming independence and disjointness, but make sure it is at most 1.0
     // In case of NOT we subtract the argument's selectivity from 1.0
 
     else if (auto andNode = input.Maybe<TCoAnd>()) {
@@ -739,7 +740,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
         auto node = std::make_shared<TTreeNode>();
         node->Operator = logicalOperator;
 
-        TMap<TString, TVector<TPredicateRange>> tempAttributePredicates;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
             // collect all conjunctions of a column
             const auto& child = ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectMembers);
@@ -766,7 +766,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     }
 
     else if (auto notNode = input.Maybe<TCoNot>()) {
-        // resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
         return ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
     }
 
@@ -781,7 +780,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     else if (auto notEquality = input.Maybe<TCoCmpNotEqual>()) {
         auto left = notEquality.Cast().Left();
         auto right = notEquality.Cast().Right();
-        // resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
         return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
     }
 
@@ -819,7 +817,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
         if (compareSign == EInequalityPredicateType::Equal) {
             return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
         } else if (compareSign == EInequalityPredicateType::NotEqual) {
-            // resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
             return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
         } else {
             return ConvertInequalityToRange(left, right, underNot, collectMembers, compareSign);

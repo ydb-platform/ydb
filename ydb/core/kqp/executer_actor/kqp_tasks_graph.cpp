@@ -576,8 +576,6 @@ void TKqpTasksGraph::BuildTransformChannels(const TTransform& transform, const T
 void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
     const NKqpProto::TKqpPhyCnSequencer& sequencer, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
-    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-
     NKikimrKqp::TKqpSequencerSettings* settings = GetMeta().Allocate<NKikimrKqp::TKqpSequencerSettings>();
     settings->MutableTable()->CopyFrom(sequencer.GetTable());
     settings->SetDatabase(GetMeta().Database);
@@ -589,6 +587,9 @@ void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 in
     transform.OutputType = sequencer.GetOutputType();
     TTaskInputMeta meta;
     meta.SequencerSettings = settings;
+
+    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size(),
+        "Sequencer requires 1-1 task count; stage tasks: " << stageInfo.Tasks.size() << ", input stage tasks: " << inputStageInfo.Tasks.size());
     BuildTransformChannels(transform, meta, "Sequencer/Map", stageInfo, inputIndex,
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
@@ -1982,6 +1983,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kMerge:
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                 case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kSequencer:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
@@ -2007,6 +2009,14 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kMap: {
+                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
+                partitionsCount = originStageInfo.Tasks.size();
+                forceMapTasks = true;
+                ++mapConnectionCount;
+                break;
+            }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                // Sequencer is 1-1 like Map: stage must have same task count as input
                 tasksReason = TTaskType::PREV_STAGE_COMPUTE;
                 partitionsCount = originStageInfo.Tasks.size();
                 forceMapTasks = true;

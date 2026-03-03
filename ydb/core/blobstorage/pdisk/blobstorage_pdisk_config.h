@@ -134,6 +134,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferSizeBytes;
     ui32 BufferPoolBufferCount;
     ui32 MaxQueuedCompletionActions;
+    ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
@@ -231,6 +232,9 @@ struct TPDiskConfig : public TThrRefBase {
         BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
         BufferPoolBufferCount = choose(1024, 512, 256);
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+        IoPieceSizeBytes = choose(64 << 10, 64 << 10, 512 << 10);
+        // piece size should be ≤ buffer size
+        IoPieceSizeBytes = Min(IoPieceSizeBytes, BufferPoolBufferSizeBytes);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
@@ -317,6 +321,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferSizeBytes# " << BufferPoolBufferSizeBytes << x;
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
+        str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
@@ -400,6 +405,9 @@ struct TPDiskConfig : public TThrRefBase {
         }
         if (cfg->HasMaxQueuedCompletionActions()) {
             MaxQueuedCompletionActions = cfg->GetMaxQueuedCompletionActions();
+        }
+        if (cfg->HasIoPieceSizeBytes()) {
+            IoPieceSizeBytes = cfg->GetIoPieceSizeBytes();
         }
         if (cfg->HasInsaneLogChunksMultiplier()) {
             InsaneLogChunksMultiplier = cfg->GetInsaneLogChunksMultiplier();

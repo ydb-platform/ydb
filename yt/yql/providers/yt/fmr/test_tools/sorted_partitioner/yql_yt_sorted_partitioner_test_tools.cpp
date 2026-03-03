@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_yt_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
+#include <yt/yql/providers/yt/fmr/test_tools/fmr_block_iterator/yql_yt_fmr_block_iterator.h>
 
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -28,13 +29,6 @@ TChunkStats MakeSortedChunk(ui64 weight, ui64 firstK, ui64 lastK) {
 
 TString MakeRowTextYson(ui64 k, ui64 id) {
     return TStringBuilder() << "{\"k\"=" << static_cast<i64>(k) << ";\"id\"=" << static_cast<i64>(id) << "};\n";
-}
-
-TTempFileHandle WriteTempFile(const TString& content) {
-    TTempFileHandle file;
-    TFileOutput out(file.Name());
-    out.Write(content.data(), content.size());
-    return file;
 }
 
 TStringBuf RowBytesFromMarkup(const TString& blob, const TRowIndexMarkup& markup) {
@@ -213,10 +207,7 @@ TFingerprintCounts CountTaskFingerprintsFromFiles(
             continue;
         }
 
-        auto merge = MakeIntrusive<TSortedMergeReader>(
-            std::move(iters),
-            TVector<ESortOrder>(keyColumns.size(), ESortOrder::Ascending)
-        );
+        auto merge = MakeIntrusive<TSortedMergeReader>(iters);
         const TString mergedBinary = merge->ReadAll();
         AddFingerprintsFromBinaryYson(mergedBinary, keyColumns, dst);
     }

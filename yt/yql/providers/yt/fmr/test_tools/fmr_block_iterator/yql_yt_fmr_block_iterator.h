@@ -11,6 +11,7 @@
 
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 
 namespace NYql::NFmr {
 
@@ -19,20 +20,22 @@ TTempFileHandle WriteTempFile(const TString& content);
 IBlockIterator::TPtr MakeYtFileIterator(
     const TString& filePath,
     const TVector<TString>& keyColumns,
-    ui64 targetBlockBytes
+    const TYtBlockIteratorSettings& settings,
+    const TVector<ESortOrder>& sortOrders = {}
 );
 
-IBlockIterator::TPtr MakeTdsIterator(
+IBlockIterator::TPtr MakeTableDataServiceIterator(
     const TString& tableId,
     const TString& partId,
     const ITableDataService::TPtr& tds,
     const TVector<TString>& keyColumns,
-    const TVector<TString>& neededColumns
+    const TVector<TString>& neededColumns,
+    const TVector<ESortOrder>& sortOrders = {}
 );
 
 enum class EMergeReaderSourceType {
     YT,
-    TDS
+    TableDataService
 };
 
 struct TMergeTestTable {
@@ -42,7 +45,12 @@ struct TMergeTestTable {
     TString RawTableBody;
 };
 
-TVector<IBlockIterator::TPtr> MakeTestIterators(TVector<TMergeTestTable> rawTestTables, TMaybe<ILocalTableDataService::TPtr> tds, TYtBlockIteratorSettings settings);
+TVector<IBlockIterator::TPtr> MakeTestBlockIterators(
+    TVector<TMergeTestTable> rawTestTables,
+    TMaybe<ILocalTableDataService::TPtr> tableDataService = Nothing(),
+    TYtBlockIteratorSettings settings = {},
+    const TVector<ESortOrder>& sortOrders = {}
+);
 
 } // namespace NYql::NFmr
 

@@ -1600,7 +1600,7 @@ protected:
 #undef DUMP_PREFIXED
     }
 
-    virtual void TaskRunnerMonitoringInfo(TStringStream& str) {
+    virtual void ExtraMonitoringInfo(TStringStream& str) {
         Y_UNUSED(str);
     }
 
@@ -1638,7 +1638,7 @@ protected:
                     }
                     str << Endl;
                 }
-                TaskRunnerMonitoringInfo(str);
+                ExtraMonitoringInfo(str);
 
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {
                     str << "  Inflight: " << ProcessOutputsState.Inflight << Endl;

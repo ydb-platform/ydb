@@ -1,4 +1,3 @@
-// CI: resource monitoring (CPU/RAM/disk) during ya make
 #include "helpers/get_value.h"
 #include "helpers/query_executor.h"
 #include "helpers/local.h"

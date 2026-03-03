@@ -1,0 +1,11 @@
+items:
+- name: Prerequisites
+  href: requirements.md
+- name: Downloading and preparing the package
+  href: install.md
+- name: Configuration
+  href: configuration.md
+- name: Running the deployment
+  href: deployment.md
+- name: Getting started
+  href: usage.md

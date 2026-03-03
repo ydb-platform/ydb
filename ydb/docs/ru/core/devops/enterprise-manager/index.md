@@ -16,7 +16,36 @@
 
 Пользователь обращается к {{ ydb-short-name }} Enterprise Manager через веб-браузер. Gateway принимает HTTP/HTTPS-запросы и взаимодействует с базой данных YDB EM и Control Plane по протоколу gRPC. На каждом узле управляемого кластера работает Agent, который получает информацию о динамических узлах от Control Plane.
 
-<!-- TODO: Добавить схему архитектуры (mermaid-диаграмма не поддерживается в YFM, необходимо использовать изображение) -->
+```mermaid
+flowchart LR
+    User[fa:fa-user Пользователь] --> Browser
+    Browser --http/https--> meta[YDB EM Gateway]
+    ydb-host01-ydb --metainfo--> meta
+    ydb-host01-agent --get dynnode--> CP
+    ydb-host02-agent --get dynnode--> CP
+    ydb-host03-agent --get dynnode--> CP
+
+    subgraph YDBEM["YDB EM"]
+        meta --grpc/grpcs--> YDB(fa:fa-database БД YDB EM)
+        meta --grpc/grpcs--> CP[YDB EM CP]
+        CP --grpc/grpcs--> YDB
+    end
+
+    subgraph YDBCluster1["Кластер YDB"]
+        subgraph Node01
+            ydb-host01-ydb[YDB Node 1]
+            ydb-host01-agent[YDB EM Agent 1]
+        end
+        subgraph Node02
+            ydb-host02-ydb[YDB Node 2]
+            ydb-host02-agent[YDB EM Agent 2]
+        end
+        subgraph Node03
+            ydb-host03-ydb[YDB Node 3]
+            ydb-host03-agent[YDB EM Agent 3]
+        end
+    end
+```
 
 ## Содержание раздела
 

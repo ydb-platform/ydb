@@ -8,6 +8,7 @@ IF (WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 IF(SANITIZER_TYPE == "memory")

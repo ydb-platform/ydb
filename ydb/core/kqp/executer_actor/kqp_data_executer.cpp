@@ -2859,6 +2859,7 @@ private:
             const auto context = TasksGraph.GetMeta().UserRequestContext;
             if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
                 auto counters = Counters->Counters->GetKqpCounters();
+                counters = counters->GetSubgroup("host", "");
                 counters->RemoveSubgroup("path", context->StreamingQueryPath);
             }
         }
@@ -3003,6 +3004,7 @@ private:
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
+            counters = counters->GetSubgroup("host", "");
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
         const auto& checkpointId = context->CheckpointId;

@@ -12,7 +12,10 @@ public:
     {}
 
     ~TStreamingQueryCounters() {
-        SubGroup->RemoveSubgroup("path", Path);
+        if (!HostGroup) {
+            return;
+        }
+        HostGroup->RemoveSubgroup("path", Path);
     }
 
     void Update(const TAggExecStat& stats) override {
@@ -30,7 +33,8 @@ public:
 private:
     void Init() {
         SubGroup = Counters->GetSubgroup("subsystem", "streaming_queries");
-        auto queryGroup = SubGroup->GetSubgroup("path", Path);
+        HostGroup = SubGroup->GetSubgroup("host", "");
+        auto queryGroup = HostGroup->GetSubgroup("path", Path);
         CpuMs = queryGroup->GetCounter("streaming.query.cpu.usage.milliseconds", true);
         MemoryUsageBytes = queryGroup->GetCounter("streaming.query.memory.usage.bytes");
         UptimeSeconds = queryGroup->GetCounter("streaming.query.uptime.seconds");
@@ -42,6 +46,7 @@ private:
 private:
     const TString Path;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr HostGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr CpuMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;

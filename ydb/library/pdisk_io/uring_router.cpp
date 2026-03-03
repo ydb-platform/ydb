@@ -451,4 +451,18 @@ bool TUringRouter::Probe(TUringRouterConfig config) {
     return false;
 }
 
+TString TUringRouterConfig::ToString() const {
+    auto boolToString = [](bool value) -> const char* {
+        return value ? "true" : "false";
+    };
+
+    return TStringBuilder()
+        << "QueueDepth=" << QueueDepth
+        << " SqThreadIdleMs=" << SqThreadIdleMs
+        << " UseSQPoll=" << boolToString(UseSQPoll)
+        << " UseIOPoll=" << boolToString(UseIOPoll)
+        << " UseSharedSQPoll=" << boolToString(UseSharedSQPoll)
+        << " Favor=" << GetUringFavor();
+}
+
 } // namespace NKikimr::NPDisk

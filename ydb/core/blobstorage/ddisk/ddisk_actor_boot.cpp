@@ -118,10 +118,11 @@ namespace NKikimr::NDDisk {
             if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
-                    STLOG(PRI_WARN, BS_DDISK, BSDD17,
+                    STLOG(PRI_WARN, BS_DDISK, BSDD18,
                         "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
                         (DDiskId, DDiskId), (Errno, result.error()));
                 }
+
                 UringRouter->Start();
             }
         }
@@ -133,12 +134,17 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
             *Counters.DirectIO.FallbackPDiskCount = 0;
             if (actualFavor != requestedFavor) {
-                STLOG(PRI_INFO, BS_DDISK, BSDD17,
+                STLOG(PRI_WARN, BS_DDISK, BSDD19,
                     "TDDiskActor::StartHandlingQueries io_uring mode fallback",
                     (DDiskId, DDiskId),
                     (RequestedFavor, requestedFavor),
                     (ActualFavor, actualFavor));
             }
+            STLOG(PRI_INFO, BS_DDISK, BSDD20,
+                "TDDiskActor::StartHandlingQueries started io_uring with config",
+                (DDiskId, DDiskId),
+                (Config, UringRouter->GetConfig()));
+
         } else {
             *Counters.DirectIO.RegularUringCount = 0;
             *Counters.DirectIO.FallbackUringCount = 0;

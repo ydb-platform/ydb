@@ -710,6 +710,7 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
+            ProcessStreamingQueryCounters();
         }
 
         YQL_ENSURE(Planner);
@@ -741,7 +742,6 @@ protected:
                 ; // ignore all other states.
         }
 
-        ProcessStreamingQueryCounters();
         return ack;
     }
 

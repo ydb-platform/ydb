@@ -12,8 +12,21 @@ from typing import List, Dict, Any, Optional, Callable, Tuple
 from contextlib import contextmanager
 
 class YDBWrapper:
-    """Wrapper for working with YDB with statistics logging"""
-    
+    """Wrapper for YDB with statistics logging.
+
+    Use as::
+
+        with YDBWrapper() as w:
+            w.execute_scan_query_with_metadata(...)
+            w.create_table(...)
+            w.bulk_upsert_batches(...)
+
+    All data operations (scan, create_table, bulk_upsert, execute_dml) use a single
+    cached main driver (no reconnection between calls). Statistics are written via
+    a separate cached stats driver. Both drivers are created lazily and closed
+    when exiting the ``with`` block.
+    """
+
     def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = True):
         # If use_local_config=True: use only local config file (ignore YDB_QA_CONFIG env)
         # If use_local_config=False: Priority: YDB_QA_CONFIG env > config file (JSON)
@@ -68,6 +81,9 @@ class YDBWrapper:
         self._enable_statistics = enable_statistics
         self._cluster_version = None
         self._session_id = str(uuid.uuid4())
+        # One driver per endpoint for the whole wrapper lifetime
+        self._driver = None
+        self._stats_driver = None
         
         # Automatically determine script_name if not provided
         if script_name is None:
@@ -77,22 +93,28 @@ class YDBWrapper:
         # GitHub Action info - get once
         self._github_info = self._get_github_action_info()
         
-        # Get cluster version once during initialization
+        # Get cluster version once during initialization (uses cached main driver)
         try:
-            with self.get_driver() as driver:
-                self._get_cluster_version(driver)
+            self._get_cluster_version(self._get_driver())
         except Exception as e:
             self._log("warning", f"Failed to get cluster version: {e}")
             self._cluster_version = "unknown"
-        
-        # Check stats DB availability only once during initialization
+
+        # Statistics: if stats and main use the same endpoint/path, reuse main driver (no extra connection)
         self._stats_available = None
         if self._enable_statistics:
-            self._stats_available = self._check_stats_availability()
-            if self._stats_available:
-                self._log("info", f"Statistics logging enabled - session_id: {self._session_id}")
+            stats_same_as_main = (
+                self.stats_endpoint == self.database_endpoint and self.stats_path == self.database_path
+            )
+            if stats_same_as_main:
+                self._stats_available = True
+                self._log("info", f"Statistics logging enabled (same DB as main) - session_id: {self._session_id}")
             else:
-                self._log("warning", "Statistics database is not available, statistics will not be logged")
+                self._stats_available = self._check_stats_availability()
+                if self._stats_available:
+                    self._log("info", f"Statistics logging enabled - session_id: {self._session_id}")
+                else:
+                    self._log("warning", "Statistics database is not available, statistics will not be logged")
         else:
             self._log("info", "Statistics logging disabled")
     
@@ -176,8 +198,19 @@ class YDBWrapper:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager - exit"""
-        pass  # No longer need to stop threads
+        """Context manager - exit: close cached drivers"""
+        if self._driver is not None:
+            try:
+                self._driver.stop()
+            except Exception:
+                pass
+            self._driver = None
+        if self._stats_driver is not None:
+            try:
+                self._stats_driver.stop()
+            except Exception:
+                pass
+            self._stats_driver = None
     
     def _log(self, level: str, message: str, details: str = ""):
         """Universal logging"""
@@ -231,18 +264,17 @@ class YDBWrapper:
         except Exception as e:
             raise RuntimeError(f"Failed to get cluster version: {e}")
     
-    @contextmanager
-    def get_driver(self):
-        """Context manager for getting YDB driver"""
+    def _get_driver(self):
+        """Return the single cached main driver; create and connect once if needed."""
         self._setup_credentials()
-        
-        with ydb.Driver(
-            endpoint=self.database_endpoint,
-            database=self.database_path,
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
+        if self._driver is None:
+            self._driver = ydb.Driver(
+                endpoint=self.database_endpoint,
+                database=self.database_path,
+                credentials=ydb.credentials_from_env_variables(),
+            )
             try:
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                self._driver.wait(timeout=self._connection_timeout, fail_fast=True)
             except TimeoutError as e:
                 self._log("error", f"Failed to connect to YDB: {e}")
                 self._log("error", f"Endpoint: {self.database_endpoint}")
@@ -250,6 +282,11 @@ class YDBWrapper:
                 self._log("error", f"Timeout: {self._connection_timeout} seconds")
                 self._log("error", "Possible causes: network issues, YDB service unavailable, or invalid credentials")
                 self._log("error", f"Try increasing timeout with: export YDB_CONNECTION_TIMEOUT=30")
+                try:
+                    self._driver.stop()
+                except Exception:
+                    pass
+                self._driver = None
                 raise RuntimeError(f"YDB connection timeout after {self._connection_timeout}s: {e}") from e
             except Exception as e:
                 self._log("error", f"Failed to connect to YDB: {e}")
@@ -257,42 +294,49 @@ class YDBWrapper:
                 self._log("error", f"Database: {self.database_path}")
                 self._log("error", f"Timeout: {self._connection_timeout} seconds")
                 self._log("error", "Check your YDB credentials and network connectivity")
-                raise RuntimeError(f"YDB connection failed: {e}") from e
-            
-            # Cluster version already obtained in __init__
-            # Get it additionally only if it's None (fallback)
-            if self._cluster_version is None:
                 try:
-                    self._get_cluster_version(driver)
-                except Exception as e:
-                    self._log("warning", f"Failed to get cluster version during operation: {e}")
-                    self._cluster_version = "unknown"
-            
-            yield driver
+                    self._driver.stop()
+                except Exception:
+                    pass
+                self._driver = None
+                raise RuntimeError(f"YDB connection failed: {e}") from e
+        if self._cluster_version is None:
+            try:
+                self._get_cluster_version(self._driver)
+            except Exception as e:
+                self._log("warning", f"Failed to get cluster version during operation: {e}")
+                self._cluster_version = "unknown"
+        return self._driver
+
+    @contextmanager
+    def get_driver(self):
+        """Context manager that yields the cached main driver (for compatibility)."""
+        yield self._get_driver()
     
     def _check_stats_availability(self) -> bool:
-        """Check statistics database availability (called only once in __init__)"""
+        """Check statistics database availability and cache stats driver on success (called once in __init__)."""
+        driver = None
         try:
-            # Setup credentials
             self._setup_credentials()
-            
-            # Connect to statistics database
             driver = ydb.Driver(
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()
             )
-            try:
-                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
-                tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-                table_client = ydb.TableClient(driver, tc_settings)
-                scan_query = ydb.ScanQuery("SELECT 1 as test", {})
-                it = table_client.scan_query(scan_query)
-                next(it)
-                return True
-            finally:
-                driver.stop()
+            driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
+            tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+            table_client = ydb.TableClient(driver, tc_settings)
+            scan_query = ydb.ScanQuery("SELECT 1 as test", {})
+            it = table_client.scan_query(scan_query)
+            next(it)
+            self._stats_driver = driver
+            return True
         except Exception:
+            if driver is not None:
+                try:
+                    driver.stop()
+                except Exception:
+                    pass
             return False
     
     def _log_statistics(self, operation_type: str, query: str, duration: float, 
@@ -345,56 +389,39 @@ class YDBWrapper:
             self._log("success", f"Statistics sent successfully in {send_duration:.2f}s")
     
     def _write_stats_sync(self, stats_data):
-        """Synchronous statistics writing"""
+        """Synchronous statistics writing (uses stats driver or main driver if same DB)."""
+        if not self._stats_available:
+            return False
         try:
-            # Setup credentials for statistics database
             self._setup_credentials()
-            
-            driver = ydb.Driver(
-                endpoint=self.stats_endpoint,
-                database=self.stats_path,
-                credentials=ydb.credentials_from_env_variables()
+            driver = self._stats_driver if self._stats_driver is not None else self._get_driver()
+            # Ensure statistics table exists
+            self._ensure_stats_table_exists(driver)
+            stats_data_list = [stats_data]
+            table_client = ydb.TableClient(driver)
+            column_types = (
+                ydb.BulkUpsertColumns()
+                .add_column("timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("session_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("operation_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("query", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("duration_ms", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("error", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("rows_affected", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("script_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("query_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("cluster_version", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("database_endpoint", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("database_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("table_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("github_workflow_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("github_run_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("github_run_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
-            try:
-                # Connect to statistics database
-                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
-                # Create statistics table if it doesn't exist
-                self._ensure_stats_table_exists(driver)
-                
-                # Prepare data for insertion
-                stats_data_list = [stats_data]
-                
-                # Insert statistics
-                table_client = ydb.TableClient(driver)
-                column_types = (
-                    ydb.BulkUpsertColumns()
-                    .add_column("timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                    .add_column("session_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("operation_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("query", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("duration_ms", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                    .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("error", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("rows_affected", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                    .add_column("script_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("query_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("cluster_version", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("database_endpoint", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("database_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("table_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("github_workflow_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("github_run_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    .add_column("github_run_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                )
-                
-                full_path = f"{self.stats_path}/{self.stats_table}"
-                table_client.bulk_upsert(full_path, stats_data_list, column_types)
-                
-                return True
-                
-            finally:
-                driver.stop()
-                
+            full_path = f"{self.stats_path}/{self.stats_table}"
+            table_client.bulk_upsert(full_path, stats_data_list, column_types)
+            return True
         except TimeoutError as e:
             self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._stats_connection_timeout}s)")
             self._stats_available = False
@@ -458,120 +485,111 @@ class YDBWrapper:
         cluster_version = self._cluster_version or "unknown"
         
         try:
-            with self.get_driver() as driver:
-                start_time = time.time()
+            driver = self._get_driver()
+            start_time = time.time()
 
-                if operation_type == "scan_query":
-                    tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
-                    table_client = ydb.TableClient(driver, tc_settings)
-                    scan_query = ydb.ScanQuery(query, {})
-                    it = table_client.scan_query(scan_query)
-                    
-                    results = []
-                    batch_count = 0
-                    
-                    while True:
-                        try:
-                            result = next(it)
-                            batch_count += 1
-                            batch_size = len(result.result_set.rows) if result.result_set.rows else 0
-                            results = results + result.result_set.rows
-                            rows_affected += batch_size
-                            
-                            # Log progress only every 50 batches or every 10000 rows (but not for empty results)
-                            if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
-                                elapsed = time.time() - start_time
-                                self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
-                            
-                        except StopIteration:
-                            break
-                    
-                    end_time = time.time()
-                    duration = end_time - start_time
-                    
-                    if rows_affected == 0:
-                        self._log("success", f"Scan query completed", f"No results found, Duration: {duration:.2f}s")
-                    else:
-                        self._log("success", f"Scan query completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
-                    
-                    # Log statistics
-                    self._log_statistics(
-                        operation_type=operation_type,
-                        query=query,
-                        duration=duration,
-                        status=status,
-                        rows_affected=rows_affected,
-                        cluster_version=cluster_version,
-                        table_path=table_path,
-                        query_name=query_name
-                    )
-                    
-                    return results
-                
-                elif operation_type == "scan_query_with_metadata":
-                    # For scan_query_with_metadata use operation_func
-                    result = operation_func(driver)
-                    
-                    # operation_func always returns (results, column_types)
+            if operation_type == "scan_query":
+                tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
+                table_client = ydb.TableClient(driver, tc_settings)
+                scan_query = ydb.ScanQuery(query, {})
+                it = table_client.scan_query(scan_query)
+
+                results = []
+                batch_count = 0
+                scan_start = time.time()
+
+                while True:
+                    try:
+                        result = next(it)
+                        batch_count += 1
+                        batch_size = len(result.result_set.rows) if result.result_set.rows else 0
+                        results = results + result.result_set.rows
+                        rows_affected += batch_size
+
+                        if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
+                            elapsed = time.time() - scan_start
+                            self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
+
+                    except StopIteration:
+                        break
+
+                duration = time.time() - scan_start
+
+                if rows_affected == 0:
+                    self._log("success", f"Scan query completed", f"No results found, Duration: {duration:.2f}s")
+                else:
+                    self._log("success", f"Scan query completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
+
+                self._log_statistics(
+                    operation_type=operation_type,
+                    query=query,
+                    duration=duration,
+                    status=status,
+                    rows_affected=rows_affected,
+                    cluster_version=cluster_version,
+                    table_path=table_path,
+                    query_name=query_name
+                )
+
+                return results
+
+            elif operation_type == "scan_query_with_metadata":
+                result = operation_func(driver)
+                data, metadata = result
+                rows_affected = len(data) if isinstance(data, list) else 0
+                duration = getattr(self, "_last_scan_duration", None)
+                if duration is None:
+                    duration = time.time() - start_time
+                else:
+                    del self._last_scan_duration
+
+                if rows_affected == 0:
+                    self._log("success", f"Scan query with metadata completed", f"No results found, Duration: {duration:.2f}s")
+                else:
+                    self._log("success", f"Scan query with metadata completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
+
+                self._log_statistics(
+                    operation_type="scan_query",
+                    query=query,
+                    duration=duration,
+                    status=status,
+                    rows_affected=rows_affected,
+                    cluster_version=cluster_version,
+                    table_path=table_path,
+                    query_name=query_name
+                )
+
+                return result
+
+            else:
+                result = operation_func(driver)
+
+                if isinstance(result, (int, float)) and operation_type in ["bulk_upsert", "create_table"]:
+                    rows_affected = int(result)
+                elif isinstance(result, tuple) and len(result) == 2 and operation_type == "scan_query":
                     data, metadata = result
                     rows_affected = len(data) if isinstance(data, list) else 0
-                    
-                    end_time = time.time()
-                    duration = end_time - start_time
-                    
-                    if rows_affected == 0:
-                        self._log("success", f"Scan query with metadata completed", f"No results found, Duration: {duration:.2f}s")
-                    else:
-                        self._log("success", f"Scan query with metadata completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
-                    
-                    # Log statistics (use "scan_query" for both types of scan operations)
-                    self._log_statistics(
-                        operation_type="scan_query",
-                        query=query,
-                        duration=duration,
-                        status=status,
-                        rows_affected=rows_affected,
-                        cluster_version=cluster_version,
-                        table_path=table_path,
-                        query_name=query_name
-                    )
-                    
-                    return result
-                
-                else:
-                    # For other operations
-                    result = operation_func(driver)
-                    
-                    # If operation returned a number, use it as rows_affected
-                    if isinstance(result, (int, float)) and operation_type in ["bulk_upsert", "create_table"]:
-                        rows_affected = int(result)
-                    # If operation returned a tuple (data + metadata), extract row count
-                    elif isinstance(result, tuple) and len(result) == 2 and operation_type == "scan_query":
-                        data, metadata = result
-                        rows_affected = len(data) if isinstance(data, list) else 0
-                    # If scan_query returned just a list, count rows
-                    elif isinstance(result, list) and operation_type == "scan_query":
-                        rows_affected = len(result)
-                    
-                    end_time = time.time()
-                    duration = end_time - start_time
-                    
-                    self._log("success", f"{operation_type} completed", f"Duration: {duration:.2f}s")
-                    
-                    # Log statistics
-                    self._log_statistics(
-                        operation_type=operation_type,
-                        query=query or f"{operation_type} operation",
-                        duration=duration,
-                        status=status,
-                        rows_affected=rows_affected,
-                        cluster_version=cluster_version,
-                        table_path=table_path,
-                        query_name=query_name
-                    )
-                    
-                    return result
-                
+                elif isinstance(result, list) and operation_type == "scan_query":
+                    rows_affected = len(result)
+
+                end_time = time.time()
+                duration = end_time - start_time
+
+                self._log("success", f"{operation_type} completed", f"Duration: {duration:.2f}s")
+
+                self._log_statistics(
+                    operation_type=operation_type,
+                    query=query or f"{operation_type} operation",
+                    duration=duration,
+                    status=status,
+                    rows_affected=rows_affected,
+                    cluster_version=cluster_version,
+                    table_path=table_path,
+                    query_name=query_name
+                )
+
+                return result
+
         except Exception as e:
             end_time = time.time()
             duration = end_time - start_time if start_time is not None else 0
@@ -612,6 +630,7 @@ class YDBWrapper:
             
             results = []
             column_types = None
+            scan_start = time.time()
             
             while True:
                 try:
@@ -624,6 +643,7 @@ class YDBWrapper:
                 except StopIteration:
                     break
             
+            self._last_scan_duration = time.time() - scan_start
             # If no results, column_types may be None
             if column_types is None:
                 column_types = []
@@ -702,22 +722,21 @@ class YDBWrapper:
         cluster_version = self._cluster_version or "unknown"
         
         try:
-            with self.get_driver() as driver:
-                start_time = time.time()
-                
-                table_client = ydb.TableClient(driver)
-                
-                for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
-                    batch_rows = all_rows[start_idx:start_idx + batch_size]
-                    table_client.bulk_upsert(full_path, batch_rows, column_types)
-                    
-                    # Log progress every 10 batches or for the last one
-                    if batch_num % 10 == 0 or start_idx + batch_size >= total_rows:
-                        elapsed = time.time() - start_time
-                        processed = min(start_idx + batch_size, total_rows)
-                        self._log("progress", f"Batch {batch_num}/{num_batches}", 
-                                  f"{processed}/{total_rows} rows, {elapsed:.2f}s")
-            
+            driver = self._get_driver()
+            start_time = time.time()
+
+            table_client = ydb.TableClient(driver)
+
+            for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
+                batch_rows = all_rows[start_idx:start_idx + batch_size]
+                table_client.bulk_upsert(full_path, batch_rows, column_types)
+
+                if batch_num % 10 == 0 or start_idx + batch_size >= total_rows:
+                    elapsed = time.time() - start_time
+                    processed = min(start_idx + batch_size, total_rows)
+                    self._log("progress", f"Batch {batch_num}/{num_batches}",
+                              f"{processed}/{total_rows} rows, {elapsed:.2f}s")
+
             duration = time.time() - start_time
             self._log("success", f"bulk_upsert_batches completed", 
                       f"Total: {total_rows} rows in {num_batches} batches, Duration: {duration:.2f}s")
@@ -762,14 +781,11 @@ class YDBWrapper:
             query_name: Query name for logging
         """
         def operation(driver):
-            def callee(session):
-                prepared_query = session.prepare(query)
-                with session.transaction() as tx:
-                    tx.execute(prepared_query, parameters or {}, commit_tx=True)
-                    return 1  # Successful execution
-            
-            with ydb.SessionPool(driver) as pool:
-                return pool.retry_operation_sync(callee)
+            # Use Query Service API because Table Service DML does not support
+            # modifications for column shard tables.
+            with ydb.QuerySessionPool(driver) as pool:
+                pool.execute_with_retries(query=query, parameters=parameters or {})
+                return 1  # Successful execution
         
         return self._execute_with_logging("dml_query", operation, query, None, query_name)
     

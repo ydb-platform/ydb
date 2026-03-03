@@ -701,7 +701,7 @@ def main():
 
         chunk_size = 40000
 
-        # Подготавливаем column_types один раз
+        # Prepare column_types once
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -735,7 +735,10 @@ def main():
             .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         )
         
-        ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_update_rows, column_types, chunk_size)
+        ydb_wrapper.bulk_upsert_batches(
+            table_path, prepared_for_update_rows, column_types, chunk_size,
+            query_name=f"tests_monitor_{branch}_{build_type}"
+        )
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

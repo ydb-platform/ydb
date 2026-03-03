@@ -2419,6 +2419,7 @@ void THive::RemoveNodeFromSegments(TNodeId nodeId) {
 }
 
 void THive::UpdateNodeSegments(TNodeInfo* node) {
+    RemoveNodeFromSegments(node->Id);
     node->Segment = NodeSegments.insert(node);
 }
 

@@ -5220,6 +5220,15 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        {
+            const TString q = Q1_(R"(
+                SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
+            )");
+            auto explainResult = session.ExplainDataQuery(q).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            Cerr << "IndexFilterPushDown AST (query 1): " << explainResult.GetAst() << Endl;
+        }
+
         result = session.ExecuteDataQuery(Q1_(R"(
             SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
@@ -6187,6 +6196,126 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 INSERT INTO `/Root/TestInsertIndexNotNullDefault` (Key) VALUES (1);
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CoveringIndexFilterBeforeLookup) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            const TString createTableSql(R"(
+                CREATE TABLE `/Root/t_main` (
+                    pk_col Text NOT NULL,
+                    ts_col Timestamp,
+                    state_a Text,
+                    state_b Text,
+                    ref_col_1 Text,
+                    ref_col_2 Text,
+                    data_col Text,
+                    PRIMARY KEY (pk_col),
+                    INDEX ix_ts GLOBAL SYNC ON (ts_col)
+                    COVER (state_a, state_b, ref_col_1, ref_col_2)
+                );
+            )");
+            auto result = queryClient.ExecuteQuery(
+                createTableSql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString upsertSql(Q_(R"(
+                UPSERT INTO `/Root/t_main` (pk_col, ts_col, state_a, state_b, ref_col_1, ref_col_2, data_col) VALUES
+                    ('r1'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x1'u, 'y1'u, 'D1'u),
+                    ('r2'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x2'u, 'y2'u, 'D2'u),
+                    ('r3'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B2'u, 'x3'u, 'y3'u, 'D3'u),
+                    ('r4'u, Timestamp('2025-01-02T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x4'u, 'y4'u, 'D4'u),
+                    ('r5'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A2'u, 'B1'u, 'x5'u, 'y5'u, 'D5'u);
+            )"));
+
+            auto result = queryClient.ExecuteQuery(
+                upsertSql,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query(Q_(R"(
+            SELECT ts_col, state_a, state_b, data_col
+            FROM `/Root/t_main` VIEW ix_ts
+            WHERE ts_col = Timestamp('2025-01-01T00:00:00.000000Z')
+                AND state_a = 'A1'
+                AND state_b = 'B1';
+        )"));
+
+        {
+            auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST: " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan: " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+
+            auto filterCount = CountPlanNodesByKv(planJson, "Node Type", "Filter");
+            UNIT_ASSERT_C(filterCount > 0, "Expected Filter node in the plan (filter on covered columns should be pushed before lookup)");
+
+            auto indexAccess = CountPlanNodesByKv(planJson, "Table", "t_main/ix_ts/indexImplTable");
+            UNIT_ASSERT_C(indexAccess > 0, "Expected access to index table ix_ts");
+        }
+
+        {
+            auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto yson = NYdb::FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "Result: " << yson << Endl;
+
+            CompareYson(R"([
+                [[1735689600000000u];["A1"];["B1"];["D1"]];
+                [[1735689600000000u];["A1"];["B1"];["D2"]]
+            ])", yson);
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            ui64 mainTableReads = 0;
+            ui64 indexTableReads = 0;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    if (access.name() == "/Root/t_main" && access.reads().rows() > 0) {
+                        mainTableReads += access.reads().rows();
+                    }
+                    if (access.name() == "/Root/t_main/ix_ts/indexImplTable" && access.reads().rows() > 0) {
+                        indexTableReads += access.reads().rows();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(indexTableReads > mainTableReads,
+                "Index table should read more rows than main table (filter narrows results before lookup). "
+                "Index reads: " << indexTableReads << ", main table reads: " << mainTableReads);
+            UNIT_ASSERT_VALUES_EQUAL_C(mainTableReads, 2,
+                "Filter on covered columns must be applied before lookup to main table. "
+                "Expected 2 main table reads (only matching rows), got " << mainTableReads);
         }
     }
 

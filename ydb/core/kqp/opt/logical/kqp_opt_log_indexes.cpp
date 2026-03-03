@@ -1119,10 +1119,9 @@ bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription
     }
 
     for (auto & lambdaColumn : lambdaSubset) {
-        auto columnIndex = tableDesc.GetKeyColumnIndex(lambdaColumn);
-        if (!columnIndex) {
+        auto columnType = tableDesc.GetColumnType(lambdaColumn);
+        if (!columnType)
             return false;
-        }
     }
 
     extraColumns.insert(extraColumns.end(), lambdaSubset.begin(), lambdaSubset.end());
@@ -1993,8 +1992,47 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         .Done();
 }
 
+TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TParentsMap& parentsMap)
+{
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Cast<TCoFlatMap>();
+
+    auto read = TReadMatch::MatchIndexedRead(flatMap.Input(), kqpCtx);
+    if (!read) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    const auto indexName = read.Index().Value();
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
+    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        // TODO(mbkkt) some warning?
+        return node;
+    }
+    const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
+
+    TVector<TString> extraColumns;
+    if (!CanPushFlatMap(flatMap, implTableDesc, parentsMap, extraColumns))
+        return node;
+
+    auto filter = [&](const TExprBase& in) mutable {
+        return Build<TCoFlatMap>(ctx, node.Pos())
+            .Input(in)
+            .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+            .Done();
+    };
+
+    return DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+}
+
+
 TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-                                    const TParentsMap& parentsMap) {
+                                    const TParentsMap& parentsMap)
+{
     if (!node.Maybe<TCoTake>()) {
         return node;
     }

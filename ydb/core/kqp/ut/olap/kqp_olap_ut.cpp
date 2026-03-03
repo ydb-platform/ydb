@@ -1762,7 +1762,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
+    Y_UNIT_TEST(PushdownFilterKnownIssuies) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1777,8 +1777,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
-                a Int64	NOT NULL,
-                b Int32,
+                a Uint64 NOT NULL,
+                b Uint32 NOT NULL,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1792,6 +1792,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 select count(*) from `/Root/t1` as t1
                 where t1.b = $sub;
+            )",
+            R"(
+                select a, res, count(*) as cnt
+                from `/Root/t1`
+                where (b % 128) == 0
+                group by a, cast(bitcast(Digest::IntHash64(a) as UInt32)/((Math::Pow(2, 32)/240) + 1) as UInt32) as res
+                order by cnt desc;
             )",
         };
 

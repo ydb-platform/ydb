@@ -32,13 +32,13 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
         NPDisk::NSectorMap::DM_NONE);
 }
 
-void TInMemoryDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId,
-                                                     ui32 vChunkIndex)
+void TInMemoryDirectBlockGroup::EstablishConnections(
+    NWilson::TTraceId traceId,
+    ui32 vChunkIndex)
 {
     Y_UNUSED(traceId);
     Y_UNUSED(vChunkIndex);
 }
-
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TInMemoryDirectBlockGroup::WriteBlocksLocal(

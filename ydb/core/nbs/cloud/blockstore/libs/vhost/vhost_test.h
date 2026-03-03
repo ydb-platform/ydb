@@ -17,7 +17,10 @@ struct ITestVhostDevice
     virtual bool IsStopped() = 0;
 
     virtual NThreading::TFuture<TVhostRequest::EResult> SendTestRequest(
-        EBlockStoreRequest type, ui64 from, ui64 length, TSgList sgList) = 0;
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList) = 0;
 
     virtual void DisableAutostop(bool disable) = 0;
 

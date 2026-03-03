@@ -9,8 +9,8 @@
 
 #if !defined(NDEBUG) && defined(NBS_FORCE_MOVE)
 namespace std {
-    template <typename T>
-    T&& move(const T&) = delete;
+template <typename T>
+T&& move(const T&) = delete;
 }
 #endif
 
@@ -20,15 +20,15 @@ namespace NProbeParam {
 ////////////////////////////////////////////////////////////////////////////////
 
 #if !defined(PLATFORM_PAGE_SIZE)
-#   define PLATFORM_PAGE_SIZE 4096
+#define PLATFORM_PAGE_SIZE 4096
 #endif
 
 #if !defined(PLATFORM_CACHE_LINE)
-#   define PLATFORM_CACHE_LINE 64
+#define PLATFORM_CACHE_LINE 64
 #endif
 
 #if !defined(Y_CACHE_ALIGNED)
-#   define Y_CACHE_ALIGNED alignas(PLATFORM_CACHE_LINE)
+#define Y_CACHE_ALIGNED alignas(PLATFORM_CACHE_LINE)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

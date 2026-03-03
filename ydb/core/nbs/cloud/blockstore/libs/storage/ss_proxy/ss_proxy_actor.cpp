@@ -69,8 +69,9 @@ void TSSProxyActor::Bootstrap(const TActorContext& ctx)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TSSProxyActor::HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev,
-                                  const TActorContext& ctx)
+void TSSProxyActor::HandleConnect(
+    TEvTabletPipe::TEvClientConnected::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
@@ -85,7 +86,8 @@ void TSSProxyActor::HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 }
 
 void TSSProxyActor::HandleDisconnect(
-    TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
+    TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
@@ -99,7 +101,9 @@ void TSSProxyActor::HandleDisconnect(
 }
 
 void TSSProxyActor::OnConnectionError(
-    const TActorContext& ctx, const NProto::TError& error, ui64 schemeShard)
+    const TActorContext& ctx,
+    const NProto::TError& error,
+    ui64 schemeShard)
 {
     Y_UNUSED(error);
 
@@ -133,14 +137,17 @@ STFUNC(TSSProxyActor::StateWork)
         HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
 
-        HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered,
-              HandleTxRegistered);
+        HFunc(
+            TEvSchemeShard::TEvNotifyTxCompletionRegistered,
+            HandleTxRegistered);
         HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, HandleTxResult);
 
         default:
             if (!HandleRequests(ev)) {
-                HandleUnexpectedEvent(ev, NKikimrServices::NBS_SS_PROXY,
-                                      __PRETTY_FUNCTION__);
+                HandleUnexpectedEvent(
+                    ev,
+                    NKikimrServices::NBS_SS_PROXY,
+                    __PRETTY_FUNCTION__);
             }
             break;
     }
@@ -189,8 +196,8 @@ NProto::TError TranslateTxProxyError(NProto::TError error)
         return error;
     }
 
-    auto status =
-        static_cast<NKikimr::NTxProxy::TResultStatus::EStatus>(STATUS_FROM_CODE(error.GetCode()));
+    auto status = static_cast<NKikimr::NTxProxy::TResultStatus::EStatus>(
+        STATUS_FROM_CODE(error.GetCode()));
     if (RetriableTxProxyErrors.count(status)) {
         error.SetCode(E_REJECTED);
     }

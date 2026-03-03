@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         //
         // Request #1 delays the execution of requests 2 and 3.
 
-       TTestEnvironment env;
+        TTestEnvironment env;
 
         TString data;
         data.resize(10 * DefaultBlockSize, 0);

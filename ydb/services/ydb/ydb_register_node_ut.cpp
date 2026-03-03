@@ -135,10 +135,14 @@ void SetLogPriority(TKikimrServerForTestNodeRegistration& server) {
     server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
 }
 
-NDiscovery::TNodeRegistrationResult RegisterNode(const TDriverConfig& config) {
+NDiscovery::TNodeRegistrationResult RegisterNode(const TDriverConfig& config, const TMaybe<TDuration>& clientTimeout = Nothing()) {
     auto connection = NYdb::TDriver(config);
     NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    auto settings = GetNodeRegistrationSettings();
+    if (clientTimeout.Defined()) {
+        settings.ClientTimeout(*clientTimeout);
+    }
+    const auto result = discoveryClient.NodeRegistration(settings).GetValueSync();
     connection.Stop(true);
     return result;
 }
@@ -627,10 +631,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        const auto timeout = TDuration::Seconds(2);
+        const TString expectedError = "Deadline Exceeded";
+        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -648,10 +653,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        const auto timeout = TDuration::Seconds(2);
+        const TString expectedError = "Deadline Exceeded";
+        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
     }
 }
 
@@ -661,7 +667,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
     if (clientServerCert.PrivateKey[20] != 'a') {
         clientServerCert.PrivateKey[20] = 'a';
     } else {
-        clientServerCert.Certificate[20] = 'b';
+        clientServerCert.PrivateKey[20] = 'b';
     }
     {
         TKikimrServerForTestNodeRegistration server({
@@ -679,10 +685,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        const auto timeout = TDuration::Seconds(2);
+        const TString expectedError = "Deadline Exceeded";
+        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -700,10 +707,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        const auto timeout = TDuration::Seconds(2);
+        const TString expectedError = "Deadline Exceeded";
+        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
     }
 }
 

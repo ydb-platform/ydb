@@ -278,7 +278,6 @@ public:
     }
 
     void InitConfig(const TCgiParameters& params) {
-        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -340,6 +339,11 @@ public:
         InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
+        }
+        if (Streaming == EStreamingType::None || params.Has("timeout")) {
+            Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
+        } else {
+            Timeout = TDuration::Max(); // no timeout for streaming queries by default
         }
     }
 
@@ -1515,10 +1519,9 @@ public:
                 default: true
               - name: timeout
                 in: query
-                description: timeout in ms
+                description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-                default: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

@@ -25,9 +25,9 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnAfterChangePortion(info, nullptr);
 
     if (IntervalTree) {
-        IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
+        IntervalTree->AddRange(NPortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+            NPortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
+            NPortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
     }
 }
 
@@ -155,7 +155,7 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
     if (HasAppData() && AppData()->ColumnShardConfig.GetEnableIntervalTreeForMetadataSelect()) {
-        IntervalTree = std::make_unique<PortionIntervalTree::TPortionIntervalTree>();
+        IntervalTree = std::make_unique<NPortionIntervalTree::TPortionIntervalTree>();
     }
 }
 
@@ -177,9 +177,9 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
         if (IntervalTree) {
-            IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
+            IntervalTree->AddRange(NPortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+                NPortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
+                NPortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
     }
 }

@@ -9,7 +9,7 @@
 #include <memory>
 #include <variant>
 
-namespace NKikimr::NOlap::PortionIntervalTree {
+namespace NKikimr::NOlap::NPortionIntervalTree {
 
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {
@@ -71,4 +71,4 @@ public:
 
 using TPortionIntervalTree = NRangeTreap::TRangeTreap<TPositionView, std::shared_ptr<TPortionInfo>, TPositionView, TPortionIntervalTreeValueTraits, TPositionViewBorderComparator>;
 
-} // namespace NKikimr::NOlap::PortionIntervalTree
+} // namespace NKikimr::NOlap::NPortionIntervalTree

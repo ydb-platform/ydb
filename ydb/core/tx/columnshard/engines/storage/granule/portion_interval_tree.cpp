@@ -1,6 +1,6 @@
 #include "portion_interval_tree.h"
 
-namespace NKikimr::NOlap::PortionIntervalTree {
+namespace NKikimr::NOlap::NPortionIntervalTree {
 
 TPositionView::TPositionView(NArrow::TSimpleRow&& simpleRow)
     : Position(std::move(simpleRow)) {
@@ -88,4 +88,4 @@ void TPositionViewBorderComparator::ValidateKey(const TPositionView& /*key*/) {
     // Do nothing
 }
 
-} // namespace NKikimr::NOlap::PortionIntervalTree
+} // namespace NKikimr::NOlap::NPortionIntervalTree

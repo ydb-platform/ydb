@@ -149,12 +149,12 @@ private:
     }
 
     void AppendCommittedPortionsFromIntervalTree() {
-        using TPositionView = PortionIntervalTree::TPositionView;
+        using TPositionView = NPortionIntervalTree::TPositionView;
         using TBorder = NRangeTreap::TBorder<TPositionView>;
 
         std::unordered_map<ui64, TColumnEngineForLogs::TSelectedPortionInfo> selectedPortionsMap;
 
-        const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
+        const auto collector = [&](const NPortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
                                 const std::shared_ptr<TPortionInfo>& portion) -> bool {
             if (portion->IsRemovedFor(Snapshot)) {
                 return true;

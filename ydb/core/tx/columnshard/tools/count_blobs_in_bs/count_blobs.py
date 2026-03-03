@@ -335,8 +335,8 @@ class Report:
         emit("not keep:", str(not_keep), pct(not_keep, self.logoblobs_total), pct(not_keep, total_records))
         emit("inplaced:", str(num_items_inplaced), pct(num_items_inplaced, self.logoblobs_total), pct(num_items_inplaced, total_records))
         emit("huge:", str(num_items_huge), pct(num_items_huge, self.logoblobs_total), pct(num_items_huge, total_records))
-        emit("inplaced size:", human_size(inplaced_size), pct(inplaced_size, inplaced_size + huge_size), pct(inplaced_size, total_records))
-        emit("huge size:", human_size(huge_size), pct(huge_size, inplaced_size + huge_size), pct(huge_size, total_records))
+        emit("inplaced size:", human_size(inplaced_size), pct(inplaced_size, inplaced_size + huge_size))
+        emit("huge size:", human_size(huge_size), pct(huge_size, inplaced_size + huge_size))
 
         total_blobs = sum(len(ch._blobs) for ch in self.channels)
         for idx, channel_key in enumerate(("channel 0", "channel 1", "other channels")):

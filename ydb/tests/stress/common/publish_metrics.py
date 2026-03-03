@@ -213,7 +213,7 @@ class MetricsPublisher:
                 "value": metric_data["count"]
             })
 
-        payload = {"metrics": metrics[:10000]}
+        payload = {"metrics": metrics}
         headers = {'Content-Type': 'application/json'}
 
         try:

@@ -256,7 +256,7 @@ class YdbQueue(object):
 
     def send_query(self, query, parameters, event_kind):
         try:
-            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops, operation_name=event_kind)
             self.update_stats(event_kind)
             return result_list
         except ydb.Error as e:
@@ -443,7 +443,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=5)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -454,7 +454,7 @@ class Workload:
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
-        self.pool_semaphore = threading.BoundedSemaphore(value=2)
+        self.pool_semaphore = threading.BoundedSemaphore(value=1)
         self.worker_exception = []
 
     def random_points(self, size=1):

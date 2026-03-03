@@ -167,6 +167,12 @@ private:
     void ResolveShard(TShardState& state);
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        auto field = [](TStringBuf name, size_t width = 33) {
+            TString label = TStringBuilder() << name << ":";
+            label.resize(Max(label.size(), width), ' ');
+            return label;
+        };
+
         TStringStream str;
         HTML(str) {
             PRE() {
@@ -184,23 +190,28 @@ private:
                     << " CompletedShards=" << Stats.CompletedShards << Endl;
 
                 str << Endl << "Compute Actor(s):" << Endl;
-                str << "  # FreeSpace - bytes available for next data pack" << Endl;
-                str << "  # DataQueue - packs waiting to be sent" << Endl;
+                str << "  # DataChunksSent             - total chunks sent to compute actor" << Endl;
+                str << "  # AcksReceived               - total acks received back from compute actor" << Endl;
+                str << "  # DataChunksSent-AcksReceived - events currently stuck in actor mailbox" << Endl;
+                str << "  # DataQueue                  - packs queued locally, waiting for ack before sending" << Endl;
                 InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
-                    str << "  ";
+                    str << Endl << "  ";
                     HREF(ActorLink(actorId)) {
                         str << actorId;
                     }
-                    str << " FreeSpace=" << info.GetFreeSpace()
-                        << " DataQueue=" << info.GetPacksToSendCount() << Endl;
+                    str << Endl;
+                    str << "    " << field("DataChunksSent") << info.GetDataChunksSent() << Endl;
+                    str << "    " << field("AcksReceived") << info.GetAcksReceived() << Endl;
+                    str << "    " << field("DataChunksSent-AcksReceived") << info.GetDataChunksSent() - info.GetAcksReceived() << Endl;
+                    str << "    " << field("DataQueue") << info.GetPacksToSendCount() << Endl;
                 });
 
                 str << Endl << "Shard Scanner(s):" << Endl;
-                str << "  # DataChunksInFlightCount - total chunks not yet processed by compute; shard blocked until 0" << Endl;
+                str << "  # DataChunksInFlightCount - total chunks not yet processed; shard blocked until 0" << Endl;
                 str << "  # PendingMessageCount     - subset of above stuck in queue, no free compute actor" << Endl;
                 str << "  # WaitOutputTime          - cumulative time waiting for a free compute actor" << Endl;
                 InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
-                    str << "  TabletId=";
+                    str << Endl << "  TabletId=";
                     HREF(TabletLink(tabletId)) {
                         str << tabletId;
                     }
@@ -213,10 +224,10 @@ private:
                         str << " ActorId=none";
                     }
                     str << " Finished=" << scanner.IsFinished() << Endl;
-                    str << "    DataChunksInFlightCount=" << scanner.GetDataChunksInFlightCount()
-                        << " PendingMessageCount=" << scanner.GetPendingMessageCount()
-                        << " NeedAck=" << scanner.IsNeedAck()
-                        << " WaitOutputTime=" << scanner.GetWaitOutputTime() << Endl;
+                    str << "    " << field("DataChunksInFlightCount") << scanner.GetDataChunksInFlightCount() << Endl;
+                    str << "    " << field("PendingMessageCount") << scanner.GetPendingMessageCount() << Endl;
+                    str << "    " << field("NeedAck") << scanner.IsNeedAck() << Endl;
+                    str << "    " << field("WaitOutputTime") << scanner.GetWaitOutputTime() << Endl;
                 });
             }
         }

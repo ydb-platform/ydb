@@ -169,10 +169,6 @@ public:
         TBase::ExtraMonitoringInfo(str);
         str << Endl << "Backpressure:" << Endl;
         str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
-        if (ScanData) {
-            str << "  StoredBytes: " << ScanData->GetStoredBytes() << Endl;
-            str << "  FreeSpace: " << CalculateFreeSpace() << Endl;
-        }
         str << "  AcksSent: " << AcksSent << Endl;
         str << "  SendDataReceived: " << SendDataReceived << Endl;
         if (!Fetchers.empty()) {

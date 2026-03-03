@@ -239,6 +239,8 @@ public:
     private:
         YDB_READONLY_DEF(NActors::TActorId, ActorId);
         YDB_READONLY(ui64, FreeSpace, 0);
+        YDB_READONLY(ui64, DataChunksSent, 0);
+        YDB_READONLY(ui64, AcksReceived, 0);
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {
@@ -249,6 +251,7 @@ public:
                 DataQueue.front()->Finish();
                 DataQueue.pop_front();
                 FreeSpace = 0;
+                ++DataChunksSent;
                 return true;
             }
             return false;
@@ -267,6 +270,7 @@ public:
             AFL_ENSURE(!FreeSpace);
             AFL_ENSURE(freeSpace);
             FreeSpace = freeSpace;
+            ++AcksReceived;
             SendData();
         }
 

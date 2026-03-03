@@ -23,6 +23,7 @@ namespace {
 TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize = 8_MB) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableArrowResultSetFormat(true);
+    featureFlags.SetEnableColumnshardBool(true);
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

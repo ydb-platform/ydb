@@ -241,6 +241,7 @@ public:
         YDB_READONLY(ui64, FreeSpace, 0);
         YDB_READONLY(ui64, DataChunksSent, 0);
         YDB_READONLY(ui64, AcksReceived, 0);
+        YDB_READONLY(ui64, TotalAcksFromCompute, 0);
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {
@@ -260,6 +261,10 @@ public:
     public:
         ui32 GetPacksToSendCount() const {
             return DataQueue.size();
+        }
+
+        void IncTotalAcksFromCompute() {
+            ++TotalAcksFromCompute;
         }
 
         TComputeActorInfo(const NActors::TActorId& actorId)
@@ -324,6 +329,7 @@ public:
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "ack")("compute_actor_id", computeActorId);
         auto it = ComputeActorsById.find(computeActorId);
         AFL_ENSURE(it != ComputeActorsById.end())("compute_actor_id", computeActorId);
+        it->second->IncTotalAcksFromCompute();
         if (it->second->IsFree()) {
             return false;
         }

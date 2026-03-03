@@ -188,10 +188,11 @@ private:
             TABLE_SORTABLE_CLASS("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Compute actor receiving data from this fetcher"}}) { str << "ActorId"; }
                         TABLEH_ATTRS({{"title", "Total chunks sent to compute actor"}}) { str << "DataChunksSent"; }
-                        TABLEH_ATTRS({{"title", "Total acks received back from compute actor"}}) { str << "AcksReceived"; }
-                        TABLEH_ATTRS({{"title", "Events currently stuck in actor mailbox"}}) { str << "Sent-Acked"; }
+                        TABLEH_ATTRS({{"title", "Accepted acks (only when compute was not free)"}}) { str << "AcksReceived"; }
+                        TABLEH_ATTRS({{"title", "DataChunksSent minus AcksReceived: events stuck in compute mailbox"}}) { str << "Sent-Acked"; }
+                        TABLEH_ATTRS({{"title", "All acks from compute including dropped (compute was already free)"}}) { str << "TotalAcksFromCompute"; }
                         TABLEH_ATTRS({{"title", "Packs queued locally, waiting for ack before sending"}}) { str << "DataQueue"; }
                     }
                 }
@@ -203,7 +204,8 @@ private:
                             }
                             TABLED() { str << info.GetDataChunksSent(); }
                             TABLED() { str << info.GetAcksReceived(); }
-                            TABLED() { str << info.GetDataChunksSent() - info.GetAcksReceived(); }
+                            TABLED() { str << (i64)info.GetDataChunksSent() - (i64)info.GetAcksReceived(); }
+                            TABLED() { str << info.GetTotalAcksFromCompute(); }
                             TABLED() { str << info.GetPacksToSendCount(); }
                         }
                     });
@@ -214,13 +216,13 @@ private:
             TABLE_SORTABLE_CLASS("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() { str << "TabletId"; }
-                        TABLEH() { str << "ActorId"; }
-                        TABLEH_ATTRS({{"title", "Total chunks not yet processed; shard blocked until 0"}}) { str << "InFlight"; }
-                        TABLEH_ATTRS({{"title", "Subset of InFlight stuck in queue, no free compute actor"}}) { str << "Pending"; }
-                        TABLEH() { str << "NeedAck"; }
-                        TABLEH_ATTRS({{"title", "Cumulative time waiting for a free compute actor"}}) { str << "WaitOutputTime"; }
-                        TABLEH() { str << "Finished"; }
+                        TABLEH_ATTRS({{"title", "DataShard tablet serving this key range"}}) { str << "TabletId"; }
+                        TABLEH_ATTRS({{"title", "Scan actor on the shard side"}}) { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Total chunks from shard not yet processed by compute; shard blocked until 0"}}) { str << "InFlight"; }
+                        TABLEH_ATTRS({{"title", "Subset of InFlight stuck in queue because no compute actor was free"}}) { str << "Pending"; }
+                        TABLEH_ATTRS({{"title", "Shard is waiting for fetcher to send ack before sending next chunk"}}) { str << "NeedAck"; }
+                        TABLEH_ATTRS({{"title", "Cumulative time chunks waited in queue for a free compute actor"}}) { str << "WaitOutputTime"; }
+                        TABLEH_ATTRS({{"title", "Shard has finished scanning its key range"}}) { str << "Finished"; }
                     }
                 }
                 TABLEBODY() {

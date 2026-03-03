@@ -436,6 +436,8 @@ bool TSolomonExporter::ReadSensors(
     ValidateSummaryPolicy(readOptions.SummaryPolicy);
 
     readOptions.MarkAggregates |= Config_->MarkAggregates;
+    readOptions.EnableSolomonAggregates |= Config_->EnableSolomonAggregates;
+    readOptions.ExportGlobalsAsMemOnly |= Config_->ExportGlobalsAsMemOnly;
     if (!readOptions.Host && Config_->Host) {
         readOptions.Host = Config_->Host;
     }
@@ -650,6 +652,7 @@ void TSolomonExporter::DoHandleShard(
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
         options.EnableSolomonAggregates = Config_->EnableSolomonAggregates;
+        options.ExportGlobalsAsMemOnly = Config_->ExportGlobalsAsMemOnly;
         options.ReportTimestampsForRateMetrics = Config_->ReportTimestampsForRateMetrics;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;

@@ -69,10 +69,19 @@ def build_html_dashboard(
     resources: list[dict],
     tests: list[dict],
     output_path: Path,
+    interval_sec: float | None = None,
 ) -> None:
     if not resources:
         output_path.write_text("<html><body>No resource data</body></html>")
         return
+
+    # Machine specs from first record (monitor adds cpu_cores, ram_total_gb)
+    first = resources[0]
+    cpu_cores = first.get("cpu_cores") or 1
+    ram_total_gb = first.get("ram_total_gb") or 64.0
+    if interval_sec is None and len(resources) >= 2:
+        interval_sec = round(resources[1]["ts"] - resources[0]["ts"], 1) or 1.0
+    interval_sec = interval_sec or 1.0
 
     ts = [r["ts"] for r in resources]
     cpu_total = [r.get("cpu_total_pct", 0) for r in resources]
@@ -84,6 +93,10 @@ def build_html_dashboard(
     disk_ya_r = [r.get("disk_ya_read_mb_delta", 0) for r in resources]
     disk_ya_w = [r.get("disk_ya_write_mb_delta", 0) for r in resources]
 
+    # CPU: convert % to cores (100% = 1 core)
+    cpu_total_cores = [c / 100.0 * cpu_cores for c in cpu_total]
+    cpu_ya_cores = [c / 100.0 * cpu_cores for c in cpu_ya]
+
     from datetime import datetime, timezone
     ts_str = [datetime.fromtimestamp(t, timezone.utc).strftime("%H:%M:%S") for t in ts]
 
@@ -91,45 +104,58 @@ def build_html_dashboard(
         rows=4,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.06,
-        subplot_titles=("CPU % (total + ya make)", "RAM (GB) (total + ya make)", "Disk read MB/sample (total + ya)", "Disk write MB/sample (total + ya)"),
+        vertical_spacing=0.08,
+        subplot_titles=(
+            f"CPU (ядра из {cpu_cores}, 100%=1 ядро)",
+            f"RAM (GB из {ram_total_gb:.0f} GB всего)",
+            f"Disk read (MB за {interval_sec:.0f} сек)",
+            f"Disk write (MB за {interval_sec:.0f} сек)",
+        ),
         row_heights=[0.3, 0.3, 0.2, 0.2],
     )
 
     fig.add_trace(
-        go.Scatter(x=ts_str, y=cpu_total, mode="lines", name="CPU total", line=dict(color="#2563eb")),
+        go.Scatter(x=ts_str, y=cpu_total_cores, mode="lines", name="CPU total (ядра)", line=dict(color="#2563eb")),
         row=1, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=cpu_ya, mode="lines", name="CPU ya make", line=dict(color="#60a5fa", dash="dash")),
+        go.Scatter(x=ts_str, y=cpu_ya_cores, mode="lines", name="CPU ya make (ядра)", line=dict(color="#60a5fa", dash="dash")),
         row=1, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total", line=dict(color="#16a34a")),
+        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total (GB)", line=dict(color="#16a34a")),
         row=2, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=ram_ya_gb, mode="lines", name="RAM ya make", line=dict(color="#4ade80", dash="dash")),
+        go.Scatter(x=ts_str, y=ram_ya_gb, mode="lines", name="RAM ya make (GB)", line=dict(color="#4ade80", dash="dash")),
         row=2, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_r, mode="lines", name="Disk read total", line=dict(color="#ea580c")),
+        go.Scatter(x=ts_str, y=disk_r, mode="lines", name="Disk read total (MB)", line=dict(color="#ea580c")),
         row=3, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_ya_r, mode="lines", name="Disk read ya make", line=dict(color="#fb923c", dash="dash")),
+        go.Scatter(x=ts_str, y=disk_ya_r, mode="lines", name="Disk read ya make (MB)", line=dict(color="#fb923c", dash="dash")),
         row=3, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_w, mode="lines", name="Disk write total", line=dict(color="#7c3aed")),
+        go.Scatter(x=ts_str, y=disk_w, mode="lines", name="Disk write total (MB)", line=dict(color="#7c3aed")),
         row=4, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_ya_w, mode="lines", name="Disk write ya make", line=dict(color="#a78bfa", dash="dash")),
+        go.Scatter(x=ts_str, y=disk_ya_w, mode="lines", name="Disk write ya make (MB)", line=dict(color="#a78bfa", dash="dash")),
         row=4, col=1,
     )
 
-    # Add test intervals as vertical bands (limit to top by duration to avoid overload)
+    # Y-axis: 0 to max possible
+    fig.update_yaxes(range=[0, cpu_cores * 1.05], row=1, col=1)
+    fig.update_yaxes(range=[0, ram_total_gb * 1.05], row=2, col=1)
+    disk_r_max = max(max(disk_r or [0]) * 1.2, 1)
+    disk_w_max = max(max(disk_w or [0]) * 1.2, 1)
+    fig.update_yaxes(range=[0, disk_r_max], row=3, col=1)
+    fig.update_yaxes(range=[0, disk_w_max], row=4, col=1)
+
+    # Green/red bands = test intervals (интервалы выполнения тестов из report.json)
     if tests:
         t_min = min(ts)
         t_max = max(ts)
@@ -143,7 +169,7 @@ def build_html_dashboard(
             end_idx = max(0, min(len(ts), sum(1 for x in ts if x <= t["end"])))
             if start_idx >= end_idx:
                 continue
-            color = "rgba(34,197,94,0.12)" if t["status"] == "OK" else "rgba(239,68,68,0.12)"
+            color = "rgba(34,197,94,0.15)" if t["status"] == "OK" else "rgba(239,68,68,0.15)"
             fig.add_vrect(
                 x0=start_idx - 0.5, x1=end_idx - 0.5,
                 fillcolor=color, line_width=0,
@@ -151,12 +177,12 @@ def build_html_dashboard(
             )
 
     fig.update_layout(
-        height=700,
-        title_text="Resource consumption during ya make (layered with test intervals)",
+        height=750,
+        title_text="Resource consumption during ya make<br><sup>Зелёная полоса = интервалы выполнения тестов (report.json). Красная = упавшие тесты.</sup>",
         showlegend=True,
         template="plotly_white",
     )
-    fig.update_xaxes(title_text="Time", row=4, col=1)
+    fig.update_xaxes(title_text="Time (UTC)", row=4, col=1)
     fig.write_html(str(output_path), include_plotlyjs="cdn")
 
 

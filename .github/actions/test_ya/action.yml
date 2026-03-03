@@ -426,18 +426,18 @@ runs:
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
                   echo "$(date +%s) $used_kb" >> ram_usage_legacy.txt
-                  sleep 3
+                  sleep 1
               done
           }
           monitor_memory &
           MONITOR_LEGACY_PID=$!
 
-          # Resource monitor: CPU (total + per PID), RAM, disk I/O every 3 sec
+          # Resource monitor: CPU (total + per PID), RAM, disk I/O every 1 sec
           rm -f ram_usage.txt resources_monitor.jsonl
           python3 .github/scripts/monitor_resources.py \
             --output $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
             --ram-usage-file ram_usage.txt \
-            --interval 3 &
+            --interval 1 &
           MONITOR_PID=$!
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"

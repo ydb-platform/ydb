@@ -162,6 +162,28 @@ def read_meminfo() -> int:
     return total - avail
 
 
+def get_cpu_cores() -> int:
+    """Return number of CPU cores from /proc/cpuinfo."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            return sum(1 for line in f if line.strip().startswith("processor"))
+    except OSError:
+        return 1
+
+
+def get_ram_total_gb() -> float:
+    """Return total RAM in GB from /proc/meminfo."""
+    mem = {}
+    with open("/proc/meminfo") as f:
+        for line in f:
+            parts = line.split(":")
+            if len(parts) == 2:
+                key = parts[0].strip()
+                val = parts[1].strip().split()[0]
+                mem[key] = int(val)
+    return mem.get("MemTotal", 0) / (1024 * 1024)
+
+
 def read_diskstats() -> tuple[int, int]:
     """Read /proc/diskstats. Return (total_read_sectors, total_write_sectors) for block devices."""
     read_sectors = 0
@@ -199,6 +221,7 @@ def run_monitor(
     prev_disk = read_diskstats()
     prev_pid_cpu: dict[int, tuple[int, int]] = {}
     prev_ya_io: tuple[int, int] = (0, 0)
+    meta_added = False
     time.sleep(interval_sec)
 
     with open(output_jsonl, "w") as jf:
@@ -282,6 +305,10 @@ def run_monitor(
                 "disk_ya_read_mb_delta": round(disk_ya_read_mb, 2),
                 "disk_ya_write_mb_delta": round(disk_ya_write_mb, 2),
             }
+            if not meta_added:
+                record["cpu_cores"] = get_cpu_cores()
+                record["ram_total_gb"] = round(get_ram_total_gb(), 2)
+                meta_added = True
             jf.write(json.dumps(record) + "\n")
             jf.flush()
 

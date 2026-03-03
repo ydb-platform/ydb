@@ -151,17 +151,23 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream) {
-        if (settings.NodeCount > 1) {
-            auto* logStream = settings.LogStream;
-            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
+    {
+        auto* logStream = settings.LogStream;
+        auto logSettings = settings.LogSettings;
+        auto nodeCount = settings.NodeCount;
+
+        if (logStream && nodeCount == 1) {
+            ServerSettings->SetLogBackend(new TStreamLogBackend(logStream));
+        }
+
+        ServerSettings->SetLoggerInitializer([logStream, logSettings, nodeCount](NActors::TTestActorRuntime& runtime) {
+            if (logStream && nodeCount > 1) {
                 runtime.SetLogBackendFactory([logStream]() {
                     return new TStreamLogBackend(logStream);
                 });
-            });
-        } else {
-            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
-        }
+            }
+            NTestUtils::SetupLogLevel(runtime, logSettings, "KQP");
+        });
     }
 
     if (settings.InitFederatedQuerySetupFactory) {
@@ -588,14 +594,6 @@ void TKikimrRunner::CreateSampleTables() {
 }
 
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
-    // You can enable logging for these services in test using test option:
-    // `--test-param KQP_LOG=<level>`
-    // or `--test-param KQP_LOG_<service>=<level>`
-    // For example:
-    // --test-param KQP_LOG=TRACE
-    // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    NTestUtils::SetupLogLevel(*Server->GetRuntime(), settings.LogSettings, "KQP");
-
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;

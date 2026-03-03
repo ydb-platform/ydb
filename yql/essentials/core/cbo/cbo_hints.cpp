@@ -201,14 +201,14 @@ private:
 
     char Char(unsigned char c) {
         std::bitset<256> allowed;
-        allowed[c] = 1;
+        allowed[c] = true;
         return Char(allowed);
     }
 
     char Char(unsigned char intervalBegin, unsigned char intervalEnd) {
         std::bitset<256> allowed;
         for (size_t i = intervalBegin; i <= intervalEnd; ++i) {
-            allowed[i] = 1;
+            allowed[i] = true;
         }
         return Char(allowed);
     }
@@ -283,7 +283,7 @@ private:
         std::bitset<256> res;
 
         for (char c : s) {
-            res[c] = 1;
+            res[c] = true;
         }
 
         return res;
@@ -293,10 +293,10 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = 'a'; i <= 'z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
         for (unsigned char i = 'A'; i <= 'Z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -306,7 +306,7 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = '0'; i <= '9'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -314,7 +314,7 @@ private:
 
     constexpr std::bitset<256> LabelAllowedSymbols() {
         auto labelSymbols = Digits() | Letters();
-        labelSymbols['_'] = 1;
+        labelSymbols['_'] = true;
         return labelSymbols;
     }
 

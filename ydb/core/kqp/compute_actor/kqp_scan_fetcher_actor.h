@@ -89,6 +89,7 @@ public:
                 hFunc(TEvScanExchange::TEvTerminateFromCompute, HandleExecute);
                 hFunc(TEvScanExchange::TEvAckData, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
@@ -164,6 +165,23 @@ private:
     void DoAckAvailableWaiting();
 
     void ResolveShard(TShardState& state);
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
+                str << Endl << "Scan Actor(s):" << Endl;
+                for (auto& [actorId, _] : InFlightComputes.ComputeActorsById) {
+                    HREF(TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId)  {
+                        str << actorId;
+                    }
+                    str << Endl;
+                }
+            }
+        }
+        this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
+    }
 
 private:
     void PassAway() override {

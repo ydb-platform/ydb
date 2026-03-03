@@ -423,7 +423,8 @@ private:
 
         auto commitMsg = std::make_unique<NPDisk::TEvLog>(LogCtx->PDiskCtx->Dsk->Owner,
                 LogCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureChunkKeeper,
-                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr);
+                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr, NPDisk::TEvLog::TCallback(),
+                TWriteSource::VDisk(TWriteSource::EOp::ChunkKeeperCommit));
 
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK15, VDISKP(LogCtx->VCtx, "Sending TEvLog"),
                 (Event, commitMsg->ToString()));

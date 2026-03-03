@@ -22,6 +22,7 @@ namespace NKikimr {
         const bool IgnoreBlock;
         const bool IssueKeepFlag;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
@@ -38,6 +39,7 @@ namespace NKikimr {
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                             TWriteSource writeSource = TWriteSource::Unknown(),
                              bool rewriteBlob = false)
             : SenderId(senderId)
             , Cookie(cookie)
@@ -47,6 +49,7 @@ namespace NKikimr {
             , IgnoreBlock(ignoreBlock)
             , IssueKeepFlag(issueKeepFlag)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {
@@ -80,6 +83,7 @@ namespace NKikimr {
         const TActorId OrigClient;
         const ui64 OrigCookie;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
@@ -95,6 +99,7 @@ namespace NKikimr {
                            NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                           TWriteSource writeSource = TWriteSource::Unknown(),
                            bool rewriteBlob = false)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
@@ -105,6 +110,7 @@ namespace NKikimr {
             , OrigClient(origClient)
             , OrigCookie(origCookie)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {

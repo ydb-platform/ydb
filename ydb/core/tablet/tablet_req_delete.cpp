@@ -66,7 +66,8 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
                     info.Channel,                     // channel
                     Generation,                       // collectGeneration
                     std::numeric_limits<ui32>::max(), // collectStep
-                    TInstant::Max());                 // deadline
+                    TInstant::Max(),                  // deadline
+                    TWriteSource::Tablet(TWriteSource::EOp::DeleteHardBarrier));
         event->IsMonitored = false;
         SendToBSProxy(ctx, info.GroupId, event.Release(), numRequest);
     }

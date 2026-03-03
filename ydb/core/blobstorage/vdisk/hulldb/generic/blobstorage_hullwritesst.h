@@ -123,7 +123,8 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
                 Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
-                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts, nullptr, true, Priority);
+                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts,
+                    nullptr, true, Priority, true, TWriteSource::VDisk(TWriteSource::EOp::HullWriteSst));
                 MsgQueue.push(std::move(ev));
                 HasBuffer = false;
             }

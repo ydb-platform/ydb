@@ -4,6 +4,7 @@
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
@@ -416,6 +417,9 @@ void TPartitionActor::Start(
             .DiskId = diskId,
             .ClientId = "client-1",
             .BlockSize = blockSize,
+            .StripeSize = StorageConfig.GetStripeSize()
+                              ? StorageConfig.GetStripeSize()
+                              : DefaultStripeSize,
             .BlocksCount = blockCount,
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(

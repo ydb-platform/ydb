@@ -16,10 +16,137 @@
 
 #include <cerrno>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 using NActors::TActorSystem;
 
 namespace NKikimr::NPDisk {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+constexpr i32 SharedSQPollLeaderIndex = 0;
+
+class TSharedSQPollLeaders {
+private:
+    struct TLeaderSlot {
+        struct io_uring Ring = {};
+        bool Initialized = false;
+
+        ~TLeaderSlot() {
+            if (Initialized) {
+                io_uring_queue_exit(&Ring);
+            }
+        }
+    };
+
+public:
+    int GetOrCreateLeaderFd(size_t index, ui32 queueDepth, ui32 sqThreadIdleMs) {
+        std::lock_guard guard(Mutex);
+        if (Slots.size() <= index) {
+            Slots.resize(index + 1);
+        }
+
+        if (!Slots[index]) {
+            auto slot = std::make_unique<TLeaderSlot>();
+
+            struct io_uring_params params;
+            memset(&params, 0, sizeof(params));
+            params.flags |= IORING_SETUP_SQPOLL;
+            params.sq_thread_idle = sqThreadIdleMs;
+
+            int ret = io_uring_queue_init_params(queueDepth, &slot->Ring, &params);
+            if (ret != 0) {
+                return ret;
+            }
+
+            slot->Initialized = true;
+            Slots[index] = std::move(slot);
+        }
+
+        return Slots[index]->Ring.ring_fd;
+    }
+
+private:
+    std::mutex Mutex;
+    std::vector<std::unique_ptr<TLeaderSlot>> Slots;
+};
+
+std::vector<TUringRouterConfig> BuildFallbackConfigs(const TUringRouterConfig& requestedConfig) {
+    std::vector<TUringRouterConfig> configs;
+    configs.reserve(5);
+    configs.push_back(requestedConfig); // 1. requested config
+
+    TUringRouterConfig fallback = requestedConfig;
+    if (fallback.UseSharedSQPoll) {
+        fallback.UseSharedSQPoll = false;
+        configs.push_back(fallback); // 2. no shared SQPOLL
+    }
+    if (fallback.UseIOPoll) {
+        fallback.UseIOPoll = false;
+        configs.push_back(fallback); // 3. no user polling
+    }
+    if (fallback.UseSQPoll) {
+        fallback.UseSQPoll = false;
+        configs.push_back(fallback); // 4. no kernel poller
+    }
+
+    return configs;
+}
+
+int ConfigureParams(const TUringRouterConfig& config, struct io_uring_params& params) {
+    memset(&params, 0, sizeof(params));
+
+    if (config.UseSQPoll) {
+        params.flags |= IORING_SETUP_SQPOLL;
+        params.sq_thread_idle = config.SqThreadIdleMs;
+
+        if (config.UseSharedSQPoll) {
+            static TSharedSQPollLeaders sharedLeaders;
+            int sharedFd = sharedLeaders.GetOrCreateLeaderFd(
+                SharedSQPollLeaderIndex,
+                config.QueueDepth,
+                config.SqThreadIdleMs);
+            if (sharedFd < 0) {
+                return sharedFd;
+            }
+            params.flags |= IORING_SETUP_ATTACH_WQ;
+            params.wq_fd = sharedFd;
+        }
+    }
+
+    if (config.UseIOPoll) {
+        params.flags |= IORING_SETUP_IOPOLL;
+    }
+
+    return 0;
+}
+
+int InitRingWithFallback(struct io_uring* ring, const TUringRouterConfig& requestedConfig,
+                         TUringRouterConfig* effectiveConfig) {
+    int lastError = -EINVAL;
+    for (const TUringRouterConfig& config : BuildFallbackConfigs(requestedConfig)) {
+        struct io_uring_params params;
+        if (int paramsRet = ConfigureParams(config, params); paramsRet != 0) {
+            lastError = paramsRet;
+            continue;
+        }
+
+        int ret = io_uring_queue_init_params(config.QueueDepth, ring, &params);
+        if (ret == 0) {
+            *effectiveConfig = config;
+            return 0;
+        }
+
+        lastError = ret;
+    }
+
+    return lastError;
+}
+
+} // anonymous
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TCompletionPoller
@@ -140,19 +267,10 @@ TUringRouter::TUringRouter(FHANDLE fd, TActorSystem* actorSystem, TUringRouterCo
     , Config(config)
     , Ring(new struct io_uring())
 {
-    struct io_uring_params params;
-    memset(&params, 0, sizeof(params));
-
-    if (Config.UseSQPoll) {
-        params.flags |= IORING_SETUP_SQPOLL;
-        params.sq_thread_idle = Config.SqThreadIdleMs;
-    }
-    if (Config.UseIOPoll) {
-        params.flags |= IORING_SETUP_IOPOLL;
-    }
-
-    int ret = io_uring_queue_init_params(Config.QueueDepth, Ring, &params);
-    Y_ABORT_UNLESS(ret == 0, "io_uring_queue_init_params failed: %s (errno %d)", strerror(-ret), -ret);
+    TUringRouterConfig effectiveConfig = Config;
+    int ret = InitRingWithFallback(Ring, Config, &effectiveConfig);
+    Y_ABORT_UNLESS(ret == 0, "io_uring_queue_init_params failed after fallbacks: %s (errno %d)", strerror(-ret), -ret);
+    Config = effectiveConfig;
 }
 
 TUringRouter::~TUringRouter() {
@@ -318,20 +436,14 @@ bool TUringRouter::IsFileRegistered() const {
     return FixedFdIndex >= 0;
 }
 
+EUringFavor TUringRouter::GetUringFavor() const {
+    return Config.GetUringFavor();
+}
+
 bool TUringRouter::Probe(TUringRouterConfig config) {
     struct io_uring ring;
-    struct io_uring_params params;
-    memset(&params, 0, sizeof(params));
-
-    if (config.UseSQPoll) {
-        params.flags |= IORING_SETUP_SQPOLL;
-        params.sq_thread_idle = config.SqThreadIdleMs;
-    }
-    if (config.UseIOPoll) {
-        params.flags |= IORING_SETUP_IOPOLL;
-    }
-
-    int ret = io_uring_queue_init_params(config.QueueDepth, &ring, &params);
+    TUringRouterConfig effectiveConfig = config;
+    int ret = InitRingWithFallback(&ring, config, &effectiveConfig);
     if (ret == 0) {
         io_uring_queue_exit(&ring);
         return true;

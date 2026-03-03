@@ -17,11 +17,39 @@ namespace NActors {
 
 namespace NKikimr::NPDisk {
 
+enum class EUringFavor {
+    Uring,
+    IOPoll,
+    SQPoll,
+    IOPollSQPoll,
+    SharedSQPoll,
+    FallbackPDisk,
+};
+
 struct TUringRouterConfig {
     ui32 QueueDepth = 128;          // max inflight I/O operations (SQ/CQ ring size)
     ui32 SqThreadIdleMs = 5000;     // submission kernel thread idle timeout before sleeping (only when UseSQPoll)
     bool UseSQPoll = true;          // kernel thread polls submissions (IORING_SETUP_SQPOLL)
     bool UseIOPoll = true;          // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL)
+
+    // On Linux kernel 5.15 this option showed very poor performance in our benchmarks, so it is disabled by default.
+    bool UseSharedSQPoll = false;    // Share kernel poller and backend between uring instances (IORING_SETUP_ATTACH_WQ)
+
+    EUringFavor GetUringFavor() const {
+        if (UseSQPoll && UseSharedSQPoll) {
+            return EUringFavor::SharedSQPoll;
+        }
+        if (UseSQPoll && UseIOPoll) {
+            return EUringFavor::IOPollSQPoll;
+        }
+        if (UseSQPoll) {
+            return EUringFavor::SQPoll;
+        }
+        if (UseIOPoll) {
+            return EUringFavor::IOPoll;
+        }
+        return EUringFavor::Uring;
+    }
 };
 
 // Our cookie passed through io_uring user_data.
@@ -106,8 +134,9 @@ public:
     ui32 SubmitItemsLeft() const;
 
     bool IsFileRegistered() const;
+    EUringFavor GetUringFavor() const;
 
-    // Returns true if an io_uring instance can be created on this system with the given config.
+    // Returns true if an io_uring instance can be created on this system with either the given config or fallback config.
     // Always use in tests to skip when running in restricted environments (seccomp, containers, etc.).
     static bool Probe(TUringRouterConfig config = {});
 

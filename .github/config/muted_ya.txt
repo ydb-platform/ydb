@@ -3,6 +3,8 @@ ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
+ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
@@ -53,6 +55,7 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
+ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
 ydb/library/actors/interconnect/ut_rdma XdcRdmaTest.RestoreRdmaSession
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk

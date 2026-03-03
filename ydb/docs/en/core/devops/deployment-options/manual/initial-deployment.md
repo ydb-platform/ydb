@@ -79,7 +79,7 @@ sudo usermod -aG disk ydb
 
 ## Configure File Descriptor Limits {#file-descriptors}
 
-For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/query_execution/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
 
 To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
 

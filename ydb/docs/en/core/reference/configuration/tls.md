@@ -105,7 +105,7 @@ auth_config:
 
 ### Federated Queries
 
-[Federated queries](../../concepts/federated_query/index.md) allow {{ ydb-short-name }} to query various external data sources. Whether these queries occur over TLS-encrypted connections is controlled by the `USE_TLS` setting of `CREATE EXTERNAL DATA SOURCE` queries. No changes to the server-side configuration are required.
+[Federated queries](../../concepts/query_execution/federated_query/index.md) allow {{ ydb-short-name }} to query various external data sources. Whether these queries occur over TLS-encrypted connections is controlled by the `USE_TLS` setting of `CREATE EXTERNAL DATA SOURCE` queries. No changes to the server-side configuration are required.
 
 ### Tracing
 

@@ -41,7 +41,7 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
         # endpoint, database, duration, sqs_endpoint
         utils = Workload(self.endpoint, self.database, duration, self.http_proxy_endpoint + "/Root")
 
-        utils.create_topic()
+        utils.create_topics()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             logger.info("Starting workload")
@@ -56,8 +56,8 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
             logger.info("Waiting for workload task")
             for nn, runner in enumerate(concurrent.futures.as_completed(runners)):
                 try:
-                    runner.result()
-                    logger.info("Workload task #%d completed, stdout: %s", nn, runner.result().stdout)
+                    result = runner.result()
+                    logger.info("Workload task #%d completed, result: %r", nn, result)
                 except Exception:
-                    logger.exception("Workload task #%d failed, stdout: %s", nn, runner.result().stdout)
+                    logger.exception("Workload task #%d failed", nn)
                     raise

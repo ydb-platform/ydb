@@ -1,5 +1,5 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "0.13.4";
+  version = "0.13.5";
 
   src = fetchFromGitHub {
     owner = "awslabs";

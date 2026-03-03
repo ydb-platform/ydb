@@ -384,6 +384,9 @@ runs:
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
+        RESOURCES_COMBINED_JSONL=$PUBLIC_DIR/resources_monitor_combined.jsonl
+        TRY_BOUNDARIES_FILE=$PUBLIC_DIR/try_boundaries.json
+        echo "[]" > $TRY_BOUNDARIES_FILE
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
@@ -418,27 +421,31 @@ runs:
 
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
-          # Legacy RAM monitor (grep/awk, for comparison with new)
-          monitor_memory() {
-              set +x
-              rm -f ram_usage_legacy.txt
-              while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
-                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
-                  echo "$(date +%s) $used_kb" >> ram_usage_legacy.txt
-                  sleep 1
-              done
-          }
-          monitor_memory &
-          MONITOR_LEGACY_PID=$!
+          # Combined resource monitor (one for all tries) - start on first try only
+          if [ $RETRY -eq 1 ]; then
+            # Legacy RAM monitor (grep/awk, for comparison with new)
+            monitor_memory() {
+                set +x
+                rm -f ram_usage_legacy.txt
+                while true; do
+                    used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
+                              awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                    echo "$(date +%s) $used_kb" >> ram_usage_legacy.txt
+                    sleep 1
+                done
+            }
+            monitor_memory &
+            MONITOR_LEGACY_PID=$!
 
-          # Resource monitor: CPU (total + per PID), RAM, disk I/O every 1 sec
-          rm -f ram_usage.txt resources_monitor.jsonl
-          python3 .github/scripts/monitor_resources.py \
-            --output $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
-            --ram-usage-file ram_usage.txt \
-            --interval 1 &
-          MONITOR_PID=$!
+            rm -f ram_usage.txt $RESOURCES_COMBINED_JSONL
+            python3 .github/scripts/monitor_resources.py \
+              --output $RESOURCES_COMBINED_JSONL \
+              --ram-usage-file ram_usage.txt \
+              --interval 1 &
+            MONITOR_PID=$!
+          fi
+
+          TRY_START_TS=$(date +%s)
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -453,9 +460,18 @@ runs:
           set -e
           RC=`cat exit_code`
 
+          TRY_END_TS=$(date +%s)
+          # Append try boundary
+          python3 -c "
+import json
+p='$TRY_BOUNDARIES_FILE'
+d=json.load(open(p))
+d.append({'try':$RETRY,'start':$TRY_START_TS,'end':$TRY_END_TS})
+json.dump(d,open(p,'w'))
+" 2>/dev/null || true
+
           # Keep monitoring 60 sec after ya make to capture post-completion metrics
           sleep 60
-          kill $MONITOR_PID $MONITOR_LEGACY_PID 2>/dev/null || true
 
           cp -f ram_usage_legacy.txt $CURRENT_PUBLIC_DIR/ram_usage_legacy.txt 2>/dev/null || true
 
@@ -468,17 +484,6 @@ runs:
             --ram-usage-file ram_usage.txt \
             --chat-id "$GH_ALERTS_TG_CHAT" \
             --memory-threshold 97 || true
-
-          # Resource consumption dashboard (CPU, RAM, disk, per try)
-          python3 .github/scripts/analyze_resources.py \
-            --resources-jsonl $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
-            --report "$CURRENT_REPORT" \
-            --output-html $CURRENT_PUBLIC_DIR/resources_report.html \
-            --output-trace $CURRENT_PUBLIC_DIR/resources_trace.json \
-            --try-num $RETRY || true
-          echo "25 [Resources try $RETRY](${CURRENT_PUBLIC_DIR_URL}/resources_report.html)" >> $SUMMARY_LINKS
-          # Copy to PUBLIC_DIR root for visibility in index.html
-          cp -f $CURRENT_PUBLIC_DIR/resources_report.html $PUBLIC_DIR/resources_report.html 2>/dev/null || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -602,6 +607,30 @@ runs:
               CONTEXT_PATH=""
           fi
         done;
+
+        # Kill combined monitor, build combined resources report with try markers
+        kill $MONITOR_PID $MONITOR_LEGACY_PID 2>/dev/null || true
+        MERGED_REPORT=$PUBLIC_DIR/report_merged.json
+        python3 -c "
+import json,glob
+reports=glob.glob('$PUBLIC_DIR/try_*/report.json')
+all=[]
+for p in sorted(reports):
+    try:
+        d=json.load(open(p))
+        all.extend(d.get('results',[]))
+    except: pass
+json.dump({'results':all},open('$MERGED_REPORT','w'))
+" 2>/dev/null || true
+        if [ -s "$RESOURCES_COMBINED_JSONL" ] && [ -f "$MERGED_REPORT" ]; then
+          python3 .github/scripts/analyze_resources.py \
+            --resources-jsonl $RESOURCES_COMBINED_JSONL \
+            --report "$MERGED_REPORT" \
+            --output-html $PUBLIC_DIR/resources_report.html \
+            --output-trace $PUBLIC_DIR/resources_trace.json \
+            --try-boundaries $TRY_BOUNDARIES_FILE || true
+        fi
+        echo "25 [Resources (all tries)](${PUBLIC_DIR_URL}/resources_report.html)" >> $SUMMARY_LINKS
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT

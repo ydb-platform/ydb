@@ -71,6 +71,7 @@ def build_html_dashboard(
     output_path: Path,
     interval_sec: float | None = None,
     try_num: int | None = None,
+    try_boundaries: list[dict] | None = None,
 ) -> None:
     if not resources:
         output_path.write_text("<html><body>No resource data</body></html>")
@@ -110,6 +111,7 @@ def build_html_dashboard(
     ts_str = [datetime.fromtimestamp(t, timezone.utc).strftime("%H:%M:%S") for t in ts]
 
     try_suffix = f" (try {try_num})" if try_num else ""
+    try_boundaries = try_boundaries or []
     fig = make_subplots(
         rows=5,
         cols=1,
@@ -172,9 +174,27 @@ def build_html_dashboard(
     active_max = max(max(active_tests) if active_tests else 0, 1)
     fig.update_yaxes(range=[0, active_max * 1.1], row=5, col=1)
 
+    # Try boundary markers (vertical lines when try ends / next starts)
+    for b in try_boundaries:
+        t_end = b.get("end")
+        try_n = b.get("try")
+        if t_end is None or try_n is None:
+            continue
+        idx = sum(1 for x in ts if x < t_end)
+        if 0 <= idx < len(ts):
+            fig.add_vline(
+                x=idx,
+                line_dash="dash",
+                line_color="rgba(100,116,139,0.7)",
+                line_width=1,
+                annotation_text=f"try {try_n} end",
+                annotation_position="top",
+            )
+
+    boundary_note = " Метки: try N end = граница между попытками." if try_boundaries else ""
     fig.update_layout(
         height=850,
-        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Мониторинг по try. Нижний график: кол-во тестов, выполняющихся параллельно.</sup>",
+        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Общий отчёт по всем try.{boundary_note} Нижний график: кол-во тестов, выполняющихся параллельно.</sup>",
         showlegend=True,
         template="plotly_white",
     )
@@ -204,7 +224,8 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--output-html", type=Path, required=True)
     parser.add_argument("--output-trace", type=Path, default=None)
-    parser.add_argument("--try-num", type=int, default=None, help="Try number for report title")
+    parser.add_argument("--try-num", type=int, default=None, help="Try number for report title (per-try mode)")
+    parser.add_argument("--try-boundaries", type=Path, default=None, help="JSON file with try boundaries [{try,start,end}...] for combined report")
     args = parser.parse_args()
 
     if not args.resources_jsonl.exists():
@@ -221,7 +242,17 @@ def main() -> int:
         return 0
     tests = load_report_tests(args.report)
 
-    build_html_dashboard(resources, tests, args.output_html, try_num=args.try_num)
+    try_boundaries = []
+    if args.try_boundaries and args.try_boundaries.exists():
+        try:
+            try_boundaries = json.loads(args.try_boundaries.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    build_html_dashboard(
+        resources, tests, args.output_html,
+        try_num=args.try_num,
+        try_boundaries=try_boundaries,
+    )
     if args.output_trace:
         build_chromium_trace(resources, args.output_trace)
 

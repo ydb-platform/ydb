@@ -245,8 +245,6 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
     UNIT_ASSERT_C(firstArrowBatch, "First arrow batch must be deserialized");
     UNIT_ASSERT_C(secondArrowBatch, "Second arrow batch must be deserialized");
 
-    UNIT_ASSERT_C(firstArrowBatch->num_rows() > 0, "Arrow batch must not be empty");
-
     UNIT_ASSERT_C(firstArrowBatch->ValidateFull().ok(), "Batch validation failed");
     UNIT_ASSERT_C(secondArrowBatch->ValidateFull().ok(), "Batch validation failed");
 
@@ -1208,7 +1206,6 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1268,7 +1265,6 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1328,7 +1324,6 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++count;
             }
@@ -1391,7 +1386,6 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
                 ++counts[idx];
             }

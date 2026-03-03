@@ -68,6 +68,9 @@ namespace NKikimr::NDDisk {
             .DirectIO = {
                 COUNTER(DirectIO, ShortReads, true)
                 COUNTER(DirectIO, ShortWrites, true)
+                COUNTER(DirectIO, RegularUringCount, false)
+                COUNTER(DirectIO, FallbackUringCount, false)
+                COUNTER(DirectIO, FallbackPDiskCount, false)
             },
         };
 

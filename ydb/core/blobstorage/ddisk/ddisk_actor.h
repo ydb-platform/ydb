@@ -135,6 +135,9 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
                 NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+                NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
             } DirectIO;
         };
 

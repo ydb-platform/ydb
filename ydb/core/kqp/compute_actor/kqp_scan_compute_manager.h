@@ -156,6 +156,30 @@ public:
     ui64 GetPendingTimeUs() const {
         return WaitOutputTime.MicroSeconds();
     }
+
+    i64 GetDataChunksInFlightCount() const {
+        return DataChunksInFlightCount;
+    }
+
+    ui64 GetPendingMessageCount() const {
+        return PendingMessageCount;
+    }
+
+    TDuration GetWaitOutputTime() const {
+        return WaitOutputTime;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
+    bool HasActorId() const {
+        return ActorId.has_value();
+    }
+
+    TString GetActorIdStr() const {
+        return ActorId ? ToString(*ActorId) : "none";
+    }
 };
 
 class TComputeTaskData {
@@ -248,7 +272,6 @@ public:
 private:
     std::deque<std::unique_ptr<TComputeTaskData>> UndefinedShardTaskData;
     std::deque<TComputeActorInfo> ComputeActors;
-public:
     THashMap<TActorId, TComputeActorInfo*> ComputeActorsById;
 
 public:
@@ -271,6 +294,13 @@ public:
         TStringBuilder sb;
         sb << "ca=" << ComputeActors.size() << ";";
         return sb;
+    }
+
+    template <typename TFunc>
+    void ForEachCompute(TFunc&& func) const {
+        for (auto& [actorId, info] : ComputeActorsById) {
+            func(actorId, *info);
+        }
     }
 
     bool OnComputeAck(const TActorId& computeActorId, const ui64 freeSpace) {
@@ -449,6 +479,13 @@ public:
     }
     ui32 GetShardsCount() const {
         return Shards.size();
+    }
+
+    template <typename TFunc>
+    void ForEachScanner(TFunc&& func) const {
+        for (auto& [tabletId, scanner] : ShardScanners) {
+            func(tabletId, *scanner);
+        }
     }
     TShardState::TPtr Put(TShardState&& state);
 };

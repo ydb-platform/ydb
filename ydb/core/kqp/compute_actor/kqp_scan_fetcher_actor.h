@@ -171,13 +171,32 @@ private:
         HTML(str) {
             PRE() {
                 str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
-                str << Endl << "Scan Actor(s):" << Endl;
-                for (auto& [actorId, _] : InFlightComputes.ComputeActorsById) {
-                    HREF(TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId)  {
+                str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
+                str << "PendingScanData: " << PendingScanData.size()
+                    << ", PendingShards: " << PendingShards.size() << Endl;
+                str << "InFlightShards: " << InFlightShards.GetScansCount()
+                    << "/" << InFlightShards.GetShardsCount()
+                    << ", PacksToSend: " << InFlightComputes.GetPacksToSendCount() << Endl;
+
+                str << Endl << "Compute Actor(s):" << Endl;
+                InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
+                    str << "  ";
+                    HREF(TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId) {
                         str << actorId;
                     }
-                    str << Endl;
-                }
+                    str << " FreeSpace=" << info.GetFreeSpace()
+                        << " Queue=" << info.GetPacksToSendCount() << Endl;
+                });
+
+                str << Endl << "Shard Scanner(s):" << Endl;
+                InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
+                    str << "  TabletId=" << tabletId
+                        << " ActorId=" << scanner.GetActorIdStr()
+                        << " InFlight=" << scanner.GetDataChunksInFlightCount()
+                        << " Pending=" << scanner.GetPendingMessageCount()
+                        << " WaitOutput=" << scanner.GetWaitOutputTime()
+                        << " Finished=" << scanner.IsFinished() << Endl;
+                });
             }
         }
         this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));

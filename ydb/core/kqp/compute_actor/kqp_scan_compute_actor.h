@@ -27,6 +27,8 @@ private:
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     bool ScanDataInFlight = false;
+    ui64 SendDataReceived = 0;
+    ui64 AcksSent = 0;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {
@@ -164,12 +166,21 @@ public:
 
     void ExtraMonitoringInfo(TStringStream& str) override {
         TBase::ExtraMonitoringInfo(str);
+        str << Endl << "Backpressure:" << Endl;
+        str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
+        str << "  ChannelBufferSize: " << GetMemoryLimits().ChannelBufferSize << Endl;
+        if (ScanData) {
+            str << "  StoredBytes: " << ScanData->GetStoredBytes() << Endl;
+            str << "  FreeSpace: " << CalculateFreeSpace() << Endl;
+        }
+        str << "  AcksSent: " << AcksSent << Endl;
+        str << "  SendDataReceived: " << SendDataReceived << Endl;
         if (!Fetchers.empty()) {
             HTML(str) {
-                str << Endl << "Fetchers(s):";
+                str << Endl << "Fetcher(s): " << Fetchers.size();
                 for (auto& fetcherId : Fetchers) {
                     str << " ";
-                    HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ca=" << SelfId() << "&sf=" << fetcherId)  {
+                    HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ca=" << SelfId() << "&sf=" << fetcherId) {
                         str << fetcherId;
                     }
                 }
@@ -179,12 +190,11 @@ public:
     }
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
         auto sf = cgi.Get("sf");
         if (sf) {
             for (auto& fetcherId : Fetchers) {
-                auto s = ToString(fetcherId);
-                if (sf == s) {
+                if (sf == ToString(fetcherId)) {
                     TActivationContext::Send(ev->Forward(fetcherId));
                     return;
                 }

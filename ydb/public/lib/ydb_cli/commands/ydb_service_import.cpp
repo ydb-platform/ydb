@@ -162,7 +162,6 @@ void TCommandImportBase::ExtractParams(TConfig& config) {
     }
 }
 
-// Fill common settings for import operations (description, retries, index mode, ACL, checksum, encryption)
 template <typename TSettings>
 void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
     if (Description) {
@@ -177,6 +176,10 @@ void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
     const bool encryption = !EncryptionKey.empty();
     if (encryption) {
         settings.SymmetricKey(EncryptionKey);
+    }
+
+    if (CommonDestinationPath) {
+        settings.DestinationPath(CommonDestinationPath);
     }
 }
 
@@ -215,6 +218,7 @@ void TCommandImportBase::FillItemsFromItemParam(TSettings& settings) const {
 #else
     if constexpr (std::is_same_v<TSettings, NImport::TImportFromFsSettings>) {
         ApplyItems(settings);
+        return;
     }
     static_assert(std::is_same_v<TSettings, NImport::TImportFromS3Settings>, "Not implemented");
     InitAwsAPI();
@@ -368,10 +372,6 @@ NImport::TImportFromS3Settings TCommandImportFromS3::MakeImportSettings() {
         settings.SourcePrefix(CommonSourcePrefix);
     }
 
-    if (CommonDestinationPath) {
-        settings.DestinationPath(CommonDestinationPath);
-    }
-
     FillItems(settings);
 
     return settings;
@@ -490,22 +490,7 @@ NImport::TImportFromFsSettings TCommandImportFromFs::MakeImportSettings() {
     }
 
     FillCommonImportSettings(settings);
-
-    if (CommonDestinationPath) {
-        if (Items.empty()) {
-            settings.AppendItem({.Src = {}, .Dst = CommonDestinationPath});
-        }
-    }
-
-    for (const auto& item : Items) {
-        settings.AppendItem({item.Source, item.Destination});
-    }
-
-    ExcludeItems(settings, ExclusionPatterns);
-
-    if (settings.Item_.empty()) {
-        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
-    }
+    FillItems(settings);
 
     return settings;
 }

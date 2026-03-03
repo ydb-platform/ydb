@@ -68,6 +68,7 @@ Checks: >
   modernize-redundant-void-arg,
   modernize-use-bool-literals,
   modernize-use-equals-delete,
+  modernize-use-noexcept,
   modernize-use-override
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays

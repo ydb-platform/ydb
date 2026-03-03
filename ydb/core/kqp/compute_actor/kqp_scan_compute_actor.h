@@ -84,6 +84,7 @@ public:
                 hFunc(TEvScanExchange::TEvRegisterFetcher, Handle);
                 hFunc(TEvScanExchange::TEvFetcherFinished, Handle);
                 hFunc(TEvScanExchange::TEvTerminateFromFetcher, Handle)
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 default:
                     BaseStateFuncBody(ev);
             }
@@ -160,6 +161,37 @@ public:
     }
 
     void DoBootstrap();
+
+    void ExtraMonitoringInfo(TStringStream& str) override {
+        TBase::ExtraMonitoringInfo(str);
+        if (!Fetchers.empty()) {
+            HTML(str) {
+                str << Endl << "Fetchers(s):";
+                for (auto& fetcherId : Fetchers) {
+                    str << " ";
+                    HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ca=" << SelfId() << "&sf=" << fetcherId)  {
+                        str << fetcherId;
+                    }
+                }
+                str << Endl;
+            }
+        }
+    }
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        auto sf = cgi.Get("sf");
+        if (sf) {
+            for (auto& fetcherId : Fetchers) {
+                auto s = ToString(fetcherId);
+                if (sf == s) {
+                    TActivationContext::Send(ev->Forward(fetcherId));
+                    return;
+                }
+            }
+        }
+        TBase::OnMonitoringPage(ev);
+    }
 
 };
 

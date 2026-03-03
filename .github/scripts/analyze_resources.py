@@ -70,6 +70,7 @@ def build_html_dashboard(
     tests: list[dict],
     output_path: Path,
     interval_sec: float | None = None,
+    try_num: int | None = None,
 ) -> None:
     if not resources:
         output_path.write_text("<html><body>No resource data</body></html>")
@@ -87,11 +88,19 @@ def build_html_dashboard(
     cpu_total = [r.get("cpu_total_pct", 0) for r in resources]
     cpu_ya = [r.get("cpu_ya_pct", 0) for r in resources]
     ram_gb = [r.get("ram_used_kb", 0) / (1024 * 1024) for r in resources]
-    ram_ya_gb = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
+    ram_ya_raw = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
+    # RSS counts shared memory per process → sum can exceed total. Cap ya at total.
+    ram_ya_gb = [min(ya, tot) for ya, tot in zip(ram_ya_raw, ram_gb)]
     disk_r = [r.get("disk_read_mb_delta", 0) for r in resources]
     disk_w = [r.get("disk_write_mb_delta", 0) for r in resources]
     disk_ya_r = [r.get("disk_ya_read_mb_delta", 0) for r in resources]
     disk_ya_w = [r.get("disk_ya_write_mb_delta", 0) for r in resources]
+
+    # Active tests count per timestamp (replaces green bands)
+    active_tests = []
+    for t in ts:
+        cnt = sum(1 for test in tests if test["start"] <= t < test["end"])
+        active_tests.append(cnt)
 
     # CPU: convert % to cores (100% = 1 core)
     cpu_total_cores = [c / 100.0 * cpu_cores for c in cpu_total]
@@ -100,18 +109,20 @@ def build_html_dashboard(
     from datetime import datetime, timezone
     ts_str = [datetime.fromtimestamp(t, timezone.utc).strftime("%H:%M:%S") for t in ts]
 
+    try_suffix = f" (try {try_num})" if try_num else ""
     fig = make_subplots(
-        rows=4,
+        rows=5,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.08,
+        vertical_spacing=0.06,
         subplot_titles=(
             f"CPU (ядра из {cpu_cores}, 100%=1 ядро)",
-            f"RAM (GB из {ram_total_gb:.0f} GB всего)",
+            f"RAM (GB из {ram_total_gb:.0f} GB всего, ya cap at total)",
             f"Disk read (MB за {interval_sec:.0f} сек)",
             f"Disk write (MB за {interval_sec:.0f} сек)",
+            "Активных тестов (параллельно)",
         ),
-        row_heights=[0.3, 0.3, 0.2, 0.2],
+        row_heights=[0.25, 0.25, 0.18, 0.18, 0.14],
     )
 
     fig.add_trace(
@@ -146,43 +157,28 @@ def build_html_dashboard(
         go.Scatter(x=ts_str, y=disk_ya_w, mode="lines", name="Disk write ya make (MB)", line=dict(color="#a78bfa", dash="dash")),
         row=4, col=1,
     )
+    fig.add_trace(
+        go.Scatter(x=ts_str, y=active_tests, mode="lines", name="Активных тестов", line=dict(color="#64748b", shape="hv")),
+        row=5, col=1,
+    )
 
     # Y-axis: 0 to max possible
     fig.update_yaxes(range=[0, cpu_cores * 1.05], row=1, col=1)
     fig.update_yaxes(range=[0, ram_total_gb * 1.05], row=2, col=1)
-    disk_r_max = max(max(disk_r or [0]) * 1.2, 1)
-    disk_w_max = max(max(disk_w or [0]) * 1.2, 1)
-    fig.update_yaxes(range=[0, disk_r_max], row=3, col=1)
-    fig.update_yaxes(range=[0, disk_w_max], row=4, col=1)
-
-    # Green/red bands = test intervals (интервалы выполнения тестов из report.json)
-    if tests:
-        t_min = min(ts)
-        t_max = max(ts)
-        by_duration = sorted(
-            [t for t in tests if t["end"] > t_min and t["start"] < t_max],
-            key=lambda x: x["end"] - x["start"],
-            reverse=True,
-        )[:80]
-        for t in by_duration:
-            start_idx = max(0, min(len(ts) - 1, sum(1 for x in ts if x < t["start"])))
-            end_idx = max(0, min(len(ts), sum(1 for x in ts if x <= t["end"])))
-            if start_idx >= end_idx:
-                continue
-            color = "rgba(34,197,94,0.15)" if t["status"] == "OK" else "rgba(239,68,68,0.15)"
-            fig.add_vrect(
-                x0=start_idx - 0.5, x1=end_idx - 0.5,
-                fillcolor=color, line_width=0,
-                row="all", col=1,
-            )
+    disk_all = (disk_r or [0]) + (disk_w or [0]) + (disk_ya_r or [0]) + (disk_ya_w or [0])
+    disk_max = max(max(disk_all) * 1.5, 1) if disk_all else 1
+    fig.update_yaxes(range=[0, disk_max], row=3, col=1)
+    fig.update_yaxes(range=[0, disk_max], row=4, col=1)
+    active_max = max(max(active_tests) if active_tests else 0, 1)
+    fig.update_yaxes(range=[0, active_max * 1.1], row=5, col=1)
 
     fig.update_layout(
-        height=750,
-        title_text="Resource consumption during ya make<br><sup>Зелёная полоса = интервалы выполнения тестов (report.json). Красная = упавшие тесты.</sup>",
+        height=850,
+        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Мониторинг по try. Нижний график: кол-во тестов, выполняющихся параллельно.</sup>",
         showlegend=True,
         template="plotly_white",
     )
-    fig.update_xaxes(title_text="Time (UTC)", row=4, col=1)
+    fig.update_xaxes(title_text="Time (UTC)", row=5, col=1)
     fig.write_html(str(output_path), include_plotlyjs="cdn")
 
 
@@ -208,6 +204,7 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--output-html", type=Path, required=True)
     parser.add_argument("--output-trace", type=Path, default=None)
+    parser.add_argument("--try-num", type=int, default=None, help="Try number for report title")
     args = parser.parse_args()
 
     if not args.resources_jsonl.exists():
@@ -224,7 +221,7 @@ def main() -> int:
         return 0
     tests = load_report_tests(args.report)
 
-    build_html_dashboard(resources, tests, args.output_html)
+    build_html_dashboard(resources, tests, args.output_html, try_num=args.try_num)
     if args.output_trace:
         build_chromium_trace(resources, args.output_trace)
 

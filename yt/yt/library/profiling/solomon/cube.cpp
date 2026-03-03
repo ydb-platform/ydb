@@ -255,7 +255,7 @@ int TCube<T>::ReadSensors(
     auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
-        if (options.Global) {
+        if (options.Global && !options.ExportGlobalsAsMemOnly) {
             consumer->OnLabel(globalHostLabel.first, globalHostLabel.second);
         } else if (options.Host) {
             consumer->OnLabel(hostLabel.first, hostLabel.second);
@@ -263,12 +263,12 @@ int TCube<T>::ReadSensors(
 
         TCompactVector<bool, 8> replacedInstanceTags(options.InstanceTags.size());
 
-        if (options.MarkAggregates && !options.Global) {
+        if (options.MarkAggregates) {
             if (options.EnableSolomonAggregates) {
                 auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
                 consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
-            } else if (summaryPolicy == ESummaryPolicy::Sum) {
-                // By default support only sum aggregate.
+            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
+                // By default support only sum aggregate except global sensors.
                 consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
             }
         }
@@ -374,7 +374,7 @@ int TCube<T>::ReadSensors(
         };
 
         auto writeFlags = [&] {
-            consumer->OnMemOnly(options.MemOnly);
+            consumer->OnMemOnly(options.MemOnly || (options.Global && options.ExportGlobalsAsMemOnly));
         };
 
         auto writeSummary = [&, tagIds = tagIds] (auto makeSummary) {

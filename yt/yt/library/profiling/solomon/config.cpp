@@ -69,6 +69,8 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_solomon_aggregates", &TThis::EnableSolomonAggregates)
         .Default(false);
+    registrar.Parameter("export_globals_as_mem_only", &TThis::ExportGlobalsAsMemOnly)
+        .Default(false);
 
     registrar.Parameter("strip_sensors_name_prefix", &TThis::StripSensorsNamePrefix)
         .Default(false);

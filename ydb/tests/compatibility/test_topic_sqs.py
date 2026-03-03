@@ -34,12 +34,12 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
         )
 
     def test_write_and_read(self):
-        logger.info(f"endpoint: {self.http_endpoint}")
+        logger.info(f"endpoint: {self.http_proxy_endpoint}")
 
         duration = 30
 
         # endpoint, database, duration, sqs_endpoint
-        utils = Workload(self.endpoint, self.database, duration, self.http_endpoint + "/Root")
+        utils = Workload(self.endpoint, self.database, duration, self.http_proxy_endpoint + "/Root")
 
         utils.create_topic()
 

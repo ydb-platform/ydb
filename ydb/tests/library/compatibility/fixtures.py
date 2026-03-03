@@ -119,6 +119,7 @@ class RestartToAnotherVersionFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+        self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
@@ -191,6 +192,7 @@ class MixedClusterFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+        self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
@@ -279,10 +281,13 @@ class RollingUpgradeAndDowngradeFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoints = []
+        self.http_proxy_endpoints = []
         for i in range(1, len(self.cluster.nodes) + 1):
             self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
+            self.http_proxy_endpoints.append("http://%s:%s" % ('localhost', self.cluster.nodes[i].http_proxy_port))
 
         self.endpoint = self.endpoints[0]
+        self.http_proxy_endpoint = self.http_proxy_endpoints[0]
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:

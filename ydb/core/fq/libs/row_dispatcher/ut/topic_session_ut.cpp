@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         writeMessages();
         StopSession(ReadActorId2, source);      // delete slow client, clear unread buffer
-        Sleep(TDuration::MilliSeconds(100));
+        Sleep(TDuration::MilliSeconds(200));    // > 100 (BatchCreationTimeoutMs)
 
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);

@@ -650,6 +650,7 @@ message TColumnTableSchemeOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional uint64 MaxPortionIntersectionsLimit = 6;
 }
 
 message TColumnTableSchema {
@@ -695,6 +696,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional uint64 MaxPortionIntersectionsLimit = 6;
 }
 
 message TAlterColumnTableSchema {

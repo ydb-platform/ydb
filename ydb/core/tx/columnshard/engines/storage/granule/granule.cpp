@@ -138,6 +138,13 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
+bool TGranuleMeta::IsOverloadedByPortionIntersections(std::optional<ui64> limit) const {
+    if (!limit || *limit == 0) {
+        return false;
+    }
+    return GetMaxPortionIntersectionsCount() >= *limit;
+}
+
 TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
     const TVersionedIndex& versionedIndex)
     : PathId(pathId)

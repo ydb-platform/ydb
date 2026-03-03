@@ -13,6 +13,7 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, MaxPortionIntersectionsLimit);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
@@ -20,6 +21,9 @@ public:
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
             ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
+        }
+        if (alterRequest.GetOptions().HasMaxPortionIntersectionsLimit()) {
+            MaxPortionIntersectionsLimit = alterRequest.GetOptions().GetMaxPortionIntersectionsLimit();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -43,6 +47,9 @@ public:
         alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
         if (ScanReaderPolicyName) {
             alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+        }
+        if (MaxPortionIntersectionsLimit) {
+            alterRequest.MutableOptions()->SetMaxPortionIntersectionsLimit(*MaxPortionIntersectionsLimit);
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

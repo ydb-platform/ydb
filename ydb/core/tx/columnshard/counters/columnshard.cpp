@@ -46,6 +46,8 @@ TCSCounters::TCSCounters()
     OverloadShardWritesSizeCount = TBase::GetDeriviative("Overload/Shard/WritesSize/Count");
     OverloadRejectProbabilityBytes = TBase::GetDeriviative("Overload/RejectProbability/Bytes");
     OverloadRejectProbabilityCount = TBase::GetDeriviative("Overload/RejectProbability/Count");
+    OverloadPortionIntersectionsBytes = TBase::GetDeriviative("Overload/PortionIntersections/Bytes");
+    OverloadPortionIntersectionsCount = TBase::GetDeriviative("Overload/PortionIntersections/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");

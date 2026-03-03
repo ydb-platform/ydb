@@ -1875,6 +1875,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeString(options.GetScanReaderPolicyName(), paramsStr);
         del = ", ";
     }
+    if (options.HasMaxPortionIntersectionsLimit()) {
+        paramsStr << del;
+        EscapeName("MAX_PORTION_INTERSECTIONS_LIMIT", paramsStr);
+        paramsStr << "=";
+        paramsStr << options.GetMaxPortionIntersectionsLimit();
+        del = ", ";
+    }
     if (options.HasCompactionPlannerConstructor()) {
         const auto& compactionPlannerConstructor = options.GetCompactionPlannerConstructor();
         if (compactionPlannerConstructor.HasClassName() && !compactionPlannerConstructor.GetClassName().empty()) {

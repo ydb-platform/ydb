@@ -49,6 +49,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::RejectProbability:
             Counters.OnWriteOverloadRejectProbability(writeSize);
             break;
+        case EOverloadStatus::OverloadPortionIntersections:
+            Counters.OnWriteOverloadPortionIntersections(writeSize);
+            break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
     }
@@ -67,11 +70,15 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
         }
         auto& engineForLogs = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
         auto badPortionsCounter = engineForLogs.GetBadPortionsCounter();
-        if (engineForLogs
-                .GetGranuleVerified(pathId)
+        const auto& granule = engineForLogs.GetGranuleVerified(pathId);
+        if (granule
                 .GetOptimizerPlanner()
                 .IsOverloaded(badPortionsCounter)) {
             return EOverloadStatus::OverloadCompaction;
+        }
+        const auto& indexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
+        if (granule.IsOverloadedByPortionIntersections(indexInfo.GetMaxPortionIntersectionsLimit())) {
+            return EOverloadStatus::OverloadPortionIntersections;
         }
     }
     return EOverloadStatus::None;

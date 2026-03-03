@@ -212,6 +212,9 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
+    if (optionsProto.HasMaxPortionIntersectionsLimit()) {
+        MaxPortionIntersectionsLimit = optionsProto.GetMaxPortionIntersectionsLimit();
+    }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());

@@ -374,6 +374,18 @@ public:
         return *IntervalTree;
     }
 
+    /** Текущее максимальное число пересечений порций в дереве интервалов (0 если дерева нет). */
+    ui32 GetMaxPortionIntersectionsCount() const {
+        if (!HasPortionIntervalTree()) {
+            return 0;
+        }
+        auto portion = GetPortionIntervalTreeVerified().GetPortionWithMaxIntersections();
+        return portion ? portion->GetIntervalTreeRangesCount() : 0;
+    }
+
+    /** Возвращает true, если гранула перегружена по числу пересечений порций (limit задаётся опциями таблицы через ALTER). */
+    bool IsOverloadedByPortionIntersections(std::optional<ui64> limit) const;
+
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {
         return InsertedPortions;
     }

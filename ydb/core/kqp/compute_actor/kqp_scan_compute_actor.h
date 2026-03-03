@@ -190,11 +190,12 @@ public:
     }
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
         auto sf = cgi.Get("sf");
         if (sf) {
             for (auto& fetcherId : Fetchers) {
-                if (sf == ToString(fetcherId)) {
+                auto s = ToString(fetcherId);
+                if (sf == s) {
                     TActivationContext::Send(ev->Forward(fetcherId));
                     return;
                 }

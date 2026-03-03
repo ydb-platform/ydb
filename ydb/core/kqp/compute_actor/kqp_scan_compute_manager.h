@@ -272,6 +272,7 @@ public:
 private:
     std::deque<std::unique_ptr<TComputeTaskData>> UndefinedShardTaskData;
     std::deque<TComputeActorInfo> ComputeActors;
+public:
     THashMap<TActorId, TComputeActorInfo*> ComputeActorsById;
 
 public:

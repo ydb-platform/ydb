@@ -26,7 +26,7 @@ private:
 
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
-    bool ScanDataInFlight = false;
+    ui64 InFlightBytes = 0;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {
@@ -118,8 +118,9 @@ public:
     void Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev);
 
     ui64 CalculateFreeSpace() const {
-        return GetMemoryLimits().ChannelBufferSize > ScanData->GetStoredBytes()
-            ? GetMemoryLimits().ChannelBufferSize - ScanData->GetStoredBytes()
+        const ui64 occupied = ScanData->GetStoredBytes() + InFlightBytes;
+        return GetMemoryLimits().ChannelBufferSize > occupied
+            ? GetMemoryLimits().ChannelBufferSize - occupied
             : 0ul;
     }
 

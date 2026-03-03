@@ -181,7 +181,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
-    ScanDataInFlight = false;
+    const ui64 reserve = GetMemoryLimits().ChannelBufferSize;
+    InFlightBytes = InFlightBytes > reserve ? InFlightBytes - reserve : 0;
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
 
@@ -210,8 +211,11 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
-    Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
-    ScanDataInFlight = true;
+    const ui64 freeSpace = CalculateFreeSpace();
+    if (freeSpace) {
+        Send(ev->Sender, new TEvScanExchange::TEvAckData(freeSpace));
+        InFlightBytes += GetMemoryLimits().ChannelBufferSize;
+    }
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
@@ -227,9 +231,6 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!ScanData || ScanData->IsFinished()) {
         return;
     }
-    if (ScanDataInFlight) {
-        return;
-    }
     const auto hasNewMemoryPred = [&]() {
         const ui64 freeSpace = CalculateFreeSpace();
         return freeSpace > prevFreeSpace;
@@ -237,12 +238,16 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
         return;
     }
-    const ui64 freeSpace = CalculateFreeSpace();
+    ui64 freeSpace = CalculateFreeSpace();
     CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
     for (auto&& i : Fetchers) {
+        freeSpace = CalculateFreeSpace();
+        if (!freeSpace) {
+            break;
+        }
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
+        InFlightBytes += GetMemoryLimits().ChannelBufferSize;
     }
-    ScanDataInFlight = true;
     CA_LOG_D("POLL_SOURCES:FINISH");
 }
 

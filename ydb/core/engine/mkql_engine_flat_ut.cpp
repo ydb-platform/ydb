@@ -198,7 +198,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 IEngineFlat::TValidationInfo validationInfo;
                 IEngineFlat::EResult result = dataEngine->Validate(validationInfo);
@@ -216,7 +216,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 auto result = dataEngine->PrepareOutgoingReadsets();
                 if (result != IEngineFlat::EResult::Ok) {
@@ -252,7 +252,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
 
                 if (incomingReadsets.contains(shardPgm.first)) {

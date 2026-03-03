@@ -1,14 +1,17 @@
 #include "write_session.h"
 
-#include <util/system/byteorder.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 #include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
 
 #include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/threading/future/subscription/wait_any.h>
+
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
+#include <util/system/byteorder.h>
+
+#include <format>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -123,6 +126,10 @@ bool TKeyedWriteSession::TPartitionInfo::InRange(const std::string_view key) con
         return false;
     }
     return true;
+}
+
+bool TKeyedWriteSession::TPartitionInfo::IsSplitted() const {
+    return !Children_.empty();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -292,7 +299,17 @@ void TKeyedWriteSession::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint64_t 
 
 bool TKeyedWriteSession::TSplittedPartitionWorker::IsDone() {
     std::lock_guard lock(Lock);
+    DoneAt = TInstant::Now();
     return State == EState::Done;
+}
+
+bool TKeyedWriteSession::TSplittedPartitionWorker::CanBeRemoved() {
+    std::lock_guard lock(Lock);
+    if (State != EState::Done) {
+        return false;
+    }
+
+    return TInstant::Now() - DoneAt > TDuration::Seconds(10);
 }
 
 bool TKeyedWriteSession::TSplittedPartitionWorker::IsInit() {
@@ -514,7 +531,7 @@ std::optional<NThreading::TPromise<void>> TKeyedWriteSession::TEventsWorker::DoW
 }
 
 void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
-    if (auto it = Session->SplittedPartitionWorkers.find(partition); it != Session->SplittedPartitionWorkers.end()) {
+    if (Session->Partitions[partition].IsSplitted() || Session->SplittedPartitionWorkers.contains(partition)) {
         Session->Partitions[partition].Future(NThreading::MakeFuture());
         return;
     }
@@ -551,11 +568,13 @@ std::optional<NThreading::TPromise<void>> TKeyedWriteSession::TEventsWorker::Han
         return EventsPromise;
     }
 
+    Session->Metrics.IncBufferFull();
     return std::nullopt;
 }
 
 void TKeyedWriteSession::TEventsWorker::AddReadyToAcceptEvent() {
     EventsOutputQueue.push_back(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
+    Session->Metrics.IncContinuationTokensSent();
 }
 
 bool TKeyedWriteSession::TEventsWorker::AddSessionClosedIfNeeded() {
@@ -653,6 +672,7 @@ bool TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
 
     if (shouldAddReadyToAcceptEvent) {
         AddReadyToAcceptEvent();
+        Session->Metrics.IncContinuationTokensSent();
     }
 
     return eventsTransferred;
@@ -850,6 +870,9 @@ void TKeyedWriteSession::TSessionsWorker::DoWork() {
         }
 
         const auto partition = (*it)->Session->Partition;
+        if (Session->Partitions[partition].Locked_) {
+            continue;
+        }
 
         // Remove idle tracking first to keep containers consistent even if the session
         // is already absent from SessionsIndex.
@@ -859,7 +882,7 @@ void TKeyedWriteSession::TSessionsWorker::DoWork() {
         auto sessionIter = SessionsIndex.find(partition);
         if (sessionIter != SessionsIndex.end()) {
             sessionIter->second->IdleSession.reset();
-            DestroyWriteSession(sessionIter, TDuration::Zero());
+            DestroyWriteSession(sessionIter, TDuration::Zero(), !Session->SplittedPartitionWorkers.contains(partition));
         }
     }
 }
@@ -942,6 +965,7 @@ bool TKeyedWriteSession::TMessagesWorker::SendMessage(WrappedWriteSessionPtr wra
         return false;
     }
     
+    Session->Metrics.IncOutgoingMessages();
     wrappedSession->Session->Write(std::move(*continuationToken), message.BuildMessage(), message.Tx);
     return true;
 }
@@ -1162,12 +1186,14 @@ typename TKeyedWriteSession::TKeyedWriteSessionRetryPolicy::IRetryState::TPtr TK
 
 void TKeyedWriteSession::TMetricGauge::Add(std::uint64_t value) {
     Sum += value;
+    Max = std::max(Max, value);
     MetricCount++;
 }
 
 void TKeyedWriteSession::TMetricGauge::Clear() {
     Sum = 0;
     MetricCount = 0;
+    Max = 0;
 }
 
 long double TKeyedWriteSession::TMetricGauge::Average() {
@@ -1176,6 +1202,14 @@ long double TKeyedWriteSession::TMetricGauge::Average() {
     }
 
     return (long double)Sum / (long double)MetricCount;
+}
+
+std::uint64_t TKeyedWriteSession::TMetricGauge::GetMax() const {
+    return Max;
+}
+
+std::uint64_t TKeyedWriteSession::TMetricGauge::GetSum() const {
+    return Sum;
 }
 
 TKeyedWriteSession::TMetrics::TMetrics(TKeyedWriteSession* session): Session(session) {}
@@ -1195,12 +1229,49 @@ void TKeyedWriteSession::TMetrics::AddWriteLag(std::uint64_t lagMs) {
     WriteLagMs.Add(lagMs);
 }
 
+void TKeyedWriteSession::TMetrics::IncContinuationTokensSent() {
+    std::lock_guard lock(Lock);
+    ContinuationTokensSent.Add(1);
+}
+
+void TKeyedWriteSession::TMetrics::IncBufferFull() {
+    std::lock_guard lock(Lock);
+    BufferFull.Add(1);
+}
+
+void TKeyedWriteSession::TMetrics::IncIncomingMessages() {
+    std::lock_guard lock(Lock);
+    IncomingMessages.Add(1);
+}
+
+void TKeyedWriteSession::TMetrics::IncOutgoingMessages() {
+    std::lock_guard lock(Lock);
+    OutgoingMessages.Add(1);
+}
+
 void TKeyedWriteSession::TMetrics::PrintMetrics() {
     std::lock_guard lock(Lock);
-    LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "METRICS: MainWorkerTimeMs: " << MainWorkerTimeMs.Average() << " ms, CycleTimeMs: " << CycleTimeMs.Average() << " ms, WriteLagMs: " << WriteLagMs.Average() << " ms");
+    LOG_LAZY(
+        Session->DbDriverState->Log,
+        TLOG_ERR,
+        Session->LogPrefix() 
+            << "METRICS: average MainWorkerTimeMs: " << MainWorkerTimeMs.Average()
+            << " ms, average CycleTimeMs: " << CycleTimeMs.Average()
+            << " ms, average WriteLagMs: " << WriteLagMs.Average() << " ms, "
+            << "max MainWorkerTimeMs: " << MainWorkerTimeMs.GetMax() << " ms, "
+            << "max CycleTimeMs: " << CycleTimeMs.GetMax() << " ms, "
+            << "max WriteLagMs: " << WriteLagMs.GetMax() << " ms, "
+            << "ContinuationTokensSent: " << ContinuationTokensSent.GetSum() << " tokens, "
+            << "BufferFull: " << BufferFull.GetSum() << " times, "
+            << "IncomingMessages: " << IncomingMessages.GetSum() << " messages, "
+            << "OutgoingMessages: " << OutgoingMessages.GetSum() << " messages");
     MainWorkerTimeMs.Clear();
     CycleTimeMs.Clear();
     WriteLagMs.Clear();
+    ContinuationTokensSent.Clear();
+    BufferFull.Clear();
+    IncomingMessages.Clear();
+    OutgoingMessages.Clear();
 }
 
 
@@ -1342,10 +1413,19 @@ std::vector<TKeyedWriteSession::TPartitionInfo> TKeyedWriteSession::GetPartition
     return partitions;
 }
 
+std::unordered_map<std::uint32_t, TKeyedWriteSession::TPartitionInfo> TKeyedWriteSession::GetPartitionsMap() const {
+    return Partitions;
+}
+
+std::map<std::string, std::uint32_t> TKeyedWriteSession::GetPartitionsIndex() const {
+    return PartitionsIndex;
+}
+
 void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWriteMessage&& message, TTransactionBase* tx) {
     std::optional<NThreading::TPromise<void>> eventsPromise;
     {
         std::lock_guard lock(GlobalLock);
+        Metrics.IncIncomingMessages();
         if (Closed.load()) {
             return;
         }
@@ -1434,19 +1514,37 @@ TDuration TKeyedWriteSession::GetCloseTimeout() {
 }
 
 bool TKeyedWriteSession::RunSplittedPartitionWorkers() {
-    if (SplittedPartitionWorkers.empty()) {
+    if (SplittedPartitionWorkers.empty() && ReadySplittedPartitionWorkers.empty()) {
         return false;
     }
 
     bool needRerun = false;
+    std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> readySplittedPartitionWorkers;
     for (const auto& [partition, splittedPartitionWorker] : SplittedPartitionWorkers) {
         if (splittedPartitionWorker->IsDone()) {
+            readySplittedPartitionWorkers[partition] = splittedPartitionWorker;
             continue;
         }
 
         splittedPartitionWorker->DoWork();
         needRerun = needRerun || splittedPartitionWorker->IsInit();
         needRerun = needRerun || splittedPartitionWorker->IsDone();
+    }
+
+    for (const auto& [partition, splittedPartitionWorker] : readySplittedPartitionWorkers) {
+        ReadySplittedPartitionWorkers[partition] = splittedPartitionWorker;
+        SplittedPartitionWorkers.erase(partition);
+    }
+
+    std::vector<std::uint32_t> partitionsToRemove;
+    for (const auto& [partition, splittedPartitionWorker] : ReadySplittedPartitionWorkers) {
+        if (splittedPartitionWorker->CanBeRemoved()) {
+            partitionsToRemove.push_back(partition);
+        }
+    }
+
+    for (const auto& partition : partitionsToRemove) {
+        ReadySplittedPartitionWorkers.erase(partition);
     }
 
     return needRerun;

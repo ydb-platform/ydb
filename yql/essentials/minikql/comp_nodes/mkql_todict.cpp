@@ -1057,10 +1057,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TSqueezeSetFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1094,23 +1091,13 @@ public:
         codegenItemArg->CreateSetValue(ctx, block, item);
         const auto key = GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
-
-        const auto keyArg = key;
-
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
-        CallInst::Create(insType, insPtr, {stateArg, keyArg}, "", block);
+        EmitFunctionCall<&TState::Insert>(Type::getVoidTy(context), {stateArg, key}, ctx, block);
 
         BranchInst::Create(more, block);
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
-
-        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        const auto dict = EmitFunctionCall<&TState::Build>(valueType, {stateArg}, ctx, block);
         UnRefBoxed(state, ctx, block);
         result->addIncoming(dict, block);
 
@@ -1245,10 +1232,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetWideWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TSqueezeSetWideWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1290,23 +1274,13 @@ public:
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
-
-        const auto keyArg = key;
-
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
-        CallInst::Create(insType, insPtr, {stateArg, keyArg}, "", block);
+        EmitFunctionCall<&TState::Insert>(Type::getVoidTy(context), {stateArg, key}, ctx, block);
 
         BranchInst::Create(more, block);
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
-
-        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        const auto dict = EmitFunctionCall<&TState::Build>(valueType, {stateArg}, ctx, block);
         UnRefBoxed(state, ctx, block);
         result->addIncoming(dict, block);
 
@@ -1568,10 +1542,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TSqueezeMapFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1606,24 +1577,13 @@ public:
         const auto key = GetNodeValue(Key, ctx, block);
         const auto payload = GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
-
-        const auto keyArg = key;
-        const auto payloadArg = payload;
-
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
-        CallInst::Create(insType, insPtr, {stateArg, keyArg, payloadArg}, "", block);
+        EmitFunctionCall<&TState::Insert>(Type::getVoidTy(context), {stateArg, key, payload}, ctx, block);
 
         BranchInst::Create(more, block);
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
-
-        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        const auto dict = EmitFunctionCall<&TState::Build>(valueType, {stateArg}, ctx, block);
         UnRefBoxed(state, ctx, block);
         result->addIncoming(dict, block);
 
@@ -1764,10 +1724,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapWideWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TSqueezeMapWideWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1810,24 +1767,13 @@ public:
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
         const auto payload = PasstroughPayload ? getres.second[*PasstroughPayload](ctx, block) : GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
-
-        const auto keyArg = key;
-        const auto payloadArg = payload;
-
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
-        CallInst::Create(insType, insPtr, {stateArg, keyArg, payloadArg}, "", block);
+        EmitFunctionCall<&TState::Insert>(Type::getVoidTy(context), {stateArg, key, payload}, ctx, block);
 
         BranchInst::Create(more, block);
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
-
-        const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
-        const auto dict = CallInst::Create(funType, funcPtr, {stateArg}, "dict", block);
+        const auto dict = EmitFunctionCall<&TState::Build>(valueType, {stateArg}, ctx, block);
         UnRefBoxed(state, ctx, block);
         result->addIncoming(dict, block);
 

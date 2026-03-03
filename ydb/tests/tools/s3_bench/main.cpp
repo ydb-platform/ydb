@@ -277,7 +277,7 @@ i32 main(i32 argc, const char** argv) {
         THolder<TActorSystem> system(new TActorSystem(setup));
         system->Start();
 
-        const TActorId wrapperId = system->Register(CreateS3Wrapper(storageOperator));
+        const TActorId wrapperId = system->Register(CreateStorageWrapper(storageOperator));
         const ui64 sizeBytes = cfg.RangeSizeBytes ? cfg.RangeSizeBytes : (cfg.SizeMiBPerFile * 1024ull * 1024ull);
         auto done = NThreading::NewPromise<void>();
         auto future = done.GetFuture();

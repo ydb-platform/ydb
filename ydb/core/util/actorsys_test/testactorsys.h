@@ -16,6 +16,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
+#include <util/thread/lfqueue.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
@@ -24,6 +25,8 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include "single_thread_ic_mock.h"
+
+#include <thread>
 
 namespace NKikimr {
 
@@ -133,6 +136,18 @@ class TTestActorSystem {
     TSingleThreadInterconnectMock InterconnectMock;
     std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     std::set<TActorId> LoggerActorIds;
+    std::atomic<std::thread::id> OwnerThreadId;
+
+    struct TQueuedSendItem {
+        std::unique_ptr<IEventHandle> Event;
+        ui32 NodeId;
+
+        TQueuedSendItem(std::unique_ptr<IEventHandle> event, ui32 nodeId)
+            : Event(std::move(event))
+            , NodeId(nodeId)
+        {}
+    };
+    TAutoLockFreeQueue<TQueuedSendItem> QueuedSendQ;
 
     static thread_local TTestActorSystem *CurrentTestActorSystem;
 
@@ -208,6 +223,7 @@ public:
         , AppDataInfo({.DomainsInfo=domainsInfo, .FeatureFlags=featureFlags, .MonotonicTimeProvider=CreateMonotonicTimeProvider()})
         , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NActorsServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
+        , OwnerThreadId(std::this_thread::get_id())
     {
         LoggerSettings_->Append(
             NActorsServices::EServiceCommon_MIN,
@@ -434,6 +450,34 @@ public:
     bool Send(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
         if (!ev) {
             return false;
+        }
+
+        if (!IsStateOwnerThread() && !TlsActivationContext) {
+            TAutoLockFreeQueue<TQueuedSendItem>::TRef item(
+                new TQueuedSendItem(std::unique_ptr<IEventHandle>(ev.Release()), nodeId)
+            );
+            QueuedSendQ.Enqueue(std::move(item));
+            return true;
+        }
+
+        return SendImpl(ev, nodeId);
+    }
+
+private:
+    bool IsStateOwnerThread() const {
+        return std::this_thread::get_id() == OwnerThreadId;
+    }
+
+    void DrainQueuedSends() {
+        TAutoLockFreeQueue<TQueuedSendItem>::TRef item;
+        while (QueuedSendQ.Dequeue(&item)) {
+            SendImpl(item->Event.release(), item->NodeId);
+        }
+    }
+
+    bool SendImpl(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
+        if (!ev) {
+            return false;
         } else if (LoggerActorIds.count(ev->GetRecipientRewrite()) && ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
             auto *msg = ev->CastAsLocal<NLog::TEvLog>();
             ui64 microsec = Clock.MicroSeconds();
@@ -466,11 +510,12 @@ public:
             Schedule(Clock, ev, nullptr, nodeId);
             return true;
         } else {
-            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
+            SendImpl(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
             return false;
         }
     }
 
+public:
     IActor *GetActor(const TActorId& actorId, TMailbox **mailbox = nullptr) {
         if (const auto it = Mailboxes.find(actorId); it != Mailboxes.end()) {
             TMailboxInfo& mbox = it->second;
@@ -586,7 +631,11 @@ public:
 
     template<typename TCallback>
     void Sim(TCallback&& callback, std::function<void(IEventHandle&)> witness = {}) {
+         OwnerThreadId = std::this_thread::get_id();
+
         while (callback()) {
+            DrainQueuedSends();
+
             // obtain event with least time
             std::optional<TScheduleItem> item;
             while (!ScheduleQ.empty()) {
@@ -642,7 +691,7 @@ public:
             });
             if (!success) { // can't find the actor
                 event = IEventHandle::ForwardOnNondelivery(std::move(event), TEvents::TEvUndelivered::ReasonActorUnknown);
-                Send(event.release(), item->NodeId);
+                SendImpl(event.release(), item->NodeId);
             }
         }
     }

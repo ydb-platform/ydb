@@ -4,8 +4,8 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 namespace {
 void FilterColumnOrderByType(TColumnOrder& columnOrder, const TTypeAnnotationNode& type) {
@@ -315,5 +315,5 @@ IGraphTransformer::TStatus OrderFromFirstAndOutputType(const TExprNode::TPtr& no
     return IGraphTransformer::TStatus::Ok;
 }
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

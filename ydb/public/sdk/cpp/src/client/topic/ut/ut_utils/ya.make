@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/testlib/common
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
@@ -18,6 +19,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/tests/integration/topic/utils
 
+    ydb/core/base
     ydb/core/persqueue/ut/common
     ydb/core/tx/schemeshard/ut_helpers
 

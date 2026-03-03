@@ -35,9 +35,6 @@ private:
 
     std::shared_ptr<TTopicWorkloadKeyedWriterProducer> CreateProducer();
 
-    void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
-        std::shared_ptr<TTopicWorkloadKeyedWriterProducer> producer);
-
     void Process(TInstant endTime);
 
     TInstant GetExpectedCurrMessageCreationTimestamp() const;

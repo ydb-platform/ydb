@@ -4,8 +4,7 @@
 
 #include <yql/essentials/core/yql_graph_transformer.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * A transformer which rewrite the root to respect block types.
  *
@@ -17,5 +16,4 @@ namespace NPureCalc {
 TAutoPtr<IGraphTransformer> MakeRootToBlocks(
     bool acceptsBlocks,
     EProcessorMode processorMode);
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

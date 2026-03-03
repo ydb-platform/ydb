@@ -60,7 +60,10 @@ class GCB(IntEnum):
     LVT = 13
 
 
-@lru_cache(maxsize=1000)
+# All lru_cache sizes in this file use maxsize=1024, chosen by benchmarking UDHR data (500+
+# languages) and considering typical process-long sessions: western scripts need ~64 unique
+# codepoints, but CJK could reach ~2000 -- but likely not.
+@lru_cache(maxsize=1024)
 def _grapheme_cluster_break(ucs: int) -> GCB:
     # pylint: disable=too-many-branches,too-complex
     """Return the Grapheme_Cluster_Break property for a codepoint."""
@@ -95,25 +98,25 @@ def _grapheme_cluster_break(ucs: int) -> GCB:
     return GCB.OTHER
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=1024)
 def _is_extended_pictographic(ucs: int) -> bool:
     """Check if codepoint has Extended_Pictographic property."""
     return bool(_bisearch(ucs, EXTENDED_PICTOGRAPHIC))
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=1024)
 def _is_incb_linker(ucs: int) -> bool:
     """Check if codepoint has InCB=Linker property."""
     return bool(_bisearch(ucs, INCB_LINKER))
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _is_incb_consonant(ucs: int) -> bool:
     """Check if codepoint has InCB=Consonant property."""
     return bool(_bisearch(ucs, INCB_CONSONANT))
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _is_incb_extend(ucs: int) -> bool:
     """Check if codepoint has InCB=Extend property."""
     return bool(_bisearch(ucs, INCB_EXTEND))
@@ -126,7 +129,7 @@ class BreakResult(NamedTuple):
     ri_count: int
 
 
-@lru_cache(maxsize=196)  # 14 GCB values × 14 = 196 max combinations
+@lru_cache(maxsize=1024)
 def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> BreakResult | None:
     """
     Check simple GCB-pair-based break rules (cacheable).

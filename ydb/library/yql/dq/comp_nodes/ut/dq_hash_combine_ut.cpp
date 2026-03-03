@@ -555,9 +555,22 @@ void RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator)
     AssertMapsEqual(refResult, graphResult);
 }
 
+void DisableDehydration(THolder<IComputationGraph>& graph)
+{
+    for (auto& node : graph->GetNodes()) {
+        auto* testPoints = dynamic_cast<TDqHashCombineTestPoints*>(node.Get());
+        if (!testPoints) {
+            continue;
+        }
+        testPoints->DisableStateDehydration(true);
+        return;
+    }
+    UNIT_ASSERT_C(false, "Couldn't find a DqHashCombine node wrapper in the graph");
+}
+
 template<bool UseLLVM, bool Spilling, typename StreamCreator, typename StreamChecker>
 void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useFlow,
-    StreamCreator streamCreator, StreamChecker streamChecker)
+    StreamCreator streamCreator, StreamChecker streamChecker, const bool disableDehydration)
 {
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
@@ -567,6 +580,10 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 
     if (Spilling) {
         graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    }
+
+    if (disableDehydration) {
+        DisableDehydration(graph);
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -616,7 +633,7 @@ void RunDqAggregateBlockTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useF
 }
 
 template<bool LLVM, bool Spilling, typename StreamCreator>
-void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator)
+void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator, const bool disableDehydration = false)
 {
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
@@ -626,6 +643,10 @@ void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow,
 
     if (Spilling) {
         graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    }
+
+    if (disableDehydration) {
+        DisableDehydration(graph);
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -764,6 +785,17 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         });
     }
 
+    Y_UNIT_TEST_QUAD(TestWideModeAggregationWithSpillingNonDehydrated, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 100000, 10, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == 100000) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
+            });
+        }, true);
+    }
+
     Y_UNIT_TEST_QUAD(TestWideModeAggregationMultiRowNoSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
         RunDqAggregateWideTest(setup, UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
@@ -792,62 +824,111 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestEarlyStop, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
         size_t lineCount = 0;
+
+        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 100, 1, columnTypes, refMap);
+        };
+
+        auto streamChecker = [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
+            if (fetchStatus == NUdf::EFetchStatus::Ok) {
+                ++lineCount;
+            }
+            return lineCount < 90;
+        };
+
         RunDqAggregateEarlyStopTest(
             setup,
             UseFlow,
-            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-                return new TWideKVStream(ctx, 100, 1, columnTypes, refMap);
-            },
-            [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
-                if (fetchStatus == NUdf::EFetchStatus::Ok) {
-                    ++lineCount;
-                }
-                return lineCount < 90;
-            }
+            streamCreator,
+            streamChecker,
+            false
+        );
+
+        lineCount = 0;
+
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            streamCreator,
+            streamChecker,
+            true
         );
     }
 
     Y_UNIT_TEST_QUAD(TestEarlyStopInSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+
         bool stopping = false;
+
+        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 1000, 1, columnTypes, refMap, [&](const size_t rowNum, bool& yield) {
+                if (rowNum == 100) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                } else if (rowNum == 200) {
+                    stopping = true;
+                    yield = true;
+                }
+            });
+        };
+
+        auto streamChecker = [&stopping](NUdf::EFetchStatus fetchStatus) -> bool {
+            return !(fetchStatus == NUdf::EFetchStatus::Yield && stopping);
+        };
+
         RunDqAggregateEarlyStopTest(
             setup,
             UseFlow,
-            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-                return new TWideKVStream(ctx, 1000, 1, columnTypes, refMap, [&](const size_t rowNum, bool& yield) {
-                    if (rowNum == 100) {
-                        setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
-                    } else if (rowNum == 200) {
-                        stopping = true;
-                        yield = true;
-                    }
-                });
-            },
-            [&stopping](NUdf::EFetchStatus fetchStatus) -> bool {
-                return !(fetchStatus == NUdf::EFetchStatus::Yield && stopping);
-            }
+            streamCreator,
+            streamChecker,
+            false
+        );
+
+        stopping = false;
+
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            streamCreator,
+            streamChecker,
+            true
         );
     }
 
     Y_UNIT_TEST_QUAD(TestEarlyStopAfterSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
         size_t lineCount = 0;
+
+        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 100000, 1, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == 100) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
+            });
+        };
+
+        auto streamChecker = [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
+            if (fetchStatus == NUdf::EFetchStatus::Ok) {
+                ++lineCount;
+            }
+            return lineCount < 90;
+        };
+
         RunDqAggregateEarlyStopTest(
             setup,
             UseFlow,
-            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-                return new TWideKVStream(ctx, 100000, 1, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
-                    if (rowNum == 100) {
-                        setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
-                    }
-                });
-            },
-            [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
-                if (fetchStatus == NUdf::EFetchStatus::Ok) {
-                    ++lineCount;
-                }
-                return lineCount < 90;
-            }
+            streamCreator,
+            streamChecker,
+            false
+        );
+
+        lineCount = 0;
+
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            streamCreator,
+            streamChecker,
+            true
         );
     }
 } // Y_UNIT_TEST_SUITE

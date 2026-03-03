@@ -1,8 +1,6 @@
 #include "mkql_function_metadata.h"
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TKernelFamilyBase::TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions)
     : TKernelFamily(functionOptions)
@@ -32,5 +30,4 @@ void TKernelFamilyBase::Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NU
     KernelMap_.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

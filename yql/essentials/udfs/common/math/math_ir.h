@@ -9,8 +9,7 @@
 
 #include <math.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #define CONST_FUNCS(XX)                             \
     XX(Pi, M_PI)                                    \
@@ -133,5 +132,4 @@ extern "C" UDF_ALWAYS_INLINE void NearbyIntIR(const IBoxedValue* /*pThis*/, TUnb
     *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod();
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

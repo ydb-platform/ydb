@@ -331,6 +331,13 @@ public:
         const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NWilson::TTraceId TraceId;
+    };
+
+    struct TControlPlaneArguments {
+        TString Type;
+        TTxId TxId;
     };
 
     // Creates source.
@@ -357,6 +364,10 @@ public:
     // Could throw YQL errors.
     // IActor* and IDqComputeActorAsyncOutput* returned by method must point to the objects with consistent lifetime.
     virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TOutputTransformArguments&& args) = 0;
+
+    // Creates generic control plane actor. Single actor on DQ stage / whole graph.
+    // Could throw YQL errors.
+    virtual NActors::IActor* CreateDqControlPlane(TControlPlaneArguments&& args) = 0;
 };
 
 } // namespace NYql::NDq

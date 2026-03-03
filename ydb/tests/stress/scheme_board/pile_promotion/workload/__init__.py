@@ -292,6 +292,7 @@ class WorkloadRunner:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._cleanup()
+        self.client.close()
 
     def _cleanup(self):
         logger.info(f"Cleaning up {self.tables_prefix}...")

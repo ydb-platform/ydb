@@ -15,8 +15,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -3710,5 +3709,4 @@ NUdf::TUnboxedValuePod TPlainContainerCache::NewArray(const THolderFactory& fact
     return static_cast<const NUdf::TUnboxedValuePod&>(Cached_[CacheIndex_]);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

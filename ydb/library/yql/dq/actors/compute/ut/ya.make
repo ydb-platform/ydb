@@ -40,6 +40,8 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+FORK_SUBTESTS()
+
 YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
@@ -49,3 +51,4 @@ END()
 RECURSE(
    proto
 )
+RECURSE_FOR_TESTS(large)

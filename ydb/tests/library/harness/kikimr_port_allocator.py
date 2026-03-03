@@ -36,6 +36,10 @@ class KikimrNodePortAllocatorInterface(object):
         pass
 
     @abc.abstractproperty
+    def http_proxy_port(self):
+        pass
+
+    @abc.abstractproperty
     def public_http_port(self):
         pass
 
@@ -78,6 +82,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__mbus_port = None
         self.__ic_port = None
         self.__sqs_port = None
+        self.__http_proxy_port = None
         self.__grpc_ssl_port = None
         self.__ext_port = None
         self.__public_http_port = None
@@ -118,6 +123,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         if self.__sqs_port is None:
             self.__sqs_port = self.__port_manager.get_port()
         return self.__sqs_port
+
+    @property
+    def http_proxy_port(self):
+        if self.__http_proxy_port is None:
+            self.__http_proxy_port = self.__port_manager.get_port()
+        return self.__http_proxy_port
 
     @property
     def pgwire_port(self):
@@ -172,6 +183,7 @@ DEFAULT_GRPC_SSL_PORT = 2137
 DEFAULT_SQS_PORT = 8771
 DEFAULT_PUBLIC_HTTP_PORT = 8766
 DEFAULT_PGWIRE_PORT = 5432
+DEFAULT_HTTP_PROXY_PORT = 8433
 
 #
 # Fixed port allocator
@@ -190,7 +202,8 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         sqs_port=DEFAULT_SQS_PORT,
         grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
         public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
-        pgwire_port=DEFAULT_PGWIRE_PORT
+        pgwire_port=DEFAULT_PGWIRE_PORT,
+        http_proxy_port=DEFAULT_HTTP_PROXY_PORT
     ):
         super(KikimrFixedNodePortAllocator, self).__init__()
 
@@ -203,6 +216,7 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT', grpc_ssl_port))
         self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT', public_http_port))
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
+        self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
 
     @property
     def mon_port(self):
@@ -236,6 +250,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     def pgwire_port(self):
         return self.__pgwire_port + self.base_port_offset
 
+    @property
+    def http_proxy_port(self):
+        return self.__http_proxy_port + self.base_port_offset
+
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):
     def __init__(self,
@@ -266,19 +284,20 @@ class DefaultFirstNodePortAllocator(KikimrPortAllocatorInterface):
     Port allocator that uses default ports for the first node
     and unique ports with offset for other nodes.
     """
-    def __init__(self):
+    def __init__(self, base_offset=0):
         super(DefaultFirstNodePortAllocator, self).__init__()
         self.__node_allocators = {}
+        self.base_offset = base_offset
 
     def get_node_port_allocator(self, node_index):
         if node_index not in self.__node_allocators:
             if node_index == 1:
-                # First node uses default ports
-                self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(base_port_offset=0)
+                # First node uses base offset
+                self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(base_port_offset=self.base_offset)
             else:
-                # Other nodes use ports with offset
-                # Offset is (node_index - 1) * PORT_OFFSET_STEP
-                port_offset = (node_index - 1) * PORT_OFFSET_STEP
+                # Other nodes use base offset + node offset
+                # Offset is base_offset + (node_index - 1) * PORT_OFFSET_STEP
+                port_offset = self.base_offset + (node_index - 1) * PORT_OFFSET_STEP
                 self.__node_allocators[node_index] = KikimrFixedNodePortAllocator(
                     base_port_offset=port_offset,
                     grpc_port=DEFAULT_GRPC_PORT,
@@ -289,8 +308,8 @@ class DefaultFirstNodePortAllocator(KikimrPortAllocatorInterface):
         return self.__node_allocators[node_index]
 
     def get_slot_port_allocator(self, slot_index):
-        # For slots, use offset starting from a large number to avoid conflicts
-        slot_offset = 10000 + (slot_index - 1) * PORT_OFFSET_STEP
+        # For slots, use base offset + large number to avoid conflicts with nodes
+        slot_offset = self.base_offset + 10000 + (slot_index - 1) * PORT_OFFSET_STEP
         return KikimrFixedNodePortAllocator(
             base_port_offset=slot_offset,
             grpc_port=DEFAULT_GRPC_PORT,

@@ -33,6 +33,11 @@ message CreatePartitionRequest {
 
     // Storage media type
     StorageMediaKind StorageMedia = 5;
+
+    // Disk id.
+    string DiskId = 6;
+
+    uint32 SyncRequestsBatchSize = 7;
 }
 
 message CreatePartitionResponse {
@@ -59,6 +64,24 @@ message DeletePartitionResponse {
 message DeletePartitionResult {
     // Deleted partition tablet id.
     string TabletId = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get load actor adapter actor id request/response.
+
+message GetLoadActorAdapterActorIdRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Partition tablet id (actor id string).
+    string TabletId = 2;
+}
+
+message GetLoadActorAdapterActorIdResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetLoadActorAdapterActorIdResult {
+    // Load actor adapter actor id string.
+    string ActorId = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

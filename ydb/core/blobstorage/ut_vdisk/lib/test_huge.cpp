@@ -228,7 +228,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->PDiskCtx->Dsk->OwnerRound,
                         HmCtx->LsnMngr->GetLsn(),
                         HmCtx->Counters));
-        TLogCutterCtx logCutterCtx = {HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr, HmCtx->Config, HmCtx->LoggerID};
+        TLogCutterCtx logCutterCtx = {HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr, HmCtx->Config, HmCtx->LoggerID, false};
         HmCtx->LogCutterID = ctx.Register(CreateRecoveryLogCutter(std::move(logCutterCtx)));
         RepairedHuge->FinishRecovery(ctx);
         auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr,

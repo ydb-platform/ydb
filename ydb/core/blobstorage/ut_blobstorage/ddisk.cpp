@@ -70,7 +70,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Edge);
             auto& rr = response->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), 8);
-            return rr.GetResponses();
+            auto responses = rr.GetResponses();
+            return responses;
         }
 
         void GreetDDisks() {
@@ -270,6 +271,44 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return res;
         }
 
+        double BatchErasePB() {
+            std::vector<std::tuple<NDDisk::TBlockSelector, ui64>> erases;
+            std::set<ui64> lsns;
+            for (ui64 lsn : PersistentBuffers | std::views::keys) {
+                lsns.emplace(lsn);
+            }
+            if (lsns.empty()) {
+                return -1;
+            }
+            for (ui32 _ : xrange(RandomNumber(4u) + 1)) {
+                if (lsns.empty()) {
+                    break;
+                }
+                auto lsn = lsns.begin();
+                std::advance(lsn, RandomNumber(lsns.size()));
+                const auto& [offsetInBytes, size, buffer] = PersistentBuffers.at(*lsn);
+                erases.push_back({{VChunkIndex, offsetInBytes, size}, *lsn});
+                lsns.erase(lsn);
+            }
+
+            auto testErase = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
+                Cerr << "batch erase persistent buffer count# " << erases.size() << Endl;
+
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
+                    PBCreds, erases)), Edge.NodeId());
+                auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
+                UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
+                return res->Get()->Record.GetFreeSpace();
+            };
+
+            auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
+            for (auto [_, lsn] : erases) {
+                PersistentBuffers.erase(lsn);
+            }
+            return res;
+        }
+
         void SyncPB() {
             std::vector<ui64> lsns;
             lsns.reserve(PersistentBuffers.size());
@@ -316,7 +355,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::tuple<ui32, ui32, ui32> sourceDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
             ui64 sourceDDiskInstanceGuid = *PBCreds.DDiskInstanceGuid;
-            auto sync = std::make_unique<NDDisk::TEvSync>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
+            auto sync = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
 
             for (ui64 lsn : selectedLsns) {
                 const auto& record = PersistentBuffers.at(lsn);
@@ -324,11 +363,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegmentFromPersistentBuffer({VChunkIndex, offsetInBytes, size}, lsn);
+                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());
-            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncResult>(Edge, false);
+            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncWithPersistentBufferResult>(Edge, false);
             const auto& syncRecord = syncRes->Get()->Record;
             UNIT_ASSERT(syncRecord.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(syncRecord.SegmentResultsSize(), selectedLsns.size());
@@ -443,7 +482,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                     if (iter % 400 == 399) {
                         f.RestartNode();
                     }
-                    switch (RandomNumber(4u)) {
+                    switch (RandomNumber(5u)) {
                         case 0: {
                             f.ListPB();
                             break;
@@ -460,6 +499,10 @@ Y_UNIT_TEST_SUITE(DDisk) {
                             f.ErasePB();
                             break;
                         }
+                        case 4: {
+                            f.BatchErasePB();
+                            break;
+                        }
                     }
                 }
                 ++f.VChunkIndex;
@@ -468,10 +511,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferFreeSpace) {
-        const ui32 maxChunks = 128;
+        const ui32 maxChunks = 256;
         const ui32 sectorInChunk = 32768;
         TDDiskTestContext f(1_MB);
-        auto& node = f.AllocateDDiskBlockGroup().begin()->GetNodes(0);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
         for (ui32 i = 0; i < 10; ++i) {
             f.WritePB(0, RandomNumber(127u) + 1);
@@ -499,7 +543,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             if (i % 200 == 99) {
                 f.RestartNode();
             }
-            freeSpace = f.ErasePB();
+            auto fs = i % 2 ? f.ErasePB() : f.BatchErasePB();
+            freeSpace = fs >= 0 ? fs : freeSpace;
             Cerr << "freeSpace: " << freeSpace << Endl;
         }
         UNIT_ASSERT(freeSpace == 1);

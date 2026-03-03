@@ -12,8 +12,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/stack.h>
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 namespace {
 class TRestrictedYsonFormatter: public NYson::TYsonConsumerBase {
@@ -326,5 +325,4 @@ TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) 
     return DecodeRestrictedYson(NYT::NodeFromYsonString(yson), format);
 }
 
-} // namespace NResult
-} // namespace NYql
+} // namespace NYql::NResult

@@ -72,6 +72,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::RESTORE:
             res << "ydb://restore";
             break;
+        case Ydb::TOperationId::COMPACTION:
+            res << "ydb://compaction";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }
@@ -321,6 +324,10 @@ TOperationId::EKind ParseKind(const std::string_view value) {
 
     if (value.starts_with("restore")) {
         return TOperationId::RESTORE;
+    }
+
+    if (value.starts_with("compaction")) {
+        return TOperationId::COMPACTION;
     }
 
     return TOperationId::UNUSED;

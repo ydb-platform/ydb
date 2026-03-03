@@ -184,6 +184,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
+                .WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID)
                 .Build();
 
             const auto& record = *recordPtr;

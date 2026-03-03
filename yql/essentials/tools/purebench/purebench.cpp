@@ -34,6 +34,8 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 using namespace NYql::NUdf;
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPickleInputSpec: public TInputSpecBase {
     explicit TPickleInputSpec(const TVector<NYT::TNode>& schemas)
         : Schemas(schemas)
@@ -122,6 +124,8 @@ struct TInputSpecTraits<TPickleInputSpec> {
     }
 };
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPickleOutputSpec: public TOutputSpecBase {
     explicit TPickleOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
@@ -194,6 +198,8 @@ struct TOutputSpecTraits<TPickleOutputSpec> {
     }
 };
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPrintOutputSpec: public TOutputSpecBase {
     explicit TPrintOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
@@ -359,7 +365,7 @@ double RunBenchmarks(
     return std::exp(sum / times.size());
 }
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
     using namespace NLastGetopt;
@@ -501,7 +507,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     if (argc > 1 && TString(argv[1]) != TStringBuf("--ndebug")) {
         Cerr << "purebench ABI version: " << NKikimr::NUdf::CurrentAbiVersionStr() << Endl;
     }

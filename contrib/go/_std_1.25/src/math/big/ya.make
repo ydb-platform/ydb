@@ -83,5 +83,31 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM
         roundingmode_string.go
         sqrt.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        accuracy_string.go
+        arith.go
+        arith_decl.go
+        arith_wasm.s
+        decimal.go
+        doc.go
+        float.go
+        floatconv.go
+        floatmarsh.go
+        ftoa.go
+        int.go
+        intconv.go
+        intmarsh.go
+        nat.go
+        natconv.go
+        natdiv.go
+        natmul.go
+        prime.go
+        rat.go
+        ratconv.go
+        ratmarsh.go
+        roundingmode_string.go
+        sqrt.go
+    )
 ENDIF()
 END()

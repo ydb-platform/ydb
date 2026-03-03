@@ -1,6 +1,6 @@
 #include "mon.h"
 #include "mon_impl.h"
-#include "events_internal.h"
+#include "mon_events.h"
 #include "counters_adapter_impl.h"
 
 #include <ydb/core/base/appdata.h>
@@ -36,7 +36,7 @@ namespace NActors {
 namespace {
 
 using namespace NKikimr;
-using namespace NMonitoring::NPrivate;
+using NMonitoring::TEvMon;
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
@@ -548,7 +548,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -822,24 +822,28 @@ public:
     void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
         if (ev->Get()->Record.HasHttpResponse()) {
             TString responseTxt = ev->Get()->Record.GetHttpResponse();
-            NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
-
-            if (responseObj->Status == "301" || responseObj->Status == "302") {
+            NHttp::THttpOutgoingResponsePtr responseObj;
+            TStringBuf responseBuf(responseTxt);
+            responseBuf.NextTok(' '); // skip protocol
+            TStringBuf status = responseBuf.NextTok(' ');
+            if (status == "301" || status == "302") {
                 NHttp::THttpResponseParser parser(responseTxt);
                 NHttp::THeadersBuilder headers(parser.Headers);
                 auto location(headers["Location"]);
                 if (location.starts_with('/') && !location.starts_with("/node/")) {
-                    NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
-                    response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
+                    responseObj = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
+                    responseObj->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
                     headers.Set("Location", TStringBuilder() << "/node/" << NodeId << location);
-                    response->Set(headers);
+                    responseObj->Set(headers);
                     if (parser.HasBody()) {
-                        response->SetBody(parser.Body);
+                        responseObj->SetBody(parser.Body);
                     }
-                    responseObj = response;
                 }
             }
-
+            if (!responseObj) {
+                responseObj = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
+                responseObj->Assign(responseTxt);
+            }
             Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj), 0, Event->Cookie);
 
             if (responseObj->IsDone()) {
@@ -907,10 +911,10 @@ public:
 // receives requests to another nodes
 class THttpMonServiceNodeProxy : public TActor<THttpMonServiceNodeProxy> {
 public:
-    THttpMonServiceNodeProxy(TActorId httpProxyActorId)
+    THttpMonServiceNodeProxy(TActorId httpProxyActorId, std::shared_ptr<NHttp::THttpEndpointInfo> endpoint)
         : TActor(&THttpMonServiceNodeProxy::StateWork)
         , HttpProxyActorId(httpProxyActorId)
-        , Endpoint(std::make_shared<NHttp::THttpEndpointInfo>())
+        , Endpoint(std::move(endpoint))
     {
     }
 
@@ -1178,7 +1182,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1374,7 +1378,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1681,8 +1685,9 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();
+    std::shared_ptr<NHttp::THttpEndpointInfo> endpointInfo = std::make_shared<NHttp::TPrivateEndpointInfo>(Config.CompressContentTypes);
     auto nodeProxyActorId = ActorSystem->Register(
-        new THttpMonServiceNodeProxy(HttpProxyActorId),
+        new THttpMonServiceNodeProxy(HttpProxyActorId, endpointInfo),
         TMailboxType::ReadAsFilled,
         executorPool);
     NodeProxyServiceActorId = MakeNodeProxyId(ActorSystem->NodeId);
@@ -1709,15 +1714,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->Port = Config.Port;
     addPort->WorkerName = workerName;
     addPort->Address = Config.Address;
-    addPort->CompressContentTypes = {
-        "text/plain",
-        "text/html",
-        "text/css",
-        "text/javascript",
-        "application/javascript",
-        "application/json",
-        "application/yaml",
-    };
+    addPort->CompressContentTypes = Config.CompressContentTypes;
     addPort->SslCertificatePem = Config.Certificate;
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;

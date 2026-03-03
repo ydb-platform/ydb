@@ -194,6 +194,23 @@ public:
         CreateTier("tier2");
     }
 
+    void WaitForCdcStreamReady(const std::string& streamPath) {
+        for (int i = 0; i < 60; ++i) {
+            auto pathDesc = DescribePath(Runtime, TString(streamPath));
+            if (pathDesc.HasCdcStreamDescription()
+                && pathDesc.GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady)
+            {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_FAIL("Timed out waiting for CDC stream to become ready: " << streamPath);
+    }
+
+    std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
+        return ShowCreate(session, "TABLE", tableName);
+    }
+
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
@@ -347,10 +364,6 @@ private:
         UNIT_ASSERT(createQuery);
 
         return createQuery;
-    }
-
-    std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
-        return ShowCreate(session, "TABLE", tableName);
     }
 
     std::string ShowCreateView(NQuery::TSession& session, const std::string& viewName) {
@@ -1708,6 +1721,40 @@ ALTER TABLE `test_show_create`
 )"
         , false, true
         );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableChangefeedAfterInitialScan) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"), INITIAL_SCAN = TRUE);
+        )");
+
+        // Wait for the initial scan to complete (state transitions from ECdcStreamStateScan to ECdcStreamStateReady)
+        checker.WaitForCdcStreamReady("/Root/test_show_create/feed");
+
+        // After the scan is complete, SHOW CREATE TABLE must still include INITIAL_SCAN = TRUE
+        auto showCreateTableQuery = checker.ShowCreateTable(session, "test_show_create");
+        UNIT_ASSERT_C(showCreateTableQuery.contains("INITIAL_SCAN = TRUE"),
+            "INITIAL_SCAN = TRUE must be present in SHOW CREATE TABLE output after initial scan completes: "
+            << showCreateTableQuery);
+
+        ExecuteQuery(session, "DROP TABLE `test_show_create`;");
     }
 
     Y_UNIT_TEST(ShowCreateTableSequences) {
@@ -3752,53 +3799,29 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(0); // IndexSize
     }
 
-    Y_UNIT_TEST_TWIN(Describe, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(Describe) {
+        TTestEnv env;
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            if (EnableRealSystemViewPaths) {
-                auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-                const auto& systemView = result.GetSystemViewDescription();
+            const auto& systemView = result.GetSystemViewDescription();
 
-                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
-                const auto& columns = systemView.GetTableColumns();
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
-                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+            const auto& columns = systemView.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
+            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+            UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-                const auto& keyColumns = systemView.GetPrimaryKeyColumns();
-                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
-            } else {
-                auto settings = TDescribeTableSettings()
-                    .WithKeyShardBoundary(true)
-                    .WithTableStatistics(true)
-                    .WithPartitionStatistics(true);
-
-                auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-                const auto& table = result.GetTableDescription();
-                const auto& columns = table.GetTableColumns();
-                const auto& keyColumns = table.GetPrimaryKeyColumns();
-
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
-                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
-
-                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
-
-                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
-            }
+            const auto& keyColumns = systemView.GetPrimaryKeyColumns();
+            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+            UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
         }
 
         TSchemeClient schemeClient(env.GetDriver());
@@ -3808,12 +3831,7 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys/partition_stats").GetValueSync();
@@ -3821,16 +3839,12 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
     }
 
-    Y_UNIT_TEST_TWIN(SystemViewFailOps, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(SystemViewFailOps) {
+        TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
         // Make AdministrationAllowedSIDs non-empty to deny any user cluster admin privilege.
@@ -3909,13 +3923,8 @@ R"(CREATE TABLE `test_show_create` (
         auto userSchemeClient = TSchemeClient(driver);
         {
             auto result = userSchemeClient.MakeDirectory("/Root/.sys").GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                    "path exist", result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path exist", result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -3930,27 +3939,19 @@ R"(CREATE TABLE `test_show_create` (
         }
         {
             auto result = userSchemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
             auto result = userSchemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            if (EnableRealSystemViewPaths) {
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
         }
     }
 
-    Y_UNIT_TEST_TWIN(DescribeSystemFolder, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(DescribeSystemFolder) {
+        TTestEnv env;
         CreateTenantsAndTables(env, true);
 
         TSchemeClient schemeClient(env.GetDriver());
@@ -3999,11 +4000,7 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                if (EnableRealSystemViewPaths) {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
@@ -4022,11 +4019,7 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                if (EnableRealSystemViewPaths) {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
@@ -4279,7 +4272,8 @@ R"(CREATE TABLE `test_show_create` (
         TString query = R"(
             SELECT FollowerId, TabletId
             FROM `/Root/.sys/hive_tablets`
-            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul;
+            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul
+            ORDER BY TabletId, FollowerId
         )";
 
         TString expected = R"([

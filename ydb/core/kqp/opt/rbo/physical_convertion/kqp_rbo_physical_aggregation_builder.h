@@ -28,7 +28,7 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
     };
 
 public:
-    TPhysicalAggregationBuilder(std::shared_ptr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
         : TPhysicalUnaryOpBuilder(ctx, pos)
         , Aggregate(aggregate) {
     }
@@ -113,11 +113,11 @@ private:
     TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
                                       const THashMap<TString, TString>& projectionMap);
 
-    std::shared_ptr<TOpAggregate> Aggregate;
+    TIntrusivePtr<TOpAggregate> Aggregate;
     static constexpr bool DebugPackWideLambdasToStruct{false};
 
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.
-    static constexpr TStringBuf PhysicalAggregationName = "WideCombiner";
+    static constexpr TStringBuf PhysicalAggregationName = "DqPhyHashCombine";
 };

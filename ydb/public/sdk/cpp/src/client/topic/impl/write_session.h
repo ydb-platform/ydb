@@ -75,6 +75,7 @@ private:
         using TSelf = TPartitionInfo;
 
         bool InRange(const std::string_view key) const;
+        bool IsSplitted() const;
 
         FLUENT_SETTING(std::string, FromBound);
         FLUENT_SETTING(std::optional<std::string>, ToBound);
@@ -248,6 +249,7 @@ private:
         void DoWork();
         bool IsDone();
         bool IsInit();
+        bool CanBeRemoved();
         std::string GetStateName() const;
             
     private:
@@ -261,6 +263,7 @@ private:
         std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
         size_t Retries = 0;
+        TInstant DoneAt = TInstant::Max();
     };
 
     struct TEventsWorker : public std::enable_shared_from_this<TEventsWorker> {
@@ -335,9 +338,12 @@ private:
     struct TMetricGauge {
         std::uint64_t MetricCount = 0;
         std::uint64_t Sum = 0;
+        std::uint64_t Max = 0;
 
         long double Average();
         void Add(std::uint64_t value);
+        std::uint64_t GetMax() const;
+        std::uint64_t GetSum() const;
         void Clear();
     };
 
@@ -347,12 +353,20 @@ private:
         TMetricGauge MainWorkerTimeMs;
         TMetricGauge CycleTimeMs;
         TMetricGauge WriteLagMs;
+        TMetricGauge ContinuationTokensSent;
+        TMetricGauge BufferFull;
+        TMetricGauge IncomingMessages;
+        TMetricGauge OutgoingMessages;
         std::mutex Lock;
         TKeyedWriteSession* Session;
 
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);
         void AddWriteLag(std::uint64_t lagMs);
+        void IncContinuationTokensSent();
+        void IncBufferFull();
+        void IncIncomingMessages();
+        void IncOutgoingMessages();
         void PrintMetrics();
     };
 
@@ -403,6 +417,10 @@ public:
 
     std::vector<TPartitionInfo> GetPartitions() const;
 
+    std::unordered_map<std::uint32_t, TPartitionInfo> GetPartitionsMap() const;
+
+    std::map<std::string, std::uint32_t> GetPartitionsIndex() const;
+
     ~TKeyedWriteSession();
 
 private:
@@ -413,7 +431,7 @@ private:
     TMetrics Metrics;
 
     std::unordered_map<std::uint32_t, TPartitionInfo> Partitions;
-    std::map<std::string, std::uint64_t> PartitionsIndex;
+    std::map<std::string, std::uint32_t> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
     ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
@@ -435,6 +453,7 @@ private:
     std::shared_ptr<TEventsWorker> EventsWorker;
     std::shared_ptr<TSessionsWorker> SessionsWorker;
     std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> SplittedPartitionWorkers;
+    std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> ReadySplittedPartitionWorkers;
     std::shared_ptr<TMessagesWorker> MessagesWorker;
     std::shared_ptr<TKeyedWriteSessionRetryPolicy> RetryPolicy;
 

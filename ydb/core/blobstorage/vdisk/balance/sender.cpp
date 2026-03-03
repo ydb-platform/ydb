@@ -40,7 +40,10 @@ namespace {
         void SendReadRequests(const TActorId& selfId) {
             for (ui32 i = 0; i < Parts.size(); ++i) {
                 auto& item = Parts[i];
-                Result[i] = TPart{.Key=item.Key, .PartsMask=item.PartsMask};
+                Result[i] = TPart{
+                    .Key = item.Key,
+                    .PartsMask = item.PartsMask,
+                };
                 std::visit(TOverloaded{
                     [&](TRope&& data) {
                         // part is already in memory, no need to read it from disk
@@ -58,6 +61,11 @@ namespace {
                             NPriRead::HullLow,
                             reinterpret_cast<void*>(i)
                         );
+
+                        if (item.IsHugeBlob) {
+                            Y_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
+                            ev->BlobId = TLogoBlobID(item.Key, item.PartsMask.FirstPosition() + 1);
+                        }
 
                         TReplQuoter::QuoteMessage(
                             Quoter,

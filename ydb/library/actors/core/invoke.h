@@ -113,34 +113,30 @@ namespace NActors {
     class TScheduledInvokeActivity: public TActor<TScheduledInvokeActivity<TInvokeExecutor>> {
     private:
         using TBase = TActor<TScheduledInvokeActivity<TInvokeExecutor>>;
-        const TMonotonic Timestamp;
         TInvokeExecutor Executor;
+        
     public:
-        TScheduledInvokeActivity(TInvokeExecutor&& executor, const TMonotonic timestamp)
+        TScheduledInvokeActivity(TInvokeExecutor&& executor)
             : TBase(&TBase::TThis::StateFunc)
-            , Timestamp(timestamp)
             , Executor(std::move(executor)) {
         }
 
-        void StateFunc(STFUNC_SIG) {
+        STFUNC(StateFunc) {
             Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Wakeup);
             auto g = TBase::PassAwayGuard();
             Executor();
         }
-
-        void Registered(TActorSystem* sys, const TActorId& owner) override {
-            sys->Schedule(Timestamp, new IEventHandle(TEvents::TSystem::Wakeup, 0, TBase::SelfId(), owner, nullptr, 0));
-        }
     };
 
     template<class TInvokeExecutor>
-    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TDuration d) {
-        TActivationContext::Register(new TScheduledInvokeActivity<TInvokeExecutor>(std::move(executor), TMonotonic::Now() + d));
+    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TMonotonic timestamp) {
+        auto actorId = TActivationContext::Register(new TScheduledInvokeActivity<TInvokeExecutor>(std::move(executor)));
+        TActivationContext::Schedule(timestamp, new IEventHandle(TEvents::TSystem::Wakeup, 0, actorId, actorId, nullptr, 0));
     }
 
     template<class TInvokeExecutor>
-    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TMonotonic timestamp) {
-        TActivationContext::Register(new TScheduledInvokeActivity<TInvokeExecutor>(std::move(executor), timestamp));
+    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TDuration d) {
+        ScheduleInvokeActivity(std::move(executor), TActivationContext::Monotonic() + d);
     }
 
 } // NActors

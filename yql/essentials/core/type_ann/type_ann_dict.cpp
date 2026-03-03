@@ -1,8 +1,8 @@
 #include "type_ann_dict.h"
 #include "type_ann_types.h"
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 constexpr TStringBuf MutDictResourcePrefix = "_MutDict_";
 
@@ -457,5 +457,5 @@ template IGraphTransformer::TStatus DictBlindOpWrapper<true>(const TExprNode::TP
 template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

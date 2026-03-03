@@ -25,6 +25,12 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 struct TPDiskMon;
 namespace NPDisk {
 
+struct TDiskFormat;
+struct TPersistentBufferFormat;
+
+using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
+using TPersistentBufferFormatPtr = std::unique_ptr<TPersistentBufferFormat, void(*)(TPersistentBufferFormat*)>;
+
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
@@ -191,6 +197,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
     TFileHandle DiskFd; // A duplicated fd for direct disk access
+    TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
+    TPersistentBufferFormatPtr PersistentBufferFormat{nullptr, nullptr};
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
@@ -257,6 +265,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
         }
         str << "}";
         str << " DiskFd# " << static_cast<FHANDLE>(record.DiskFd);
+        str << " DiskFormat# " << (record.DiskFormat ? "set" : "null");
         str << "}";
         return str.Str();
     }
@@ -967,6 +976,7 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     void *Cookie;
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1083,6 +1093,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     ui8 PriorityClass;
     bool DoFlush;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     mutable NLWTrace::TOrbit Orbit;
 

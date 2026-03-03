@@ -573,6 +573,10 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = TRUE)\n;\n"},
         {"alter table user add changefeed user with (initial_scan = FaLsE)",
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE)\n;\n"},
+        {"alter table user add changefeed user with (user_sids = tRUe)",
+         "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user_sids = TRUE)\n;\n"},
+        {"alter table user add changefeed user with (user_sids = FaLsE)",
+         "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user_sids = FALSE)\n;\n"},
         {"alter table user add changefeed user with (retention_period = Interval(\"P1D\"))",
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval('P1D'))\n;\n"},
         {"alter table user add changefeed user with (virtual_timestamps = TruE)",
@@ -597,6 +601,10 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = FALSE)\n;\n"},
         {"alter table user compact with(cascade=TruE,max_shards_in_flight=3)",
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, max_shards_in_flight = 3)\n;\n"},
+        {"alter table t alter column c set default 42",
+         "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
+        {"alter table t alter column c drop default",
+         "ALTER TABLE t\n\tALTER COLUMN c DROP DEFAULT\n;\n"},
     };
 
     TSetup setup;
@@ -1606,6 +1614,8 @@ Y_UNIT_TEST(CreateTableTrailingComma) {
          "CREATE TABLE tableName (\n\tKey Uint32,\n\tPRIMARY KEY (Key),\n);\n"},
         {"CREATE TABLE tableName (Key Uint32,);",
          "CREATE TABLE tableName (\n\tKey Uint32,\n);\n"},
+        {"CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);",
+         "CREATE TABLE tableName (\n\tKey Uint32\n)\nWITH (STORE = COLUMN,\n);\n"},
     };
     TSetup setup;
     setup.Run(cases);

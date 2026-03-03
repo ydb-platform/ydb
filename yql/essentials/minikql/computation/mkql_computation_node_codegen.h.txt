@@ -220,18 +220,29 @@ Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodege
     return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, arg1, arg2);
 }
 
-Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+template <size_t Argc>
+class CallArgs {
+    std::array<Value*, Argc> args;
+
+public:
+    template <typename... Args>
+        requires (sizeof...(Args) == Argc)
+    constexpr CallArgs(Args... args) : args{args...} {}
+
+    template <typename... Args>
+        requires (sizeof...(Args) != Argc)
+    CallArgs(Args...) = delete;
+
+    auto begin() const { return std::begin(args); }
+    auto end()   const { return std::end(args); }
+};
+
+Value* EmitFunctionCallImpl(uintptr_t methodPtr, Type* result, std::vector<Value*>&& args, const TCodegenContext& ctx, BasicBlock* block);
 
 template<auto Method>
-Value* CallUnaryUnboxedValueFunction(Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallUnaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, arg, codegen, block);
-}
-
-Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
-
-template<auto Method>
-Value* CallBinaryUnboxedValueFunction(Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallBinaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, left, right, codegen, block);
+Value* EmitFunctionCall(Type* result, CallArgs<arity_v<decltype(Method)>> args, const TCodegenContext& ctx, BasicBlock* block) {
+    std::vector<Value*> argVec(std::begin(args), std::end(args));
+    return EmitFunctionCallImpl(GetMethodPtr<Method>(), result, std::move(argVec), ctx, block);
 }
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);

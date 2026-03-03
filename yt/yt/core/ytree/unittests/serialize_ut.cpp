@@ -470,6 +470,14 @@ TEST(TSerializationTest, PlainEnum)
     TestSerializationDeserialization(static_cast<EVanillaTestEnum>(42));
 }
 
+TEST(TSerializationTest, TError)
+{
+    TestSerializationDeserialization(TError());
+    TestSerializationDeserialization(TErrorOr<ui64>(5ull));
+    TestSerializationDeserialization(TError("some error"));
+    TestSerializationDeserialization(TErrorOr<ui64>(TError("some error")));
+}
+
 TEST(TYTreeSerializationTest, Protobuf)
 {
     NProto::TTestMessage message;

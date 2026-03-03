@@ -1,36 +1,81 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+
+#include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitionActor
-    : public NActors::TActorBootstrapped<TPartitionActor>
+struct TDiskIds
 {
+    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
+    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
+};
+using TPartitionIds = TVector<TDiskIds>;
+
+class TPartitionActor
+    : public NActors::TActor<TPartitionActor>
+    , public NKikimr::NTabletFlatExecutor::TTabletExecutedFlat
+{
+    enum EState
+    {
+        STATE_BOOT,
+        STATE_INIT,
+        STATE_WORK,
+        STATE_ZOMBIE,
+        STATE_MAX,
+    };
+
 private:
-    NYdb::NBS::NProto::TStorageConfig StorageConfig;
+    NYdb::NBS::NProto::TStorageServiceConfig StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
 
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
-
+    bool DdiskBlockGroupAllocated = false;
 
 public:
-    TPartitionActor(
-        NYdb::NBS::NProto::TStorageConfig storageConfig,
-        NKikimrBlockStore::TVolumeConfig volumeConfig);
-
-    void Bootstrap(const NActors::TActorContext& ctx);
+    static constexpr size_t NumDirectBlockGroups = 32;
+    TPartitionActor(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info);
 
 private:
+    void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
+
+    void OnDetach(const NActors::TActorContext& ctx) override;
+    void OnTabletDead(NKikimr::TEvTablet::TEvTabletDead::TPtr& ev, const NActors::TActorContext& ctx) override;
+    void OnActivateExecutor(const NActors::TActorContext& ctx) override;
+    void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
+
+    void HandleServerConnected(
+        const NKikimr::TEvTabletPipe::TEvServerConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleServerDisconnected(
+        const NKikimr::TEvTabletPipe::TEvServerDisconnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleServerDestroyed(
+        const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void ReportTabletState(const NActors::TActorContext& ctx);
 
     void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
@@ -39,6 +84,30 @@ private:
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleGetLoadActorAdapterActorId(
+        const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleUpdateVolumeConfig(
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void Start(
+        const NActors::TActorContext& ctx,
+        TPartitionIds ids);
+
+    bool HaveStoredTabletInfo();
+
+    void LoadTabletInfo(const NActors::TActorContext& ctx,
+                        TPartitionIds &ids);
+
+    void StoreTabletInfo(
+        const NActors::TActorContext& ctx,
+        const TPartitionIds& ids);
+
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }  // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

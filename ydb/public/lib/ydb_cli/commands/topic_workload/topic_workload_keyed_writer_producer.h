@@ -60,6 +60,8 @@ private:
     const NUnifiedAgent::TClock Clock_;
     std::string KeyPrefix_;
     ui64 KeyId_ = 0;
+
+    std::condition_variable ContinuationTokenCondition_;
 };
 
 } // namespace NYdb::NConsoleClient

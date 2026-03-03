@@ -14,7 +14,7 @@
 #undef RWF_APPEND
 
 #if !defined(_musl_)
-#include <liburing.h>
+#include "liburing_compat.h"
 #endif
 #include <libaio.h>
 #if !defined(_musl_)

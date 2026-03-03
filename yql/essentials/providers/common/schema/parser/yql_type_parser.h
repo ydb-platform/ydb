@@ -9,8 +9,7 @@
 #include <util/generic/strbuf.h>
 #include <util/stream/output.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TYqlTypeYsonSaverBase {
 public:
@@ -506,5 +505,4 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
 
 bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

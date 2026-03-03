@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <thread>
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_fmr_partitioner.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_ordered_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_sorted_partitioner.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -98,6 +100,7 @@ public:
         for (auto& currentTaskParams: taskParams) {
             TString taskId = GenerateId();
             auto fmrResourceTasks = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
+            SortedTasksPreprocess(currentTaskParams);
 
             TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, request.Files, request.YtResources, fmrResourceTasks, fmrOperationSpec);
             Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
@@ -105,7 +108,8 @@ public:
             taskIds.emplace(taskId);
         }
 
-        Operations_[operationId] = {.TaskIds = taskIds, .OperationStatus = EOperationStatus::Accepted, .SessionId = request.SessionId};
+        const auto initialStatus = taskIds.empty() ? EOperationStatus::Completed : EOperationStatus::Accepted;
+        Operations_[operationId] = {.TaskIds = taskIds, .OperationStatus = initialStatus, .SessionId = request.SessionId};
 
         if (std::holds_alternative<TSortedUploadOperationParams>(request.OperationParams)) {
             InitializeSortedUploadOperation(operationId, taskIds.size(), request.ClusterConnections);
@@ -114,6 +118,17 @@ public:
         YQL_CLOG(DEBUG, FastMapReduce) << "Starting operation with id " << operationId;
         OperationPartitions_.erase(partitionId);
         return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Accepted, operationId));
+    }
+
+    void SortedTasksPreprocess(TTaskParams& currentTaskParams) {
+        if (auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&currentTaskParams)) {
+            if (sortedMergeTaskParams->Output.PartId.empty()) {
+                TString newPartId = GenerateId();
+                TString tableId = sortedMergeTaskParams->Output.TableId;
+                sortedMergeTaskParams->Output.PartId = newPartId;
+                PartIdsForTables_[tableId].emplace_back(newPartId);
+            }
+        }
     }
 
     NThreading::TFuture<TGetOperationResponse> GetOperation(const TGetOperationRequest& request) override {
@@ -291,8 +306,15 @@ public:
                 SetUnfinishedTaskStatus(taskId, ETaskStatus::InProgress);
             }
             ClearPreviousPartIdsForTask(task);
+            bool canRunTask = true;
             with_lock(Mutex_) {
-                SetNewPartIdsForTask(task);
+                if (auto error = SetNewPartIdsForTask(task, taskId)) {
+                    YQL_CLOG(ERROR, FastMapReduce) << error->ErrorMessage << ", taskId: " << taskId;
+                    SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, *error);
+                    canRunTask = false;
+                }
+            }
+            if (canRunTask) {
                 currentTasksToRun.emplace_back(task);
                 ++filledSlots;
             }
@@ -626,40 +648,79 @@ private:
         return settings;
     }
 
-    bool CheckIsOperationOrdered(const TOperationParams& operationParams) {
+    TSortedPartitionSettings GetSortedPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
+        TSortedPartitionSettings settings;
+        settings.FmrPartitionSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+        return settings;
+    }
+
+    EPartitionType CheckPartitionType(const TOperationParams& operationParams) {
         if (auto mapOptions = std::get_if<TMapOperationParams>(&operationParams)) {
-            return mapOptions->IsOrdered;
-        } else if (auto reduceOptions = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
-            return reduceOptions->IsOrdered;
+            if (mapOptions->IsOrdered) {
+                return EPartitionType::OrderedPartition;
+            } else {
+                return EPartitionType::UnorderedPartition;
+            }
+        } else if (std::holds_alternative<TSortedUploadOperationParams>(operationParams)) {
+            return EPartitionType::OrderedPartition;
+        } else if (std::holds_alternative<TSortedMergeOperationParams>(operationParams)) {
+            return EPartitionType::SortedPartition;
         }
-        return false;
+        return EPartitionType::UnorderedPartition;
+    }
+
+    TSortingColumns GetSortingColumns(const TOperationParams& operationParams) {
+        TSortingColumns sortingColumns;
+        if (auto sortedMerge = std::get_if<TSortedMergeOperationParams>(&operationParams)) {
+            auto columns = sortedMerge->Output.SortColumns;
+            auto sortOrder = sortedMerge->Output.SortOrder;
+            sortingColumns.Columns = std::move(columns);
+            sortingColumns.SortOrders = std::move(sortOrder);
+        }
+        return sortingColumns;
     }
 
     TString PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
-        bool isOrdered = CheckIsOperationOrdered(operationParams);
+        EPartitionType partitionType = CheckPartitionType(operationParams);
         auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
         auto partitionId = GenerateId();
         YQL_CLOG(TRACE, FastMapReduce)
         << "PartitionOperationIntoSeveralTasks: partitionId=" << partitionId
-        << ", isOrdered=" << isOrdered
+        << ", isOrdered=" << (partitionType == EPartitionType::OrderedPartition)
         << ", opIndex=" << operationParams.index();
 
         TPartitionResult partitionResult;
-        if (!isOrdered) {
-            auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
-            auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
-            std::vector<TYtTableRef> ytInputTables;
-            std::vector<TFmrTableRef> fmrInputTables;
-            GetOperationInputTables(ytInputTables, fmrInputTables, operationParams);
-            partitionResult = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, YtCoordinatorService_, clusterConnections, ytPartitionerSettings);
-        } else {
-            auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
-            auto orderedPartitioner = TOrderedPartitioner(PartIdsForTables_, PartIdStats_, orderedPartitionerSettings);
+        switch (partitionType) {
+            case EPartitionType::OrderedPartition: {
+                auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
+                auto orderedPartitioner = TOrderedPartitioner(PartIdsForTables_, PartIdStats_, orderedPartitionerSettings);
 
-            TOperationInputTablesGetter tablesGetter{};
-            std::visit(tablesGetter, operationParams);
-            auto& inputTables = tablesGetter.OperationTableRef;
-            partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, YtCoordinatorService_, clusterConnections);
+                TOperationInputTablesGetter tablesGetter{};
+                std::visit(tablesGetter, operationParams);
+                auto& inputTables = tablesGetter.OperationTableRef;
+                partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, YtCoordinatorService_, clusterConnections);
+                break;
+            } case EPartitionType::UnorderedPartition: {
+                auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+                auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
+                std::vector<TYtTableRef> ytInputTables;
+                std::vector<TFmrTableRef> fmrInputTables;
+                GetOperationInputTables(ytInputTables, fmrInputTables, operationParams);
+                partitionResult = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, YtCoordinatorService_, clusterConnections, ytPartitionerSettings);
+                break;
+            } case EPartitionType::SortedPartition: {
+                auto sortedPartitionerSettings = GetSortedPartitionerSettings(fmrOperationSpec);
+                TSortingColumns sortedColumns = GetSortingColumns(operationParams);
+                auto sortedPartitioner = TSortedPartitioner(PartIdsForTables_, PartIdStats_, sortedColumns, sortedPartitionerSettings);
+
+                TOperationInputTablesGetter tablesGetter{};
+                std::visit(tablesGetter, operationParams);
+                auto& inputTables = tablesGetter.OperationTableRef;
+                partitionResult = PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
+                break;
+            } default: {
+                ythrow yexception() << "Unknown partition type";
+            }
         }
         if (!partitionResult.PartitionStatus) {
             ythrow yexception() << "Failed to partition input tables into tasks";
@@ -726,12 +787,13 @@ private:
         return resultFmrOperationSpec;
     }
 
-    void SetNewPartIdsForTask(TTask::TPtr task) {
+    TMaybe<TFmrError> SetNewPartIdsForTask(TTask::TPtr task, const TString& taskId) {
         // TODO - remove code duplication
         TString newPartId = GenerateId();
 
         auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
         auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
+        auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams);
         auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
         if (downloadTaskParams) {
             TString tableId = downloadTaskParams->Output.TableId;
@@ -741,6 +803,28 @@ private:
             TString tableId = mergeTaskParams->Output.TableId;
             mergeTaskParams->Output.PartId = newPartId;
             PartIdsForTables_[tableId].emplace_back(newPartId);
+        } else if (sortedMergeTaskParams) {
+            if (sortedMergeTaskParams->Output.PartId.empty()) {
+                return TFmrError{
+                    .Component = EFmrComponent::Coordinator,
+                    .Reason = EFmrErrorReason::RestartQuery,
+                    .ErrorMessage = "SortedMerge task has empty output PartId, fallback to native gateway is required",
+                    .TaskId = taskId,
+                    .OperationId = Tasks_[taskId].OperationId
+                };
+            }
+            TString tableId = sortedMergeTaskParams->Output.TableId;
+            TString partId = sortedMergeTaskParams->Output.PartId;
+            auto& partIds = PartIdsForTables_[tableId];
+            if (std::find(partIds.begin(), partIds.end(), partId) == partIds.end()) {
+                return TFmrError{
+                    .Component = EFmrComponent::Coordinator,
+                    .Reason = EFmrErrorReason::RestartQuery,
+                    .ErrorMessage = "SortedMerge task output PartId is missing in coordinator part list, fallback to native gateway is required",
+                    .TaskId = taskId,
+                    .OperationId = Tasks_[taskId].OperationId
+                };
+            }
         } else if (mapTaskParams) {
             for (auto& fmrTableOutputRef: mapTaskParams->Output) {
                 TString tableId = fmrTableOutputRef.TableId;
@@ -748,6 +832,7 @@ private:
                 PartIdsForTables_[tableId].emplace_back(newPartId);
             }
         }
+        return Nothing();
     }
 
     std::vector<TPartIdInfo> CollectPreviousPartIdsForTask(TTask::TPtr task) {
@@ -756,24 +841,31 @@ private:
 
         auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
         auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
+        auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams);
         auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
 
         if (downloadTaskParams) {
             TString tableId = downloadTaskParams->Output.TableId;
-            if (!downloadTaskParams->Output.PartId.empty()) {
+            if (!downloadTaskParams->Output.PartId.empty() && PartIdStats_.contains(downloadTaskParams->Output.PartId)) {
                 auto prevPartId = downloadTaskParams->Output.PartId;
                 groupsToClear.emplace_back(tableId, prevPartId);
             }
         } else if (mergeTaskParams) {
             TString tableId = mergeTaskParams->Output.TableId;
-            if (!mergeTaskParams->Output.PartId.empty()) {
+            if (!mergeTaskParams->Output.PartId.empty() && PartIdStats_.contains(mergeTaskParams->Output.PartId)) {
                 auto prevPartId = mergeTaskParams->Output.PartId;
+                groupsToClear.emplace_back(tableId, prevPartId);
+            }
+        } else if (sortedMergeTaskParams) {
+            TString tableId = sortedMergeTaskParams->Output.TableId;
+            if (!sortedMergeTaskParams->Output.PartId.empty() && PartIdStats_.contains(sortedMergeTaskParams->Output.PartId)) {
+                auto prevPartId = sortedMergeTaskParams->Output.PartId;
                 groupsToClear.emplace_back(tableId, prevPartId);
             }
         } else if (mapTaskParams) {
             for (auto& fmrTableOutputRef: mapTaskParams->Output) {
                 TString tableId = fmrTableOutputRef.TableId;
-                if (!fmrTableOutputRef.PartId.empty()) {
+                if (!fmrTableOutputRef.PartId.empty() && PartIdStats_.contains(fmrTableOutputRef.PartId)) {
                     auto prevPartId = fmrTableOutputRef.PartId;
                     groupsToClear.emplace_back(tableId, prevPartId);
                 }
@@ -790,9 +882,20 @@ private:
         return tableGroupsToClear;
     }
 
+    std::unordered_set<TString> GetPartIdsToKeepForTask(TTask::TPtr task) {
+        std::unordered_set<TString> partIdsToKeep; // encoded as table data service group id
+        if (auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams)) {
+            if (!sortedMergeTaskParams->Output.PartId.empty()) {
+                partIdsToKeep.emplace(GetTableDataServiceGroup(sortedMergeTaskParams->Output.TableId, sortedMergeTaskParams->Output.PartId));
+            }
+        }
+        return partIdsToKeep;
+    }
+
     void ClearPreviousPartIdsForTask(TTask::TPtr task) {
         std::vector<TString> tableGroupsToClear;
         std::vector<TPartIdInfo> groupsToClear;
+        auto partIdsToKeep = GetPartIdsToKeepForTask(task);
         with_lock(Mutex_) {
             groupsToClear = CollectPreviousPartIdsForTask(task);
             tableGroupsToClear = GetTableGroupsToClear(groupsToClear);
@@ -802,6 +905,9 @@ private:
 
         with_lock(Mutex_) {
             for (const auto& group : groupsToClear) {
+                if (partIdsToKeep.contains(GetTableDataServiceGroup(group.TableId, group.PartId))) {
+                    continue;
+                }
                 auto tableIt = PartIdsForTables_.find(group.TableId);
                 if (tableIt != PartIdsForTables_.end()) {
                     auto& partIds = tableIt->second;
@@ -958,6 +1064,9 @@ private:
         void operator()(const TMergeOperationParams& mergeOperationParams) {
             OperationTableRef = mergeOperationParams.Input;
         }
+        void operator()(const TSortedMergeOperationParams& sortedMergeOperationParams) {
+            OperationTableRef = sortedMergeOperationParams.Input;
+        }
         void operator()(const TMapOperationParams& mapOperationParams) {
             OperationTableRef = mapOperationParams.Input;
         }
@@ -1011,6 +1120,14 @@ private:
                 mergeTaskParams.Input = task;
                 mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
                 TaskParams.emplace_back(mergeTaskParams);
+            }
+        }
+        void operator()(const TSortedMergeOperationParams& sortedMergeOperationParams) {
+            for (auto& task: PartitionResult.TaskInputs) {
+                TSortedMergeTaskParams sortedMergeTaskParams;
+                sortedMergeTaskParams.Input = task;
+                sortedMergeTaskParams.Output = TFmrTableOutputRef(sortedMergeOperationParams.Output);
+                TaskParams.emplace_back(sortedMergeTaskParams);
             }
         }
         void operator()(const TMapOperationParams& mapOperationParams) {

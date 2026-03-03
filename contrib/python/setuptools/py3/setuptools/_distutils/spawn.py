@@ -56,7 +56,6 @@ def spawn(
     cmd: MutableSequence[bytes | str | os.PathLike[str]],
     search_path: bool = True,
     verbose: bool = False,
-    dry_run: bool = False,
     env: _ENV | None = None,
 ) -> None:
     """Run another program, specified as a command list 'cmd', in a new process.
@@ -68,15 +67,12 @@ def spawn(
 
     If 'search_path' is true (the default), the system's executable
     search path will be used to find the program; otherwise, cmd[0]
-    must be the exact path to the executable.  If 'dry_run' is true,
-    the command will not actually be run.
+    must be the exact path to the executable.
 
     Raise DistutilsExecError if running the program fails in any way; just
     return on success.
     """
     log.info(subprocess.list2cmdline(cmd))
-    if dry_run:
-        return
 
     if search_path:
         executable = shutil.which(cmd[0])

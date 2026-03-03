@@ -198,6 +198,9 @@ class KikimrConfigGenerator(object):
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            http_proxy_config=None,
+            enable_nbs=False,
+            nbs_database="/Root/NBS",
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -461,6 +464,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
         if deduplication_grouped_memory_limiter_config:
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
+        if http_proxy_config:
+            self.yaml_config["http_proxy_config"] = http_proxy_config
 
         self.__build()
         if self.grpc_ssl_enable:
@@ -594,6 +599,21 @@ class KikimrConfigGenerator(object):
         if bridge_config is not None:
             self.yaml_config["bridge_config"] = bridge_config
 
+        if enable_nbs:
+            self.yaml_config["nbs_config"] = {
+                "enabled": True,
+                "nbs_storage_config": {
+                    "scheme_shard_dir": nbs_database,
+                    "folder_id": "testFolder",
+                    "ssd_system_channel_pool_kind": "hdd",
+                    "ssd_log_channel_pool_kind": "hdd",
+                    "ssd_index_channel_pool_kind": "hdd",
+                    "pipe_client_retry_count": 3,
+                    "pipe_client_min_retry_time": 1,
+                    "pipe_client_max_retry_time": 10,
+                }
+            }
+
         self.full_config = dict()
         if self.explicit_hosts_and_host_configs:
             self._add_host_config_and_hosts()
@@ -607,7 +627,12 @@ class KikimrConfigGenerator(object):
                 self.yaml_config["grpc_config"]["services"].append("config")
 
             self.yaml_config["default_disk_type"] = "ROT"
-            self.yaml_config["fail_domain_type"] = "rack"
+
+            if self.static_erasure == Erasure.MIRROR_3_DC and len(self.__node_ids) == 3:
+                self.yaml_config["fail_domain_type"] = "disk"
+            else:
+                self.yaml_config["fail_domain_type"] = "rack"
+
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
@@ -637,6 +662,13 @@ class KikimrConfigGenerator(object):
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        elif self.use_self_management:
+            self.full_config["metadata"] = {
+                "kind": "MainConfig",
+                "version": 0,
+                "cluster": "",
+            }
             self.full_config["config"] = self.yaml_config
         else:
             self.full_config = self.yaml_config
@@ -741,6 +773,10 @@ class KikimrConfigGenerator(object):
     @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
+
+    @property
+    def http_proxy_enabled(self):
+        return self.yaml_config.get('http_proxy_config', {}).get('enabled')
 
     @property
     def working_dir(self):

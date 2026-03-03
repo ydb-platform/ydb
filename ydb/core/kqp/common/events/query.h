@@ -89,6 +89,8 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
+    TEvQueryRequest(const TString& userSID);
+
     bool IsSerializable() const override {
         return true;
     }
@@ -97,6 +99,11 @@ public:
 
     const TString& GetDatabase() const {
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
+    }
+
+    TString GetUserSID() const {
+        auto token = GetUserToken();
+        return token ? token->GetUserSID() : "";
     }
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
@@ -289,6 +296,11 @@ public:
 
     bool IsInternalCall() const {
         return RequestCtx ? RequestCtx->IsInternalCall() : Record.GetRequest().GetIsInternalCall();
+    }
+
+    bool GetIsWarmupCompilation() const {
+        // RequestCtx is set only if request came from grpc, warmup is internal operation
+        return RequestCtx ? false : Record.GetRequest().GetIsWarmupCompilation();
     }
 
     ui64 GetParametersSize() const {

@@ -8,8 +8,7 @@
 
 struct ArrowSchema;
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 // opaque type info
 using TType = void;
@@ -460,5 +459,4 @@ public:
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper, 16);
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper::TPtr, 8);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

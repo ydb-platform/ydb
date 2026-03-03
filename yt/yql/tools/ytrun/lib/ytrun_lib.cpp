@@ -231,6 +231,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
     fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
+    fmrServices.TvmSettings = fmrInitializationOpts.FmrTvmSettings;
 
     if (!DisableLocalFmrWorker_) {
         auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), TableDataServiceDiscoveryFilePath_);

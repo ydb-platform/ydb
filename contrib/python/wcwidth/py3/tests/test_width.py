@@ -437,3 +437,15 @@ def test_soft_hyphen_exception():
     """U+00AD SOFT HYPHEN remains width 1 for ISO-8859-1 compatibility."""
     result = wcwidth.wcwidth('\u00AD')
     assert result == 1
+
+
+def test_fitzpatrick_modifier_after_emoji():
+    """Fitzpatrick modifier following emoji base adds zero-width in width()."""
+    result = wcwidth.width('\U0001F469\U0001F3FB')
+    assert result == 2
+
+
+def test_fitzpatrick_modifier_standalone_width():
+    """Standalone Fitzpatrick modifier, however, is wide character in width()."""
+    result = wcwidth.width('\U0001F3FB')
+    assert result == 2

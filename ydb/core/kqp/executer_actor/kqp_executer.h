@@ -13,6 +13,7 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr {
@@ -33,11 +34,19 @@ struct TEvKqpExecuter {
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
+        std::optional<ui64> BrokenLockQuerySpanId;
 
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
         ui64 LocksBrokenAsBreaker = 0;
         ui64 LocksBrokenAsVictim = 0;
+        TVector<ui64> BreakerQuerySpanIds;  // QuerySpanIds of all queries that broke locks (from DataShard, one per shard/table)
+
+        struct TDeferredBreakerInfo {
+            ui64 QuerySpanId = 0;  // Breaker's QuerySpanId
+            ui32 NodeId = 0;        // Node where breaker's query text is cached
+        };
+        TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
 
         THashSet<ui32> ParticipantNodes;
 
@@ -143,11 +152,23 @@ struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
 struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
+    const NKikimrConfig::TTliConfig& TliConfig;
 
-    TExecuterConfig( TIntrusivePtr<TExecuterMutableConfig> mutableConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig)
+    TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NKikimrConfig::TTliConfig& tliConfig
+    )
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)
+        , TliConfig(tliConfig)
     {}
+
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode GetBlockTrackingMode() const {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        return NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY;
+#endif
+        return TableServiceConfig.GetBlockTrackingMode();
+    }
 };
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
@@ -167,6 +188,7 @@ IActor* CreateKqpSchemeExecuter(
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
+    bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(

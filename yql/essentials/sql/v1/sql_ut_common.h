@@ -2453,6 +2453,25 @@ Y_UNIT_TEST(DeclareDecimalParameter) {
     UNIT_ASSERT(res.Root);
 }
 
+Y_UNIT_TEST(OptionalDecimal) {
+    const auto optionality = [](TStringBuf query) -> size_t {
+        NYql::TAstParseResult res = SqlToYql(TString(query));
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"OptionalType"};
+        VerifyProgram(res, stat, {});
+        return stat["OptionalType"];
+    };
+
+    UNIT_ASSERT_EQUAL(0, optionality(R"sql(SELECT FormatType(Decimal(15, 6)))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Decimal(15, 6)?))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Decimal(15, 6)??))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Decimal(15, 6)???))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>?))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>??))sql"));
+}
+
 Y_UNIT_TEST(SimpleGroupBy) {
     NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;");
     UNIT_ASSERT(res.Root);
@@ -3401,6 +3420,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
                     MODE = 'KEYS_ONLY',
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
+                    USER_SIDS = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
                     SCHEMA_CHANGES = FALSE,
@@ -3420,6 +3440,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("user_sids"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
@@ -3722,6 +3743,117 @@ Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
                         "<main>:1:40: Error: local: alternative is not implemented yet: \n");
 #endif
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx
+        LOCAL USING bloom_filter
+        ON (col)
+        WITH (
+            false_positive_probability=0.05
+        )
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomNgramFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx
+        LOCAL USING bloom_ngram_filter
+        ON (col)
+        WITH (
+            ngram_size=3,
+            hashes_count=2,
+            filter_size_bytes=512,
+            records_count=1024,
+            case_sensitive=true
+        )
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableAddIndexLocalBloomFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_filter
+            ON (col)
+            WITH (false_positive_probability=0.05),
+        PRIMARY KEY (pk))
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableAddIndexLocalBloomNgramFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_ngram_filter
+            ON (col)
+            WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
+        PRIMARY KEY (pk))
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddIndexGlobalBloomFilterIsNotSupported) {
+    ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx GLOBAL USING bloom_filter ON (col)",
+                        "<main>:1:55: Error: BLOOM_FILTER index can only be LOCAL\n");
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomCoverIsNotSupported) {
+    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING bloom_filter ON (col) COVER (payload)",
+                             "Error: COVER is not supported for local bloom indexes");
+}
+
+Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
+    const auto result = SqlToYql("USE ydb; ALTER TABLE table DROP INDEX idx");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_filter
+            ON (col)
+            WITH (false_positive_probability=0.05),
+        PRIMARY KEY (pk)
+        );
+        ALTER TABLE table DROP INDEX idx;
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterAndDropIndexIsCorrect) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_ngram_filter
+            ON (col)
+            WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
+        PRIMARY KEY (pk)
+        );
+        ALTER TABLE table DROP INDEX idx;
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
 Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
@@ -4692,6 +4824,7 @@ Y_UNIT_TEST(LinearAsColumnOrType) {
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    UNIT_ASSERT(SqlToYql(R"sql(USE ydb; CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);)sql").IsOk());
 }
 
 Y_UNIT_TEST(BetweenSymmetric) {
@@ -6623,6 +6756,19 @@ Y_UNIT_TEST(InvalidChangefeedInitialScan) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:95: Error: Literal of Bool type is expected for INITIAL_SCAN\n");
+}
+
+Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
+    auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", USER_SIDS = "foo")
+            );
+        )";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
 }
 
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
@@ -11773,6 +11919,57 @@ Y_UNIT_TEST(LangVerBefore202504) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(InsideLambda) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res;
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN 1 + (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT * FROM $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
@@ -12599,7 +12796,292 @@ Y_UNIT_TEST(NamedNodeSubqueryReuse) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
 }
 
+Y_UNIT_TEST(SelectOpUnion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) UNION (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpExcept) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) EXCEPT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpIntersect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) INTERSECT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(ColumnDefault) {
+
+Y_UNIT_TEST(AlterColumnSetDefault) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultString) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT "hello"u;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultNull) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT NULL;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnDropDefault) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropDefault");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultDoesNotEmitCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("columnCompression"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("changeColumnConstraints"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnDropDefaultDoesNotEmitCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_C(line.find("columnCompression") == TString::npos, line);
+            UNIT_ASSERT_C(line.find("changeColumnConstraints") == TString::npos, line);
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultWithOtherActions) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl
+            ALTER COLUMN val SET DEFAULT 42,
+            ALTER COLUMN other DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropDefault");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultMultipleColumns) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl
+            ALTER COLUMN a SET DEFAULT 1,
+            ALTER COLUMN b SET DEFAULT "hello"u,
+            ALTER COLUMN c DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    TVector<TString> lines;
+    Split(program, "\n", lines);
+
+    int setDefaultCount = 0;
+    int dropDefaultCount = 0;
+    for (const auto& line : lines) {
+        auto last = line.find("setDefaultValue");
+        while (last != TString::npos) {
+            ++setDefaultCount;
+            last = line.find("setDefaultValue", last + 1);
+        }
+        last = line.find("dropDefault");
+        while (last != TString::npos) {
+            ++dropDefaultCount;
+            last = line.find("dropDefault", last + 1);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(2, setDefaultCount);
+    UNIT_ASSERT_VALUES_EQUAL(1, dropDefaultCount);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultBoolLiteral) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT false;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterExternalTableSetDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER EXTERNAL TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterExternalTableDropDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER EXTERNAL TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterTableStoreSetDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLESTORE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterTableStoreDropDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLESTORE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+} // Y_UNIT_TEST_SUITE(ColumnDefault)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
 

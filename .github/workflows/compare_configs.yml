@@ -12,7 +12,7 @@ on:
         default: ""
         description: |
           List of branches for compare separated by space. 
-          If not set, result will be uploaded to global store for this list: 'stable-25-3-1 stable-25-4 prestable-26-1 current'.
+          If not set, result will be uploaded to global store for the default list of branches.
         required: false
 defaults:
   run:
@@ -59,7 +59,7 @@ jobs:
         set -xe
         cd ./ydb/tests/library/compatibility/configs
         if [[ -z "${{inputs.branches}}" ]]; then
-            BRANCH_LIST="stable-25-3-1 stable-25-4-1 stable-25-4 prestable-26-1 current"
+            BRANCH_LIST="stable-25-4-1 stable-25-4 stable-26-1-1 stable-26-1 prestable-26-2 current"
         else
             BRANCH_LIST="${{inputs.branches}}"
         fi

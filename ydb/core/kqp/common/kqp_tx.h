@@ -3,6 +3,8 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
@@ -83,9 +85,11 @@ struct TKqpTxLocks {
 struct TDeferredEffect {
     TKqpPhyTxHolder::TConstPtr PhysicalTx;
     TQueryData::TPtr Params;
+    ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx)
-        : PhysicalTx(physicalTx) {}
+    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, ui64 querySpanId = 0)
+        : PhysicalTx(physicalTx)
+        , QuerySpanId(querySpanId) {}
 };
 
 
@@ -111,8 +115,8 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        DeferredEffects.emplace_back(physicalTx);
+    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        DeferredEffects.emplace_back(physicalTx, querySpanId);
         DeferredEffects.back().Params = params;
         return true;
     }
@@ -189,8 +193,8 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        return DeferredEffects.Add(physicalTx, params);
+    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        return DeferredEffects.Add(physicalTx, params, querySpanId);
     }
 
     bool TxHasEffects() const {
@@ -220,9 +224,10 @@ public:
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery() {
+    void OnBeginQuery(ui64 querySpanId, const TString& queryText) {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
+        QueryTextCollector.AddQueryText(querySpanId, queryText);
     }
 
     void OnEndQuery() {
@@ -242,6 +247,7 @@ public:
         HasTableWrite = false;
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
+        QueryTextCollector.Clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -369,6 +375,8 @@ public:
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };
 
 struct TTxId {
@@ -516,8 +524,10 @@ public:
     }
 };
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId,
+    TMaybe<ui64> victimQuerySpanId = Nothing());
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
+    TMaybe<ui64> victimQuerySpanId = Nothing());
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
@@ -531,3 +541,4 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
+

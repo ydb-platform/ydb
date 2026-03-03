@@ -12,8 +12,7 @@
 #include <functional>
 #include <iterator>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 template <typename TNode>
 class TMaybeNode {};
@@ -673,5 +672,4 @@ TNodeBuilder<TBuildValueHolder<TNode>, TNode> Build(TExprContext& ctx, TPosition
     return builder;
 }
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

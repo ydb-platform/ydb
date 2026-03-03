@@ -3131,16 +3131,16 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 KeyColumnNames: ["id", "embedding"]
                 DataColumnNames: ["data"]
                 Type: EIndexTypeGlobalVectorKmeansTree
-                VectorIndexKmeansTreeDescription: { 
-                    Settings: { 
-                        settings: { 
-                            metric: DISTANCE_COSINE, 
-                            vector_type: VECTOR_TYPE_FLOAT, 
-                            vector_dimension: 1024 
-                        }, 
-                        clusters: 4, 
-                        levels: 5 
-                    } 
+                VectorIndexKmeansTreeDescription: {
+                    Settings: {
+                        settings: {
+                            metric: DISTANCE_COSINE,
+                            vector_type: VECTOR_TYPE_FLOAT,
+                            vector_dimension: 1024
+                        },
+                        clusters: 4,
+                        levels: 5
+                    }
                 }
             }
         )");
@@ -3183,7 +3183,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             TString implPath = "/MyRoot/TableWithVector/VectorIndex/" + implTable;
             auto desc = DescribePrivatePath(runtime, implPath, true, true);
 
-            UNIT_ASSERT_C(desc.GetPathDescription().HasTable(), 
+            UNIT_ASSERT_C(desc.GetPathDescription().HasTable(),
                 Sprintf("Vector index implementation table %s should exist", implTable.c_str()));
 
             const auto& table = desc.GetPathDescription().GetTable();
@@ -3195,7 +3195,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     break;
                 }
             }
-            UNIT_ASSERT_C(foundImplCdc, 
+            UNIT_ASSERT_C(foundImplCdc,
                 Sprintf("Vector index implementation table %s should have CDC stream after full backup", implTable.c_str()));
         }
 
@@ -3226,7 +3226,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, indexMetaPath), {
             NLs::PathExist,
-            NLs::ChildrenCount(3) 
+            NLs::ChildrenCount(3)
         });
 
         for (const auto& implTable : implTables) {
@@ -3259,16 +3259,16 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 KeyColumnNames: ["id", "embedding"]
                 DataColumnNames: ["data"]
                 Type: EIndexTypeGlobalVectorKmeansTree
-                VectorIndexKmeansTreeDescription: { 
-                    Settings: { 
-                        settings: { 
-                            metric: DISTANCE_COSINE, 
-                            vector_type: VECTOR_TYPE_FLOAT, 
-                            vector_dimension: 1024 
-                        }, 
-                        clusters: 4, 
-                        levels: 5 
-                    } 
+                VectorIndexKmeansTreeDescription: {
+                    Settings: {
+                        settings: {
+                            metric: DISTANCE_COSINE,
+                            vector_type: VECTOR_TYPE_FLOAT,
+                            vector_dimension: 1024
+                        },
+                        clusters: 4,
+                        levels: 5
+                    }
                 }
             }
         )");
@@ -3304,7 +3304,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithVector"), {NLs::PathNotExist});
 
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             Sprintf(R"(Name: "%s")", DEFAULT_NAME_1));
         env.TestWaitNotification(runtime, txId);
 
@@ -3335,17 +3335,64 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             });
 
             const auto& table = implDesc.GetPathDescription().GetTable();
-            UNIT_ASSERT_C(table.ColumnsSize() > 0, 
+            UNIT_ASSERT_C(table.ColumnsSize() > 0,
                 Sprintf("Implementation table %s should have columns restored", implTable.c_str()));
         }
 
         const auto& kmeansDesc = indexDesc.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription();
-        const auto& treeSettings = kmeansDesc.GetSettings(); 
+        const auto& treeSettings = kmeansDesc.GetSettings();
         const auto& vectorSettings = treeSettings.Getsettings();
 
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getmetric(), Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getvector_dimension(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getclusters(), 4);
         UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getlevels(), 5);
+    }
+
+    Y_UNIT_TEST(InitCopyTableSourceDroppedSurvives) {
+        // Init must not set PathState=EPathStateCopying on a dropped CopyTable source.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Block datashard propose results to keep CopyTable in TxInFlightV2 across reboot.
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> block(runtime);
+
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "Table1Copy", "/MyRoot/Table1");
+        TestModificationResult(runtime, txId);
+
+        if (block.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&block](IEventHandle&) { return !block.empty(); });
+            runtime.DispatchEvents(opts);
+        }
+
+        auto tablePathId = DescribePath(runtime, "/MyRoot/Table1")
+            .GetPathDescription().GetSelf().GetPathId();
+
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('Id (Uint64 '%lu))))
+                (let update '('('StepDropped (Uint64 '1000000))))
+                (return (AsList (UpdateRow 'Paths key update)))
+            )
+        )", tablePathId));
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Triggers Dropped() on Table1 which checks PathState consistency.
+        // Without fix: init sets PathState=EPathStateCopying on dropped source -> crash.
+        DescribePath(runtime, "/MyRoot/Table1");
     }
 } // TBackupCollectionTests

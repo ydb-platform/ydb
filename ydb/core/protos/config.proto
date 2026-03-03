@@ -1,6 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
+import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
@@ -462,6 +463,7 @@ message TInterconnectConfig {
         PER_PEER = 1;
         PER_DATA_CENTER = 2;
         NO_MERGE = 3;
+        PER_HOST = 4;
     }
 
     enum EEncryptionMode {
@@ -615,13 +617,14 @@ message TMonitoringConfig {
     optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
     optional string MonitoringPrivateKeyFile = 20;
-    optional string MonitoringCaFile = 23;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool HideHttpEndpoint = 19 [default = false];
     optional bool RequireCountersAuthentication = 21 [default = false];
     optional bool RequireHealthcheckAuthentication = 22 [default = false];
+    optional string MonitoringCaFile = 23;
+    repeated string CompressContentTypes = 24; // by default most text types are compressed
 }
 
 message TRestartsCountConfig {
@@ -2559,6 +2562,7 @@ message TColumnShardConfig {
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
     optional bool EnableCursorV1 = 68 [default = false];
+    optional uint64 LimitSortedStartInFlight = 69 [default = 16];
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
@@ -2619,7 +2623,7 @@ message TCompactionConfig {
     }
 
     message TBorrowedCompactionConfig {
-        optional double MaxRate = 1 [default = 0]; // unlimitted
+        optional double MaxRate = 1 [default = 0]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
         // After this interval we will try to restart
@@ -2629,12 +2633,30 @@ message TCompactionConfig {
         optional uint64 MinWakeupIntervalMs = 4 [default = 10];
     }
 
+    message TForcedCompactionConfig {
+        optional double MaxRate = 1 [default = 0]; // unlimited
+        optional uint64 InflightLimit = 2 [default = 10];
+
+        // After this interval we will try to restart
+        optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 4 [default = 10];
+
+        // number of shards to persist in one batch
+        optional uint32 PersistBatchSize = 5 [default = 100];
+
+        // maximum time of unpersisted batch of shards
+        optional uint32 PersistBatchMaxTimeMs = 6 [default = 100];
+    }
+
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
+    optional TForcedCompactionConfig ForcedCompactionConfig = 3;
 }
 
 message TBackgroundCleaningConfig {
-    optional double MaxRate = 1 [default = 0]; // unlimitted
+    optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
     // After this interval we will try to restart
@@ -2959,6 +2981,15 @@ message TClusterDiagnosticsConfig {
     optional uint64 CountersMaxInflight = 2 [default = 100];
 }
 
+message TNbsConfig {
+    optional bool Enabled = 1;
+    optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
+}
+
+message TTliConfig {
+    repeated string IgnoredTableRegexes = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3073,6 +3104,10 @@ message TAppConfig {
     optional TRecoveryShardConfig RecoveryShardConfig = 117;
 
     optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
+
+    optional TNbsConfig NbsConfig = 119;
+
+    optional TTliConfig TliConfig = 120;
 }
 
 message TYdbVersion {

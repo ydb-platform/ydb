@@ -4,6 +4,7 @@
 
 #include <yt/yql/providers/yt/lib/dump_helpers/yql_yt_dump_helpers.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -29,7 +30,6 @@
 #include <util/folder/path.h>
 #include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
-#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 
 namespace NYql {
 
@@ -229,6 +229,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 }
                 downloaderOptions.SamplingConfig = samplingConfig;
                 downloaderOptions.UniqueId = uniqueId;
+                downloaderOptions.DeliveryMode = deliveryMode;
 
                 auto downloaderResult = Downloader_(downloaderOptions).GetValueSync();
 

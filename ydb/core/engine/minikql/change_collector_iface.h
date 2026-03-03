@@ -12,11 +12,11 @@ public:
 
     virtual bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TRowVersion& writeVersion) = 0;
+        const TRowVersion& writeVersion, const TString& userSID) = 0;
 
     virtual bool OnUpdateTx(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        ui64 writeTxId) = 0;
+        ui64 writeTxId, const TString& userSID) = 0;
 };
 
 } // NMiniKQL

@@ -84,6 +84,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    forced_compaction.proto
     fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
@@ -178,6 +179,7 @@ PEERDIR(
     ydb/core/config/protos
     ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/nbs/cloud/blockstore/config
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos

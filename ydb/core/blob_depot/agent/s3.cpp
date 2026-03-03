@@ -11,7 +11,7 @@ namespace NKikimr::NBlobDepot {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
             auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
-            S3WrapperId = Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
+            S3WrapperId = Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }
     }

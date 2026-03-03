@@ -908,6 +908,10 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
         def check_predicate():
             return predicate(), None, None
 
+    result = False
+    last_exception = None
+    last_exception_traceback = None
+
     if timeout is None:
         if iter is None:
             iter = 100

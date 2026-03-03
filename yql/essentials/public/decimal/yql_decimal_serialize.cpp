@@ -2,8 +2,7 @@
 
 #include <utility>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
 size_t Serialize(TInt128 value, char* buf) {
     if (value == -Nan()) {
@@ -86,5 +85,4 @@ std::pair<TInt128, size_t> Deserialize(const char* b, size_t len) {
     return std::make_pair(v, used);
 }
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

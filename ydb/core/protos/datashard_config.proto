@@ -26,6 +26,9 @@ message TDataShardConfig {
     optional bool DisabledOnSchemeShard = 19 [default = false];
     optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
     optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];
+    optional uint32 IncrementalRestoreScanBatchMaxBytes = 31 [default = 512000];  // 500 KB
+    optional uint32 IncrementalRestoreScanBatchMinRows = 32 [default = 100];
+    optional uint32 IncrementalRestoreScanBatchMaxRows = 33 [default = 10000];
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
     optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
     optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];

@@ -178,7 +178,7 @@ public:
     }
 
     TString GetActorIdStr() const {
-        return ActorId ? ToString(*ActorId) : "none";
+        return ActorId ? ::ToString(*ActorId) : "none";
     }
 };
 

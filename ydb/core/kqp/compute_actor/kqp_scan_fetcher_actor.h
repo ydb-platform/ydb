@@ -168,10 +168,14 @@ private:
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream str;
+        const auto elapsed = TInstant::Now() - RegistrationStartTime;
+        const double elapsedSec = elapsed.SecondsFloat();
+
         HTML(str) {
             PRE() {
                 str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
                 str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
+                str << "Elapsed: " << elapsed << Endl;
                 str << "PendingScanData: " << PendingScanData.size()
                     << ", PendingShards: " << PendingShards.size()
                     << ", PendingResolveShards: " << PendingResolveShards.size() << Endl;
@@ -180,6 +184,13 @@ private:
                     << ", PacksToSendCount: " << InFlightComputes.GetPacksToSendCount() << Endl;
                 str << "BlocksReceived: " << BlocksReceived
                     << ", TotalBytesReceived: " << TotalBytesReceived << Endl;
+                if (BlocksReceived > 0) {
+                    str << "AvgBlockSize: " << (TotalBytesReceived / BlocksReceived) << " bytes" << Endl;
+                }
+                if (elapsedSec > 0) {
+                    str << "Throughput: " << (ui64)(TotalBytesReceived / elapsedSec) << " bytes/sec"
+                        << ", " << (ui64)(Stats.TotalReadRows / elapsedSec) << " rows/sec" << Endl;
+                }
                 str << "Stats: TotalReadRows=" << Stats.TotalReadRows
                     << " CompletedShards=" << Stats.CompletedShards << Endl;
             }
@@ -189,10 +200,11 @@ private:
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH_ATTRS({{"title", "Compute actor receiving data from this fetcher"}}) { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Last FreeSpace value reported by compute actor"}}) { str << "FreeSpace"; }
                         TABLEH_ATTRS({{"title", "Total chunks sent to compute actor"}}) { str << "DataChunksSent"; }
                         TABLEH_ATTRS({{"title", "Accepted acks (only when compute was not free)"}}) { str << "AcksReceived"; }
                         TABLEH_ATTRS({{"title", "DataChunksSent minus AcksReceived: events stuck in compute mailbox"}}) { str << "Sent-Acked"; }
-                        TABLEH_ATTRS({{"title", "All acks from compute including dropped (compute was already free)"}}) { str << "TotalAcksFromCompute"; }
+                        TABLEH_ATTRS({{"title", "All acks from compute including ones ignored because compute was already free"}}) { str << "TotalAcksFromCompute"; }
                         TABLEH_ATTRS({{"title", "Packs queued locally, waiting for ack before sending"}}) { str << "DataQueue"; }
                     }
                 }
@@ -202,6 +214,7 @@ private:
                             TABLED() {
                                 HREF(ActorLink(actorId)) { str << actorId; }
                             }
+                            TABLED() { str << info.GetFreeSpace(); }
                             TABLED() { str << info.GetDataChunksSent(); }
                             TABLED() { str << info.GetAcksReceived(); }
                             TABLED() { str << (i64)info.GetDataChunksSent() - (i64)info.GetAcksReceived(); }
@@ -218,6 +231,7 @@ private:
                     TABLER() {
                         TABLEH_ATTRS({{"title", "DataShard tablet serving this key range"}}) { str << "TabletId"; }
                         TABLEH_ATTRS({{"title", "Scan actor on the shard side"}}) { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Rows read from this shard so far"}}) { str << "RowsRead"; }
                         TABLEH_ATTRS({{"title", "Total chunks from shard not yet processed by compute; shard blocked until 0"}}) { str << "InFlight"; }
                         TABLEH_ATTRS({{"title", "Subset of InFlight stuck in queue because no compute actor was free"}}) { str << "Pending"; }
                         TABLEH_ATTRS({{"title", "Shard is waiting for fetcher to send ack before sending next chunk"}}) { str << "NeedAck"; }
@@ -237,6 +251,10 @@ private:
                                 } else {
                                     str << "none";
                                 }
+                            }
+                            TABLED() {
+                                auto it = Stats.ReadShardInfo.find(tabletId);
+                                str << (it != Stats.ReadShardInfo.end() ? it->second.first : 0);
                             }
                             TABLED() { str << scanner.GetDataChunksInFlightCount(); }
                             TABLED() { str << scanner.GetPendingMessageCount(); }

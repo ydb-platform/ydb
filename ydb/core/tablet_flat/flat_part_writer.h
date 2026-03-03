@@ -63,11 +63,11 @@ namespace NTable {
                 Histories.emplace_back(scheme, conf, tags, NPage::TGroupId(group, true));
             }
 
-            if (conf.ByKeyFilter) {
+            for (ui32 prefixLen : conf.ByKeyFilterPrefixes) {
                 if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
-                    ByKey.Reset(new NBloom::TQueue(0.0001));
+                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TQueue>(0.0001));
                 } else {
-                    ByKey.Reset(new NBloom::TWriter(conf.MaxRows, 0.0001));
+                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TWriter>(conf.MaxRows, 0.0001));
                 }
             }
 
@@ -363,8 +363,8 @@ namespace NTable {
         {
             KeyState.RowId = Groups[0].Data.GetLastRowId();
 
-            if (ByKey) {
-                ByKey->Add(KeyState.Key);
+            for (auto& [prefixLen, writer] : ByKeyPrefixes) {
+                writer->Add(TArrayRef<const TCell>(KeyState.Key.data(), Min<size_t>(prefixLen, KeyState.Key.size())));
             }
 
             for (auto& g : Groups) {
@@ -501,6 +501,11 @@ namespace NTable {
                     // Main index always includes an entry for the last key
                     indexSize += Groups[0].NextIndexSize;
 
+                    ui64 byKeyPrefixesSize = 0;
+                    for (auto& [_, writer] : ByKeyPrefixes) {
+                        byKeyPrefixesSize += writer->EstimateBytesUsed(1);
+                    }
+
                     ui64 mainPageCollectionSize = Current.MainWritten
                             + Groups[0].Data.BytesUsed()
                             + Groups[0].NextDataSize.DataPageSize
@@ -508,7 +513,7 @@ namespace NTable {
                             + FrameS.EstimateBytesUsed(smallRefs)
                             + FrameL.EstimateBytesUsed(largeRefs)
                             + Globs.EstimateBytesUsed(largeRefs)
-                            + (ByKey ? ByKey->EstimateBytesUsed(1) : 0)
+                            + byKeyPrefixesSize
                             + SchemeData.size();
 
                     // On overflow we would have to start a new data page
@@ -588,8 +593,12 @@ namespace NTable {
                 Current.Large = WriteIf(FrameL.Make(), EPage::Frames);
                 Current.Small = WriteIf(FrameS.Make(), EPage::Frames);
                 Current.Globs = WriteIf(Globs.Make(), EPage::Globs);
-                if (ByKey) {
-                    Current.ByKey = WriteIf(ByKey->Make(), EPage::Bloom);
+                Current.ByKeyPrefixPages.clear();
+                for (auto& [prefixLen, writer] : ByKeyPrefixes) {
+                    TPageId pageId = WriteIf(writer->Make(), EPage::Bloom);
+                    if (pageId != Max<TPageId>()) {
+                        Current.ByKeyPrefixPages.emplace_back(prefixLen, pageId);
+                    }
                 }
 
                 if (Current.GarbageStatsBuilder) {
@@ -624,8 +633,8 @@ namespace NTable {
                 FrameL.Reset();
                 FrameS.Reset();
                 Globs.Reset();
-                if (ByKey) {
-                    ByKey->Reset();
+                for (auto& [_, writer] : ByKeyPrefixes) {
+                    writer->Reset();
                 }
                 Slices.Reset();
 
@@ -702,8 +711,11 @@ namespace NTable {
                     lay->SetLarge(Current.Large);
                 if (Current.Small != Max<TPageId>())
                     lay->SetSmall(Current.Small);
-                if (Current.ByKey != Max<TPageId>())
-                    lay->SetByKey(Current.ByKey);
+                for (auto& [prefixLen, pageId] : Current.ByKeyPrefixPages) {
+                    auto* meta = lay->AddByKeyPrefixes();
+                    meta->SetPageId(pageId);
+                    meta->SetPrefixColumns(prefixLen);
+                }
 
                 for (TPageId page : Current.FlatGroupIndexes) {
                     lay->AddGroupIndexes(page);
@@ -1106,7 +1118,7 @@ namespace NTable {
         NPage::TFrameWriter FrameL; /* Large blobs inverted index   */
         NPage::TFrameWriter FrameS; /* Packed blobs inverted index */
         NPage::TExtBlobsWriter Globs;
-        THolder<NBloom::IWriter> ByKey;
+        TVector<std::pair<ui32, THolder<NBloom::IWriter>>> ByKeyPrefixes;
         TWriteStats WriteStats;
         TStackVec<TCell, 16> Key;
         TStackVec<TCell, 16> PrevPageLastKey;
@@ -1190,7 +1202,7 @@ namespace NTable {
             TPageId Large = Max<TPageId>();
             TPageId Small = Max<TPageId>();
             TPageId Globs = Max<TPageId>();
-            TPageId ByKey = Max<TPageId>();
+            TVector<std::pair<ui32, TPageId>> ByKeyPrefixPages; // {prefixLen, pageId}
             TPageId GarbageStats = Max<TPageId>();
             TPageId TxIdStats = Max<TPageId>();
 

@@ -975,16 +975,24 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
+                    TSet<ui32> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
 
                         if (isLocalBloom) {
-                            if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
+                            if (index.Type == TIndexDescription::EType::LocalBloomNgramFilter &&
+                                metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom ngram indexes are supported only for column tables"));
                                 return;
                             }
 
+                            if (metadata->StoreType == EStoreType::Column) {
+                                continue; // handled by OLAP path below
+                            }
+
+                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
+                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
                             continue;
                         }
 
@@ -1016,6 +1024,9 @@ public:
                             default:
                                 break;
                         }
+                    }
+                    for (ui32 prefix : bloomPrefixes) {
+                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));

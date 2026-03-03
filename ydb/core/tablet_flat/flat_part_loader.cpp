@@ -63,6 +63,10 @@ void TLoader::StageParseMeta()
         LargeId = layout.HasLarge() ? layout.GetLarge() : LargeId;
         SmallId = layout.HasSmall() ? layout.GetSmall() : SmallId;
         ByKeyId = layout.HasByKey() ? layout.GetByKey() : ByKeyId;
+        ByKeyPrefixMetas.clear();
+        for (const auto& meta : layout.GetByKeyPrefixes()) {
+            ByKeyPrefixMetas.push_back({meta.GetPageId(), meta.GetPrefixColumns()});
+        }
         GarbageStatsId = layout.HasGarbageStats() ? layout.GetGarbageStats() : GarbageStatsId;
         TxIdStatsId = layout.HasTxIdStats() ? layout.GetTxIdStats() : TxIdStatsId;
 
@@ -184,6 +188,10 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         getPage(pageId);
     }
 
+    for (const auto& meta : ByKeyPrefixMetas) {
+        getPage(meta.PageId);
+    }
+
     if (auto fetch = LoaderEnv->GetFetch()) {
         return fetch;
     }
@@ -230,14 +238,30 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         }
     }
 
+    auto partScheme = TPartScheme::Parse(*scheme, Rooted);
+
+    TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> byKeyPrefixes;
+    // Convert legacy full-key bloom to a prefix entry
+    if (byKey) {
+        ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
+        byKeyPrefixes.emplace_back(keyCount, new NPage::TBloom(*byKey));
+    }
+    for (const auto& meta : ByKeyPrefixMetas) {
+        if (meta.PageId != Max<TPageId>()) {
+            if (auto* page = getPage(meta.PageId)) {
+                byKeyPrefixes.emplace_back(meta.PrefixColumns, new NPage::TBloom(*page));
+            }
+        }
+    }
+
     auto *partStore = new TPartStore(
         PageCollections.front()->PageCollection->Label(),
         {
             epoch,
-            TPartScheme::Parse(*scheme, Rooted),
+            std::move(partScheme),
             { FlatGroupIndexes, FlatHistoricIndexes, BTreeGroupIndexes, BTreeHistoricIndexes },
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
-            byKey ? new NPage::TBloom(*byKey) : nullptr,
+            std::move(byKeyPrefixes),
             large ? new NPage::TFrames(*large) : nullptr,
             small ? new NPage::TFrames(*small) : nullptr,
             indexesRawSize,

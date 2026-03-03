@@ -5052,7 +5052,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
         }
 
-        failAt = TInstant::Now();
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE

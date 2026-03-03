@@ -64,7 +64,10 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
+ydb/services/ydb/ut unittest.[*/*] chunk
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
+ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
+ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-4-1_to_prestable-26-1]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-4-1_to_stable-26-1-1]

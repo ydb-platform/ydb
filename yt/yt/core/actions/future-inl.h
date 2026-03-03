@@ -1110,7 +1110,21 @@ bool TFutureBase<T>::IsSet() const
 template <class T>
 const TErrorOr<T>& TFutureBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+const TErrorOr<T>& TFutureBase<T>::BlockingGet() const
+{
     YT_ASSERT(Impl_);
+    return Impl_->Get();
+}
+
+template <class T>
+const TErrorOr<T>& TFutureBase<T>::GetOrCrash() const
+{
+    YT_ASSERT(Impl_);
+    YT_VERIFY(Impl_->IsSet(), "GetOrCrash must not be called before future is set");
     return Impl_->Get();
 }
 
@@ -1426,7 +1440,21 @@ inline TFuture<void>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<void>> im
 template <class T>
 TErrorOr<T> TUniqueFutureBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+TErrorOr<T> TUniqueFutureBase<T>::BlockingGet() const
+{
     YT_ASSERT(this->Impl_);
+    return this->Impl_->GetUnique();
+}
+
+template <class T>
+TErrorOr<T> TUniqueFutureBase<T>::GetOrCrash() const
+{
+    YT_ASSERT(this->Impl_);
+    YT_VERIFY(this->Impl_->IsSet(), "GetOrCrash must not be called before future is set");
     return this->Impl_->GetUnique();
 }
 
@@ -1606,7 +1634,21 @@ inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
 template <class T>
 const TErrorOr<T>& TPromiseBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+const TErrorOr<T>& TPromiseBase<T>::BlockingGet() const
+{
     YT_ASSERT(Impl_);
+    return Impl_->Get();
+}
+
+template <class T>
+const TErrorOr<T>& TPromiseBase<T>::GetOrCrash() const
+{
+    YT_ASSERT(Impl_);
+    YT_VERIFY(Impl_->IsSet(), "GetOrCrash must not be called before promise is set");
     return Impl_->Get();
 }
 

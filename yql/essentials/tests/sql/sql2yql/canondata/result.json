@@ -8875,6 +8875,20 @@
             "uri": "https://{canondata_backend}/1924537/7c266a8fc2827810e9c5a76a5330561b54cf9b80/resource.tar.gz#test_sql2yql.test_select_yql-minimal_ordered_columns_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-named_node_auto_subquery_flatten_by]": [
+        {
+            "checksum": "b640f614228520a0523440ac9ecf60a6",
+            "size": 2519,
+            "uri": "https://{canondata_backend}/1937150/741fe9bae9bb3e6b68a847bff685a6ce2d463a10/resource.tar.gz#test_sql2yql.test_select_yql-named_node_auto_subquery_flatten_by_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-named_node_auto_subquery_join]": [
+        {
+            "checksum": "8cf35cc3a3b9af728d974281671a86eb",
+            "size": 2563,
+            "uri": "https://{canondata_backend}/1781765/7b0347baf78525397125020612d65a610f000c12/resource.tar.gz#test_sql2yql.test_select_yql-named_node_auto_subquery_join_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-named_node_expression]": [
         {
             "checksum": "efae42b5670b4b101941b1c1f36b14af",
@@ -15199,6 +15213,16 @@
             "uri": "file://test_sql_format.test_select_yql-minimal_ordered_columns_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-named_node_auto_subquery_flatten_by]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-named_node_auto_subquery_flatten_by_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-named_node_auto_subquery_join]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-named_node_auto_subquery_join_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-named_node_expression]": [
         {
             "uri": "file://test_sql_format.test_select_yql-named_node_expression_/formatted.sql"
@@ -16614,13 +16638,6 @@
             "checksum": "465a73c24481d40a8d5831924c7ec1de",
             "size": 131,
             "uri": "https://{canondata_backend}/1942525/e86e8eb1384217e7ea80a68b1032b7de98ab99b9/resource.tar.gz#test_sql_negative.test_select_yql-group_by_a_agglist_b-_/err_file.out"
-        }
-    ],
-    "test_sql_negative.test[select_yql-named_node_auto_subquery_from-]": [
-        {
-            "checksum": "ca7afdbce5ad46da4e3fe62e21ee7e44",
-            "size": 188,
-            "uri": "https://{canondata_backend}/1924537/75f17e4ed5e203b1549aabee611ff0e0b7a49359/resource.tar.gz#test_sql_negative.test_select_yql-named_node_auto_subquery_from-_/err_file.out"
         }
     ],
     "test_sql_negative.test[select_yql-select_op_order_by_inner_first-]": [

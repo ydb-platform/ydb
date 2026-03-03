@@ -10,8 +10,8 @@ namespace NHive {
 
 struct TTabletInfo;
 
-struct TNodeInfoTag {};
-struct TNodeInfo: public TIntrusiveListItem<TNodeInfo, TNodeInfoTag> {
+struct TSegmentNodesTag {};
+struct TNodeInfo: public TIntrusiveListItem<TNodeInfo, TSegmentNodesTag> {
     enum class EVolatileState {
         Unknown,
         Disconnected,

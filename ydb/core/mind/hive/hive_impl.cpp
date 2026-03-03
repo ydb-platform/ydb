@@ -2410,23 +2410,27 @@ double THive::GetUsage() const {
     THiveStats stats = GetStats();
     return stats.MaxUsage;
 }
+
+void THive::RemoveNodeFromSegments(TNodeInfo* node) {
+    auto it = NodeSegments.find(node->GetSegment());
+    if (it == NodeSegments.end()) {
+        return;
+    }
+
+    it->second.Remove(node);
+    if (it->second.Empty()) {
+        NodeSegments.erase(it);
+    }
+}
  
 void THive::RemoveNodeFromSegments(TNodeId nodeId) {
     if (auto* node = FindNode(nodeId)) {
-        auto it = NodeSegments.find(node->GetSegment());
-        if (it == NodeSegments.end()) {
-            return;
-        }
-
-        it->second.Remove(node);
-        if (it->second.Empty()) {
-            NodeSegments.erase(it);
-        }
+        RemoveNodeFromSegments(node);
     }
 }
 
 void THive::UpdateNodeSegments(TNodeInfo* node) {
-    RemoveNodeFromSegments(node->Id);
+    RemoveNodeFromSegments(node);
     NodeSegments[node->GetSegment()].PushBack(node);
 }
 
@@ -2507,7 +2511,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     }
 
     for (const auto& [segmentId, nodes] : NodeSegments) {
-        if (nodes.empty()) {
+        if (nodes.Empty()) {
             continue;
         }
 

@@ -390,7 +390,6 @@ public:
         if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
@@ -427,13 +426,7 @@ public:
 
     void Cancelled() {
         CancelQuery();
-        PassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
-        }
+        TBase::Cancelled();
     }
 
     void PassAway() override {
@@ -458,8 +451,9 @@ public:
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 

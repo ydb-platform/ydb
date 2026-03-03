@@ -1164,6 +1164,18 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     RequestDone(requests);
 }
 
+void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+        Cancelled();
+    }
+}
+
+void TViewerPipeClient::Cancelled() {
+    BLOG_D("Request cancelled");
+    AddEvent("Cancelled");
+    PassAway();
+}
+
 void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     if (ResourceNavigateResponse) {
         ResourceNavigateResponse->Set(std::move(ev));
@@ -1256,6 +1268,8 @@ STATEFN(TViewerPipeClient::StateResolveDatabase) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1264,6 +1278,18 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveResource);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
+    }
+}
+
+STATEFN(TViewerPipeClient::StateWork) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1274,6 +1300,9 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
+    if (HttpEvent) {
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+    }
     auto request = GetRequest();
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {

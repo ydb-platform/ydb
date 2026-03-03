@@ -88,7 +88,7 @@ void InitViewerBSGroupInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonBSGroupInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/bsgroupinfo", new TJsonHandler<TJsonBSGroupInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/bsgroupinfo", new THttpHandler<TJsonBSGroupInfo>(yaml));
     TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
 }
 
@@ -101,7 +101,7 @@ void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonNodeInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/nodeinfo", new TJsonHandler<TJsonNodeInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/nodeinfo", new THttpHandler<TJsonNodeInfo>(yaml));
     TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
 }
 
@@ -114,7 +114,7 @@ void InitViewerPDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonPDiskInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/pdiskinfo", new TJsonHandler<TJsonPDiskInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/pdiskinfo", new THttpHandler<TJsonPDiskInfo>(yaml));
 }
 
 void InitViewerSysInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -126,7 +126,7 @@ void InitViewerSysInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonSysInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/sysinfo", new TJsonHandler<TJsonSysInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/sysinfo", new THttpHandler<TJsonSysInfo>(yaml));
 }
 
 void InitViewerTabletInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -213,7 +213,7 @@ void InitViewerTabletInfoJsonHandler(TJsonHandlers& jsonHandlers) {
         .Type = "string",
     });
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonTabletInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/tabletinfo", new TJsonHandler<TJsonTabletInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/tabletinfo", new THttpHandler<TJsonTabletInfo>(yaml));
 }
 
 void InitViewerVDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -225,7 +225,7 @@ void InitViewerVDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonVDiskInfo::TResponseType>());
-    jsonHandlers.AddHandler("/viewer/vdiskinfo", new TJsonHandler<TJsonVDiskInfo>(yaml));
+    jsonHandlers.AddHandler("/viewer/vdiskinfo", new THttpHandler<TJsonVDiskInfo>(yaml));
 }
 
 }

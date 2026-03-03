@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/meta/support_links/resolver_validation.h>
+#include <ydb/mvp/meta/support_links/support_links_config_validation.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -267,7 +267,7 @@ void TMVP::TryGetMetaOptionsFromConfig() {
 }
 
 void TMVP::ValidateSupportLinksConfig() const {
-    const auto& sourceValidators = NSupportLinks::TLinkSourceConfigValidators::Default();
+    const auto& sourceValidators = NSupportLinks::TConfigValidation::Default();
     auto validateEntityLinks = [&](const TVector<TSupportLinkEntryConfig>& links, TStringBuf entityName) {
         for (size_t i = 0; i < links.size(); ++i) {
             const auto& link = links[i];

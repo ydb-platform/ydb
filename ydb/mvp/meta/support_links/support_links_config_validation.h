@@ -6,7 +6,7 @@
 
 namespace NMVP::NSupportLinks {
 
-class TLinkSourceConfigValidators {
+class TConfigValidation {
 public:
     void Validate(const TSupportLinkEntryConfig& linkConfig, const TGrafanaSupportConfig&, TStringBuf where) const {
         if (linkConfig.Source.empty()) {
@@ -18,9 +18,9 @@ public:
                             << " (source=" << linkConfig.Source << ")";
     }
 
-    static const TLinkSourceConfigValidators& Default() {
-        static const TLinkSourceConfigValidators validators;
-        return validators;
+    static const TConfigValidation& Default() {
+        static const TConfigValidation validation;
+        return validation;
     }
 };
 

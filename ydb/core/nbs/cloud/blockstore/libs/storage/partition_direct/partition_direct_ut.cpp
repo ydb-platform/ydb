@@ -4,9 +4,9 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 using namespace NKikimr;
 
@@ -49,7 +49,8 @@ void SetupStorage(TEnvironmentSetup& env)
     NKikimrConfig::TNbsConfig nbsConfig;
     auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
     storageConfig->SetDDiskPoolName(DDiskPoolName);
-    storageConfig->SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
+    storageConfig->SetPersistentBufferDDiskPoolName(
+        PersistentBufferDDiskPoolName);
     CreateNbsService(nbsConfig);
     StartNbsService();
 }
@@ -74,23 +75,22 @@ ui64 CreatePartitionTablet(TEnvironmentSetup& env)
             TTabletTypes::Unknown,
             env.Settings.Erasure.GetErasure(),
             env.GroupId,
-            3),  // NumChannels
-        [](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
-            return new TPartitionActor(tablet, info);
-        },
+            3),   // NumChannels
+        [](const TActorId& tablet, TTabletStorageInfo* info) -> IActor*
+        { return new TPartitionActor(tablet, info); },
         env.Settings.ControllerNodeId);
 
     // Wait for tablet to boot
     bool working = true;
     env.Runtime->Sim(
         [&] { return working; },
-        [&](IEventHandle& event) {
-            working = event.GetTypeRewrite() != TEvTablet::EvBoot;
-        });
+        [&](IEventHandle& event)
+        { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
 
     // Send volume config update
     auto volumeConfig = CreateVolumeConfig();
-    auto updateEvent = std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+    auto updateEvent =
+        std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
     updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
     updateEvent->Record.SetTxId(1);
 
@@ -107,7 +107,8 @@ ui64 CreatePartitionTablet(TEnvironmentSetup& env)
         TTestActorSystem::GetPipeConfigWithRetries());
 
     // Wait for response
-    auto response = env.WaitForEdgeActorEvent<NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+    auto response = env.WaitForEdgeActorEvent<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
     UNIT_ASSERT(response->Get()->Record.GetStatus() == NKikimrBlockStore::OK);
 
     // Wait for partition to allocate DDisk group
@@ -121,7 +122,8 @@ TActorId GetLoadActorAdapterActorId(
     ui64 partitionTabletId,
     const TActorId& edge)
 {
-    auto request = std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdRequest>();
+    auto request =
+        std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdRequest>();
     env.Runtime->SendToPipe(
         partitionTabletId,
         edge,

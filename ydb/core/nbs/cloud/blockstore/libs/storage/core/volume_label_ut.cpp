@@ -11,11 +11,14 @@ namespace NYdb::NBS::NStorage {
 
 Y_UNIT_TEST_SUITE(TDiskIdTest)
 {
-    static void VerifyDiskIdToPathDeprecated(const TString& diskId,
-                                             const TString& path)
+    static void VerifyDiskIdToPathDeprecated(
+        const TString& diskId,
+        const TString& path)
     {
-        UNIT_ASSERT_VALUES_EQUAL_C(DiskIdToPathDeprecated(diskId), path,
-                                   "where diskId=" << diskId.Quote());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            DiskIdToPathDeprecated(diskId),
+            path,
+            "where diskId=" << diskId.Quote());
     }
 
     Y_UNIT_TEST(TestDiskIdToPathDeprecated)
@@ -28,8 +31,10 @@ Y_UNIT_TEST_SUITE(TDiskIdTest)
 
     static void VerifyDiskIdToPath(const TString& diskId, const TString& path)
     {
-        UNIT_ASSERT_VALUES_EQUAL_C(DiskIdToPath(diskId), path,
-                                   "where diskId=" << diskId.Quote());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            DiskIdToPath(diskId),
+            path,
+            "where diskId=" << diskId.Quote());
     }
 
     Y_UNIT_TEST(TestDiskIdToPath)
@@ -40,11 +45,14 @@ Y_UNIT_TEST_SUITE(TDiskIdTest)
         VerifyDiskIdToPath("тест", "_189/%D1%82%D0%B5%D1%81%D1%82");
     }
 
-    static void VerifyPathNameToDiskId(const TString& pathName,
-                                       const TString& diskId)
+    static void VerifyPathNameToDiskId(
+        const TString& pathName,
+        const TString& diskId)
     {
-        UNIT_ASSERT_VALUES_EQUAL_C(PathNameToDiskId(pathName), diskId,
-                                   "where pathName=" << pathName.Quote());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            PathNameToDiskId(pathName),
+            diskId,
+            "where pathName=" << pathName.Quote());
     }
 
     Y_UNIT_TEST(TestPathNameToDiskId)
@@ -56,8 +64,10 @@ Y_UNIT_TEST_SUITE(TDiskIdTest)
     }
 
     static void VerifyDiskIdToVolumeDirAndNameDeprecated(
-        const TString& rootDir, const TString& diskId,
-        const TString& expectedDir, const TString& expectedName)
+        const TString& rootDir,
+        const TString& diskId,
+        const TString& expectedDir,
+        const TString& expectedName)
     {
         TString dir, name;
         std::tie(dir, name) =
@@ -68,24 +78,43 @@ Y_UNIT_TEST_SUITE(TDiskIdTest)
 
     Y_UNIT_TEST(TestDiskIdToVolumeDirAndNameDeprecated)
     {
-        VerifyDiskIdToVolumeDirAndNameDeprecated("/local/nbs", "volume",
-                                                 "/local/nbs", "volume");
-        VerifyDiskIdToVolumeDirAndNameDeprecated("/local/nbs", "test volume",
-                                                 "/local/nbs", "test+volume");
-        VerifyDiskIdToVolumeDirAndNameDeprecated("/local/nbs", "///volume",
-                                                 "/local/nbs", "volume");
-        VerifyDiskIdToVolumeDirAndNameDeprecated("/local/nbs", "/test/volume",
-                                                 "/local/nbs/test", "volume");
         VerifyDiskIdToVolumeDirAndNameDeprecated(
-            "/local/nbs", "///test///volume", "/local/nbs/test", "volume");
+            "/local/nbs",
+            "volume",
+            "/local/nbs",
+            "volume");
         VerifyDiskIdToVolumeDirAndNameDeprecated(
-            "/local/nbs", "///test//dir///volume", "/local/nbs/test/dir",
+            "/local/nbs",
+            "test volume",
+            "/local/nbs",
+            "test+volume");
+        VerifyDiskIdToVolumeDirAndNameDeprecated(
+            "/local/nbs",
+            "///volume",
+            "/local/nbs",
+            "volume");
+        VerifyDiskIdToVolumeDirAndNameDeprecated(
+            "/local/nbs",
+            "/test/volume",
+            "/local/nbs/test",
+            "volume");
+        VerifyDiskIdToVolumeDirAndNameDeprecated(
+            "/local/nbs",
+            "///test///volume",
+            "/local/nbs/test",
+            "volume");
+        VerifyDiskIdToVolumeDirAndNameDeprecated(
+            "/local/nbs",
+            "///test//dir///volume",
+            "/local/nbs/test/dir",
             "volume");
     }
 
     static void VerifyDiskIdToVolumeDirAndName(
-        const TString& rootDir, const TString& diskId,
-        const TString& expectedDir, const TString& expectedName)
+        const TString& rootDir,
+        const TString& diskId,
+        const TString& expectedDir,
+        const TString& expectedName)
     {
         TString dir, name;
         std::tie(dir, name) = DiskIdToVolumeDirAndName(rootDir, diskId);
@@ -95,17 +124,31 @@ Y_UNIT_TEST_SUITE(TDiskIdTest)
 
     Y_UNIT_TEST(TestDiskIdToVolumeDirAndName)
     {
-        VerifyDiskIdToVolumeDirAndName("/local/nbs", "volume",
-                                       "/local/nbs/_355", "volume");
-        VerifyDiskIdToVolumeDirAndName("/local/nbs", "test volume",
-                                       "/local/nbs/_249", "test+volume");
-        VerifyDiskIdToVolumeDirAndName("/local/nbs", "///volume",
-                                       "/local/nbs/_3E", "%2F%2F%2Fvolume");
-        VerifyDiskIdToVolumeDirAndName("/local/nbs", "/test/volume",
-                                       "/local/nbs/_366", "%2Ftest%2Fvolume");
-        VerifyDiskIdToVolumeDirAndName("/local/nbs", "///test///volume",
-                                       "/local/nbs/_1D2",
-                                       "%2F%2F%2Ftest%2F%2F%2Fvolume");
+        VerifyDiskIdToVolumeDirAndName(
+            "/local/nbs",
+            "volume",
+            "/local/nbs/_355",
+            "volume");
+        VerifyDiskIdToVolumeDirAndName(
+            "/local/nbs",
+            "test volume",
+            "/local/nbs/_249",
+            "test+volume");
+        VerifyDiskIdToVolumeDirAndName(
+            "/local/nbs",
+            "///volume",
+            "/local/nbs/_3E",
+            "%2F%2F%2Fvolume");
+        VerifyDiskIdToVolumeDirAndName(
+            "/local/nbs",
+            "/test/volume",
+            "/local/nbs/_366",
+            "%2Ftest%2Fvolume");
+        VerifyDiskIdToVolumeDirAndName(
+            "/local/nbs",
+            "///test///volume",
+            "/local/nbs/_1D2",
+            "%2F%2F%2Ftest%2F%2F%2Fvolume");
     }
 }
 

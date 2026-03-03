@@ -105,9 +105,12 @@ struct TEvSSProxy
 
         const ui64 FillGeneration;
 
-        TModifyVolumeRequest(EOpType opType, TString diskId,
-                             TString newMountToken, ui64 tokenVersion,
-                             ui64 fillGeneration = 0)
+        TModifyVolumeRequest(
+            EOpType opType,
+            TString diskId,
+            TString newMountToken,
+            ui64 tokenVersion,
+            ui64 fillGeneration = 0)
             : OpType(opType)
             , DiskId(std::move(diskId))
             , NewMountToken(std::move(newMountToken))
@@ -153,7 +156,8 @@ struct TEvSSProxy
         TDescribeSchemeResponse() = default;
 
         TDescribeSchemeResponse(
-            TString path, NKikimrSchemeOp::TPathDescription pathDescription)
+            TString path,
+            NKikimrSchemeOp::TPathDescription pathDescription)
             : Path(std::move(path))
             , PathDescription(std::move(pathDescription))
         {}
@@ -180,7 +184,8 @@ struct TEvSSProxy
         TDescribeVolumeResponse() = default;
 
         TDescribeVolumeResponse(
-            TString path, NKikimrSchemeOp::TPathDescription pathDescription)
+            TString path,
+            NKikimrSchemeOp::TPathDescription pathDescription)
             : Path(std::move(path))
             , PathDescription(std::move(pathDescription))
         {}

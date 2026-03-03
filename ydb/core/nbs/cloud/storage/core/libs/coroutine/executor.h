@@ -46,7 +46,8 @@ public:
         struct TRequestCancelled: T
         {
             TRequestCancelled()
-                : T(static_cast<T>(TErrorResponse(E_REJECTED, "request cancelled")))
+                : T(static_cast<T>(
+                      TErrorResponse(E_REJECTED, "request cancelled")))
             {}
         };
 
@@ -98,12 +99,14 @@ private:
 
         auto weakPtr = weak_from_this();
 
-        future.Subscribe([&, weakPtr = std::move(weakPtr)] (const auto&) {
-            if (auto ptr = weakPtr.lock()) {
-                // switch to executor thread
-                ptr->ExecuteSimple([&] { event.Signal(); });
-            }
-        });
+        future.Subscribe(
+            [&, weakPtr = std::move(weakPtr)](const auto&)
+            {
+                if (auto ptr = weakPtr.lock()) {
+                    // switch to executor thread
+                    ptr->ExecuteSimple([&] { event.Signal(); });
+                }
+            });
 
         int result = event.WaitI();
         return (result != ECANCELED);

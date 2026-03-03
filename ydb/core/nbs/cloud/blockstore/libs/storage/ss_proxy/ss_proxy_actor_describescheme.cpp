@@ -36,8 +36,11 @@ private:
     TActorId PathDescriptionBackup;
 
 public:
-    TDescribeSchemeActor(TRequestInfoPtr requestInfo, TString schemeShardDir,
-                         TString path, TActorId pathDescriptionBackup);
+    TDescribeSchemeActor(
+        TRequestInfoPtr requestInfo,
+        TString schemeShardDir,
+        TString path,
+        TActorId pathDescriptionBackup);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -60,9 +63,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDescribeSchemeActor::TDescribeSchemeActor(TRequestInfoPtr requestInfo,
-                                           TString schemeShardDir, TString path,
-                                           TActorId pathDescriptionBackup)
+TDescribeSchemeActor::TDescribeSchemeActor(
+    TRequestInfoPtr requestInfo,
+    TString schemeShardDir,
+    TString path,
+    TActorId pathDescriptionBackup)
     : RequestInfo(std::move(requestInfo))
     , SchemeShardDir(std::move(schemeShardDir))
     , Path(std::move(path))
@@ -90,8 +95,9 @@ void TDescribeSchemeActor::DescribeScheme(const TActorContext& ctx)
     NYdb::NBS::Send(ctx, MakeTxProxyID(), std::move(request));
 }
 
-bool TDescribeSchemeActor::HandleError(const TActorContext& ctx,
-                                       const NProto::TError& error)
+bool TDescribeSchemeActor::HandleError(
+    const TActorContext& ctx,
+    const NProto::TError& error)
 {
     if (FAILED(error.GetCode())) {
         ReplyAndDie(
@@ -156,7 +162,8 @@ void TDescribeSchemeActor::HandleDescribeSchemeResult(
     // }
 
     auto response = std::make_unique<TEvSSProxy::TEvDescribeSchemeResponse>(
-        record.GetPath(), record.GetPathDescription());
+        record.GetPath(),
+        record.GetPathDescription());
 
     ReplyAndDie(ctx, std::move(response));
 }
@@ -164,12 +171,15 @@ void TDescribeSchemeActor::HandleDescribeSchemeResult(
 STFUNC(TDescribeSchemeActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvSchemeShard::TEvDescribeSchemeResult,
-              HandleDescribeSchemeResult);
+        HFunc(
+            TEvSchemeShard::TEvDescribeSchemeResult,
+            HandleDescribeSchemeResult);
 
         default:
-            HandleUnexpectedEvent(ev, NKikimrServices::NBS_SS_PROXY,
-                                  __PRETTY_FUNCTION__);
+            HandleUnexpectedEvent(
+                ev,
+                NKikimrServices::NBS_SS_PROXY,
+                __PRETTY_FUNCTION__);
             break;
     }
 }
@@ -188,8 +198,11 @@ void TSSProxyActor::HandleDescribeScheme(
         CreateRequestInfo(ev->Sender, ev->Cookie, msg->CallContext);
 
     NYdb::NBS::Register<TDescribeSchemeActor>(
-        ctx, std::move(requestInfo), NbsStorageConfig.GetSchemeShardDir(),
-        msg->Path, PathDescriptionBackup);
+        ctx,
+        std::move(requestInfo),
+        NbsStorageConfig.GetSchemeShardDir(),
+        msg->Path,
+        PathDescriptionBackup);
 }
 
 }   // namespace NYdb::NBS::NStorage

@@ -1,9 +1,10 @@
 #pragma once
 
 #include "public.h"
-#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.pb.h>
 
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/public.h>
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.pb.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/histogram.h>
 
 #include <library/cpp/threading/future/future.h>
@@ -51,6 +52,6 @@ ITestRunnerPtr CreateTestRunner(
     ui32 maxIoDepth,
     std::atomic<bool>& shouldStop,
     TLoadTestRequestCallbacks requestCallbacks,
-    const void *udata);
+    const void* udata);
 
 }   // namespace NYdb::NBS::NBlockStore::NLoadTest

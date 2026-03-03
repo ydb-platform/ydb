@@ -46,20 +46,26 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
-    void SendWaitTxRequest(const NActors::TActorContext& ctx, ui64 schemeShard,
-                           ui64 txId);
+    void SendWaitTxRequest(
+        const NActors::TActorContext& ctx,
+        ui64 schemeShard,
+        ui64 txId);
 
-    void OnConnectionError(const NActors::TActorContext& ctx,
-                           const NProto::TError& error, ui64 schemeShard);
+    void OnConnectionError(
+        const NActors::TActorContext& ctx,
+        const NProto::TError& error,
+        ui64 schemeShard);
 
 private:
     STFUNC(StateWork);
 
-    void HandleConnect(NKikimr::TEvTabletPipe::TEvClientConnected::TPtr& ev,
-                       const NActors::TActorContext& ctx);
+    void HandleConnect(
+        NKikimr::TEvTabletPipe::TEvClientConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
-    void HandleDisconnect(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
-                          const NActors::TActorContext& ctx);
+    void HandleDisconnect(
+        NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     void HandleTxRegistered(
         const NKikimr::NSchemeShard::TEvSchemeShard::
@@ -85,7 +91,9 @@ NProto::TError TranslateTxProxyError(NProto::TError error);
 
 std::unique_ptr<TEvSSProxy::TEvModifySchemeRequest>
 CreateModifySchemeRequestForAlterVolume(
-    TString path, ui64 pathId, ui64 version,
+    TString path,
+    ui64 pathId,
+    ui64 version,
     const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
 }   // namespace NYdb::NBS::NStorage

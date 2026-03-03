@@ -33,7 +33,6 @@ struct TBlockRange
 
     TBlockRange() = default;
 
-
     // Create range [0, std::numeric_limits<TBlockRange>::max()]
     static TBlockRange Max()
     {
@@ -212,7 +211,8 @@ public:
     void OnBlock(TBlockIndex blockIndex)
     {
         // TODO(drbasic). Handle out-of-order blockIndex.
-        // Y_DEBUG_ABORT_UNLESS(Ranges.empty() || Ranges.back().End <= blockIndex);
+        // Y_DEBUG_ABORT_UNLESS(Ranges.empty() || Ranges.back().End <=
+        // blockIndex);
 
         if (Ranges.empty()) {
             Ranges.push_back(

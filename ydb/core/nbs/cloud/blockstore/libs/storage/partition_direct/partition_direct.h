@@ -12,8 +12,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::IActor* CreatePartitionTablet(const NActors::TActorId& tablet,
-                                       NKikimr::TTabletStorageInfo* info);
+NActors::IActor* CreatePartitionTablet(
+    const NActors::TActorId& tablet,
+    NKikimr::TTabletStorageInfo* info);
 
 ////////////////////////////////////////////////////////////////////////////////
 

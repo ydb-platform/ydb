@@ -52,8 +52,13 @@ private:
     vhd_io* VhdIo;
 
 public:
-    TVhostRequestImpl(vhd_io* vhdIo, EBlockStoreRequest type, ui64 from,
-                      ui64 length, TSgList sgList, void* cookie)
+    TVhostRequestImpl(
+        vhd_io* vhdIo,
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList,
+        void* cookie)
         : TVhostRequest(type, from, length, std::move(sgList), cookie)
         , VhdIo(vhdIo)
     {}
@@ -122,10 +127,17 @@ private:
     TMutex Lock;
 
 public:
-    TVhostDevice(vhd_request_queue* vhdQueue, TString socketPath,
-                 TString deviceName, ui32 blockSize, ui64 blocksCount,
-                 ui32 queuesCount, bool discardEnabled, ui32 optimalIoSize,
-                 void* cookie, const TVhostCallbacks& callbacks)
+    TVhostDevice(
+        vhd_request_queue* vhdQueue,
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        ui32 queuesCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        void* cookie,
+        const TVhostCallbacks& callbacks)
         : VhdQueue(vhdQueue)
         , SocketPath(std::move(socketPath))
         , DeviceName(std::move(deviceName))
@@ -182,8 +194,10 @@ public:
         auto completion = std::make_unique<TUnregisterCompletion>(result);
 
         with_lock (Lock) {
-            vhd_unregister_blockdev(VhdVdev, TUnregisterCompletion::Callback,
-                                    completion.release());
+            vhd_unregister_blockdev(
+                VhdVdev,
+                TUnregisterCompletion::Callback,
+                completion.release());
             VhdVdev = nullptr;
         }
 
@@ -231,16 +245,28 @@ public:
         vhd_stop_queue(VhdRequestQueue);
     }
 
-    IVhostDevicePtr CreateDevice(TString socketPath, TString deviceName,
-                                 ui32 blockSize, ui64 blocksCount,
-                                 ui32 queuesCount, bool discardEnabled,
-                                 ui32 optimalIoSize, void* cookie,
-                                 const TVhostCallbacks& callbacks) override
+    IVhostDevicePtr CreateDevice(
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        ui32 queuesCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        void* cookie,
+        const TVhostCallbacks& callbacks) override
     {
         return std::make_shared<TVhostDevice>(
-            VhdRequestQueue, std::move(socketPath), std::move(deviceName),
-            blockSize, blocksCount, queuesCount, discardEnabled, optimalIoSize,
-            cookie, callbacks);
+            VhdRequestQueue,
+            std::move(socketPath),
+            std::move(deviceName),
+            blockSize,
+            blocksCount,
+            queuesCount,
+            discardEnabled,
+            optimalIoSize,
+            cookie,
+            callbacks);
     }
 
     TVhostRequestPtr DequeueRequest() override
@@ -286,9 +312,12 @@ private:
         }
 
         return std::make_shared<TVhostRequestImpl>(
-            vhdRequest.io, type, vhdBdevIo->first_sector * VHD_SECTOR_SIZE,
+            vhdRequest.io,
+            type,
+            vhdBdevIo->first_sector * VHD_SECTOR_SIZE,
             vhdBdevIo->total_sectors * VHD_SECTOR_SIZE,
-            ConvertVhdSgList(vhdBdevIo->sglist), cookie);
+            ConvertVhdSgList(vhdBdevIo->sglist),
+            cookie);
     }
 
     static TSgList ConvertVhdSgList(const vhd_sglist& vhdSglist)
@@ -297,7 +326,9 @@ private:
         sgList.reserve(vhdSglist.nbuffers);
         for (ui32 i = 0; i < vhdSglist.nbuffers; ++i) {
             const auto& buffer = vhdSglist.buffers[i];
-            sgList.emplace_back(reinterpret_cast<char*>(buffer.base), buffer.len);
+            sgList.emplace_back(
+                reinterpret_cast<char*>(buffer.base),
+                buffer.len);
         }
         return sgList;
     }
@@ -329,8 +360,12 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVhostRequest::TVhostRequest(EBlockStoreRequest type, ui64 from, ui64 length,
-                             TSgList sgList, void* cookie)
+TVhostRequest::TVhostRequest(
+    EBlockStoreRequest type,
+    ui64 from,
+    ui64 length,
+    TSgList sgList,
+    void* cookie)
     : Type(type)
     , From(from)
     , Length(length)

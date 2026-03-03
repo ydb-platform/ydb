@@ -195,9 +195,9 @@ private:
                 });
 
                 str << Endl << "Shard Scanner(s):" << Endl;
-                str << "  (DataChunksInFlightCount: data chunks sent to compute but not yet acked back to shard)" << Endl;
-                str << "  (PendingMessageCount: messages queued for compute actors)" << Endl;
-                str << "  (WaitOutputTime: cumulative time waiting for compute to consume data)" << Endl;
+                str << "  (DataChunksInFlightCount: total chunks from this shard not yet processed by compute; shard is blocked until 0)" << Endl;
+                str << "  (PendingMessageCount: subset of InFlight stuck in queue because no compute actor was free)" << Endl;
+                str << "  (WaitOutputTime: cumulative time chunks spent waiting in queue for a free compute actor)" << Endl;
                 InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
                     str << "  TabletId=";
                     HREF(TabletLink(tabletId)) {

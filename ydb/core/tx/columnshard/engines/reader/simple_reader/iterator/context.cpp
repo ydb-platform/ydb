@@ -128,6 +128,7 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
 
     const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
     AFL_VERIFY(casted_sources);
+    // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
     std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
     casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
         const auto info = constructor.GetPortion();

@@ -3,6 +3,7 @@
 #include "yql_setting.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -348,8 +349,9 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TSettingDispatcher(const TQContext& qContext = {})
-        : QContext_(qContext)
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+        : ProviderName_(providerName)
+        , QContext_(qContext)
     {
     }
 
@@ -397,11 +399,24 @@ public:
 
     template <class TContainer, typename TFilter>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
+        using TAttribute = typename TContainer::value_type;
+
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v : clusterValues) {
-            if (filter(v)) {
-                Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
-            }
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+
+        TVector<TAttribute> flags;
+        if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TAttribute>(activationLabel, QContext_)) {
+            flags = std::move(*loadedFlags);
+        } else {
+            CopyIf(clusterValues.begin(), clusterValues.end(), std::back_inserter(flags), filter);
+        }
+
+        for (const auto& flag : flags) {
+            Dispatch(cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback);
+        }
+
+        if (ProviderName_) {
+            NCommon::SaveActivatedFlagsToQContext<TAttribute>(flags, activationLabel, QContext_);
         }
     }
 
@@ -434,6 +449,7 @@ protected:
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
+    const TString ProviderName_;
     const TQContext QContext_;
 };
 

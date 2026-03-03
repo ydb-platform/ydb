@@ -9,15 +9,15 @@ SRCS(
 PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
+    yql/essentials/core/qplayer/storage/interface
     yql/essentials/ast
     yql/essentials/utils/log
     library/cpp/containers/sorted_vector
     library/cpp/string_utils/parse_size
     library/cpp/string_utils/levenshtein_diff
+    library/cpp/yson/node
 )
 
-
-   YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION()
 
 END()

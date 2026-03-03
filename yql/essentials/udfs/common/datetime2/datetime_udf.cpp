@@ -2732,6 +2732,8 @@ static size_t PrintTzOffset(char* out, i32 offset) {
 
 class TFormat: public TBoxedValue {
 public:
+    using TTypeAwareMarker = bool;
+
     explicit TFormat(TSourcePosition pos, size_t optionalArgs)
         : Pos_(pos)
         , OptionalArgs_(optionalArgs)

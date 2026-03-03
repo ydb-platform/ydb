@@ -206,6 +206,8 @@ void TLockInfo::SetBroken(TRowVersion at) {
             Ranges.clear();
             Locker->ScheduleBrokenLock(this);
         }
+
+        OnBrokenEvent.NotifyAll();
     }
 }
 
@@ -215,6 +217,7 @@ void TLockInfo::OnRemoved() {
         Counter = Max<ui64>();
         Points.clear();
         Ranges.clear();
+        OnBrokenEvent.NotifyAll();
     }
 
     OnRemovedEvent.NotifyAll();
@@ -838,6 +841,8 @@ void TLockLocker::RemoveBrokenRanges() {
                 Tables.at(tableId)->RemoveWriteLock(lock.Get());
             }
             lock->CleanupConflicts();
+
+            lock->OnBrokenEvent.NotifyAll();
         }
     }
 }

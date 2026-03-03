@@ -115,7 +115,3 @@ In complex situations, for example with sequential pile failures, the following 
 If it is necessary to resume cluster operation when only a pile in the `DISCONNECTED`, `NOT_SYNCHRONIZED`, or `SUSPENDED` state remains operational, the administrator can execute a switch command from `PRIMARY/DISCONNECTED` to `DISCONNECTED/PRIMARY` (or similarly for `NOT_SYNCHRONIZED` or `SUSPENDED`) with the special `force` parameter. This will lead to a cluster split with incompatible configuration. Depending on the actual state of data in the pile being transitioned to the `PRIMARY` state, the cluster may be recovered to a correct or internally inconsistent state. Operational reliability of such a cluster is not guaranteed.
 
 If the cluster turns out to be operational, you can continue recovery to normal state. Before recovering the disconnected pile, you must completely clear data and metadata on all its nodes, then transition the pile to the `NOT_SYNCHRONIZED` state.
-
-## Bridge mode implementation details {#bridge-implementation-details}
-
-For more information about the bridge mode architecture, see [{#T}](../contributor/bridge.md).

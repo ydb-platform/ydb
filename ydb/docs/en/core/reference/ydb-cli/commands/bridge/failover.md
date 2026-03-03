@@ -12,7 +12,7 @@ Command format:
 {{ ydb-cli }} [global options...] admin cluster bridge failover [options...]
 ```
 
-* `global options` — CLI [global parameters](../_includes/global-options.md).
+* `global options` — CLI [global parameters](../global-options.md).
 * `options` — [subcommand parameters](#options).
 
 View command help:

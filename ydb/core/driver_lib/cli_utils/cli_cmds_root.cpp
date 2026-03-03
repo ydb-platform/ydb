@@ -1,7 +1,9 @@
 #include "cli.h"
 #include "cli_cmds.h"
+#include "cli_cmds_standalone.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <ydb/core/driver_lib/run/factories.h>
+#include <ydb/core/driver_lib/run/main.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -21,6 +23,7 @@ public:
     TClientCommandRoot(const TString& name, std::shared_ptr<TModuleFactories> factories)
         : TClientCommandRootKikimrBase(name)
     {
+        // Visible commands
         AddCommand(std::make_unique<TClientCommandAdmin>());
         AddCommand(std::make_unique<TClientCommandDb>());
         AddCommand(std::make_unique<TClientCommandCms>());
@@ -28,6 +31,16 @@ public:
         AddCommand(std::make_unique<TClientCommandDiscovery>());
         AddClientCommandServer(*this, std::move(factories));
         AddCommand(std::make_unique<TClientCommandConfig>());
+
+        // Hidden commands (shown only in -hh verbose help)
+        AddHiddenCommand(NewCommandFormatInfo());
+        AddHiddenCommand(NewCommandFormatUtil());
+        AddHiddenCommand(NewCommandNodeByHost());
+        AddHiddenCommand(NewCommandSchemeInitRoot());
+        AddHiddenCommand(NewCommandPersQueueRequest());
+        AddHiddenCommand(NewCommandPersQueueStress());
+        AddHiddenCommand(NewCommandPersQueueDiscoverClusters());
+        AddHiddenCommand(NewCommandActorsysPerfTest());
     }
 
     void Config(TConfig& config) override {
@@ -36,6 +49,13 @@ public:
         opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
         opts.AddLongOption('s', "server", "server address to connect")
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);
+
+        NLastGetopt::TOpts& nOpts = config.Opts->GetOpts();
+        nOpts.AddLongOption(0, "allocator-info", "Print the name of allocator linked to the binary and exit")
+            .NoArgument().Handler(&PrintAllocatorInfoAndExit);
+        nOpts.AddLongOption(0, "compatibility-info", "Print compatibility info of this binary and exit")
+            .NoArgument().Handler(&PrintCompatibilityInfoAndExit);
+
         TClientCommandRootKikimrBase::Config(config);
     }
 
@@ -75,16 +95,6 @@ int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);
-}
-
-TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModuleFactories> factories) {
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(name, std::move(factories));
-    TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    stream << " [options] <subcommand>" << Endl << Endl
-        << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    commandsRoot->RenderCommandDescription(stream, false, colors, TClientCommand::BEGIN, "", true);
-    return stream.Str();
 }
 
 }

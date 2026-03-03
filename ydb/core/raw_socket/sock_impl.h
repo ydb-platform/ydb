@@ -98,11 +98,6 @@ public:
         return socket->GetSslHandshakeResult();
     }
 
-    void PollClientCertAfterHandshake() {
-        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
-        socket->PollClientCertAfterHandshake();;
-    }
-
     TString GetStringClientCert(X509* cert) {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
         return socket->ConvertX509ToPEMString(cert);

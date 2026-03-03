@@ -75,7 +75,6 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
  void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
     auto& mtlsRequest = *ev->Get();
     ClientCert = mtlsRequest.ClientCertificate;
-    KAFKA_LOG_D("Recieved client cert in auth actor: " << ClientCert);
     if (CurrentStateFunc() == &TThis::StateWork) {
         StartMtlsAuth();
         SendDescribeRequest();

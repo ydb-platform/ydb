@@ -711,8 +711,6 @@ protected:
             }
             IsSslActive = true;
         }
-        // TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
-        // Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         return true;
     }
 
@@ -871,11 +869,6 @@ protected:
                             SavedCtxForRead = std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
                             RequestPoller();
                             return false;
-
-                            // auto cert = Socket->GetSslClientCert();
-                            // if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
-                            //      Socket->PollClientCertAfterHandshake();
-                            // }
                         } else if (!ProcessRequest(ctx)) {
                             return false;
                         }
@@ -892,67 +885,38 @@ protected:
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
-    // void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext&) {
-    //     const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
-    //     if (result.Error) {
-    //         KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
-    //     } else {
-    //         KAFKA_LOG_D("Authorization successful");
-    //     }
-    //     if (result.Token == nullptr) {
-    //         KAFKA_LOG_D("Empty token");
-    //     }
-
-        // MtlsAuthenticationSuccessful = true;
-        // HandleConnected(PollerEventSaved, *SavedCtxForRead);
-    // }
-
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
             if (!CloseConnection) {
                 if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage == NO_CERT_YET) {
                     int sslHandshakeResult = Socket->GetSslHandshakeResult();
-                    KAFKA_LOG_D("Ssl handshake result: " << sslHandshakeResult);
-                    if (sslHandshakeResult != -1 && sslHandshakeResult != -2 && sslHandshakeResult != 1) {
-                        KAFKA_LOG_D("Error in ssl handshake"); // добавить сюда ошибку
+                    if (sslHandshakeResult != -1 &&
+                        sslHandshakeResult != -2 &&
+                        sslHandshakeResult != 1) {
+                        KAFKA_LOG_D("Error in ssl handshake, sslHandshakeResult=" << sslHandshakeResult); // добавить сюда ошибку
                         PassAway();
                         return;
                     }
                     if (sslHandshakeResult == 1) {
                         TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
-                        Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
                         if (!cert) {
                             PassAway();
                             return;
                         }
 
                         TString clientCert = Socket->GetStringClientCert(cert.get());
-                        // Cout << "Client cert:" << clientCert << Endl;
                         MtslRecievedCert = PROCESSING_CERT;
                         SavedCtxForRead =  std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
                         PollerEventSaved = event;
 
                         EnsureKafkaSaslAuthActor();
-
                         Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
                         Context->SaslMechanism = "MTLS";
                         Context->RequireAuthentication = true;
                         Send(SaslAuthActorId, new TEvKafka::TEvMtlsAuthRequest(1001, clientCert));
                         return;
-                        // return;
                     }
 
-
-                    // if (!cert) Socket->PollClientCertAfterHandshake();
-
-
-                    // else {
-                    //     KAFKA_LOG_D("Certificate is not ready yet. Requesting poller");
-                    //     RequestPoller();
-                    //     return;
-                    // }
-                    // DoRead(ctx);
-                    // return false;
                 }
                 if (!DoRead(ctx)) {
                     return;

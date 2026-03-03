@@ -34,6 +34,7 @@ public:
     TString MetaApiEndpoint = "";
     TString MetaDatabase = "";
     bool MetaCache = false;
+    TMetaSettings MetaSettings;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;
 

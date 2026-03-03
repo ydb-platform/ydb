@@ -20,6 +20,7 @@ PEERDIR(
     ydb/tests/sql/lib
 )
 
+REQUIREMENTS(cpu:1)
 END()
 
 RECURSE(

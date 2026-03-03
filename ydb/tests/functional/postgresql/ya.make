@@ -29,4 +29,5 @@ PEERDIR(
     ydb/tests/functional/postgresql/common
 )
 
+REQUIREMENTS(cpu:1)
 END()

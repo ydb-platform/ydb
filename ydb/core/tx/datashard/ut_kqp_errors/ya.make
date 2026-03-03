@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_kqp_errors.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

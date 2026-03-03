@@ -34,4 +34,5 @@ SRCS(
     retry_policy_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

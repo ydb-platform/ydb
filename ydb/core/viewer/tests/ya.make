@@ -14,4 +14,5 @@ PEERDIR(
     ydb/public/sdk/python/enable_v3_new_behavior
 )
 
+REQUIREMENTS(cpu:1)
 END()

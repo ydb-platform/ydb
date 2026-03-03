@@ -22,4 +22,5 @@ SRCS(
     datashard_ut_ext_blobs_multiple_channels.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

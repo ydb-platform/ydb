@@ -28,4 +28,5 @@ SRCS(
     ut_common.h
 )
 
+REQUIREMENTS(cpu:2)
 END()

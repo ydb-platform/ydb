@@ -31,4 +31,5 @@ SRCS(
     ut_olap.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

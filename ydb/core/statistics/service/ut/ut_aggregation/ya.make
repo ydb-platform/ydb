@@ -22,5 +22,6 @@ SRCS(
     ut_aggregate_statistics.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()
 

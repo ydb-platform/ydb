@@ -16,4 +16,5 @@ PEERDIR (
     ydb/tests/olap/lib
 )
 
+REQUIREMENTS(cpu:1)
 END()

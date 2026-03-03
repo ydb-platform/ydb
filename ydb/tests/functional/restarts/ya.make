@@ -7,7 +7,7 @@ TEST_SRCS(
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:4)
+    REQUIREMENTS(ram:32 cpu:2)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
@@ -15,6 +15,7 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

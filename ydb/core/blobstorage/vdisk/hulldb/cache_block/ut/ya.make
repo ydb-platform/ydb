@@ -16,4 +16,5 @@ SRCS(
     cache_block_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

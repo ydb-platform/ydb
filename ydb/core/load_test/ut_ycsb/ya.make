@@ -30,4 +30,5 @@ SRCS(
     ../ut_ycsb.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

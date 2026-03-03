@@ -8,9 +8,10 @@ IF (NOT WITH_VALGRIND)
     IF (SANITIZER_TYPE)
         SIZE(LARGE)
         TAG(ya:fat)
-        REQUIREMENTS(ram:12)
+        REQUIREMENTS(ram:12 cpu:1)
     ELSE()
         SIZE(MEDIUM)
+        REQUIREMENTS(cpu:1)
     ENDIF()
 
     PEERDIR(

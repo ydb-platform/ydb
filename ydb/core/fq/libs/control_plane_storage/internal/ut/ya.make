@@ -22,5 +22,6 @@ RESOURCE(
     resources/v2_two_results.json v2_two_results.json
 )
 
+REQUIREMENTS(cpu:1)
 END()
 

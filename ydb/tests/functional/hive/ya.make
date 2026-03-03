@@ -9,7 +9,7 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:16 cpu:1)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
@@ -19,6 +19,7 @@ IF (SANITIZER_TYPE == "thread")
     SPLIT_FACTOR(20)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
     SPLIT_FACTOR(20)
 ENDIF()
 

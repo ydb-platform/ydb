@@ -25,4 +25,5 @@ SRCS(
     datashard_ut_column_stats.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

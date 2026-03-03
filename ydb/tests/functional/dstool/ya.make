@@ -15,4 +15,5 @@ PEERDIR(
     ydb/apps/dstool/lib
 )
 
+REQUIREMENTS(cpu:1)
 END()

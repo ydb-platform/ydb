@@ -28,5 +28,6 @@ IF (NOT WITH_VALGRIND)
         ut_reboots.cpp
     )
 
+REQUIREMENTS(cpu:2)
     END()
 ENDIF()

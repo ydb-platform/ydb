@@ -28,4 +28,5 @@ SRCS(
     ut_olap_reboots.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

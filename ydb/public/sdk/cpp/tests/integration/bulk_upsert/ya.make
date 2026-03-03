@@ -22,4 +22,5 @@ SRCS(
     main.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

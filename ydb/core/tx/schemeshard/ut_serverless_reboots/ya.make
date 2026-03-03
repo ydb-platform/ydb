@@ -25,4 +25,5 @@ SRCS(
     ut_serverless_reboots.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

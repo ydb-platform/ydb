@@ -18,6 +18,7 @@ DEPENDS(
 )
 
 
+REQUIREMENTS(cpu:1)
 END()
 
 ENDIF()

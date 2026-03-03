@@ -8,4 +8,5 @@ PEERDIR(
     library/python/cyson
 )
 
+REQUIREMENTS(cpu:1)
 END()

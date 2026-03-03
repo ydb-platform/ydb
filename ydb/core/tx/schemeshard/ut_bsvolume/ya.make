@@ -25,4 +25,5 @@ SRCS(
     ut_bsvolume.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -15,4 +15,5 @@ SRCS(
     sentinel_ut_unstable.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

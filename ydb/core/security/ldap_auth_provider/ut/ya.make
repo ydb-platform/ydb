@@ -16,4 +16,5 @@ SRCS(
     ldap_utils_ut.cpp
 )
 
+REQUIREMENTS(cpu:2)
 END()

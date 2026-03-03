@@ -28,4 +28,5 @@ SRCS(
     pq_ut.cpp
 )
 
+REQUIREMENTS(cpu:2)
 END()

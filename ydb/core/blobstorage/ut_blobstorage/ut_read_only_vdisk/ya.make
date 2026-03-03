@@ -13,4 +13,5 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         ydb/core/load_test
     )
 
+REQUIREMENTS(cpu:1)
 END()

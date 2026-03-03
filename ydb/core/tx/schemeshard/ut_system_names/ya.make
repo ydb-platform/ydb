@@ -27,4 +27,5 @@ SRCS(
     # ../schemeshard_system_names.h
 )
 
+REQUIREMENTS(cpu:1)
 END()

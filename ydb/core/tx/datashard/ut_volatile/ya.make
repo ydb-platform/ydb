@@ -32,4 +32,5 @@ SRCS(
     datashard_ut_volatile.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

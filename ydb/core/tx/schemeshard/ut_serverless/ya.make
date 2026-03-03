@@ -22,4 +22,5 @@ SRCS(
     ut_serverless.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

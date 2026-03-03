@@ -16,4 +16,5 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
+REQUIREMENTS(cpu:1)
 END()

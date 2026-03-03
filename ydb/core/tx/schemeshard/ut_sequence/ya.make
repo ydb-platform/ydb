@@ -29,4 +29,5 @@ SRCS(
     ut_sequence.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

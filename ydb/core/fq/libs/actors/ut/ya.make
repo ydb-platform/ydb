@@ -17,4 +17,5 @@ SRCS(
     database_resolver_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

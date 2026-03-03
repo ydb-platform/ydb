@@ -31,4 +31,5 @@ SRCS(
     ut_registry.cpp
 )
 
+REQUIREMENTS(cpu:2)
 END()

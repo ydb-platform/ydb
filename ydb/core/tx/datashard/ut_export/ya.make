@@ -10,4 +10,5 @@ SRCS(
     export_s3_buffer_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

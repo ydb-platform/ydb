@@ -26,4 +26,5 @@ SRCS(
     immediate_control_board_actor_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

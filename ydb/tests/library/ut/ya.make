@@ -14,4 +14,5 @@ TEST_SRCS(
     kikimr_config.py
 )
 
+REQUIREMENTS(cpu:1)
 END()

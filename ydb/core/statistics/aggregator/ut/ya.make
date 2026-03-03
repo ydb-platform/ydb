@@ -27,4 +27,5 @@ SRCS(
     ut_traverse_columnshard.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

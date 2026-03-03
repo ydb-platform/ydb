@@ -38,4 +38,5 @@ ELSE ()
     MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
 ENDIF ()
 
+REQUIREMENTS(cpu:1)
 END()

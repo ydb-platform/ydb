@@ -26,6 +26,7 @@ SRCS(
     ut_http_request.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()
 
 RECURSE_FOR_TESTS(

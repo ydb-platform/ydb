@@ -26,4 +26,5 @@ SRCS(
 )
 
 
+REQUIREMENTS(cpu:2)
 END()

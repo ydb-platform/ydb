@@ -28,4 +28,5 @@ SRCS(
     ut_login.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

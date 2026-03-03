@@ -17,4 +17,5 @@ SRCS(
     balance_coverage_builder_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

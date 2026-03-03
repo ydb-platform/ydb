@@ -24,4 +24,5 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
 )
 
+REQUIREMENTS(cpu:2)
 END()

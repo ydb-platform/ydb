@@ -22,4 +22,5 @@ SRCS(
     datashard_ut_vacuum.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

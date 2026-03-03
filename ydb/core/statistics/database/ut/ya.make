@@ -22,4 +22,5 @@ SRCS(
     ut_database.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

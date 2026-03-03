@@ -19,4 +19,5 @@ SRCS(
 # RESOURCE(
 # )
 
+REQUIREMENTS(cpu:1)
 END()

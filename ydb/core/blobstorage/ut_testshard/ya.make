@@ -33,4 +33,5 @@ UNITTEST()
         ydb/core/util/actorsys_test
     )
 
+REQUIREMENTS(cpu:1)
 END()

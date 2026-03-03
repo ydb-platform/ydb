@@ -29,5 +29,6 @@ IF (NOT WITH_VALGRIND)
         ut_find_split_key.cpp
     )
 
+REQUIREMENTS(cpu:1)
     END()
 ENDIF()

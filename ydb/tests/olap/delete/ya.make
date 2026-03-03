@@ -20,4 +20,5 @@ PY3TEST()
     DEPENDS(
         )
 
+REQUIREMENTS(cpu:2)
 END()

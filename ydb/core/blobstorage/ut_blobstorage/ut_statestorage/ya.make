@@ -13,5 +13,6 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         ydb/core/blobstorage/ut_blobstorage/lib
     )
 
+REQUIREMENTS(cpu:1)
 END()
 

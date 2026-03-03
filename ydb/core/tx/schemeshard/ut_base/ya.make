@@ -30,4 +30,5 @@ SRCS(
     ut_commit_redo_limit.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

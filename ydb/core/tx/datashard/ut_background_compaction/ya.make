@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_background_compaction.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

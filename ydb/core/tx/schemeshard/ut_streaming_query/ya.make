@@ -21,4 +21,5 @@ SRCS(
     ut_streaming_query.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

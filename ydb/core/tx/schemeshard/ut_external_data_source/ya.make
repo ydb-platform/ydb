@@ -25,4 +25,5 @@ SRCS(
     ut_external_data_source.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

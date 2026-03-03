@@ -7,4 +7,5 @@ PY3_PROGRAM()
     PY_SRCS(
        __main__.py
      )
+REQUIREMENTS(cpu:1)
 END()

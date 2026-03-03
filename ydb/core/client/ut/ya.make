@@ -35,4 +35,5 @@ SRCS(
     object_storage_listing_ut.cpp
 )
 
+REQUIREMENTS(cpu:2)
 END()

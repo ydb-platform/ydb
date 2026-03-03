@@ -30,4 +30,5 @@ SRCS(
     dsproxy_ut.cpp
 )
 
+REQUIREMENTS(cpu:2)
 END()

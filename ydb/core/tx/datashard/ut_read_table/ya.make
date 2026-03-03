@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_read_table.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

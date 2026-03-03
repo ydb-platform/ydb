@@ -7,4 +7,5 @@ UNITTEST_FOR(ydb/core/blob_depot)
         given_id_range_ut.cpp
     )
 
+REQUIREMENTS(cpu:1)
 END()

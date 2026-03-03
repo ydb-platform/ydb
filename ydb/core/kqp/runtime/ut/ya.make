@@ -26,4 +26,5 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
 )
 
+REQUIREMENTS(cpu:4)
 END()

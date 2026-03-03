@@ -25,4 +25,5 @@ SRCS(
     ut_rtmr.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

@@ -10,4 +10,5 @@ SRCS(
     xml_builder_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

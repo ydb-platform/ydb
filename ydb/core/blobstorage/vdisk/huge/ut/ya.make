@@ -20,4 +20,5 @@ SRCS(
     top_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

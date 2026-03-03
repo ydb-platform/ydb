@@ -46,4 +46,5 @@ SRCS(
     batch_slice.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

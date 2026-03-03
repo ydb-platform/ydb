@@ -30,4 +30,5 @@ SRCS(
     datashard_ut_range_ops.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

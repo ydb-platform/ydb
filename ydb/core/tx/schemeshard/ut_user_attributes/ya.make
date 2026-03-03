@@ -31,4 +31,5 @@ SRCS(
     ut_user_attributes.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

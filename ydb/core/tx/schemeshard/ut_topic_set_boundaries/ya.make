@@ -25,4 +25,5 @@ SRCS(
     ut_topic_set_boundaries.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

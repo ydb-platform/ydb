@@ -31,4 +31,5 @@ SRCS(
     datashard_ut_kqp_stream_lookup.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

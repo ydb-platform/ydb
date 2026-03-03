@@ -9,4 +9,5 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition
 )
 
+REQUIREMENTS(cpu:1)
 END()

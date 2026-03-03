@@ -44,4 +44,5 @@ SRCS(
     ydb_control_plane_storage_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

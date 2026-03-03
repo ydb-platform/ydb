@@ -26,4 +26,5 @@ SRCS(
     datashard_ut_disk_quotas.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

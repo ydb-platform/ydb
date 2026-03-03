@@ -27,4 +27,5 @@ SRCS(
     jaeger_tracing_configurator_ut.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

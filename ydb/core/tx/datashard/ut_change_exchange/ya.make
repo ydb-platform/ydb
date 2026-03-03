@@ -34,4 +34,5 @@ SRCS(
     datashard_ut_change_exchange.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

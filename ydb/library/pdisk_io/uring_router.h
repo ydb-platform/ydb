@@ -41,7 +41,7 @@ struct TUringRouterConfig {
 
     // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL).
     // It requires support from both device and driver,
-    // according our measurements the latency win is negligible.
+    // according to our measurements the latency win is negligible.
     bool UseIOPoll = false;
 
     // Share kernel poller and backend between uring instances (IORING_SETUP_ATTACH_WQ)

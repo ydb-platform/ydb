@@ -581,6 +581,9 @@ protected:
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
+            MtlsAuthenticationSuccessful = true;
+            HandleConnected(PollerEventSaved, *SavedCtxForRead);
+            // ProcessRequest(ctx);
             // KAFKA_LOG_D("Processing request again after auth");
             // ProcessRequest(*SavedCtxForRead);
         }
@@ -708,8 +711,8 @@ protected:
             }
             IsSslActive = true;
         }
-        TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
-        Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
+        // TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
+        // Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         return true;
     }
 
@@ -857,13 +860,22 @@ protected:
 
                         Step = SIZE_READ;
                         KAFKA_LOG_D("Start processing request");
+
+                        // if (!ProcessRequest(ctx)) {
+                        //     return false;
+                        // }
+
+
                         if (AppData()->KafkaProxyConfig.GetMtlsEnable() && !MtlsAuthenticationSuccessful) {
                             MtlsQueuedRequests.push_back(Request);
-                            // RequestPoller();
-                            auto cert = Socket->GetSslClientCert();
-                            if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
-                                 Socket->PollClientCertAfterHandshake();
-                            }
+                            SavedCtxForRead = std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
+                            RequestPoller();
+                            return false;
+
+                            // auto cert = Socket->GetSslClientCert();
+                            // if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
+                            //      Socket->PollClientCertAfterHandshake();
+                            // }
                         } else if (!ProcessRequest(ctx)) {
                             return false;
                         }
@@ -880,38 +892,45 @@ protected:
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
-    void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext&) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
-        if (result.Error) {
-            KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
-        } else {
-            KAFKA_LOG_D("Authorization successful");
-        }
-        if (result.Token == nullptr) {
-            KAFKA_LOG_D("Empty token");
-        }
+    // void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext&) {
+    //     const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
+    //     if (result.Error) {
+    //         KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
+    //     } else {
+    //         KAFKA_LOG_D("Authorization successful");
+    //     }
+    //     if (result.Token == nullptr) {
+    //         KAFKA_LOG_D("Empty token");
+    //     }
 
-        MtlsAuthenticationSuccessful = true;
-        HandleConnected(PollerEventSaved, *SavedCtxForRead);
-    }
+        // MtlsAuthenticationSuccessful = true;
+        // HandleConnected(PollerEventSaved, *SavedCtxForRead);
+    // }
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
             if (!CloseConnection) {
                 if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage == NO_CERT_YET) {
-                    TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
-                    Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
-
                     int sslHandshakeResult = Socket->GetSslHandshakeResult();
                     KAFKA_LOG_D("Ssl handshake result: " << sslHandshakeResult);
-                    // if (!cert) Socket->PollClientCertAfterHandshake();
+                    if (sslHandshakeResult != -1 && sslHandshakeResult != -2 && sslHandshakeResult != 1) {
+                        KAFKA_LOG_D("Error in ssl handshake"); // добавить сюда ошибку
+                        PassAway();
+                        return;
+                    }
+                    if (sslHandshakeResult == 1) {
+                        TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
+                        Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
+                        if (!cert) {
+                            PassAway();
+                            return;
+                        }
 
-                    if (cert != nullptr) {
                         TString clientCert = Socket->GetStringClientCert(cert.get());
                         // Cout << "Client cert:" << clientCert << Endl;
                         MtslRecievedCert = PROCESSING_CERT;
                         SavedCtxForRead =  std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
-                        // PollerEventSaved = event;
+                        PollerEventSaved = event;
 
                         EnsureKafkaSaslAuthActor();
 
@@ -920,7 +939,13 @@ protected:
                         Context->RequireAuthentication = true;
                         Send(SaslAuthActorId, new TEvKafka::TEvMtlsAuthRequest(1001, clientCert));
                         return;
+                        // return;
                     }
+
+
+                    // if (!cert) Socket->PollClientCertAfterHandshake();
+
+
                     // else {
                     //     KAFKA_LOG_D("Certificate is not ready yet. Requesting poller");
                     //     RequestPoller();
@@ -994,7 +1019,7 @@ protected:
             HFunc(TEvKafka::TEvAuthResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
-            HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, HandleAuthorizeTicketResult);
+            // HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, HandleAuthorizeTicketResult);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:

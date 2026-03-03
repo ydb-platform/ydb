@@ -162,13 +162,15 @@ public:
         Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
-        Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
+
         if (AppData()->KafkaProxyConfig.GetMtlsEnable()) {
-            Cerr << "Mtls enabled" << Endl;
-            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &TInet64SecureStreamSocket::Verify);
-            SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
-            SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
-            SSL_CTX_set_timeout(ctx, 0);
+            Cerr << TInstant::Now() << "Mtls enabled" << Endl;
+            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
+            // SSL_set_fd(Ssl.get(), Fd_);
+            // Cout << "SecureAccept. Set fd" << Endl;
+            // SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+            // SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+            // SSL_CTX_set_timeout(ctx, 0);
             auto readFile = [](std::optional<TString> path, const char *name) {
                 if (path) {
                     try {
@@ -186,21 +188,35 @@ public:
 
             TSslHolder<X509> serverCert = GetServerCert(kafkaServerCertPath, readFile);
             if (!serverCert) { return false; }
-
             int retServerCert = SSL_CTX_use_certificate(ctx, serverCert.get());
             if (retServerCert != 1) { return false; }
+            Cout << TInstant::Now() << "SecureAccept. Load server cert" << Endl;
+
 
             TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(kafkaServerPrivateKeyPath, readFile);
             if (!privateKey) { return false; }
 
             int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, privateKey.get());
             if (retPrivateKey != 1) { return false; }
+            // Cout << TInstant::Now() << "SecureAccept. Load server private key" << Endl;
             int retCA = SSL_CTX_load_verify_locations(ctx, kafkaCAFilePath.data(), nullptr);
             if (retCA != 1) { return false; }
+            // Cout << TInstant::Now() << "SecureAccept. Load CA" << Endl;
             SSL_CTX_set_verify_depth(ctx, 9);
+            // Cout << TInstant::Now() << "SecureAccept. SSL_CTX_set_verify_depth" << Endl;
+            SSL_CTX_set_info_callback(ctx, ssl_info_cb);
+            // Cout << TInstant::Now() << "SecureAccept. SSL_CTX_set_info_callback" << Endl;
 
             SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256");
+            // Cout << TInstant::Now() << "SecureAccept. SSL_CTX_set_ciphersuites" << Endl;
+
+            const char *session_context = "YdbMtlsContext";
+            SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context));
+            // Cout << TInstant::Now() << "Set session context id" << Endl;
         }
+
+        Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
+
         SSL_set_accept_state(Ssl.get());
         Cout << "Verify mode: " << SSL_CTX_get_verify_mode(ctx) << "SSL_VERIFY_PEER: " << SSL_VERIFY_PEER << Endl;
 
@@ -246,11 +262,13 @@ public:
 
     int SecureAccept(SSL_CTX* ctx) {
         if (!Ssl) {
+
             if (!InitServerSsl(ctx)) {
                 return SSL_AD_NO_CERTIFICATE;
             }
         }
         int res = SSL_accept(Ssl.get());
+        Cout << "SecureAccept. SSL_accept" << Endl;
         return ProcessResult(res);
     }
 
@@ -270,6 +288,57 @@ public:
 
         BIO_free(bio);
         return NULL;
+    }
+
+    static void ssl_info_cb(const SSL *ssl, int where, int ret)
+    {
+        const char *role =
+            (where & SSL_ST_CONNECT) ? "client" :
+            (where & SSL_ST_ACCEPT)  ? "server" : "unknown";
+
+        if (where & SSL_CB_LOOP) {
+            // Переходы по состояниям SSL state machine
+            Cout << TInstant::Now() << " SSL_LOG: [" << role << "] state: " << SSL_state_string_long(ssl) << Endl;
+            // fprintf(stderr, "SSL_LOG: [%s] state: %s\n", role, SSL_state_string_long(ssl));
+        }
+
+        if (where & SSL_CB_HANDSHAKE_START) {
+            Cout << TInstant::Now() << " SSL_LOG: [" << role << "] handshake start" << Endl;
+            // fprintf(stderr, "SSL_LOG: [%s] handshake start\n", role);
+        }
+
+        if (where & SSL_CB_HANDSHAKE_DONE) {
+            Cout << TInstant::Now() << " SSL_LOG: [" << role << "] handshake done" << Endl;
+            // fprintf(stderr, "SSL_LOG: [%s] handshake done\n", role);
+        }
+
+        if (where & SSL_CB_ALERT) {
+            // Alerts (warning/fatal) + направление (read/write)
+            const char *dir = (where & SSL_CB_READ) ? "read" : "write";
+            Cout << TInstant::Now() << " SSL_LOG: [" << role << "] alert" << dir << ": " << SSL_alert_type_string_long(ret) << ": " << SSL_alert_desc_string_long(ret) << Endl;
+            // fprintf(stderr, "SSL_LOG: [%s] alert %s: %s: %s\n",
+            //         role,
+            //         dir,
+            //         SSL_alert_type_string_long(ret),
+            //         SSL_alert_desc_string_long(ret));
+        }
+
+        if (where & SSL_CB_EXIT) {
+            // Выход из состояния с ошибкой (часто ret <= 0)
+            if (ret == 0) {
+                Cout << TInstant::Now() << " SSL_LOG: [" << role << "] failure in: " << SSL_state_string_long(ssl) << Endl;
+                // fprintf(stderr, "SSL_LOG: [%s] failure in: %s\n", role, SSL_state_string_long(ssl));
+            } else if (ret < 0) {
+                Cout << TInstant::Now() << " SSL_LOG: [" << role << "] error in: " << SSL_state_string_long(ssl) << Endl;
+                // fprintf(stderr, "SSL_LOG: [%s] error in: %s\n", role, SSL_state_string_long(ssl));
+                unsigned long e;
+                while ((e = ERR_get_error()) != 0) {
+                    char buf[256];
+                    ERR_error_string_n(e, buf, sizeof(buf));
+                    fprintf(stderr, "OpenSSL error: %s\n", buf);
+                }
+            }
+        }
     }
 
     static int Verify(int preverify, X509_STORE_CTX *ctx) {
@@ -355,6 +424,7 @@ public:
 
     TSslHolder<X509> GetSslClientCert() {
         if (!Ssl) {
+            Cerr << "No SSL!!!" << Endl;
             return nullptr;
         }
         return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));

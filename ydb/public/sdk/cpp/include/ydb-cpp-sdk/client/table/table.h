@@ -376,6 +376,73 @@ public:
     const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
+    static TIndexDescription CreateGlobalIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateGlobalAsyncIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateGlobalUniqueIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateVectorIndex(
+        const std::string& name,
+        const std::string& vectorColumn,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {}
+    );
+
+    static TIndexDescription CreatePrefixedVectorIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {},
+        const TGlobalIndexSettings& prefixTableSettings = {}
+    );
+
+    static TIndexDescription CreateFulltextPlainIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TFulltextIndexSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateFulltextRelevanceIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TFulltextIndexSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& postingTableSettings = {},
+        const TGlobalIndexSettings& dictTableSettings = {},
+        const TGlobalIndexSettings& docsTableSettings = {},
+        const TGlobalIndexSettings& statsTableSettings = {}
+    );
+
+    TGlobalIndexSettings GetIndexTableSettings() const;
+    TGlobalIndexSettings GetLevelTableSettings() const;
+    TGlobalIndexSettings GetPrefixTableSettings() const;
+    TGlobalIndexSettings GetDictTableSettings() const;
+    TGlobalIndexSettings GetDocsTableSettings() const;
+    TGlobalIndexSettings GetStatsTableSettings() const;
+    TGlobalIndexSettings GetPostingTableSettings() const;
+
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
     std::string ToString() const;
     void Out(IOutputStream& o) const;

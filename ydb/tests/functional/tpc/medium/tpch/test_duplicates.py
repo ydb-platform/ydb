@@ -25,6 +25,11 @@ class TpchDoubleImportTestBase(tpch.TestTpch1, FunctionalTestBase):
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
 
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()
+
 
 class TestTpchDuplicatesZeroLevel(TpchDoubleImportTestBase):
     """https://github.com/ydb-platform/ydb/issues/22253"""

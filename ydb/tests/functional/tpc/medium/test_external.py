@@ -20,5 +20,7 @@ class TestExternalE1(ExternalSuiteBase, FunctionalTestBase):
         super().setup_class()
 
     @classmethod
-    def teardown_class(cls) -> None:
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()
         cls.run_cli(['workload', 'query', '-p', f'{cls.external_folder}', 'clean'])

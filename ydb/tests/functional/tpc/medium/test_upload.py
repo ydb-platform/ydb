@@ -11,3 +11,8 @@ class TestUploadTpchS0_1(upload.UploadTpchBase, FunctionalTestBase):
         YdbCluster._tables_path = ''
         cls.setup_cluster()
         super().setup_class()
+
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()

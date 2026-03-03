@@ -15,3 +15,8 @@ class TestTpchParallelS0_1T10(tpch.TpchParallelBase, FunctionalTestBase):
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
+
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()

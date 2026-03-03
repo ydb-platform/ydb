@@ -8,6 +8,11 @@ class FunctionalImportFileCsvBase(ImportFileCsvBase, FunctionalTestBase):
         cls.setup_cluster()
         super().setup_class()
 
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()
+
 
 class TestExternalImportCsv(FunctionalImportFileCsvBase):
     external_folder: str = 'e1'

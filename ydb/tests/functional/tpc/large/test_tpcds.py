@@ -22,6 +22,11 @@ class TestTpcdsS1(tpcds.TestTpcds1, FunctionalTestBase):
         cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
 
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()
+
 
 class TestTpcdsS0_1(TestTpcdsS1):
     scale = 0.1

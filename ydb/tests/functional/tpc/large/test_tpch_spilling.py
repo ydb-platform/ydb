@@ -35,3 +35,8 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'import', 'generator', '--scale=10'])
 
         tpch.TestTpch10.setup_class()
+
+    @classmethod
+    def do_teardown_class(cls) -> None:
+        if cls.cluster is not None:
+            cls.cluster.stop()

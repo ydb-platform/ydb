@@ -58,6 +58,11 @@ items:
   include:
     mode: link
     path: downloads/toc_p.yaml
+- name: Enterprise Manager
+  href: enterprise_manager/index.md
+  include:
+    mode: link
+    path: enterprise_manager/toc_p.yaml
 - name: Публичные материалы
   include:
     mode: link

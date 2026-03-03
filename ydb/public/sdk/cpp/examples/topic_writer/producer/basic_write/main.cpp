@@ -7,7 +7,7 @@
 std::shared_ptr<NYdb::NTopic::IProducer> CreateProducer(const std::string& topic, NYdb::NTopic::TTopicClient& topicClient) {
     NYdb::NTopic::TProducerSettings producerSettings;
     producerSettings.Path(topic);
-    producerSettings.Codec(NYdb::NTopic::ECodec::GZIP);
+    producerSettings.Codec(NYdb::NTopic::ECodec::ZSTD);
     producerSettings.ProducerIdPrefix("producer_basic");
     producerSettings.PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound);
     producerSettings.SubSessionIdleTimeout(TDuration::Seconds(30));

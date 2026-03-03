@@ -32,10 +32,12 @@ public:
 protected:
     void PutRows() override;
 
-private:
     void CheckIsSorted(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const;
+
     TSortedChunkStats GetSortedChunkStats(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const;
+
     TString GetIndexValue(TStringBuf currentYsonContent, const TColumnOffsetRange& index) const;
+
     NYT::TNode GetKeyRowByIndexes(TStringBuf currentYsonContent, const std::vector<TColumnOffsetRange>& indexes) const;
 
 private:

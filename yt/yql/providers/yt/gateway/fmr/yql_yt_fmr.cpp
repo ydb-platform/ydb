@@ -267,7 +267,14 @@ public:
             }
         }
         if (!outputTablesByCluster.empty()) {
-            return UploadSeveralFmrTablesToYt<TRunResult, TRunOptions>(outputTablesByCluster, TRunOptions(options), nodePos);
+            return UploadSeveralFmrTablesToYt<TRunResult, TRunOptions>(outputTablesByCluster, TRunOptions(options), nodePos)
+                .Apply([this, node, &ctx, options = std::move(options)] (const auto& f) mutable {
+                    auto uploadResult = f.GetValue();
+                    if (!uploadResult.Success()) {
+                        return MakeFuture(std::move(uploadResult));
+                    }
+                    return Slave_->Run(node, ctx, std::move(options));
+                });
         }
 
         return Slave_->Run(node, ctx, std::move(options));
@@ -452,11 +459,6 @@ public:
             TString anonTableLabel = GetTableLabel(node);
             YQL_CLOG(DEBUG, FastMapReduce) << "Output table in publish is an anonymous table with id " << fmrOutputTableId << " and label " << anonTableLabel;
 
-            // Logic in Publish for anon tables:
-            // If there is only on input and it is in fmr - don't do anything
-            // Else - create Merge operation with all inputs and dump result to fmr
-            // TODO - handle publish mode.
-
             if (inputTables.size() == 1) {
                 TFmrTableId inputFmrId(inputTables[0].RichPath);
                 auto tablePresenceStatus = GetTablePresenceStatus(inputFmrId, sessionId);
@@ -478,6 +480,10 @@ public:
                     TFmrTableRef inputTable = GetFmrTableRef(inputFmrId, sessionId);
                     SetTableSortingSpec(fmrOutputTableId, inputTable.SortColumns, inputTable.SortOrder, sessionId);
 
+                    auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
+                    MarkForDeferredUpload(inputFmrId, deferredSpec, sessionId);
+                    MarkForDeferredUpload(fmrOutputTableId, deferredSpec, sessionId);
+
                     TPublishResult publishResult;
                     publishResult.SetSuccess();
                     return MakeFuture<TPublishResult>(publishResult);
@@ -495,8 +501,31 @@ public:
             }
             TFmrTableRef outputTable = GetFmrTableRef(fmrOutputTableId, sessionId);
 
-            auto future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
-            return future.Apply([this, sessionId, fmrOutputTableId, pos = nodePos] (const auto& f) {
+            bool allInputsSorted = true;
+            for (auto& curTable: inputTables) {
+                TFmrTableId curFmrId = GetAliasOrFmrId(TFmrTableId(curTable.RichPath), sessionId);
+                TFmrTableRef curRef = GetFmrTableRef(curFmrId, sessionId);
+                if (curRef.SortColumns.empty()) {
+                    allInputsSorted = false;
+                    break;
+                }
+            }
+
+            TFuture<TFmrOperationResult> future;
+            if (allInputsSorted) {
+                TFmrTableId firstInputFmrId = GetAliasOrFmrId(TFmrTableId(inputTables[0].RichPath), sessionId);
+                TFmrTableRef firstInputRef = GetFmrTableRef(firstInputFmrId, sessionId);
+                outputTable.SortColumns = firstInputRef.SortColumns;
+                outputTable.SortOrder = firstInputRef.SortOrder;
+                SetTableSortingSpec(fmrOutputTableId, outputTable.SortColumns, outputTable.SortOrder, sessionId);
+                future = ExecSortedMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
+            } else {
+                SetTableSortingSpec(fmrOutputTableId, {}, {}, sessionId);
+                future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
+            }
+
+            auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
+            return future.Apply([this, sessionId, fmrOutputTableId, pos = nodePos, deferredSpec = std::move(deferredSpec)] (const auto& f) {
                 TFmrOperationResult anonTablesMergeResult = f.GetValue();
                 TPublishResult publishResult;
                 publishResult.AddIssues(GetIssuesFromFmrErrors(anonTablesMergeResult.Errors, pos));
@@ -521,6 +550,7 @@ public:
                 SetFmrTableMeta(fmrOutputTableId, meta, sessionId);
 
                 SetTablePresenceStatus(fmrOutputTableId, sessionId, ETablePresenceStatus::OnlyInFmr);
+                MarkForDeferredUpload(fmrOutputTableId, deferredSpec, sessionId);
                 return MakeFuture<TPublishResult>(publishResult);
             });
         }
@@ -632,30 +662,59 @@ public:
 
     TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-        TVector<TTableReq> ytPresentTables;
+        TVector<TTableReq> ytBoundTables;
         TVector<IYtGateway::TTableInfoResult::TTableData> fmrTablesInfo;
         std::unordered_set<ui64> fmrTableIndexes; // needed to keep ordering of results the same as in getTableInfoOptions
+        std::unordered_map<TString, TVector<TOutputInfo>> deferredOutputsByCluster;
+        std::vector<TFmrTableId> deferredTableFmrIds;
+
+        TString sessionId = options.SessionId();
         ui64 tableIndex = 0;
         for (auto& table: options.Tables()) {
             TFmrTableId fmrTableId(table.Cluster(), table.Table());
             if (table.Anonymous()) {
                 TString cluster = table.Cluster(), path = table.Table();
-                auto anonTableRichPath = GetWriteTable(options.SessionId(), cluster, path, GetTablesTmpFolder(*options.Config(), cluster)).Cluster(cluster);
+                auto anonTableRichPath = GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*options.Config(), cluster)).Cluster(cluster);
                 fmrTableId = TFmrTableId(anonTableRichPath);
             }
-            fmrTableId = GetAliasOrFmrId(fmrTableId, options.SessionId());
+            // fmrTableId = GetAliasOrFmrId(fmrTableId, sessionId);
             YQL_CLOG(DEBUG, FastMapReduce) << " Getting table info for table with id " << fmrTableId;
 
-            if (GetTablePresenceStatus(fmrTableId, options.SessionId()) != ETablePresenceStatus::OnlyInFmr) {
-                ytPresentTables.emplace_back(table);
+            if (GetTablePresenceStatus(fmrTableId, sessionId) != ETablePresenceStatus::OnlyInFmr) {
+                ytBoundTables.emplace_back(table);
+            } else if (IsDeferredUpload(fmrTableId, sessionId)) {
+                YQL_CLOG(INFO, FastMapReduce) << "Table " << fmrTableId << " needs deferred upload to YT for GetTableInfo";
+
+                ytBoundTables.emplace_back(table); // - ?
+                deferredTableFmrIds.emplace_back(fmrTableId);
+
+                TString cluster = table.Cluster();
+                TString path = fmrTableId.Id.substr(cluster.size() + 1); // - ?
+
+                auto& info = Sessions_[sessionId]->FmrTables[fmrTableId];
+                TOutputInfo outputInfo;
+                outputInfo.Path = path;
+                outputInfo.Spec = info.DeferredUploadSpec;
+                outputInfo.AttrSpec = NYT::TNode::CreateMap();
+
+                YQL_CLOG(INFO, FastMapReduce) << "Output table cluster: " << cluster << " path: " << path;
+                YQL_CLOG(INFO, FastMapReduce) << "Output table spec: " << NYT::NodeToYsonString(outputInfo.Spec);
+
+                auto columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
+                if (!columnGroupSpec.empty()) {
+                    outputInfo.ColumnGroups = NYT::NodeFromYsonString(columnGroupSpec);
+                }
+
+                YQL_CLOG(INFO, FastMapReduce) << "Columns groups spec: " << (outputInfo.ColumnGroups.IsUndefined() ? "" : NYT::NodeToYsonString(outputInfo.ColumnGroups));
+                deferredOutputsByCluster[cluster].emplace_back(std::move(outputInfo));
             } else {
                 IYtGateway::TTableInfoResult::TTableData fmrTableInfo;
 
-                auto meta = GetFmrTableMeta(fmrTableId, options.SessionId());
+                auto meta = GetFmrTableMeta(fmrTableId, sessionId);
                 YQL_ENSURE(meta.DoesExist);
 
                 fmrTableInfo.Meta = MakeIntrusive<TYtTableMetaInfo>(meta);
-                fmrTableInfo.Stat = MakeIntrusive<TYtTableStatInfo>(GetFmrTableStats(fmrTableId, options.SessionId()));
+                fmrTableInfo.Stat = MakeIntrusive<TYtTableStatInfo>(GetFmrTableStats(fmrTableId, sessionId));
                 fmrTableInfo.Stat->Id = table.Table();
                 fmrTableInfo.WriteLock = false;
                 fmrTablesInfo.emplace_back(fmrTableInfo);
@@ -663,31 +722,89 @@ public:
             }
             ++tableIndex;
         }
-        if (ytPresentTables.empty()) {
-            TTableInfoResult result;
-            result.SetSuccess();
-            result.Data = fmrTablesInfo;
-            return MakeFuture<TTableInfoResult>(result);
-        }
-        TGetTableInfoOptions ytTablesOptions = std::move(options);
-        ytTablesOptions.Tables() = ytPresentTables;
-        return Slave_->GetTableInfo(std::move(ytTablesOptions)).Apply([fmrTablesInfo, tableIndex, fmrTableIndexes] (const auto& f) {
-            TTableInfoResult ytTablesInfoResult = f.GetValue();
-            TTableInfoResult allTablesResult;
-            allTablesResult.SetSuccess();
-            ui64 fmrTablePos = 0, ytTablePos = 0;
-            for (ui64 i = 0; i < tableIndex; ++i) {
-                if (fmrTableIndexes.contains(i)) {
-                    // table number i should append fmr table info to total results
-                    allTablesResult.Data.emplace_back(fmrTablesInfo[fmrTablePos]);
-                    ++fmrTablePos;
-                } else {
-                    allTablesResult.Data.emplace_back(ytTablesInfoResult.Data[ytTablePos]);
-                    ++ytTablePos;
-                }
+
+        if (deferredTableFmrIds.size() == 0) {
+            YQL_CLOG(INFO, FastMapReduce) << "No deferred upload tables";
+            if (ytBoundTables.empty()) {
+                TTableInfoResult result;
+                result.SetSuccess();
+                result.Data = fmrTablesInfo;
+                return MakeFuture<TTableInfoResult>(result);
             }
-            return MakeFuture<TTableInfoResult>(allTablesResult);
+            TGetTableInfoOptions ytTablesOptions = std::move(options);
+            ytTablesOptions.Tables() = ytBoundTables;
+            return Slave_->GetTableInfo(std::move(ytTablesOptions)).Apply([fmrTablesInfo, tableIndex, fmrTableIndexes] (const auto& f) {
+                return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+            });
+        }
+
+        YQL_CLOG(INFO, FastMapReduce) << "Have " << deferredTableFmrIds.size() << " deferred upload tables";
+
+        std::vector<typename TExecContextSimple<TRunOptions>::TPtr> execCtxs;
+        for (auto& [cluster, outputTables] : deferredOutputsByCluster) {
+            TRunOptions runOptions(sessionId);
+            runOptions.Config() = options.Config();
+            auto execCtx = MakeExecCtx(std::move(runOptions), cluster, sessionId);
+            execCtx->OutTables_ = {outputTables.begin(), outputTables.end()};
+            execCtxs.emplace_back(std::move(execCtx));
+        }
+
+        YQL_CLOG(INFO, FastMapReduce) << "Dumping";
+
+        return DumpFmrTablesToYt(execCtxs).Apply(
+            [this, sessionId, options = std::move(options),
+             ytBoundTables = std::move(ytBoundTables),
+             deferredTableFmrIds = std::move(deferredTableFmrIds),
+             fmrTablesInfo = std::move(fmrTablesInfo),
+             fmrTableIndexes = std::move(fmrTableIndexes),
+             tableIndex] (const auto& f) mutable {
+            f.GetValue();
+
+            YQL_CLOG(INFO, FastMapReduce) << "Uploaded " << deferredTableFmrIds.size() << " deferred tables to YT";
+
+            // After upload: mark as OnlyInYt, remove from FMR
+            for (auto& fmrTableId : deferredTableFmrIds) {
+                SetTablePresenceStatus(fmrTableId, sessionId, ETablePresenceStatus::OnlyInYt);
+                ClearDeferredUpload(fmrTableId, sessionId);
+            }
+
+            if (ytBoundTables.empty()) {
+                TTableInfoResult result;
+                result.SetSuccess();
+                result.Data = {fmrTablesInfo.begin(), fmrTablesInfo.end()};
+                return MakeFuture<TTableInfoResult>(result);
+            }
+
+            // ytBoundTables already includes both original YT tables and deferred-uploaded tables in original order
+            TGetTableInfoOptions ytTablesOptions = std::move(options);
+            ytTablesOptions.Tables() = ytBoundTables;
+            return Slave_->GetTableInfo(std::move(ytTablesOptions)).Apply(
+                [fmrTablesInfo = std::move(fmrTablesInfo), fmrTableIndexes = std::move(fmrTableIndexes),
+                 tableIndex] (const auto& f) {
+                return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+            });
         });
+    }
+
+    static TFuture<TTableInfoResult> MergeTableInfoResults(
+        TTableInfoResult ytTablesInfoResult,
+        const TVector<IYtGateway::TTableInfoResult::TTableData>& fmrTablesInfo,
+        const std::unordered_set<ui64>& fmrTableIndexes,
+        ui64 totalCount)
+    {
+        TTableInfoResult allTablesResult;
+        allTablesResult.SetSuccess();
+        ui64 fmrTablePos = 0, ytTablePos = 0;
+        for (ui64 i = 0; i < totalCount; ++i) {
+            if (fmrTableIndexes.contains(i)) {
+                allTablesResult.Data.emplace_back(fmrTablesInfo[fmrTablePos]);
+                ++fmrTablePos;
+            } else {
+                allTablesResult.Data.emplace_back(ytTablesInfoResult.Data[ytTablePos]);
+                ++ytTablePos;
+            }
+        }
+        return MakeFuture<TTableInfoResult>(allTablesResult);
     }
 
     TFuture<TResOrPullResult> ResOrPull(const TExprNode::TPtr& node, TExprContext& ctx, TResOrPullOptions&& options) final {
@@ -869,6 +986,24 @@ private:
         TString columnGroupSpec = fmrTableInfo[fmrTableId].ColumnGroupSpec;
         YQL_CLOG(DEBUG, FastMapReduce) << "Gotten column group spec " << columnGroupSpec << " for table " << fmrTableId;
         return columnGroupSpec;
+    }
+
+    void MarkForDeferredUpload(const TFmrTableId& fmrTableId, const NYT::TNode& spec, const TString& sessionId) {
+        YQL_CLOG(DEBUG, FastMapReduce) << "Marking table " << fmrTableId << " for deferred upload to YT";
+        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+        fmrTableInfo[fmrTableId].NeedsDeferredUpload = true;
+        fmrTableInfo[fmrTableId].DeferredUploadSpec = spec;
+    }
+
+    bool IsDeferredUpload(const TFmrTableId& fmrTableId, const TString& sessionId) {
+        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+        return fmrTableInfo[fmrTableId].NeedsDeferredUpload;
+    }
+
+    void ClearDeferredUpload(const TFmrTableId& fmrTableId, const TString& sessionId) {
+        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+        fmrTableInfo[fmrTableId].NeedsDeferredUpload = false;
+        fmrTableInfo[fmrTableId].DeferredUploadSpec = NYT::TNode();
     }
 
 
@@ -1105,11 +1240,12 @@ private:
         TString outputPath = fmrTable.Path;
         TString outputCluster = execCtx->Cluster_;
 
-        TFmrTableRef fmrTableRef = GetFmrTableRef(TFmrTableId(outputCluster, outputPath), sessionId);
-        auto tablePresenceStatus = GetTablePresenceStatus(fmrTableRef.FmrTableId, sessionId);
+        TFmrTableId originalTableId(outputCluster, outputPath);
+        TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
-            YQL_CLOG(TRACE, FastMapReduce) << "Table " << fmrTableRef.FmrTableId << " has table presence status " << tablePresenceStatus << " so don't upload from fmr to yt";
+            YQL_CLOG(TRACE, FastMapReduce) << "Table " << originalTableId << " has table presence status " << tablePresenceStatus << " so it won't be uploaded from fmr to yt";
             return GetSuccessfulFmrOperationResult();
         }
 
@@ -1140,7 +1276,7 @@ private:
 
         YQL_CLOG(TRACE, FastMapReduce) << "Creating partition for distributed upload from fmr to yt for table: " << fmrTableRef.FmrTableId;
 
-        return Coordinator_->PrepareOperation(PrepareOperationRequest).Apply([this, &sessionId, &outputCluster, &clusterConnection, &config, &SortedUploadOperationParams] (const auto& PrepareOperationFuture)  {
+        return Coordinator_->PrepareOperation(PrepareOperationRequest).Apply([this, &sessionId, &outputCluster, &clusterConnection, &config, &SortedUploadOperationParams, originalTableId] (const auto& PrepareOperationFuture)  {
             try {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                 auto PrepareOperationResponse = PrepareOperationFuture.GetValue();
@@ -1179,12 +1315,13 @@ private:
                 };
 
                 YQL_CLOG(TRACE, FastMapReduce) << "Starting SortedUpload from fmr to yt for table: " << fmrTableId;
-                return GetRunningOperationFuture(SortedUploadRequest, sessionId, writeSessionId).Apply([this, sessionId, fmrTableId] (const TFuture<TFmrOperationResult>& f) {
+                return GetRunningOperationFuture(SortedUploadRequest, sessionId, writeSessionId).Apply([this, sessionId, originalTableId] (const TFuture<TFmrOperationResult>& f) {
                     try {
                         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                         auto fmrUploadResult = f.GetValue();
                         YQL_CLOG(TRACE, FastMapReduce) << "GATEWAY: Distributed upload requested, get running operation feature";
-                        SetTablePresenceStatus(fmrTableId, sessionId, ETablePresenceStatus::Both);
+                        SetTablePresenceStatus(originalTableId, sessionId, ETablePresenceStatus::OnlyInYt);
+                        ClearDeferredUpload(originalTableId, sessionId);
                         fmrUploadResult.SetRepeat(true);
                         return MakeFuture<TFmrOperationResult>(fmrUploadResult);
                     } catch (...) {
@@ -1211,11 +1348,12 @@ private:
         TString outputPath = fmrTable.Path;
         TString outputCluster = execCtx->Cluster_;
 
-        TFmrTableRef fmrTableRef = GetFmrTableRef(TFmrTableId(outputCluster, outputPath), sessionId);
-        auto tablePresenceStatus = GetTablePresenceStatus(fmrTableRef.FmrTableId, sessionId);
+        TFmrTableId originalTableId(outputCluster, outputPath);
+        TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
-            YQL_CLOG(INFO, FastMapReduce) << "Table " << fmrTableRef.FmrTableId << " has table presence status " << tablePresenceStatus << " so don't upload from fmr to yt";
+            YQL_CLOG(INFO, FastMapReduce) << "Table " << originalTableId << " has table presence status " << tablePresenceStatus << " so it won't be upload from fmr to yt";
             return GetSuccessfulFmrOperationResult();
         }
 
@@ -1241,13 +1379,13 @@ private:
         };
 
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
-        auto fmrTableId = fmrTableRef.FmrTableId;
-        YQL_CLOG(INFO, FastMapReduce) << "Starting upload from fmr to yt for table: " << fmrTableId;
-        return GetRunningOperationFuture(uploadRequest, sessionId).Apply([this, sessionId = std::move(sessionId), fmrTableId = std::move(fmrTableId)] (const TFuture<TFmrOperationResult>& f) {
+        YQL_CLOG(INFO, FastMapReduce) << "Starting upload from fmr to yt for table: " << originalTableId;
+        return GetRunningOperationFuture(uploadRequest, sessionId).Apply([this, sessionId = std::move(sessionId), originalTableId = std::move(originalTableId)] (const TFuture<TFmrOperationResult>& f) {
             try {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                 auto fmrUploadResult = f.GetValue();
-                SetTablePresenceStatus(fmrTableId, sessionId, ETablePresenceStatus::Both);
+                SetTablePresenceStatus(originalTableId, sessionId, ETablePresenceStatus::OnlyInYt);
+                ClearDeferredUpload(originalTableId, sessionId);
                 fmrUploadResult.SetRepeat(true);
                 return MakeFuture<TFmrOperationResult>(fmrUploadResult);
             } catch (...) {
@@ -1642,6 +1780,8 @@ private:
         std::vector<ESortOrder> SortOrder; // Sorting order for sorting columns.
         TYtTableStatInfo TableStats;
         TYtTableMetaInfo TableMeta;
+        bool NeedsDeferredUpload = false; // Table is marked for deferred upload to YT (anonymous tables in Publish)
+        NYT::TNode DeferredUploadSpec; // Spec (YqlRowSpecAttribute) for creating YT table during deferred upload
     };
 
     struct TFmrSession: public TSessionBase {

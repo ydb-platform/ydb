@@ -39,7 +39,8 @@ enum class ETaskType {
     Merge = 3,
     Map = 4,
     SortedUpload = 5,
-    SortedMerge = 6
+    SortedMerge = 6,
+    LocalSort = 7
 };
 
 enum class EFmrComponent {
@@ -69,22 +70,12 @@ struct TFmrError {
 };
 
 static constexpr TStringBuf FmrNonRetryableJobExceptionMarker = "[FmrNonRetryableJobException] ";
-static constexpr TStringBuf FmrNonRetryableCoordinatorExceptionMarker = "[FmrNonRetryableCoordinatorException] ";
 
 class TFmrNonRetryableJobException: public yexception {
 public:
     TFmrNonRetryableJobException() : yexception()
 {
     *this << ToString(FmrNonRetryableJobExceptionMarker);
-}
-};
-
-
-class TFmrNonRetryableCoordinatorException: public yexception {
-public:
-    TFmrNonRetryableCoordinatorException() : yexception()
-{
-    *this << ToString(FmrNonRetryableCoordinatorExceptionMarker);
 }
 };
 
@@ -416,10 +407,15 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
+struct TLocalSortTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;
+};
+
 
 using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

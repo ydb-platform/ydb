@@ -56,11 +56,14 @@ struct TMapConnection: public TConnection {
 };
 
 struct TUnionAllConnection: public TConnection {
-    TUnionAllConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("UnionAll", fromSourceStageStorageType, outputIndex) {
+    TUnionAllConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0, bool parallel = false)
+        : TConnection("UnionAll", fromSourceStageStorageType, outputIndex)
+        , Parallel(parallel) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) override;
+
+private:
+    bool Parallel{false};
 };
 
 struct TShuffleConnection: public TConnection {

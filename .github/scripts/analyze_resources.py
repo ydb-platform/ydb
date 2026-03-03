@@ -89,9 +89,7 @@ def build_html_dashboard(
     cpu_total = [r.get("cpu_total_pct", 0) for r in resources]
     cpu_ya = [r.get("cpu_ya_pct", 0) for r in resources]
     ram_gb = [r.get("ram_used_kb", 0) / (1024 * 1024) for r in resources]
-    ram_ya_raw = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
-    # RSS counts shared memory per process → sum can exceed total. Cap ya ≤ total.
-    ram_ya_gb = [min(ya, tot) for ya, tot in zip(ram_ya_raw, ram_gb)]
+    ram_ya_gb = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
     disk_r = [r.get("disk_read_mb_delta", 0) for r in resources]
     disk_w = [r.get("disk_write_mb_delta", 0) for r in resources]
     disk_ya_r = [r.get("disk_ya_read_mb_delta", 0) for r in resources]
@@ -119,7 +117,7 @@ def build_html_dashboard(
         vertical_spacing=0.06,
         subplot_titles=(
             f"CPU (ядра из {cpu_cores}, 100%=1 ядро)",
-            f"RAM (GB из {ram_total_gb:.0f} GB всего, ya ≤ total)",
+            f"RAM (GB из {ram_total_gb:.0f} GB всего)",
             f"Disk read (MB за {interval_sec:.0f} сек)",
             f"Disk write (MB за {interval_sec:.0f} сек)",
             "Количество тестов (параллельно)",
@@ -135,13 +133,12 @@ def build_html_dashboard(
         go.Scatter(x=ts_str, y=cpu_ya_cores, mode="lines", name="CPU ya make (ядра)", line=dict(color="#60a5fa", dash="dash")),
         row=1, col=1,
     )
-    # ya first (capped ≤ total), then total on top — ya never exceeds total (RSS double-counts shared mem)
     fig.add_trace(
-        go.Scatter(x=ts_str, y=ram_ya_gb, mode="lines", name="RAM ya make (GB)", line=dict(color="#4ade80", dash="dash")),
+        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total (GB)", line=dict(color="#16a34a")),
         row=2, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total (GB)", line=dict(color="#16a34a")),
+        go.Scatter(x=ts_str, y=ram_ya_gb, mode="lines", name="RAM ya make (GB)", line=dict(color="#4ade80", dash="dash")),
         row=2, col=1,
     )
     fig.add_trace(
@@ -195,7 +192,7 @@ def build_html_dashboard(
     boundary_note = " Метки: try N end = граница между попытками." if try_boundaries else ""
     fig.update_layout(
         height=850,
-        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Общий отчёт по всем try.{boundary_note} RAM ya ≤ total (RSS считает shared memory дважды). Нижний график: кол-во тестов.</sup>",
+        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Общий отчёт по всем try.{boundary_note} RAM ya может быть > total (RSS считает shared memory на каждый процесс). Нижний график: кол-во тестов.</sup>",
         showlegend=True,
         template="plotly_white",
     )

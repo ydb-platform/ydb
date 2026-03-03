@@ -75,10 +75,14 @@ def build_html_dashboard(
         return
 
     ts = [r["ts"] for r in resources]
-    cpu = [r.get("cpu_total_pct", 0) for r in resources]
+    cpu_total = [r.get("cpu_total_pct", 0) for r in resources]
+    cpu_ya = [r.get("cpu_ya_pct", 0) for r in resources]
     ram_gb = [r.get("ram_used_kb", 0) / (1024 * 1024) for r in resources]
+    ram_ya_gb = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
     disk_r = [r.get("disk_read_mb_delta", 0) for r in resources]
     disk_w = [r.get("disk_write_mb_delta", 0) for r in resources]
+    disk_ya_r = [r.get("disk_ya_read_mb_delta", 0) for r in resources]
+    disk_ya_w = [r.get("disk_ya_write_mb_delta", 0) for r in resources]
 
     from datetime import datetime, timezone
     ts_str = [datetime.fromtimestamp(t, timezone.utc).strftime("%H:%M:%S") for t in ts]
@@ -88,24 +92,40 @@ def build_html_dashboard(
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.06,
-        subplot_titles=("CPU %", "RAM (GB)", "Disk read (MB/sample)", "Disk write (MB/sample)"),
+        subplot_titles=("CPU % (total + ya make)", "RAM (GB) (total + ya make)", "Disk read MB/sample (total + ya)", "Disk write MB/sample (total + ya)"),
         row_heights=[0.3, 0.3, 0.2, 0.2],
     )
 
     fig.add_trace(
-        go.Scatter(x=ts_str, y=cpu, mode="lines", name="CPU %", line=dict(color="#2563eb")),
+        go.Scatter(x=ts_str, y=cpu_total, mode="lines", name="CPU total", line=dict(color="#2563eb")),
         row=1, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM GB", line=dict(color="#16a34a")),
+        go.Scatter(x=ts_str, y=cpu_ya, mode="lines", name="CPU ya make", line=dict(color="#60a5fa", dash="dash")),
+        row=1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total", line=dict(color="#16a34a")),
         row=2, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_r, mode="lines", name="Disk read", line=dict(color="#ea580c")),
+        go.Scatter(x=ts_str, y=ram_ya_gb, mode="lines", name="RAM ya make", line=dict(color="#4ade80", dash="dash")),
+        row=2, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=ts_str, y=disk_r, mode="lines", name="Disk read total", line=dict(color="#ea580c")),
         row=3, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=ts_str, y=disk_w, mode="lines", name="Disk write", line=dict(color="#7c3aed")),
+        go.Scatter(x=ts_str, y=disk_ya_r, mode="lines", name="Disk read ya make", line=dict(color="#fb923c", dash="dash")),
+        row=3, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=ts_str, y=disk_w, mode="lines", name="Disk write total", line=dict(color="#7c3aed")),
+        row=4, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=ts_str, y=disk_ya_w, mode="lines", name="Disk write ya make", line=dict(color="#a78bfa", dash="dash")),
         row=4, col=1,
     )
 
@@ -145,38 +165,14 @@ def build_chromium_trace(resources: list[dict], output_path: Path) -> None:
     events = []
     for r in resources:
         ts_us = r.get("ts_us", int(r["ts"] * 1_000_000))
-        events.append({
-            "ph": "C",
-            "ts": ts_us,
-            "pid": 1,
-            "tid": 0,
-            "name": "cpu_total_pct",
-            "args": {"value": r.get("cpu_total_pct", 0)},
-        })
-        events.append({
-            "ph": "C",
-            "ts": ts_us,
-            "pid": 1,
-            "tid": 1,
-            "name": "ram_used_gb",
-            "args": {"value": r.get("ram_used_kb", 0) / (1024 * 1024)},
-        })
-        events.append({
-            "ph": "C",
-            "ts": ts_us,
-            "pid": 1,
-            "tid": 2,
-            "name": "disk_read_mb",
-            "args": {"value": r.get("disk_read_mb_delta", 0)},
-        })
-        events.append({
-            "ph": "C",
-            "ts": ts_us,
-            "pid": 1,
-            "tid": 3,
-            "name": "disk_write_mb",
-            "args": {"value": r.get("disk_write_mb_delta", 0)},
-        })
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 0, "name": "cpu_total_pct", "args": {"value": r.get("cpu_total_pct", 0)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 1, "name": "cpu_ya_pct", "args": {"value": r.get("cpu_ya_pct", 0)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 2, "name": "ram_used_gb", "args": {"value": r.get("ram_used_kb", 0) / (1024 * 1024)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 3, "name": "ram_ya_gb", "args": {"value": r.get("ram_ya_kb", 0) / (1024 * 1024)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 4, "name": "disk_read_mb", "args": {"value": r.get("disk_read_mb_delta", 0)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 5, "name": "disk_ya_read_mb", "args": {"value": r.get("disk_ya_read_mb_delta", 0)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 6, "name": "disk_write_mb", "args": {"value": r.get("disk_write_mb_delta", 0)}})
+        events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 7, "name": "disk_ya_write_mb", "args": {"value": r.get("disk_ya_write_mb_delta", 0)}})
     output_path.write_text(json.dumps(events))
 
 

@@ -423,8 +423,7 @@ runs:
           python3 .github/scripts/monitor_resources.py \
             --output $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
             --ram-usage-file ram_usage.txt \
-            --interval 3 \
-            --top-pids 50 &
+            --interval 3 &
           MONITOR_PID=$!
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"

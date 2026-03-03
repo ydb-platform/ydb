@@ -11,7 +11,6 @@ import os
 import os.path
 import ssl
 import socket
-import math
 from google.protobuf import text_format
 from argparse import FileType
 from functools import wraps
@@ -300,9 +299,10 @@ def get_pdisk_inferred_settings(pdisk):
 
 
 def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
-    vu = group_size_in_units if group_size_in_units > 0 else 1
-    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units > 0 else 1
-    return math.ceil(vu / pu)
+    # Identical to blobstorage/pdisk/blobstorage_pdisk_config.h GetOwnerWeight()
+    vu = group_size_in_units if group_size_in_units else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
+    return int(vu / pu) + (1 if (vu % pu) else 0)
 
 
 class Location(typing.NamedTuple):

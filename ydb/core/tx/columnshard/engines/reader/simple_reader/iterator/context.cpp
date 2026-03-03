@@ -122,21 +122,25 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
-    AFL_VERIFY(!DuplicatesManager.Has());
-    if (NeedDuplicateFiltering()) {
-        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        AFL_VERIFY(casted_sources);
-        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
-        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
-        casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
-            const auto info = constructor.GetPortion();
-            auto state = GetPortionStateAtScanStart(*info);
-            if (!state.Conflicting) {
-                portionsToDuplicateFilter.emplace_back(std::move(info));
-            }
-        });
+    if (!NeedDuplicateFiltering()) {
+        return;
+    }
 
-        DuplicatesManager.Set(NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter)));
+    const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+    AFL_VERIFY(casted_sources);
+    std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
+    casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
+        const auto info = constructor.GetPortion();
+        auto state = GetPortionStateAtScanStart(*info);
+        if (!state.Conflicting) {
+            portionsToDuplicateFilter.emplace_back(std::move(info));
+        }
+    });
+
+    {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        AFL_VERIFY(!DuplicatesManager);
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }
 
@@ -145,9 +149,15 @@ void TSpecialReadContext::UnregisterActors() {
         return;
     }
 
-    const auto toPoison = DuplicatesManager.Take();
+    NActors::TActorId toPoison;
+    {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        toPoison = DuplicatesManager;
+        DuplicatesManager = NActors::TActorId();
+    }
+
     if (toPoison) {
-        NActors::TActivationContext::AsActorContext().Send(*toPoison, new NActors::TEvents::TEvPoison);
+        NActors::TActivationContext::AsActorContext().Send(toPoison, new NActors::TEvents::TEvPoison);
     }
 }
 

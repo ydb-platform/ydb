@@ -1,10 +1,11 @@
 #pragma once
 #include "fetching.h"
 
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
+
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
-#include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -23,7 +24,8 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    ::NKikimr::NOlap::TThreadSafeOptional<NActors::TActorId> DuplicatesManager;
+    mutable TSpinLock DuplicatesManagerLock;
+    NActors::TActorId DuplicatesManager = NActors::TActorId();
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -78,9 +80,9 @@ public:
     void UnregisterActors();
 
     NActors::TActorId GetDuplicatesManagerVerified() const {
-        const auto opt = DuplicatesManager.GetOptional();
-        AFL_VERIFY(opt);
-        return *opt;
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        AFL_VERIFY(DuplicatesManager);
+        return DuplicatesManager;
     }
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
@@ -92,7 +94,8 @@ public:
             return;
         }
 
-        AFL_VERIFY(!DuplicatesManager.Has());
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        AFL_VERIFY(!DuplicatesManager);
     }
 };
 

@@ -62,23 +62,7 @@ public:
         return *this;
     }
 
-    std::optional<T> Take() {
-        if (!Defined.exchange(false, std::memory_order_acq_rel)) {
-            return {};
-        }
-
-        T value(*Ptr());
-        Ptr()->~T();
-        return value;
-    }
-
-    void Reset() {
-        if (!Defined.exchange(false, std::memory_order_acq_rel)) {
-            return;
-        }
-
-        Ptr()->~T();
-    }
+    void Reset() = delete;
 
     void Set(const T& value) {
         AFL_VERIFY(!Has());

@@ -8,6 +8,7 @@
 #include <compare>
 #include <memory>
 #include <variant>
+#include <vector>
 
 namespace NKikimr::NOlap::NPortionIntervalTree {
 
@@ -84,10 +85,33 @@ public:
     using TBorder = TImpl::TBorder;
 
     void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
+        ui32 intersectionsCount = 0;
+        Impl.EachIntersection(range, [&intersectionsCount](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+            p->AddIntervalTreeRangesCount(1);
+            ++intersectionsCount;
+            return true;
+        });
         Impl.AddRange(std::move(range), value);
+        value->AddIntervalTreeRangesCount(intersectionsCount);
     }
 
     void RemoveRanges(const std::shared_ptr<TPortionInfo>& value) {
+        std::vector<TRange> rangesOfValue;
+        Impl.EachRange([&value, &rangesOfValue](const TRange& r, const std::shared_ptr<TPortionInfo>& p) {
+            if (p == value) {
+                rangesOfValue.push_back(r);
+            }
+            return true;
+        });
+        for (const auto& r : rangesOfValue) {
+            Impl.EachIntersection(r, [&value](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+                if (p != value) {
+                    p->DecrementIntervalTreeRangesCount(1);
+                }
+                return true;
+            });
+        }
+        value->ResetIntervalTreeRangesCount();
         Impl.RemoveRanges(value);
     }
 

@@ -96,6 +96,7 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
+    ui32 IntervalTreeRangesCount = 0;
 
     virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
 
@@ -303,6 +304,26 @@ public:
 
     ui64 GetPortionId() const {
         return PortionId;
+    }
+
+    ui32 GetIntervalTreeRangesCount() const {
+        return IntervalTreeRangesCount;
+    }
+
+    void AddIntervalTreeRangesCount(ui32 delta = 1) {
+        IntervalTreeRangesCount += delta;
+    }
+
+    void DecrementIntervalTreeRangesCount(ui32 delta = 1) {
+        if (IntervalTreeRangesCount >= delta) {
+            IntervalTreeRangesCount -= delta;
+        } else {
+            IntervalTreeRangesCount = 0;
+        }
+    }
+
+    void ResetIntervalTreeRangesCount() {
+        IntervalTreeRangesCount = 0;
     }
 
     NJson::TJsonValue SerializeToJsonVisual() const {

@@ -2588,6 +2588,65 @@ Y_UNIT_TEST(SkipAddByRetentionPolicy) {
     utils.AssertLoad();
 }
 
+Y_UNIT_TEST(MarkDLQMoved_unexpected) {
+    TUtils utils;
+    utils.Storage.SetRetentionPeriod(TDuration::Seconds(10));
+    utils.AddMessage(3);
+
+    utils.Next(TDuration::Seconds(1));
+    utils.Next(TDuration::Seconds(1));
+    utils.Next(TDuration::Seconds(1));
+
+    Cerr << utils.Storage.DebugString() << Endl;
+
+    // Move message to DLQ
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
+    utils.Storage.ProccessDeadlines();
+
+    Cerr << utils.Storage.DebugString() << Endl;
+
+    {
+        auto messages = utils.Storage.GetDLQMessages();
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].Offset, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].SeqNo, 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].SeqNo, 3);
+    }
+
+    utils.Storage.Commit(1);
+    utils.Storage.Commit(2);
+
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 1,
+            .SeqNo = 1
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 2,
+            .SeqNo = 2
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 1,
+            .SeqNo = 1
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 3,
+            .SeqNo = 3
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

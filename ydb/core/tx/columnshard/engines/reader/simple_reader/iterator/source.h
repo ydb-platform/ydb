@@ -243,6 +243,7 @@ private:
     std::shared_ptr<ISnapshotSchema> Schema;
     const TReplaceKeyAdapter Start;
     const TReplaceKeyAdapter Finish;
+    YDB_READONLY_DEF(std::shared_ptr<IIndexAccessStub>, IndexAccessStub);
 
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
 
@@ -412,7 +413,8 @@ public:
     }
 
     TPortionDataSource(
-        const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+        const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+        const std::shared_ptr<IIndexAccessStub>& indexAccessStub);
 };
 
 class TAggregationDataSource: public IDataSource {

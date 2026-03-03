@@ -33,11 +33,13 @@ private:
 public:
     // Table
     ui64 TxId = 0;
+    TString Constant;
     std::optional<ui64> LockId;
     std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
+    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
     bool readNonconflictingPortions;
@@ -63,9 +65,9 @@ public:
     }
 
     void SetLock(
-        std::optional<ui64> lockId, 
+        std::optional<ui64> lockId,
         std::optional<ui32> lockNodeId,
-        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
+        std::optional<NKikimrDataEvents::ELockMode> lockMode,
         const NColumnShard::TLockFeatures* lock,
         const bool readOnlyConflicts
     ) {

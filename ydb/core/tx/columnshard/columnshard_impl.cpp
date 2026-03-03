@@ -86,7 +86,9 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
+    , IndexAccessStub(std::make_shared<NOlap::TDefaultIndexAccessStub>(10))
+    , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID,
+          IndexAccessStub)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -775,7 +777,7 @@ bool TColumnShard::SetupTtl() {
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit);
+        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit, IndexAccessStub);
 
     if (indexChanges.empty()) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");

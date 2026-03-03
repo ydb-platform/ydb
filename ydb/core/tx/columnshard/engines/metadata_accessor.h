@@ -1,4 +1,5 @@
 #pragma once
+#include "index_access_stub.h"
 #include "scheme/index_info.h"
 #include "scheme/versions/preset_schemas.h"
 #include "scheme/versions/versioned_index.h"
@@ -67,6 +68,7 @@ public:
     private:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
+        const std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -75,15 +77,20 @@ public:
         const IColumnEngine& GetEngine() const {
             return Engine;
         }
+        const std::shared_ptr<IIndexAccessStub>& GetIndexAccessStub() const {
+            return IndexAccessStub;
+        }
 
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine)
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine,
+            const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
             : PathIdTranslator(pathIdTranslator)
-            , Engine(engine) {
+            , Engine(engine)
+            , IndexAccessStub(indexAccessStub) {
         }
     };
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool isPlain) const = 0;
+        const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
@@ -109,7 +116,7 @@ public:
     }
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool isPlain) const override;
+        const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
@@ -145,7 +152,7 @@ public:
         return std::nullopt;
     }
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool isPlain) const override;
+        const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const override;
 };
 
 } // namespace NKikimr::NOlap

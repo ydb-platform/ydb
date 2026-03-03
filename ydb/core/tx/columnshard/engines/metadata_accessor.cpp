@@ -39,16 +39,24 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
             readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions);
+
+    auto sizeBefore = portions.size();
+    std::erase_if(portions, [&constant, context](const IColumnEngine::TSelectedPortionInfo& item) {
+        return !context.GetIndexAccessStub()->CheckValue(item.GetPortion()->GetPortionId(), constant);
+    });
+    auto sizeAfter = portions.size();
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "removed_by_hier")("before", sizeBefore)("after", sizeAfter)("constant", constant);
+
     if (!isPlain) {
         std::deque<NReader::NSimple::TSourceConstructor> sources;
         for (auto&& i : portions) {
-            sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+            sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting(), context.GetIndexAccessStub()));
         }
         return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
     } else {
@@ -56,12 +64,12 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
         for (auto&& i : portions) {
             sources.emplace_back(i.GetPortion());
         }
-        return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
+        return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources), context.GetIndexAccessStub());
     }
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
-    const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/) const {
+    const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/, const TString& /*constant*/) const {
     return NReader::NSimple::TPortionsSources::BuildEmpty();
 }
 

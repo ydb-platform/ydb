@@ -68,6 +68,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
+        read.IndexAccessStub = Self->IndexAccessStub;
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
         read.SetLock(
@@ -142,6 +143,24 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (!parseResult) {
             return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
         }
+
+        TString constant;
+        const auto& program = read.GetProgram().GetProgramProto();
+        for (auto& cmd : program.GetCommand()) {
+            if (cmd.GetLineCase() == NKikimrSSA::TProgram::TCommand::kAssign && cmd.GetAssign().GetExpressionCase() == NKikimrSSA::TProgram::TAssignment::kConstant &&
+                    cmd.GetAssign().GetConstant().GetValueCase() == NKikimrSSA::TProgram::TConstant::kBytes)  {
+                constant = cmd.GetAssign().GetConstant().GetBytes();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("constant_found", constant);
+
+                // constant = std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)str.data(), str.size()), arrow::binary());
+            } else if (cmd.GetAssign().GetConstant().GetBytes().size() > 0) {
+                constant = cmd.GetAssign().GetConstant().GetBytes();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("constant_found_2", constant);
+            }
+        }
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("constant_set", constant);
+        read.Constant = constant;
+
         {
             if (request.RangesSize()) {
                 // TODO: deduplicate

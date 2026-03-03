@@ -14,14 +14,21 @@
 
 namespace NKikimr::NOlap {
 
+// to avoid loop
+class IIndexAccessStub;
+
 class TSaverContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 public:
-    TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : StoragesManager(storagesManager) {
+    TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+        : StoragesManager(storagesManager)
+        , IndexAccessStub(indexAccessStub) {
         AFL_VERIFY(StoragesManager);
+        AFL_VERIFY(IndexAccessStub);
     }
+
+    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 };
 
 struct TIndexInfo;

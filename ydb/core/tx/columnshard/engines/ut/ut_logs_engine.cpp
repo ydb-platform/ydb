@@ -1,5 +1,6 @@
 #include "helper.h"
 
+#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -33,6 +34,20 @@ using namespace NKikimr::NOlap::NEngines::NTest;
 namespace {
 
 std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<NDataLocks::TManager>();
+
+class TTestIndexAccessStub : public IIndexAccessStub {
+public:
+    void RegisterPortion(ui64 /*portionId*/, const TIndexData& /*indexData*/) override {
+        // No-op for tests
+    }
+
+    bool CheckValue(ui64 /*portionId*/, const TString& /*value*/) override {
+        // Always return true for tests
+        return true;
+    }
+};
+
+std::shared_ptr<IIndexAccessStub> TestIndexAccessStub = std::make_shared<TTestIndexAccessStub>();
 
 class TTestDbWrapper: public IDbWrapper {
 private:
@@ -432,7 +447,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         engine.FetchDataAccessors(i.GetRequest());
     }
 
-    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024, TestIndexAccessStub);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().GetSize(), expectedToDrop);
@@ -487,7 +502,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        std::vector<TInternalPathId> paths = { 
+        std::vector<TInternalPathId> paths = {
             TInternalPathId::FromRawValue(1),
             TInternalPathId::FromRawValue(2)
         };

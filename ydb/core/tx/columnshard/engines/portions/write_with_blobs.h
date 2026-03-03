@@ -110,6 +110,8 @@ public:
         AFL_VERIFY(!!PortionConstructor);
         return *PortionConstructor;
     }
+
+    TIndexData indexData;
 };
 
 class TWritePortionInfoWithBlobsResult {
@@ -187,6 +189,10 @@ public:
         for (auto&& i : constructor.Blobs) {
             Blobs.emplace_back(i.ExtractBlob(), i.ExtractChunks(), i.GetOperator());
         }
+
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("pass_index_blobs_result", constructor.indexData.Data.size());
+        // AFL_VERIFY(constructor.indexData.size() > 0);
+        indexData = constructor.indexData;
     }
 
     TString GetBlobByRangeVerified(const ui32 entityId, const ui32 chunkIdx) const;
@@ -242,6 +248,9 @@ public:
         AFL_VERIFY(PortionConstructor);
         return std::make_shared<TPortionAccessorConstructor>(std::move(*PortionConstructor));
     }
+
+    TIndexData indexData;
+    bool mustHaveIndex = true;
 };
 
 }   // namespace NKikimr::NOlap

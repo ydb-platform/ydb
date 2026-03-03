@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IIndexAccessStub>& indexAccessStub,
+    std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
     std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit)
     : TBase(pathId, nodePortionsCountLimit)
     , Counters(counters)
@@ -17,7 +18,8 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     , Selectors(std::move(selectors))
     , Levels(std::move(levels))
     , StoragesManager(storagesManager)
-    , PrimaryKeysSchema(primaryKeysSchema) {
+    , PrimaryKeysSchema(primaryKeysSchema)
+    , IndexAccessStub(indexAccessStub) {
     RefreshWeights();
 }
 
@@ -25,7 +27,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
     AFL_VERIFY(LevelsByWeight.size());
 
-    TSaverContext saverContext(StoragesManager);
+    TSaverContext saverContext(StoragesManager, IndexAccessStub);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
     bool hasOneLayer = false;
     const auto mayUsePortion = [&](const TPortionInfo::TConstPtr& p) {

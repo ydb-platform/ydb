@@ -42,6 +42,8 @@ public:
             return TConclusionStatus::Fail("cannot read index: " + CurrentExceptionMessage());
         }
     }
+
+    virtual double Or(const TString& other) = 0;
 };
 
 class IBitsStorageConstructor {

@@ -413,7 +413,8 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 }
 
 TPortionDataSource::TPortionDataSource(
-    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
     : TBase(EType::SimplePortion, sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
@@ -421,6 +422,7 @@ TPortionDataSource::TPortionDataSource(
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
     , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+    , IndexAccessStub(indexAccessStub)
 {
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {

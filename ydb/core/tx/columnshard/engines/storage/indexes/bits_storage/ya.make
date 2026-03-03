@@ -2,8 +2,8 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
-    GLOBAL bitset.cpp
-    GLOBAL string.cpp
+    bitset.cpp
+    string.cpp
 )
 
 PEERDIR(

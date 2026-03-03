@@ -356,6 +356,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             if (shardingActualVersion) {
                 constructor.GetPortionConstructor().MutablePortionConstructor().SetShardingVersion(*shardingActualVersion);
             }
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("pass_index_blobs_constructor", dataWithSecondary.indexData.Data.size());
+            constructor.indexData = dataWithSecondary.indexData;
+            // AFL_VERIFY(constructor.indexData.size() > 0);
             result.emplace_back(std::move(constructor));
             recordIdx += slice.GetRecordsCount();
         }

@@ -128,6 +128,14 @@ public:
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;
 
     virtual TString GetClassName() const = 0;
+
+    virtual bool IsHierarchical() const {
+        return false;
+    }
+
+    virtual ui32 GetNGrammSize() const {
+        return 0;
+    }
 };
 
 class TIndexMetaContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta> {

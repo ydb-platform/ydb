@@ -381,7 +381,9 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
-    return TWritePortionInfoWithBlobsResult(std::move(constructor));
+    auto result = TWritePortionInfoWithBlobsResult(std::move(constructor));
+    result.mustHaveIndex = false;
+    return result;
 }
 
 ui32 ISnapshotSchema::GetIndexesCount() const {

@@ -35,6 +35,10 @@ public:
     const THashSet<ui32>& GetEarlyFilterColumns() const;
     const THashSet<ui32>& GetProcessingColumns() const;
 
+    const NKikimrSSA::TProgram& GetProgramProto() const {
+        return ProgramProto;
+    }
+
     TString ProtoDebugString() const {
         return TStringBuilder{}
             << "Proto:" << Endl

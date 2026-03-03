@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
@@ -355,7 +356,10 @@ public:
         using TPrimaryStorageData = THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>;
         YDB_ACCESSOR_DEF(TPrimaryStorageData, ExternalData);
 
+
     public:
+        TIndexData indexData;
+
         TSecondaryData() = default;
     };
 
@@ -466,6 +470,8 @@ public:
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }
+
+    TIndexInfo() : PresetId(0) {}
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,

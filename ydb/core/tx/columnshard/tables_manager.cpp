@@ -319,7 +319,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
-                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
+                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats, IndexAccessStub);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -475,7 +475,7 @@ void TTablesManager::AddSchemaVersion(
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
-            NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+            NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats, IndexAccessStub);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
@@ -530,8 +530,10 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId)
+    const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId,
+    const std::shared_ptr<NOlap::IIndexAccessStub>& indexAccessStub)
     : StoragesManager(storagesManager)
+    , IndexAccessStub(indexAccessStub)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
     , PortionsStats(portionsStats)
@@ -544,7 +546,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
-    
+
     if (!itTable->second.IsDropped()) {
         return true;
     }

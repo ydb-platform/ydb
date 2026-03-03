@@ -5,6 +5,7 @@
 
 #include <util/generic/bitmap.h>
 #include <util/generic/string.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NIndexes {
 class TFixStringBitsStorage: public IBitsStorage {
@@ -18,6 +19,16 @@ private:
     }
     virtual ui32 DoGetBitsCount() const override {
         return Data.size() * 8;
+    }
+
+    virtual double Or(const TString& other) override {
+        AFL_VERIFY(Data.size() == other.size());
+        double numerator = 0;
+        for (ui32 i = 0; i < Data.size(); ++i) {
+            Data[i] = (Data[i] | other[i]);
+            numerator += std::popcount(static_cast<std::uint8_t>(Data[i]));
+        }
+        return numerator / (Data.size() * 8);
     }
 
 public:

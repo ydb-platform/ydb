@@ -413,6 +413,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
     const ui32 bitsCount = data.GetBitsCount();
+    AFL_VERIFY(bitsCount > 0);
     const auto predSet = [&](const ui64 hashSecondary) {
         if (!data.Get(hashSecondary % bitsCount)) {
             result = false;

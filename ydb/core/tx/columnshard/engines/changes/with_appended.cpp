@@ -80,7 +80,15 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
         auto& constructor = i.GetPortionConstructor().MutablePortionConstructor();
-        constructor.SetPortionId(context.NextPortionId());
+        auto portionId = context.NextPortionId();
+        constructor.SetPortionId(portionId);
+        if (i.mustHaveIndex && i.indexData.Data.size() > 0) {
+            SaverContext.IndexAccessStub->RegisterPortion(portionId, i.indexData);
+        } else if (i.indexData.Data.size() == 0) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("zero_size_portion_hier_index", portionId);
+        } else {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("portion_without_hier_index", portionId);
+        }
         constructor.MutableMeta().SetCompactionLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0));
     }
 }

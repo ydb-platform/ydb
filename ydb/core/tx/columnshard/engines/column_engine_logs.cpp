@@ -210,10 +210,12 @@ private:
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-    const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters,
+    const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, indexAccessStub))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , IndexAccessStub(indexAccessStub)
     , SchemaObjectsCache(schemaCache)
     , VersionedSchemas(presetId, StoragesManager, schemaCache)
     , TabletId(tabletId)
@@ -228,10 +230,12 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema,
-    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters,
+    const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, indexAccessStub))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , IndexAccessStub(indexAccessStub)
     , SchemaObjectsCache(schemaCache)
     , VersionedSchemas(schema.GetPresetId(), StoragesManager, schemaCache)
     , TabletId(tabletId)
@@ -546,11 +550,11 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 }
 
 std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit, const std::shared_ptr<IIndexAccessStub>& indexAccessStub) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("external", pathEviction.size());
 
-    TSaverContext saverContext(StoragesManager);
+    TSaverContext saverContext(StoragesManager, indexAccessStub);
     NActualizer::TTieringProcessContext context(
         memoryUsageLimit, saverContext, dataLocksManager, GetVersionedIndex(), SignalCounters, ActualizationController);
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag();

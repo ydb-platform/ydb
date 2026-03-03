@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
@@ -183,7 +184,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     }
 
     NColumnShard::TTablesManager tablesManager(
-        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
+        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId,
+        std::make_shared<NOlap::TDefaultIndexAccessStub>(100));
 
     if (!tablesManager.InitFromDB(db, nullptr)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");

@@ -8,6 +8,8 @@
 #include "inflight_request_tracker.h"
 #include "tables_manager.h"
 
+#include "engines/index_access_stub.h"
+
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
 #include "common/path_id.h"
@@ -543,6 +545,7 @@ private:
     std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
+    std::shared_ptr<NOlap::IIndexAccessStub> IndexAccessStub;
     TTablesManager TablesManager;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;

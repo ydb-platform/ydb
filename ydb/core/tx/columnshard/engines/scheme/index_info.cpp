@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
@@ -478,8 +479,19 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
         AFL_VERIFY(chunks.size() == 1);
+        if (index->IsHierarchical()) {
+            result.indexData.Data = chunks.front()->GetData();
+            AFL_VERIFY(result.indexData.Data.size() > 0);
+            result.indexData.NGrammSize = index->GetNGrammSize();
+        }
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
+        if (index->IsHierarchical()) {
+            AFL_VERIFY(chunks.size() == 1);
+            result.indexData.Data = chunks.front()->GetData();
+            AFL_VERIFY(result.indexData.Data.size() > 0);
+            result.indexData.NGrammSize = index->GetNGrammSize();
+        }
         AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
     }
     return TConclusionStatus::Success();

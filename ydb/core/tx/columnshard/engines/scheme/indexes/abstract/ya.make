@@ -6,6 +6,7 @@ SRCS(
     header.cpp
     fetcher.cpp
     abstract.cpp
+    meta.h
     meta.cpp
     checker.cpp
     common.cpp

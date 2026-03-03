@@ -163,7 +163,7 @@ public:
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo); // override
         }
     }
-    
+
     void Remove(const TSchemeShardLocalPathId schemeShardLocalPathId) {
         SchemeShardLocalPathIds.erase(schemeShardLocalPathId);
     }
@@ -207,7 +207,7 @@ public:
     void AddVersion(const NOlap::TSnapshot& snapshot) {
         Versions.insert(snapshot);
     }
-    
+
     void RenameTableSchemeShardLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldPathId, const TSchemeShardLocalPathId newPathId) {
         auto it = SchemeShardLocalPathIds.find(oldPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
@@ -341,6 +341,7 @@ private:
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::IIndexAccessStub> IndexAccessStub;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
@@ -361,7 +362,8 @@ public:   //IPathIdTranslator
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
+        const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId,
+        const std::shared_ptr<NOlap::IIndexAccessStub>& indexAccessStub);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
         const TString& tablePath, const TSchemeShardLocalPathId externalPathId);
@@ -502,7 +504,7 @@ public:
     void CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId);
     void CopyTableProgress(
         NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId, const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
-        
+
     void AddTableInfo(const NKikimr::NColumnShard::TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo);
 
     NOlap::IColumnEngine& MutablePrimaryIndex() const {

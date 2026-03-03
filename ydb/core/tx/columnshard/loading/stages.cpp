@@ -136,7 +136,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
-    
+
     TString serializedLastCompletedBackupTransaction;
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {
         return false;
@@ -157,7 +157,7 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     TTablesManager tablesManagerLocal(
-        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
+        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID(), Self->IndexAccessStub);
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
         if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {

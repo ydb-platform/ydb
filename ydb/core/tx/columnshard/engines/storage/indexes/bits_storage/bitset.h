@@ -2,6 +2,7 @@
 #include "abstract.h"
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/string.h>
@@ -16,6 +17,10 @@ private:
     virtual bool DoGet(const ui32 idx) const override;
     virtual ui32 DoGetBitsCount() const override {
         return Bits.Size();
+    }
+
+    virtual double Or(const TString& /*other*/) override {
+        AFL_VERIFY(false);
     }
 
 public:

@@ -20,6 +20,7 @@
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IStoragesManager;
+class IIndexAccessStub;
 class TGranuleMeta;
 class TPortionInfo;
 class TPortionAccessorConstructor;
@@ -285,14 +286,17 @@ public:
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
         YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
+        YDB_READONLY_DEF(std::shared_ptr<IIndexAccessStub>, IndexAccessStub);
 
     public:
         TBuildContext(
-            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema,
+            const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
+            , DefaultStrategy(EOptimizerStrategy::Default)   //TODO configure me via DDL
+            , IndexAccessStub(indexAccessStub) {
         }
     };
 

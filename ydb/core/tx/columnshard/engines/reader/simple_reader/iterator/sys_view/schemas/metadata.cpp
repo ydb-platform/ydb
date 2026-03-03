@@ -11,7 +11,8 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptio
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const {
+    (void)constant;
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(
         context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.GetSorting());

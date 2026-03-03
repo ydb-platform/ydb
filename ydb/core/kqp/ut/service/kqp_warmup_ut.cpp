@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/aclib/aclib.h>
@@ -561,6 +562,387 @@ namespace {
                 "No entries loaded when skipping for single node");
         }
 
+        Y_UNIT_TEST(WarmupRespectsMaxQueriesToLoad) {
+            TWarmupTestParams params;
+            for (ui32 i = 0; i < 15; ++i) {
+                params.UserSids.push_back("user" + ToString(i));
+            }
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            const ui32 maxToLoad = 10;
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(15);
+            warmupActorConfig.MaxQueriesToLoad = maxToLoad;
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded <= maxToLoad,
+                "EntriesLoaded should not exceed MaxQueriesToLoad. Loaded: "
+                << warmupComplete->Get()->EntriesLoaded << ", max: " << maxToLoad);
+        }
+
+        Y_UNIT_TEST(WarmupFiltersByCompilationDuration) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1", "user2"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig configNoFilter;
+            configNoFilter.SoftDeadline = TDuration::Seconds(5);
+            configNoFilter.HardDeadline = TDuration::Seconds(15);
+            configNoFilter.MaxCompilationDurationMs = 0;
+
+            auto warmupNoFilter = RunWarmup(env, configNoFilter,
+                configNoFilter.HardDeadline + TDuration::Seconds(1));
+            UNIT_ASSERT_C(warmupNoFilter && warmupNoFilter->Get()->Success,
+                "Baseline warmup should succeed");
+            const ui32 baselineLoaded = warmupNoFilter->Get()->EntriesLoaded;
+
+            TKqpWarmupConfig configWithFilter;
+            configWithFilter.SoftDeadline = TDuration::Seconds(5);
+            configWithFilter.HardDeadline = TDuration::Seconds(15);
+            configWithFilter.MaxCompilationDurationMs = 1;
+
+            auto warmupWithFilter = RunWarmup(env, configWithFilter,
+                configWithFilter.HardDeadline + TDuration::Seconds(1));
+            UNIT_ASSERT_C(warmupWithFilter && warmupWithFilter->Get()->Success,
+                "Filtered warmup should succeed");
+            const ui32 filteredLoaded = warmupWithFilter->Get()->EntriesLoaded;
+
+            UNIT_ASSERT_C(filteredLoaded < baselineLoaded,
+                "MaxCompilationDurationMs=1 should filter out some queries. "
+                "Baseline: " << baselineLoaded << ", filtered: " << filteredLoaded);
+        }
+
+        Y_UNIT_TEST(WarmupAfterSchemaChange) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteSchemeQuery(
+                    "ALTER TABLE `/Root/KeyValue` ADD COLUMN Extra String;"
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "ALTER TABLE failed: " << result.GetIssues().ToString());
+            }
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(10);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(20);
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed after schema change: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Queries should still compile after ADD COLUMN: " << warmupComplete->Get()->EntriesLoaded);
+        }
+
+        Y_UNIT_TEST(WarmupAfterDropTable) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+
+                auto createResult = session.ExecuteSchemeQuery(
+                    "CREATE TABLE `/Root/TempTable` (Id Uint32, Name String, PRIMARY KEY (Id));"
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "CREATE TABLE failed: " << createResult.GetIssues().ToString());
+
+                GrantPermissions(kikimr, "/Root/TempTable", params.UserSids, false);
+
+                for (const auto& userSid : params.UserSids) {
+                    auto result = ExecuteQueryWithCache(kikimr, userSid,
+                        "SELECT Id, Name FROM `/Root/TempTable` WHERE Id = 1;", false);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                        "Query on TempTable failed for " << userSid << ": " << result.GetIssues().ToString());
+                }
+
+                auto dropResult = session.ExecuteSchemeQuery(
+                    "DROP TABLE `/Root/TempTable`;"
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(dropResult.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "DROP TABLE failed: " << dropResult.GetIssues().ToString());
+            }
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(10);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(20);
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed even with dropped table queries: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, env.ExpectedUniqueCount,
+                "Only original KeyValue queries should compile (TempTable queries should fail). Loaded: "
+                << warmupComplete->Get()->EntriesLoaded << ", expected: " << env.ExpectedUniqueCount);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesFailed > 0,
+                "TempTable queries should fail compilation. Failed: " << warmupComplete->Get()->EntriesFailed);
+        }
+
+        Y_UNIT_TEST(WarmupInvalidMetadata) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            const auto metadataObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
+                    auto& record = ev->Get()->Record;
+                    for (size_t i = 0; i < record.CacheCacheQueriesSize(); ++i) {
+                        record.MutableCacheCacheQueries(i)->SetMetaInfo("{invalid json broken!!!}}}");
+                    }
+                });
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(15);
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed with invalid metadata (graceful degradation): "
+                << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, env.ExpectedUniqueCount,
+                "All queries should compile despite corrupted metadata "
+                "(FillYdbParametersFromMetadata silently ignores invalid JSON). "
+                "Loaded: " << warmupComplete->Get()->EntriesLoaded
+                << ", expected: " << env.ExpectedUniqueCount);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
+                "No compilations should fail with invalid metadata (graceful degradation)");
+        }
+
+        Y_UNIT_TEST(WarmupMaxNodesToRequestZero) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0", "user1", "user2"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(10);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(20);
+            warmupActorConfig.MaxNodesToRequest = 0;
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed with MaxNodesToRequest=0: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Should load entries when querying all nodes: " << warmupComplete->Get()->EntriesLoaded);
+        }
+
+        Y_UNIT_TEST(WarmupSlowFetchHardDeadline) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(3);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(6);
+
+            auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
+            auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
+            auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
+
+            const auto compileBlocker = env.Runtime.AddObserver<TEvKqp::TEvQueryResponse>(
+                [warmupActorId](TEvKqp::TEvQueryResponse::TPtr& ev) {
+                    if (ev->Recipient == warmupActorId) {
+                        ev.Reset();
+                    }
+                });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+                env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
+            }
+
+            env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+            auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
+                warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(5));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete via hard deadline");
+            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
+                "Warmup should fail when compilations are stuck (hard deadline): "
+                << warmupComplete->Get()->Message);
+        }
+
+        Y_UNIT_TEST(WarmupAllCompilationsFail) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(15);
+
+            auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
+            auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
+            auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
+
+            const auto compileObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryResponse>(
+                [warmupActorId](TEvKqp::TEvQueryResponse::TPtr& ev) {
+                    if (ev->Recipient == warmupActorId) {
+                        ev->Get()->Record.SetYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                    }
+                });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+                env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
+            }
+
+            env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+            auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
+                warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(1));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed even when all compilations fail: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
+                "No entries should be loaded when all compilations fail");
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesFailed > 0,
+                "All compilations should be counted as failed. Failed: " << warmupComplete->Get()->EntriesFailed);
+        }
+
+        Y_UNIT_TEST(WarmupQueryTypePropagation) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            auto cacheEntries = GetCompileCacheEntries(kikimr, false);
+            UNIT_ASSERT_C(!cacheEntries.empty(), "Cache should have entries");
+
+            {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(
+                    "SELECT QueryType FROM `/Root/.sys/compile_cache_queries` WHERE QueryType IS NOT NULL AND QueryType != '' LIMIT 1",
+                    TTxControl::BeginTx().CommitTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+                auto rs = result.GetResultSet(0);
+                TResultSetParser parser(rs);
+                UNIT_ASSERT_C(parser.TryNextRow(), "Should have at least one entry with QueryType");
+                auto queryType = *parser.ColumnParser("QueryType").GetOptionalUtf8();
+                UNIT_ASSERT_C(!queryType.empty(),
+                    "QueryType should not be empty for cached queries");
+                UNIT_ASSERT_C(queryType.contains("QUERY_TYPE_SQL_"),
+                    "QueryType should be a valid EQueryType name, got: " << queryType);
+            }
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Should compile queries with proper QueryType: " << warmupComplete->Get()->EntriesLoaded);
+            VerifyQueriesServedFromCache(kikimr, params.UserSids, false);
+        }
+
+        Y_UNIT_TEST(WarmupEmptyDatabase) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+            params.UseRealThreads = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+            auto warmupEdge = runtime.AllocateEdgeActor(0);
+            auto* warmupActor = CreateKqpWarmupActor(
+                TKqpWarmupConfig{.SoftDeadline = TDuration::Seconds(5), .HardDeadline = TDuration::Seconds(10)},
+                "", "", {warmupEdge});
+            runtime.Register(warmupActor, 0);
+
+            auto warmupComplete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
+                warmupEdge, TDuration::Seconds(10));
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete for empty database");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed (skip) for empty database: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
+                "No entries should be loaded for empty database");
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
+                "No entries should fail for empty database");
+        }
+
+        Y_UNIT_TEST(WarmupServerlessUnavailable) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
+                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
+                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                    NYql::TIssue issue("Compile cache is not available for this database");
+                    NYql::TIssues issues;
+                    issues.AddIssue(std::move(issue));
+                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                });
+
+            TKqpWarmupConfig warmupActorConfig;
+            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
+            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
+
+            auto warmupComplete = RunWarmup(env, warmupActorConfig,
+                warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
+                "Warmup should fail for serverless-like unavailable: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
+                "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
+        }
+
         Y_UNIT_TEST(WarmupUnavailableSysview) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
@@ -598,6 +980,37 @@ namespace {
                 "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
                 "At least one sysview request should have been intercepted");
+        }
+        Y_UNIT_TEST(WarmupTruncatedCountStats) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed: " << warmupComplete->Get()->Message);
+
+            Sleep(TDuration::Seconds(2));
+
+            i64 truncated = counters.WarmupQueriesTruncated->Val();
+            i64 emptyQueryType = counters.WarmupQueriesEmptyQueryType->Val();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(truncated, 0,
+                "No queries should be truncated (all queries are small). "
+                "Truncated: " << truncated);
+
+            Cerr << "WarmupTruncatedCountStats: truncated=" << truncated
+                 << ", emptyQueryType=" << emptyQueryType
+                 << ", loaded=" << warmupComplete->Get()->EntriesLoaded
+                 << ", failed=" << warmupComplete->Get()->EntriesFailed
+                 << Endl;
         }
     }
 

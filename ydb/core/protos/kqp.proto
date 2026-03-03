@@ -339,6 +339,7 @@ message TCompileCacheQueryInfo {
     optional string MetaInfo = 10;
     optional bool IsTruncated = 11;
     optional string Database = 12;
+    optional string QueryType = 13;
 }
 
 message TSessionInfo {

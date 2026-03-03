@@ -14,11 +14,13 @@ struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, 
     bool Success;
     TString Message;
     ui32 EntriesLoaded;
+    ui32 EntriesFailed;
 
-    TEvKqpWarmupComplete(bool success, TString message = {}, ui32 entriesLoaded = 0)
+    TEvKqpWarmupComplete(bool success, TString message = {}, ui32 entriesLoaded = 0, ui32 entriesFailed = 0)
         : Success(success)
         , Message(std::move(message))
         , EntriesLoaded(entriesLoaded)
+        , EntriesFailed(entriesFailed)
     {}
 };
 

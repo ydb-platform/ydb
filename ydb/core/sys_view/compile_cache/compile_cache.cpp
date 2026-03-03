@@ -80,6 +80,10 @@ public:
             insert({TSchema::IsTruncated::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 11
                 return TCell::Make<bool>(info.GetIsTruncated());
             }});
+
+            insert({TSchema::QueryType::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 12
+                return TCell(info.GetQueryType());
+            }});
         }
     };
 

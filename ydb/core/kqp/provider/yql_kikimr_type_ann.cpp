@@ -915,7 +915,7 @@ private:
         return TStatus::Ok;
     }
 
-    bool ParseThirdColumnItem(const TExprList& columnTuple, TKikimrColumnMetadata& columnMeta, TExprContext& ctx) {
+    bool ParseColumnExtra(const TExprList& columnTuple, TKikimrColumnMetadata& columnMeta, TExprContext& ctx) {
         auto columnItem = columnTuple.Item(3);
         if (columnItem.Maybe<TExprList>()) {
             const auto exprs = columnItem.Cast<TExprList>();
@@ -1033,7 +1033,7 @@ private:
             }
 
             if (columnTuple.Size() > 3) {
-                if (!ParseThirdColumnItem(columnTuple, columnMeta, ctx)) {
+                if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                     return TStatus::Error;
                 }
             }
@@ -1562,7 +1562,7 @@ private:
                     columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
                     if (columnTuple.Size() > 3) {
-                        if (!ParseThirdColumnItem(columnTuple, columnMeta, ctx)) {
+                        if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                             return TStatus::Error;
                         }
                     }

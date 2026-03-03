@@ -16,9 +16,24 @@ std::shared_ptr<NYdb::NTopic::IProducer> CreateProducer(const std::string& topic
     return topicClient.CreateProducer(producerSettings);
 }
 
-template<typename T>
-std::string GetResultStatus(const T& writeResult) {
-    return std::string(NEnumSerializationRuntime::ToStringBuf(writeResult.Status));
+std::string GetResultStatus(const NYdb::NTopic::TWriteResult& result) {
+    switch (result.Status) {
+        case NYdb::NTopic::EWriteStatus::Queued:
+            return "Queued";
+        case NYdb::NTopic::EWriteStatus::Error:
+            return "Error";
+        case NYdb::NTopic::EWriteStatus::Timeout:
+            return "Timeout";
+    }
+}
+
+std::string GetResultStatus(const NYdb::NTopic::TFlushResult& result) {
+    switch (result.Status) {
+        case NYdb::NTopic::EFlushStatus::Success:
+            return "Success";
+        case NYdb::NTopic::EFlushStatus::ProducerClosed:
+            return "ProducerClosed";
+    }
 }
 
 std::string GetErrorMessage(const NYdb::NTopic::TFlushResult& result) {

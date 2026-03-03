@@ -5,10 +5,13 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/range_treap/range_treap.h>
 
+#include <algorithm>
 #include <compare>
 #include <memory>
 #include <variant>
 #include <vector>
+
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap::NPortionIntervalTree {
 
@@ -84,6 +87,10 @@ public:
     using TRange = TImpl::TRange;
     using TBorder = TImpl::TBorder;
 
+    explicit TPortionIntervalTree(bool useHeap)
+        : UseHeap(useHeap)
+    {}
+
     void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
         ui32 intersectionsCount = 0;
         Impl.EachIntersection(range, [&intersectionsCount](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
@@ -93,6 +100,7 @@ public:
         });
         Impl.AddRange(std::move(range), value);
         value->AddIntervalTreeRangesCount(intersectionsCount);
+        SetHeapDirty();
     }
 
     void RemoveRanges(const std::shared_ptr<TPortionInfo>& value) {
@@ -113,6 +121,18 @@ public:
         }
         value->ResetIntervalTreeRangesCount();
         Impl.RemoveRanges(value);
+        SetHeapDirty();
+    }
+
+    /** Порция с максимальным числом пересечений (вершина кучи). nullptr если дерево пусто или куча отключена. */
+    std::shared_ptr<TPortionInfo> GetPortionWithMaxIntersections() const {
+        if (!UseHeap) {
+            return nullptr;
+        }
+        if (HeapDirty) {
+            RebuildHeap();
+        }
+        return Heap.empty() ? nullptr : Heap.front();
     }
 
     template <class TCallback>
@@ -135,7 +155,34 @@ public:
     }
 
 private:
+    void SetHeapDirty() const {
+        if (!UseHeap) {
+            return;
+        }
+        HeapDirty = true;
+    }
+
+    void RebuildHeap() const {
+        std::vector<std::shared_ptr<TPortionInfo>> portions;
+        THashSet<TPortionAddress> seen;
+        Impl.EachRange([&seen, &portions](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+            if (seen.insert(p->GetAddress()).second) {
+                portions.push_back(p);
+            }
+            return true;
+        });
+        Heap = std::move(portions);
+        std::make_heap(Heap.begin(), Heap.end(), [](const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) {
+            return a->GetIntervalTreeRangesCount() < b->GetIntervalTreeRangesCount();
+        });
+        HeapDirty = false;
+    }
+
+private:
     TImpl Impl;
+    const bool UseHeap;
+    mutable std::vector<std::shared_ptr<TPortionInfo>> Heap;
+    mutable bool HeapDirty = true;
 };
 
 } // namespace NKikimr::NOlap::NPortionIntervalTree

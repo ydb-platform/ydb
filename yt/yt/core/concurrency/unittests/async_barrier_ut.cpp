@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/async_barrier.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -92,7 +93,7 @@ TEST(TAsyncBarrierTest, Clear)
 
     barrier.Clear(TError("oops"));
     EXPECT_TRUE(future.IsSet());
-    EXPECT_FALSE(future.BlockingGet().IsOK());
+    EXPECT_FALSE(WaitForFast(future).IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

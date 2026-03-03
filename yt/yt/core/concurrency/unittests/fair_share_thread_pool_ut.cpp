@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/future.h>
@@ -28,8 +29,7 @@ TEST(TFairShareThreadPoolTest, Configure)
         }
     }
 
-    AllSucceeded(std::move(futures))
-        .BlockingGet();
+    WaitUntilSet(AllSucceeded(std::move(futures)));
     threadPool->Shutdown();
     EXPECT_EQ(N, counter->load());
 }
@@ -38,4 +38,3 @@ TEST(TFairShareThreadPoolTest, Configure)
 
 } // namespace
 } // namespace NYT::NConcurrency
-

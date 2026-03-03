@@ -182,7 +182,7 @@ protected:
         for (int i = 0; i < std::ssize(Queues_); ++i) {
             if (Queues_[i]) {
                 auto invoker = Queues_[i]->GetInvoker();
-                BIND([] { }).AsyncVia(invoker).Run().BlockingGet().ThrowOnError();
+                WaitForFast(BIND([] { }).AsyncVia(invoker).Run()).ThrowOnError();
             }
         }
 
@@ -221,7 +221,7 @@ protected:
             }
         }
 
-        AllSucceeded(futures).BlockingGet().ThrowOnError();
+        WaitForFast(AllSucceeded(futures)).ThrowOnError();
 
         auto invocationOrder = GetInvocationOrder();
 
@@ -278,7 +278,7 @@ protected:
             Spin(Quantum * (switchToCount + 1));
         }).AsyncVia(invokerPool->GetInvoker(0));
 
-        callback.Run().BlockingGet().ThrowOnError();
+        WaitForFast(callback.Run()).ThrowOnError();
 
         for (int i = 0; i <= switchToCount; ++i) {
             ExpectTotalCpuTime(i, Quantum * (i + 1));
@@ -299,7 +299,7 @@ protected:
             }
         }).AsyncVia(invokerPool->GetInvoker(0));
 
-        callback.Run().BlockingGet().ThrowOnError();
+        WaitForFast(callback.Run()).ThrowOnError();
 
         ExpectTotalCpuTime(0, Quantum * (waitForCount + 1));
         ExpectTotalCpuTime(1, TDuration::Zero());
@@ -361,7 +361,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, SwitchTo121)
         Spin(Quantum);
     }).AsyncVia(invokerPool->GetInvoker(0));
 
-    callback.Run().BlockingGet().ThrowOnError();
+    WaitForFast(callback.Run()).ThrowOnError();
 
     ExpectTotalCpuTime(0, Quantum * 2);
     ExpectTotalCpuTime(1, Quantum * 3);
@@ -401,7 +401,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, SwitchTo111AndSwitchTo222)
             Spin(Quantum);
         }).AsyncVia(invokerPool->GetInvoker(1)).Run());
 
-    AllSucceeded(futures).BlockingGet().ThrowOnError();
+    WaitForFast(AllSucceeded(futures)).ThrowOnError();
 
     ExpectTotalCpuTime(0, Quantum * 3);
     ExpectTotalCpuTime(1, Quantum * 3);
@@ -452,7 +452,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitche
     // But CPU accounting is not supported for running callbacks, therefore we expect Fairness test to pass.
     DoTestFairness(invokerPool, 2);
 
-    future.BlockingGet().ThrowOnError();
+    WaitForFast(future).ThrowOnError();
 }
 
 TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitTimeEstimateEmptyPool)

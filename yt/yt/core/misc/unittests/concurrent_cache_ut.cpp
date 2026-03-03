@@ -8,6 +8,7 @@
 #include <yt/yt/core/misc/slab_allocator.h>
 #include <yt/yt/core/misc/concurrent_cache.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 namespace NYT {
@@ -129,7 +130,7 @@ TEST_P(TConcurrentCacheTest, Stress)
         .Run());
     }
 
-    auto results = AllSucceeded(asyncResults).BlockingGet().Value();
+    auto results = WaitForFast(AllSucceeded(asyncResults)).Value();
 
     EXPECT_LE(distinctElements, std::accumulate(results.begin(), results.end(), 0u));
     threadPool->Shutdown();

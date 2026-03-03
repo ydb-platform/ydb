@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/network/pollerimpl.h>
 
@@ -64,10 +65,10 @@ TEST_F(TNetTest, TransferFourBytes)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    a->Write(TSharedRef::FromString("ping")).BlockingGet();
+    WaitUntilSet(a->Write(TSharedRef::FromString("ping")));
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).BlockingGet().ValueOrThrow());
+    ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
 }
 
@@ -76,15 +77,15 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
+    WaitForFast(a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
         TSharedRef::FromString("p"),
         TSharedRef::FromString("i"),
         TSharedRef::FromString("n"),
         TSharedRef::FromString("g")
-    }, TSharedRefArray::TMoveParts{})).BlockingGet().ThrowOnError();
+    }, TSharedRefArray::TMoveParts{}))).ThrowOnError();
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).BlockingGet().ValueOrThrow());
+    ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
 }
 
@@ -125,8 +126,8 @@ TEST_F(TNetTest, BigTransfer)
         .AsyncVia(Poller_->GetInvoker())
         .Run();
 
-    sender.BlockingGet().ThrowOnError();
-    receiver.BlockingGet().ThrowOnError();
+    WaitForFast(sender).ThrowOnError();
+    WaitForFast(receiver).ThrowOnError();
 }
 
 TEST_F(TNetTest, BidirectionalTransfer)
@@ -177,7 +178,7 @@ TEST_F(TNetTest, BidirectionalTransfer)
         startReceiver(b)
     };
 
-    AllSucceeded(futures).BlockingGet().ThrowOnError();
+    WaitForFast(AllSucceeded(futures)).ThrowOnError();
 }
 
 class TContinueReadInCaseOfWriteErrorsTest
@@ -195,20 +196,20 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     // If server closes the connection without reading the entire request,
     // it causes an error 'Connection reset by peer' on client's side right after reading response.
     if (!gracefulConnectionClose) {
-        b->Write(data).BlockingGet().ThrowOnError();
+        WaitForFast(b->Write(data)).ThrowOnError();
     }
-    a->Write(data).BlockingGet().ThrowOnError();
-    a->Close().BlockingGet().ThrowOnError();
+    WaitForFast(a->Write(data)).ThrowOnError();
+    WaitForFast(a->Close()).ThrowOnError();
 
     {
         auto data = TSharedRef::FromString(TString(16 * 1024, 'a'));
         #ifndef _win_
-            EXPECT_THROW(b->Write(data).BlockingGet().ThrowOnError(), TErrorException);
+            EXPECT_THROW(WaitForFast(b->Write(data)).ThrowOnError(), TErrorException);
         #endif
     }
 
     auto buffer = TSharedMutableRef::Allocate(32 * 1024);
-    auto read = b->Read(buffer).BlockingGet().ValueOrThrow();
+    auto read = WaitForFast(b->Read(buffer)).ValueOrThrow();
 
     EXPECT_EQ(data.size(), read);
     ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ffff"));
@@ -257,7 +258,7 @@ TEST_F(TNetTest, StressConcurrentClose)
         YT_UNUSED_FUTURE(runReceiver(b));
 
         Sleep(TDuration::MilliSeconds(10));
-        a->Close().BlockingGet().ThrowOnError();
+        WaitForFast(a->Close()).ThrowOnError();
     }
 }
 
@@ -293,7 +294,7 @@ TEST_F(TNetTest, DialError)
     BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(4000);
         auto dialer = CreateDialer();
-        EXPECT_THROW(dialer->Dial(address).BlockingGet().ValueOrThrow(), TErrorException);
+        EXPECT_THROW(WaitForFast(dialer->Dial(address)).ValueOrThrow(), TErrorException);
     })
         .AsyncVia(Poller_->GetInvoker())
         .Run()

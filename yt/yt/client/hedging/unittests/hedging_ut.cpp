@@ -21,6 +21,8 @@
 namespace NYT::NClient::NHedging::NRpc {
 namespace {
 
+using namespace NConcurrency;
+
 using ::testing::_;
 using ::testing::Return;
 using ::testing::StrictMock;
@@ -353,7 +355,7 @@ TEST(THedgingClientTest, MultiThread)
     }
 
     for (const auto& future : futures) {
-        EXPECT_NO_THROW(future.BlockingGet().ThrowOnError());
+        EXPECT_NO_THROW(WaitForFast(future).ThrowOnError());
     }
 }
 

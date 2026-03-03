@@ -5,12 +5,15 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_proxy.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/yson/protobuf_helpers.h>
 
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using namespace NConcurrency;
 
 using NYT::ToProto;
 
@@ -27,8 +30,7 @@ void SyncYPathMultisetAttributes(
         req->set_attribute(request.first);
         req->set_value(ToProto(request.second));
     }
-    ExecuteVerb(service, multisetAttributesRequest)
-        .BlockingGet()
+    WaitForFast(ExecuteVerb(service, multisetAttributesRequest))
         .ThrowOnError();
 }
 
@@ -242,4 +244,3 @@ TEST(TYTreeTest, TestGetWithAttributes)
 
 } // namespace
 } // namespace NYT::NYTree
-

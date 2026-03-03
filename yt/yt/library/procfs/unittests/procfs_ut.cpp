@@ -2,11 +2,14 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <thread>
 
 namespace NYT::NProcFS {
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,7 +33,7 @@ TEST_F(TProcFSTest, ThreadCountIncreasedOnThreadSpawning)
     auto promise = NewPromise<void>();
 
     std::thread thread([future = promise.ToFuture()] {
-        future.BlockingGet();
+        WaitUntilSet(future);
     });
 
     int newThreadCount = GetThreadCount();

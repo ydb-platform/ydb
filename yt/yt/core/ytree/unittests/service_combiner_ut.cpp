@@ -5,10 +5,13 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_proxy.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,8 +20,7 @@ std::vector<std::string> YPathListSorted(
     const TYPath& path,
     std::optional<i64> limit = {})
 {
-    auto keys = AsyncYPathList(service, path, limit)
-        .BlockingGet()
+    auto keys = WaitForFast(AsyncYPathList(service, path, limit))
         .ValueOrThrow();
     std::ranges::sort(keys);
     return keys;
@@ -28,8 +30,7 @@ bool YPathExists(
     const IYPathServicePtr& service,
     const TYPath& path)
 {
-    return AsyncYPathExists(service, path)
-        .BlockingGet()
+    return WaitForFast(AsyncYPathExists(service, path))
         .ValueOrThrow();
 }
 
@@ -38,8 +39,7 @@ TYsonString YPathGet(
     const TYPath& path,
     const TAttributeFilter& attributeFilter = {})
 {
-    return AsyncYPathGet(service, path, attributeFilter)
-        .BlockingGet()
+    return WaitForFast(AsyncYPathGet(service, path, attributeFilter))
         .ValueOrThrow();
 }
 
@@ -49,8 +49,7 @@ void YPathSet(
     const TYsonString& value,
     bool recursive = false)
 {
-    AsyncYPathSet(service, path, value, recursive)
-        .BlockingGet()
+    WaitForFast(AsyncYPathSet(service, path, value, recursive))
         .ThrowOnError();
 }
 
@@ -60,8 +59,7 @@ void YPathRemove(
     bool recursive = false,
     bool force = false)
 {
-    AsyncYPathRemove(service, path, recursive, force)
-        .BlockingGet()
+    WaitForFast(AsyncYPathRemove(service, path, recursive, force))
         .ThrowOnError();
 }
 

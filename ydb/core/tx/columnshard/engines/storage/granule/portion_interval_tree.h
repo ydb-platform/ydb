@@ -69,6 +69,49 @@ public:
 };
 
 
-using TPortionIntervalTree = NRangeTreap::TRangeTreap<TPositionView, std::shared_ptr<TPortionInfo>, TPositionView, TPortionIntervalTreeValueTraits, TPositionViewBorderComparator>;
+class TPortionIntervalTree {
+private:
+    using TImpl = NRangeTreap::TRangeTreap<
+        TPositionView,
+        std::shared_ptr<TPortionInfo>,
+        TPositionView,
+        TPortionIntervalTreeValueTraits,
+        TPositionViewBorderComparator>;
+
+public:
+    using TOwnedRange = TImpl::TOwnedRange;
+    using TRange = TImpl::TRange;
+    using TBorder = TImpl::TBorder;
+
+    void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
+        Impl.AddRange(std::move(range), value);
+    }
+
+    void RemoveRanges(const std::shared_ptr<TPortionInfo>& value) {
+        Impl.RemoveRanges(value);
+    }
+
+    template <class TCallback>
+    bool EachRange(TCallback&& callback) const {
+        return Impl.EachRange(std::forward<TCallback>(callback));
+    }
+
+    template <class TCallback>
+    bool EachIntersection(const TRange& range, TCallback&& callback) const {
+        return Impl.EachIntersection(range, std::forward<TCallback>(callback));
+    }
+
+    template <class TCallback>
+    bool EachIntersection(const TBorder& left, const TBorder& right, TCallback&& callback) const {
+        return Impl.EachIntersection(left, right, std::forward<TCallback>(callback));
+    }
+
+    size_t Size() const noexcept {
+        return Impl.Size();
+    }
+
+private:
+    TImpl Impl;
+};
 
 } // namespace NKikimr::NOlap::NPortionIntervalTree

@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->SupportLinksConfig = MakeEmptyConfig();
+        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeEmptyConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->SupportLinksConfig = MakeConfig();
+        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=missing-cluster");
         auto result = MakeEmptyClusterInfoResult();

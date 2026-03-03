@@ -10,6 +10,7 @@ IF (OS_WINDOWS)
 ENDIF()
 
 SRCS(
+    scheme_change_records.proto
     operations.proto
 )
 

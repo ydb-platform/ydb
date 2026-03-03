@@ -58,7 +58,7 @@ public:
     ++numCopyConstructorCalls;
   }
 
-  Constructable(Constructable && src) : constructed(true) {
+  Constructable(Constructable && src) noexcept : constructed(true) {
     value = src.value;
     ++numConstructorCalls;
     ++numMoveConstructorCalls;
@@ -78,7 +78,7 @@ public:
     return *this;
   }
 
-  Constructable & operator=(Constructable && src) {
+  Constructable & operator=(Constructable && src) noexcept {
     EXPECT_TRUE(constructed);
     value = src.value;
     ++numAssignmentCalls;

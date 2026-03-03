@@ -186,12 +186,10 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     continue;
                 }
 
-                auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (!isSupportedIndex(childPathId, context)) continue;
+                if (!IsSupportedIndex(childPathId, context)) continue;
 
-                // Add required PARENT directory path for index backup:
-                // {targetDir}/__ydb_backup_meta/indexes/{table_path}
-                // The index name will be the table name created within this directory
+                // Add required directory paths for index backup:
+                // {targetDir}/__ydb_backup_meta/indexes/{table_path}/{index_name}
                 TString indexBackupParentPath = JoinPath({
                     targetDir,
                     "__ydb_backup_meta",
@@ -199,16 +197,14 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     relativeItemPath
                 });
                 collectionPaths.emplace(indexBackupParentPath);
-                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                    TString vectorIndexDir = JoinPath({
-                        targetDir,
-                        "__ydb_backup_meta",
-                        "indexes",
-                        relativeItemPath,
-                        childName
-                    });
-                    collectionPaths.emplace(vectorIndexDir);
-                }
+                TString indexDir = JoinPath({
+                    targetDir,
+                    "__ydb_backup_meta",
+                    "indexes",
+                    relativeItemPath,
+                    childName
+                });
+                collectionPaths.emplace(indexDir);
             }
         }
     }

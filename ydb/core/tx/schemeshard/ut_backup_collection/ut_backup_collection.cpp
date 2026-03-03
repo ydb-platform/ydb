@@ -2231,17 +2231,23 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::IsTable,
         });
 
-        // Verify index backup table exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
-        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + 
+        // Verify index backup directory exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
+        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir +
             "/__ydb_backup_meta/indexes/TableForIncremental/ValueIndex";
         TestDescribeResult(DescribePath(runtime, indexBackupPath), {
+            NLs::PathExist,
+            NLs::ChildrenCount(1),
+        });
+
+        // Verify impl table inside the index backup directory
+        TestDescribeResult(DescribePath(runtime, indexBackupPath + "/" + indexImplTableName), {
             NLs::PathExist,
             NLs::IsTable,
         });
 
         Cerr << "SUCCESS: Full backup created CDC streams for both main table and index" << Endl;
         Cerr << "         Incremental backup created backup tables for both main table and index" << Endl;
-        Cerr << "         Index backup table verified at: " << indexBackupPath << Endl;
+        Cerr << "         Index backup table verified at: " << indexBackupPath << "/" << indexImplTableName << Endl;
     }
 
     Y_UNIT_TEST(OmitIndexesFlag) {

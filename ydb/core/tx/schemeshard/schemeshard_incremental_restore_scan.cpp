@@ -687,20 +687,7 @@ void TSchemeShard::DiscoverIndexesRecursive(
 
         for (const auto& [indexName, indexDirPathId] : currentPath.Base()->GetChildren()) {
             auto indexPathInBackup = TPath::Init(indexDirPathId, this);
-            if (indexPathInBackup.Base()->IsDirectory()) {
-                for (const auto& [implName, implPathId] : indexPathInBackup.Base()->GetChildren()) {
-                    CreateSingleIndexRestoreOperation(
-                        operationId,
-                        backupName,
-                        bcPath,
-                        accumulatedRelativePath,
-                        indexName,
-                        targetTablePath,
-                        ctx,
-                        implName
-                    );
-                }
-            } else {
+            for (const auto& [implName, implPathId] : indexPathInBackup.Base()->GetChildren()) {
                 CreateSingleIndexRestoreOperation(
                     operationId,
                     backupName,
@@ -709,7 +696,7 @@ void TSchemeShard::DiscoverIndexesRecursive(
                     indexName,
                     targetTablePath,
                     ctx,
-                    ""
+                    implName
                 );
             }
         }
@@ -817,28 +804,19 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
                 }
                 auto indexInfo = indexInfoIt->second;
 
-                if (!isSupportedIndex(indexPathId, this)) {
+                if (!IsSupportedIndex(indexPathId, this)) {
                     LOG_I("Skipping index with unsupported type: " << indexName << " (type=" << indexInfo->Type << ")");
                     return;
                 }
 
                 auto indexPath = TPath::Init(indexPathId, this);
 
-                if (!specificImplTableName.empty()) {
-                    for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
-                        if (implName == specificImplTableName) {
-                            indexImplTablePathId = implPathId;
-                            indexFound = true;
-                            LOG_I("Found vector index impl table: " << indexName << "/" << implName);
-                            break;
-                        }
-                    }
-                } else {
-                    if (indexPath.Base()->GetChildren().size() == 1) {
-                        auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-                        indexImplTablePathId = implTablePathId;
+                for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+                    if (implName == specificImplTableName) {
+                        indexImplTablePathId = implPathId;
                         indexFound = true;
-                        LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
+                        LOG_I("Found index impl table: " << indexName << "/" << implName);
+                        break;
                     }
                 }
             }
@@ -852,27 +830,15 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
         return;
     }
 
-    TString srcIndexBackupPath;
-    if (!specificImplTableName.empty()) {
-        srcIndexBackupPath = JoinPath({
-            bcPath.PathString(),
-            backupName + "_incremental",
-            "__ydb_backup_meta",
-            "indexes",
-            relativeTablePath,
-            indexName,
-            specificImplTableName
-        });
-    } else {
-        srcIndexBackupPath = JoinPath({
-            bcPath.PathString(),
-            backupName + "_incremental",
-            "__ydb_backup_meta",
-            "indexes",
-            relativeTablePath,
-            indexName
-        });
-    }
+    TString srcIndexBackupPath = JoinPath({
+        bcPath.PathString(),
+        backupName + "_incremental",
+        "__ydb_backup_meta",
+        "indexes",
+        relativeTablePath,
+        indexName,
+        specificImplTableName
+    });
 
     const TPath& srcBackupPath = TPath::Resolve(srcIndexBackupPath, this);
     if (!srcBackupPath.IsResolved()) {

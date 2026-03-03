@@ -149,7 +149,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
 
-                    if (!isSupportedIndex(childPathId, context)) continue;
+                    if (!IsSupportedIndex(childPathId, context)) continue;
                 
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
@@ -194,19 +194,15 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                 // Also invalidate cache for index impl tables
                 for (const auto& [childName, childPathId] : sPath.Base()->GetChildren()) {
                     auto childPath = context.SS->PathsById.at(childPathId);
-                    if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
-                        auto indexInfo = context.SS->Indexes.find(childPathId);
-                        if (indexInfo != context.SS->Indexes.end() && 
-                            (indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
-                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)) {
-                            
-                            auto indexPath = TPath::Init(childPathId, context.SS);
-                            for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
-                                auto implTablePath = context.SS->PathsById.at(implTablePathId);
-                                if (implTablePath->IsTable()) {
-                                    context.SS->ClearDescribePathCaches(implTablePath);
-                                    context.OnComplete.PublishToSchemeBoard(opId, implTablePathId);
-                                }
+                    if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()
+                        && IsSupportedIndex(childPathId, context))
+                    {
+                        auto indexPath = TPath::Init(childPathId, context.SS);
+                        for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+                            auto implTablePath = context.SS->PathsById.at(implTablePathId);
+                            if (implTablePath->IsTable()) {
+                                context.SS->ClearDescribePathCaches(implTablePath);
+                                context.OnComplete.PublishToSchemeBoard(opId, implTablePathId);
                             }
                         }
                     }
@@ -279,9 +275,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
                     
-                    if (!isSupportedIndex(childPathId, context)) continue;
+                    if (!IsSupportedIndex(childPathId, context)) continue;
                 
-                    // Get index implementation table (the only child of index)
+                    // Get index implementation tables
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
 

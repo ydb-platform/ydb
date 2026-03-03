@@ -252,12 +252,9 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                     continue;
                 }
 
-                // Get index info and filter for global sync only
-                auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (!isSupportedIndex(childPathId, context)) continue;
+                if (!IsSupportedIndex(childPathId, context)) continue;
 
-
-                // Get index implementation table (single child of index)
+                // Get index implementation tables
                 auto indexPath = TPath::Init(childPathId, context.SS);
                 for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
                     // Build relative path to index impl table (relative to working dir)
@@ -274,28 +271,15 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
                     auto& ib = *cb.MutableTakeIncrementalBackup();
 
-                    TString dstPath;
-
-                    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                        dstPath = JoinPath({
-                            tx.GetBackupIncrementalBackupCollection().GetName(),
-                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
-                            "__ydb_backup_meta",
-                            "indexes",
-                            relativeItemPath,
-                            childName,
-                            implTableName
-                        });
-                    } else {
-                        dstPath = JoinPath({
-                            tx.GetBackupIncrementalBackupCollection().GetName(),
-                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
-                            "__ydb_backup_meta",
-                            "indexes",
-                            relativeItemPath,
-                            childName
-                        });
-                    }
+                    TString dstPath = JoinPath({
+                        tx.GetBackupIncrementalBackupCollection().GetName(),
+                        tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                        "__ydb_backup_meta",
+                        "indexes",
+                        relativeItemPath,
+                        childName,
+                        implTableName
+                    });
 
                     ib.SetDstPath(dstPath);
 

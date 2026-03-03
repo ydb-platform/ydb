@@ -218,64 +218,63 @@ void TCommandImportBase::FillItemsFromItemParam(TSettings& settings) const {
 #else
     if constexpr (std::is_same_v<TSettings, NImport::TImportFromFsSettings>) {
         ApplyItems(settings);
-        return;
-    }
-    static_assert(std::is_same_v<TSettings, NImport::TImportFromS3Settings>, "Not implemented");
-    InitAwsAPI();
-    try {
-        auto s3Client = CreateS3ClientWrapper(settings);
-        for (auto item : Items) {
-            std::optional<TString> token;
-            if (!item.Source.empty() && item.Source.back() != '/') {
-                item.Source += "/";
-            }
-            if (!item.Destination.empty() && item.Destination.back() == '.') {
-                item.Destination.pop_back();
-            }
-            if (item.Destination.empty() || item.Destination.back() != '/') {
-                item.Destination += "/";
-            }
+    } else {
+        InitAwsAPI();
+        try {
+            auto s3Client = CreateS3ClientWrapper(settings);
+            for (auto item : Items) {
+                std::optional<TString> token;
+                if (!item.Source.empty() && item.Source.back() != '/') {
+                    item.Source += "/";
+                }
+                if (!item.Destination.empty() && item.Destination.back() == '.') {
+                    item.Destination.pop_back();
+                }
+                if (item.Destination.empty() || item.Destination.back() != '/') {
+                    item.Destination += "/";
+                }
 
-            TVector<NImport::TImportFromS3Settings::TItem> items;
-            do {
-                auto listResult = s3Client->ListObjectKeys(item.Source, token);
-                token = listResult.NextToken;
-                for (TStringBuf key : listResult.Keys) {
-                    if (IsSupportedObject(key)) {
-                        key.ChopSuffix("/");
-                        TString destination;
-                        if (const auto suffix = key.substr(item.Source.size())) {
-                            destination = item.Destination + suffix;
-                        } else {
-                            destination = NormalizePath(item.Destination);
+                TVector<NImport::TImportFromS3Settings::TItem> items;
+                do {
+                    auto listResult = s3Client->ListObjectKeys(item.Source, token);
+                    token = listResult.NextToken;
+                    for (TStringBuf key : listResult.Keys) {
+                        if (IsSupportedObject(key)) {
+                            key.ChopSuffix("/");
+                            TString destination;
+                            if (const auto suffix = key.substr(item.Source.size())) {
+                                destination = item.Destination + suffix;
+                            } else {
+                                destination = NormalizePath(item.Destination);
+                            }
+                            items.push_back({TString(key), std::move(destination)});
                         }
-                        items.push_back({TString(key), std::move(destination)});
                     }
-                }
-            } while (token);
+                } while (token);
 
-            Sort(items, [](const auto& a, const auto& b) {
-                return a.Src < b.Src;
-            });
+                Sort(items, [](const auto& a, const auto& b) {
+                    return a.Src < b.Src;
+                });
 
-            THashSet<TString> seen;
-            for (auto& item : items) {
-                TStringBuf key = item.Src;
-                // try to skip /<index_name>/<indexImplTable>
-                key.RNextTok('/');
-                key.RNextTok('/');
-                if (seen.contains(key)) {
-                    continue;
+                THashSet<TString> seen;
+                for (auto& item : items) {
+                    TStringBuf key = item.Src;
+                    // try to skip /<index_name>/<indexImplTable>
+                    key.RNextTok('/');
+                    key.RNextTok('/');
+                    if (seen.contains(key)) {
+                        continue;
+                    }
+                    seen.insert(TString{item.Src});
+                    settings.AppendItem(std::move(item));
                 }
-                seen.insert(TString{item.Src});
-                settings.AppendItem(std::move(item));
             }
+        } catch (...) {
+            ShutdownAwsAPI();
+            throw;
         }
-    } catch (...) {
         ShutdownAwsAPI();
-        throw;
     }
-    ShutdownAwsAPI();
 #endif
 }
 

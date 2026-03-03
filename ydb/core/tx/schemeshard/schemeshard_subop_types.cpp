@@ -323,6 +323,45 @@ bool IsDrop(ETxType t) {
     }
 }
 
+bool IsAlter(ETxType t) {
+    switch (t) {
+        case TxAlterTable:
+        case TxAlterPQGroup:
+        case TxAlterSubDomain:
+        case TxAlterExtSubDomain:
+        case TxAlterExtSubDomainCreateHive:
+        case TxAlterBlockStoreVolume:
+        case TxAssignBlockStoreVolume:
+        case TxAlterFileStore:
+        case TxAlterKesus:
+        case TxAlterSolomonVolume:
+        case TxAlterUserAttributes:
+        case TxAlterTableIndex:
+        case TxAlterCdcStream:
+        case TxAlterCdcStreamAtTable:
+        case TxAlterCdcStreamAtTableDropSnapshot:
+        case TxAlterSequence:
+        case TxAlterReplication:
+        case TxAlterTransfer:
+        case TxAlterBlobDepot:
+        case TxAlterExternalTable:
+        case TxAlterExternalDataSource:
+        case TxAlterView:
+        case TxAlterOlapStore:
+        case TxAlterColumnTable:
+        case TxAlterContinuousBackup:
+        case TxAlterResourcePool:
+        case TxAlterBackupCollection:
+        case TxModifyACL:
+        case TxChangePathState:
+        case TxAlterSecret:
+        case TxAlterStreamingQuery:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

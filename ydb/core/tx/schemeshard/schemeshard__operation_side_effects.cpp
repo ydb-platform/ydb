@@ -935,7 +935,103 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
     }
 }
 
+void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+    if (DoneTransactions.empty()) {
+        return;
+    }
+
+    struct TCandidate {
+        TTxId TxId;
+        TStepId PlanStep;
+        TOperationId FirstPartOpId;
+    };
+    TVector<TCandidate> candidates;
+
+    for (const auto& txId : DoneTransactions) {
+        auto it = ss->Operations.find(txId);
+        if (it == ss->Operations.end()) {
+            continue;
+        }
+
+        TOperation::TPtr operation = it->second;
+        if (!operation->IsReadyToDone(ctx)) {
+            continue;
+        }
+
+        for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
+            TOperationId partOpId(txId, partIdx);
+
+            auto txStateIt = ss->TxInFlight.find(partOpId);
+            if (txStateIt == ss->TxInFlight.end()) {
+                continue;
+            }
+
+            const TTxState& txState = txStateIt->second;
+
+            TPathId pathId = txState.TargetPathId;
+            if (!ss->PathsById.contains(pathId)) {
+                continue;
+            }
+
+            candidates.push_back(TCandidate{txId, txState.PlanStep, partOpId});
+            break;
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
+        return std::tie(a.PlanStep, a.TxId) < std::tie(b.PlanStep, b.TxId);
+    });
+
+    NIceDb::TNiceDb db(txc.DB);
+
+    for (const auto& candidate : candidates) {
+        TTxId txId = candidate.TxId;
+
+        auto txStateIt = ss->TxInFlight.find(candidate.FirstPartOpId);
+        if (txStateIt == ss->TxInFlight.end()) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "DoPersistSchemeChangeRecords: no scheme change record logged for txId=" << txId
+                    << ", TxInFlight entry disappeared between passes");
+            continue;
+        }
+
+        const TTxState& txState = txStateIt->second;
+        TPathId pathId = txState.TargetPathId;
+
+        TPathElement::TPtr path = ss->PathsById.at(pathId);
+
+        ui64 seqId = ss->AllocateSchemeChangeSequenceId(db);
+
+        TString pathName = path->Name;
+        NKikimrSchemeOp::EPathType objectType = path->PathType;
+        TString userSid = path->Owner;
+        ui64 schemaVersion = ss->GetTypeSpecificAlterVersion(pathId, path->PathType);
+
+        ss->PersistSchemeChangeRecord(db, {
+            .SequenceId = seqId,
+            .TxId = txId,
+            .TxType = txState.TxType,
+            .PathId = pathId,
+            .PathName = pathName,
+            .ObjectType = objectType,
+            .Status = NKikimrScheme::StatusSuccess,
+            .UserSid = userSid,
+            .SchemaVersion = schemaVersion,
+            .CompletedAt = ctx.Now(),
+            .PlanStep = txState.PlanStep,
+        });
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "DoPersistSchemeChangeRecords: logged entry"
+                << " seqId=" << seqId
+                << " txId=" << txId
+                << " path=" << pathName
+                << " type=" << ui32(txState.TxType));
+    }
+}
+
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
+    DoPersistSchemeChangeRecords(ss, txc, ctx);  // persist scheme change records before operations are erased
     for (auto& txId: DoneTransactions) {
 
         if (!ss->Operations.contains(txId)) {

@@ -276,6 +276,9 @@ public:
     ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
+    ui64 NextSchemeChangeSequenceId = 0;
+    ui64 SchemeChangeRecordCount = 0;
+    ui64 MaxSchemeChangeRecords = 100000;
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
@@ -846,6 +849,42 @@ public:
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+    void PersistUpdateNextSchemeChangeSequenceId(NIceDb::TNiceDb& db) const;
+    void PersistUpdateSchemeChangeRecordCount(NIceDb::TNiceDb& db) const;
+    ui64 AllocateSchemeChangeSequenceId(NIceDb::TNiceDb& db);
+
+    struct TSchemeChangeRecordData {
+        ui64 SequenceId = 0;
+        TTxId TxId = InvalidTxId;
+        TTxState::ETxType TxType = TTxState::TxInvalid;
+        TPathId PathId;
+        TString PathName;
+        NKikimrSchemeOp::EPathType ObjectType = NKikimrSchemeOp::EPathTypeInvalid;
+        NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
+        TString UserSid;
+        ui64 SchemaVersion = 0;
+        TInstant CompletedAt;
+        TStepId PlanStep = InvalidStepId;
+    };
+
+    ui64 GetTypeSpecificAlterVersion(TPathId pathId, NKikimrSchemeOp::EPathType pathType) const;
+    void PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry);
+    NTabletFlatExecutor::ITransaction* CreateTxInternalReadSchemeChangeRecords(TEvSchemeShard::TEvInternalReadSchemeChangeRecords::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvInternalReadSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxAckSchemeChangeRecords(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    // Scheme change records cleanup & backpressure
+    NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
+    void HandleWakeupToRunSchemeChangeRecordsCleanup(const TActorContext& ctx);
+    void ScheduleSchemeChangeRecordsCleanup(const TActorContext& ctx);
+    bool CheckSchemeChangeRecordsOverflow(TString& errStr) const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);

@@ -150,6 +150,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType);
 
 bool IsCreate(ETxType t);
 bool IsDrop(ETxType t);
+bool IsAlter(ETxType t);
 bool CanDeleteParts(ETxType t);
 
 }  // namespace NKikimr::NSchemeShard

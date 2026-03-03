@@ -30,8 +30,7 @@
     replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1
     ```
 
-4) После этого можно генерировать проект, как сказано в [Quick Introduction
-](https://entgo.io/docs/getting-started/). Например, попробовать выполнить команду
+4) После этого можно генерировать проект, как сказано в [Quick Introduction](https://entgo.io/docs/getting-started/). Например, попробовать выполнить команду
 
     ```bash
     go run -mod=mod entgo.io/ent/cmd/ent new User
@@ -51,24 +50,24 @@
 package main
 
 import (
-	"context"
-	"log"
+    "context"
+    "log"
 
-	"entdemo/ent"
+    "entdemo/ent"
 )
 
 func main() {
-	client, err := ent.Open("ydb", "grpc://localhost:2136/local")
-	if err != nil {
-		log.Fatalf("failed opening connection to ydb: %v", err)
-	}
-	defer client.Close()
+    client, err := ent.Open("ydb", "grpc://localhost:2136/local")
+    if err != nil {
+        log.Fatalf("failed opening connection to ydb: %v", err)
+    }
+    defer client.Close()
 
-	ctx := context.Background()
+    ctx := context.Background()
 
-	if err := client.Schema.Create(ctx); err != nil {
-		log.Fatalf("failed creating schema resources: %v", err)
-	}
+    if err := client.Schema.Create(ctx); err != nil {
+        log.Fatalf("failed creating schema resources: %v", err)
+    }
 }
 ```
 
@@ -113,29 +112,29 @@ import "github.com/ydb-platform/ydb-go-sdk/v3/retry"
 
 // Create
 user, err := client.User.Create().
-	SetName("John").
-	SetAge(30).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Save(ctx)
+    SetName("John").
+    SetAge(30).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Save(ctx)
 
 // Query
 users, err := client.User.Query().
-	Where(user.AgeGT(18)).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	All(ctx)
+    Where(user.AgeGT(18)).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    All(ctx)
 
 // Update
 affected, err := client.User.Update().
-	Where(user.NameEQ("John")).
-	SetAge(31).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Save(ctx)
+    Where(user.NameEQ("John")).
+    SetAge(31).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Save(ctx)
 
 // Delete
 affected, err := client.User.Delete().
-	Where(user.NameEQ("John")).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Exec(ctx)
+    Where(user.NameEQ("John")).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Exec(ctx)
 ```
 
 ### Параметры повторных попыток
@@ -143,7 +142,7 @@ affected, err := client.User.Delete().
 Часто используемые параметры из `ydb-go-sdk`:
 
 | Параметр | Описание |
-|----------|----------|
+| -------- | -------- |
 | `retry.WithIdempotent(true)` | Пометить операцию как идемпотентную, что позволяет повторять при большем количестве типов ошибок |
 | `retry.WithLabel(string)` | Добавить метку для отладки/трассировки |
 | `retry.WithTrace(trace.Retry)` | Включить трассировку повторных попыток |

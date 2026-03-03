@@ -12,11 +12,35 @@
 
 ## Installation
 
-Install the ent fork with {{ ydb-short-name }} support:
+1) Install ent:
 
-```bash
-go get github.com/ydb-platform/ent@v0.0.1
-```
+    ```bash
+    go get entgo.io/ent/cmd/ent@latest
+    ```
+
+2) In your `go.mod` file, replace ent with the fork that supports YDB:
+
+    ```text
+    replace entgo.io/ent => github.com/ydb-platform/ent v0.0.1
+    ```
+
+3) You also need to replace the atlas implementation (the migration engine used by ent) with a fork that supports YDB:
+
+    ```text
+    replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1
+    ```
+
+4) After that, you can generate a project as described in the [Quick Introduction](https://entgo.io/docs/getting-started/). For example, try running:
+
+    ```bash
+    go run -mod=mod entgo.io/ent/cmd/ent new User
+    ```
+
+5) Finally, run:
+
+    ```bash
+    go mod tidy
+    ```
 
 ## Opening a connection
 
@@ -26,24 +50,24 @@ To connect to {{ ydb-short-name }}, use the standard `ent.Open()` function with 
 package main
 
 import (
-	"context"
-	"log"
+    "context"
+    "log"
 
-	"entdemo/ent"
+    "entdemo/ent"
 )
 
 func main() {
-	client, err := ent.Open("ydb", "grpc://localhost:2136/local")
-	if err != nil {
-		log.Fatalf("failed opening connection to ydb: %v", err)
-	}
-	defer client.Close()
+    client, err := ent.Open("ydb", "grpc://localhost:2136/local")
+    if err != nil {
+        log.Fatalf("failed opening connection to ydb: %v", err)
+    }
+    defer client.Close()
 
-	ctx := context.Background()
+    ctx := context.Background()
 
-	if err := client.Schema.Create(ctx); err != nil {
-		log.Fatalf("failed creating schema resources: %v", err)
-	}
+    if err := client.Schema.Create(ctx); err != nil {
+        log.Fatalf("failed creating schema resources: %v", err)
+    }
 }
 ```
 
@@ -88,29 +112,29 @@ import "github.com/ydb-platform/ydb-go-sdk/v3/retry"
 
 // Create
 user, err := client.User.Create().
-	SetName("John").
-	SetAge(30).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Save(ctx)
+    SetName("John").
+    SetAge(30).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Save(ctx)
 
 // Query
 users, err := client.User.Query().
-	Where(user.AgeGT(18)).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	All(ctx)
+    Where(user.AgeGT(18)).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    All(ctx)
 
 // Update
 affected, err := client.User.Update().
-	Where(user.NameEQ("John")).
-	SetAge(31).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Save(ctx)
+    Where(user.NameEQ("John")).
+    SetAge(31).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Save(ctx)
 
 // Delete
 affected, err := client.User.Delete().
-	Where(user.NameEQ("John")).
-	WithRetryOptions(retry.WithIdempotent(true)).
-	Exec(ctx)
+    Where(user.NameEQ("John")).
+    WithRetryOptions(retry.WithIdempotent(true)).
+    Exec(ctx)
 ```
 
 ### Retry options
@@ -118,7 +142,7 @@ affected, err := client.User.Delete().
 Common retry options from `ydb-go-sdk`:
 
 | Option | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `retry.WithIdempotent(true)` | Mark operation as idempotent, allowing retries on more error types |
 | `retry.WithLabel(string)` | Add a label for debugging/tracing |
 | `retry.WithTrace(trace.Retry)` | Enable retry tracing |

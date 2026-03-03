@@ -157,28 +157,12 @@ public:
         return WaitOutputTime.MicroSeconds();
     }
 
-    i64 GetDataChunksInFlightCount() const {
-        return DataChunksInFlightCount;
-    }
-
-    ui64 GetPendingMessageCount() const {
-        return PendingMessageCount;
-    }
-
     TDuration GetWaitOutputTime() const {
         return WaitOutputTime;
     }
 
     bool IsFinished() const {
         return Finished;
-    }
-
-    bool IsNeedAck() const {
-        return NeedAck;
-    }
-
-    ui64 GetGeneration() const {
-        return Generation;
     }
 
     bool HasActorId() const {

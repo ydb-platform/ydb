@@ -188,11 +188,8 @@ private:
                     str << "AvgBlockSize: " << (TotalBytesReceived / BlocksReceived) << " bytes" << Endl;
                 }
                 if (elapsedSec > 0) {
-                    str << "Throughput: " << (ui64)(TotalBytesReceived / elapsedSec) << " bytes/sec"
-                        << ", " << (ui64)(Stats.TotalReadRows / elapsedSec) << " rows/sec" << Endl;
+                    str << "Throughput: " << (ui64)(TotalBytesReceived / elapsedSec) << " bytes/sec" << Endl;
                 }
-                str << "Stats: TotalReadRows=" << Stats.TotalReadRows
-                    << " CompletedShards=" << Stats.CompletedShards << Endl;
             }
 
             str << Endl << "Compute Actor(s):" << Endl;
@@ -231,10 +228,6 @@ private:
                     TABLER() {
                         TABLEH_ATTRS({{"title", "DataShard tablet serving this key range"}}) { str << "TabletId"; }
                         TABLEH_ATTRS({{"title", "Scan actor on the shard side"}}) { str << "ActorId"; }
-                        TABLEH_ATTRS({{"title", "Rows read from this shard so far"}}) { str << "RowsRead"; }
-                        TABLEH_ATTRS({{"title", "Total chunks from shard not yet processed by compute; shard blocked until 0"}}) { str << "InFlight"; }
-                        TABLEH_ATTRS({{"title", "Subset of InFlight stuck in queue because no compute actor was free"}}) { str << "Pending"; }
-                        TABLEH_ATTRS({{"title", "Shard is waiting for fetcher to send ack before sending next chunk"}}) { str << "NeedAck"; }
                         TABLEH_ATTRS({{"title", "Cumulative time chunks waited in queue for a free compute actor"}}) { str << "WaitOutputTime"; }
                         TABLEH_ATTRS({{"title", "Shard has finished scanning its key range"}}) { str << "Finished"; }
                     }
@@ -252,13 +245,6 @@ private:
                                     str << "none";
                                 }
                             }
-                            TABLED() {
-                                auto it = Stats.ReadShardInfo.find(tabletId);
-                                str << (it != Stats.ReadShardInfo.end() ? it->second.first : 0);
-                            }
-                            TABLED() { str << scanner.GetDataChunksInFlightCount(); }
-                            TABLED() { str << scanner.GetPendingMessageCount(); }
-                            TABLED() { str << scanner.IsNeedAck(); }
                             TABLED() { str << scanner.GetWaitOutputTime(); }
                             TABLED() { str << scanner.IsFinished(); }
                         }

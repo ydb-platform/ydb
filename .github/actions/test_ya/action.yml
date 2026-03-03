@@ -439,7 +439,7 @@ runs:
           set -e
           RC=`cat exit_code`
 
-          kill $MONITOR_PID
+          kill $MONITOR_PID 2>/dev/null || true
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
@@ -458,6 +458,8 @@ runs:
             --output-html $CURRENT_PUBLIC_DIR/resources_report.html \
             --output-trace $CURRENT_PUBLIC_DIR/resources_trace.json || true
           echo "25 [Resources (CPU/RAM/disk)](${CURRENT_PUBLIC_DIR_URL}/resources_report.html)" >> $SUMMARY_LINKS
+          # Copy to PUBLIC_DIR root for visibility in index.html
+          cp -f $CURRENT_PUBLIC_DIR/resources_report.html $PUBLIC_DIR/resources_report.html 2>/dev/null || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

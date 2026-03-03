@@ -691,7 +691,7 @@ TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(const std::vecto
 
     for (std::size_t fdIdx : fdIdxes) {
         if (FdMapping_[fdIdx] != -1) {
-            fdSet[FdMapping_[fdIdx]] = 1;
+            fdSet[FdMapping_[fdIdx]] = true;
         }
     }
 
@@ -1093,7 +1093,7 @@ void TOrderingsStateMachine::TDFSM::Build(
             }
             AddEdge(nodeIdx, dstNodeIdx, fdIdx);
 
-            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = 1;
+            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = true;
         }
     }
 
@@ -1160,13 +1160,13 @@ void TOrderingsStateMachine::TDFSM::Precompute(
                 continue;
             }
 
-            node.InterestingOrderings[interestingOrderIdx] = 1;
+            node.InterestingOrderings[interestingOrderIdx] = true;
         }
     }
 
     for (auto& node : Nodes_) {
         for (auto& nfsmNodeIdx : node.NFSMNodes) {
-            node.NFSMNodesBitset[nfsmNodeIdx] = 1;
+            node.NFSMNodesBitset[nfsmNodeIdx] = true;
         }
     }
 }

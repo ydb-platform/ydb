@@ -66,6 +66,7 @@ Checks: >
   modernize-loop-convert,
   modernize-pass-by-value,
   modernize-redundant-void-arg,
+  modernize-use-bool-literals,
   modernize-use-override
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays

@@ -2,6 +2,8 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <unordered_map>
+#include <unordered_set>
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
@@ -15,6 +17,25 @@ using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
 
 namespace {
+
+std::unordered_map<std::string, std::unordered_set<std::string>> ParseCompileCacheQueries(
+    const NYdb::TResultSet& resultSet, const std::unordered_set<std::string>& querySubstrings)
+{
+    std::unordered_map<std::string, std::unordered_set<std::string>> found;
+    NYdb::TResultSetParser parser(resultSet);
+    while (parser.TryNextRow()) {
+        auto q = parser.ColumnParser("Query").GetOptionalUtf8();
+        auto queryType = parser.ColumnParser("QueryType").GetOptionalUtf8();
+        if (!q || !queryType) continue;
+        for (const auto& substring : querySubstrings) {
+            if (q->find(substring) != TString::npos) {
+                found[substring].insert(std::string(*queryType));
+            }
+        }
+    }
+    return found;
+}
+
     ui64 SelectCompileCacheCount(TTableClient& tableClient) {
         auto session = tableClient.CreateSession().GetValueSync();
         UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
@@ -1221,7 +1242,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 12);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
         NYdb::TResultSetParser parser(resultSet);
@@ -1229,6 +1250,54 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         auto value = parser.ColumnParser("Warnings").GetOptionalUtf8();
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
+
+    }
+
+    Y_UNIT_TEST(CompileCacheCheckQueryType) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const TString query = R"(SELECT 1 AS x FROM `/Root/KeyValue`;)";
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx().CommitTx(),
+                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(
+                R"(SELECT 2 AS x FROM `/Root/KeyValue`;)",
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteDataQuery(
+            R"(SELECT Query, QueryType FROM `/Root/.sys/compile_cache_queries` WHERE Query IS NOT NULL;)",
+            TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto found = ParseCompileCacheQueries(result.GetResultSet(0), {"SELECT 1", "SELECT 2"});
+        UNIT_ASSERT_VALUES_EQUAL_C(found["SELECT 1"].size(), 2u,
+            "SELECT 1 must have 2 cache entries (DML + GENERIC_CONCURRENT), got " << found["SELECT 1"].size());
+        UNIT_ASSERT_C(found["SELECT 1"].count("QUERY_TYPE_SQL_DML"), "Table API cache entry not found in compile_cache_queries");
+        UNIT_ASSERT_C(found["SELECT 1"].count("QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY"), "Query API entry for SELECT 1 not found");
+        UNIT_ASSERT_VALUES_EQUAL_C(found["SELECT 2"].size(), 1u,
+            "SELECT 2 must have 1 cache entry, got " << found["SELECT 2"].size());
+        UNIT_ASSERT_C(found["SELECT 2"].count("QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY"), "Query API cache entry not found in compile_cache_queries");
 
     }
 

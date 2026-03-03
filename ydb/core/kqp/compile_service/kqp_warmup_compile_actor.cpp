@@ -41,6 +41,7 @@ struct TEvPrivate {
         ui64 CompilationDurationMs = 0;
         TString Metadata;
         TString SessionId;  // SessionId for cancellation
+        TString QueryType;  // EQueryType name from compile_cache_queries (e.g. QUERY_TYPE_SQL_DML)
     };
 
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
@@ -61,10 +62,12 @@ struct TEvPrivate {
     struct TEvTruncatedCountResult : public NActors::TEventLocal<TEvTruncatedCountResult, EvTruncatedCountResult> {
         bool Success;
         ui64 Count;
+        ui64 EmptyQueryTypeCount = 0;
 
-        TEvTruncatedCountResult(bool success, ui64 count = 0)
+        TEvTruncatedCountResult(bool success, ui64 count = 0, ui64 emptyQueryTypeCount = 0)
             : Success(success)
             , Count(count)
+            , EmptyQueryTypeCount(emptyQueryTypeCount)
         {}
     };
 };
@@ -86,11 +89,12 @@ public:
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
         TStringBuilder sql;
-        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, MAX(CompilationDurationMs) AS CompilationDurationMs"
+        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, MAX(CompilationDurationMs) AS CompilationDurationMs, MAX(QueryType) AS QueryType"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
             << "WHERE IsTruncated = false "
-            << "  AND AccessCount > 0 "
-            << "  AND CompilationDurationMs < " << MaxCompilationDurationMs;
+            << "AND AccessCount > 0 "
+            << "AND QueryType IS NOT NULL AND QueryType != '' "
+            << "AND CompilationDurationMs < " << MaxCompilationDurationMs;
 
         if (!NodeIds.empty()) {
             ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
@@ -102,7 +106,7 @@ public:
             sql << ")";
         }
 
-        sql << " GROUP BY Query, UserSID "
+        sql << " GROUP BY Query, UserSID, QueryType "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;
 
@@ -116,6 +120,7 @@ public:
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
             auto metadata = parser.ColumnParser("Metadata").GetOptionalUtf8();
             auto compilationDuration = parser.ColumnParser("CompilationDurationMs").GetOptionalUint64();
+            auto queryType = parser.ColumnParser("QueryType").GetOptionalUtf8();
 
             if (queryText && !queryText->empty()) {
                 TEvPrivate::TQueryToCompile query;
@@ -123,6 +128,7 @@ public:
                 query.UserSID = userSID ? TString(*userSID) : TString();
                 query.Metadata = metadata ? TString(*metadata) : TString();
                 query.CompilationDurationMs = compilationDuration.value_or(0);
+                query.QueryType = queryType ? TString(*queryType) : TString();
                 Result->Queries.push_back(std::move(query));
             }
         }
@@ -163,9 +169,10 @@ public:
 
     void OnRunQuery() override {
         TStringBuilder sql;
-        sql << "SELECT COUNT(*) AS TruncatedCount"
+        sql << "SELECT SUM(CASE WHEN IsTruncated = true THEN 1 ELSE 0 END) AS TruncatedCount,"
+            << " SUM(CASE WHEN QueryType IS NULL OR QueryType = '' THEN 1 ELSE 0 END) AS EmptyQueryTypeCount"
             << " FROM `" << Database << "/.sys/compile_cache_queries`"
-            << " WHERE IsTruncated = true AND AccessCount > 0";
+            << " WHERE AccessCount > 0";
 
         if (!NodeIds.empty()) {
             ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
@@ -183,7 +190,8 @@ public:
     void OnStreamResult(NYdb::TResultSet&& resultSet) override {
         NYdb::TResultSetParser parser(resultSet);
         if (parser.TryNextRow()) {
-            TruncatedCount = parser.ColumnParser("TruncatedCount").GetUint64();
+            TruncatedCount = static_cast<ui64>(parser.ColumnParser("TruncatedCount").GetOptionalInt64().value_or(0));
+            EmptyQueryTypeCount = static_cast<ui64>(parser.ColumnParser("EmptyQueryTypeCount").GetOptionalInt64().value_or(0));
         }
     }
 
@@ -193,13 +201,14 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&&) override {
         Send(Owner, new TEvPrivate::TEvTruncatedCountResult(
-            status == Ydb::StatusIds::SUCCESS, TruncatedCount));
+            status == Ydb::StatusIds::SUCCESS, TruncatedCount, EmptyQueryTypeCount));
     }
 
 private:
     TVector<ui32> NodeIds;
     ui32 MaxNodesToRequest;
     ui64 TruncatedCount = 0;
+    ui64 EmptyQueryTypeCount = 0;
 };
 
 namespace {
@@ -381,8 +390,10 @@ private:
     void HandleTruncatedCount(TEvPrivate::TEvTruncatedCountResult::TPtr& ev) {
         if (ev->Get()->Success && Counters) {
             Counters->WarmupQueriesTruncated->Set(ev->Get()->Count);
+            Counters->WarmupQueriesEmptyQueryType->Set(ev->Get()->EmptyQueryTypeCount);
         }
         LOG_I("Truncated queries in cache: " << ev->Get()->Count
+              << ", empty QueryType: " << ev->Get()->EmptyQueryTypeCount
               << ", success: " << ev->Get()->Success);
     }
 
@@ -495,12 +506,24 @@ private:
         StartCompilations();
     }
 
+    static NKikimrKqp::EQueryType ParseQueryType(const TString& queryTypeStr) {
+        if (queryTypeStr.empty()) {
+            return NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
+        }
+        NKikimrKqp::EQueryType result;
+        if (NKikimrKqp::EQueryType_Parse(queryTypeStr, &result)) {
+            return result;
+        }
+        return NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
+    }
+
     static std::unique_ptr<TEvKqp::TEvQueryRequest> CreatePrepareRequest(
         const TString& database,
         const TString& queryText,
         const TString& userSid,
         TDuration timeout,
-        const TString& metadata)
+        const TString& metadata,
+        const TString& queryTypeStr)
     {
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
@@ -514,7 +537,7 @@ private:
         request.SetDatabase(database);
         request.SetQuery(queryText);
         request.SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
-        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request.SetType(ParseQueryType(queryTypeStr));
         request.SetKeepSession(false);
         request.SetTimeoutMs(timeout.MilliSeconds());
         request.SetIsInternalCall(true);
@@ -536,7 +559,7 @@ private:
         auto& pendingQuery = PendingQueriesByCookie[cookie];
         pendingQuery = query;
 
-        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.SoftDeadline, query.Metadata);
+        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.SoftDeadline, query.Metadata, query.QueryType);
         if (not request->GetSessionId().empty()) {
             pendingQuery.SessionId = request->GetSessionId();
         } // otherwise SessionId will be created by KqpProxy and returned in response
@@ -629,7 +652,7 @@ private:
         LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
 
         for (const auto& actorId : NotifyActorIds) {
-            Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded));
+            Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded, EntriesFailed));
         }
 
         PassAway();

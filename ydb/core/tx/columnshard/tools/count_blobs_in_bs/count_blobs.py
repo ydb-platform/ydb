@@ -468,8 +468,8 @@ class Logger:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Parse blobsan text output and calculate counters")
-    parser.add_argument("input_path", nargs="?", default="group-dump.txt", help="Path to blobsan text dump")
+    parser = argparse.ArgumentParser(description="Calculates blob counts in a snapshot retrieved by dstool from a blobstorage, and parsed by blobsan")
+    parser.add_argument("input_path", nargs="?", default="my-snapshot.txt", help="Path to a snapshot file. The file must be retrieved by dstool and parsed by blobsan.")
     parser.add_argument("--disk-type", choices=MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA.keys(), default=DEFAULT_BS_MEDIA)
     parser.add_argument("--erasure", choices=ERASURE_BY_NAME.keys(), default=DEFAULT_ERASURE_NAME)
     args = parser.parse_args()

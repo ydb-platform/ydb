@@ -14,4 +14,5 @@ Main subsections:
     * **[Manual](deployment-options/manual/index.md)**: manual cluster deployment.
 
 * [{#T}](observability/index.md) — tools for observing {{ ydb-short-name }} clusters.
+* [{#T}](enterprise-manager/index.md) — web interface and management system for {{ ydb-short-name }} clusters.
 * [{#T}](backup-and-recovery.md) — backup and recovery of {{ ydb-short-name }} clusters.

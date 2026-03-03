@@ -37,8 +37,12 @@ class Blob:
     def keep_and_local(self) -> bool:
         return self.not_keep == 0 and self.with_local > 0
 
-    def keep_and_full_local(self) -> bool:
-        return self.not_keep == 0 and self.local_union == 0b111111
+    def keep_and_full_local(self, erasure: str) -> bool:
+        if erasure == ERASURE_BLOCK_4_2:
+            return self.not_keep == 0 and self.local_union == 0b111111
+        if erasure == ERASURE_MIRROR_3_DC:
+            return self.not_keep == 0 and self.local_union == 0b111
+        raise ValueError(f"Unknown erasure: {erasure}")
 
     def add(self, record: "LBRecord") -> None:
         self.total += 1
@@ -77,9 +81,9 @@ class Channel:
             if blob.keep_and_local():
                 yield blob
     
-    def blobs_keep_and_full_local(self) -> Iterable[Blob]:
+    def blobs_keep_and_full_local(self, erasure: str) -> Iterable[Blob]:
         for blob in self._blobs.values():
-            if blob.keep_and_full_local():
+            if blob.keep_and_full_local(erasure):
                 yield blob
 
     def add(self, record: "LBRecord") -> None:
@@ -179,7 +183,7 @@ class Channel:
         self.print_blob_group(logger, "all", self.blobs(), total_channel_blobs, total_blobs, self.total, total_records)
         self.print_blob_group(logger, "keep", self.blobs_keep(), total_channel_blobs, total_blobs, self.total, total_records)
         self.print_blob_group(logger, "keep and local", self.blobs_keep_and_local(), total_channel_blobs, total_blobs, self.total, total_records)
-        self.print_blob_group(logger, "keep and full local", self.blobs_keep_and_full_local(), total_channel_blobs, total_blobs, self.total, total_records)
+        self.print_blob_group(logger, "keep and full local", self.blobs_keep_and_full_local(self.erasure), total_channel_blobs, total_blobs, self.total, total_records)
         left()
 
 @dataclass

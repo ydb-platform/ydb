@@ -1,3 +1,55 @@
+/**
+ * TFullTextSource -- async input source actor for KQP compute actors.
+ *
+ * This file implements the full-text search query execution pipeline within YDB's
+ * KQP (KiKiMR Query Processor). TFullTextSource is registered as an
+ * IDqComputeActorAsyncInput source and is driven by a parent compute actor that
+ * pulls rows via GetAsyncInputData().
+ *
+ * === High-level pipeline ===
+ *
+ *  1. Bootstrap: resolve table partitioning for all involved tables via SchemeCache.
+ *  2. Tokenize the user's search query using the analyzer configured on the index.
+ *  3. (Relevance mode) Read aggregate statistics (doc count, total doc length) from
+ *     the stats table, and per-token document frequencies from the dict table.
+ *  4. Issue range reads against the posting (index impl) table to stream sorted
+ *     doc_id lists for each query token.
+ *  5. Merge posting lists using one of two algorithms:
+ *       - TAndOptimizedMergeAlgorithm -- leapfrog/galloping merge for AND semantics.
+ *       - TDefaultMergeAlgorithm       -- min-heap merge for OR / minimum_should_match.
+ *  6. (Relevance mode with imbalanced tokens) Use a two-layer (L1/L2) approach:
+ *     L1 merges only the rarest tokens, then L2 verifies candidates against the
+ *     remaining frequent tokens via point lookups, avoiding full scans of large
+ *     posting lists.
+ *  7. For matched documents, optionally read document lengths from the docs table
+ *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK min-heap
+ *     so only the highest-scoring documents survive.
+ *  8. Fetch full row data from the main table (unless "covered" -- all requested
+ *     columns are already available from the index key).
+ *  9. Stream result rows to the compute actor via ResultQueue / NotifyCA().
+ *
+ * === Tables involved (relevance index) ===
+ *
+ *  - Main table: the user's original table (fetches full rows for matched doc_ids).
+ *  - Posting table (indexImplTable): key=(token, doc_id), value=[freq].
+ *      Stores the inverted index.  Read in Arrow FORMAT_ARROW batches.
+ *  - Dict table (indexImplDictTable): key=(token), value=(document_frequency).
+ *      Provides per-token DF values for IDF computation.
+ *  - Docs table (indexImplDocsTable): key=(doc_id), value=(doc_length).
+ *      Provides per-document lengths for BM25 normalization.
+ *  - Stats table (indexImplStatsTable): key=(partition_id),
+ *      value=(doc_count, sum_doc_length).  Global corpus statistics.
+ *
+ *  For a plain (non-relevance) index only the main table and posting table are used.
+ *
+ * === Communication model ===
+ *
+ *  TFullTextSource is an NActors actor (TActorBootstrapped).  It sends TEvRead
+ *  requests to datashards via the PipeCache and receives TEvReadResult responses.
+ *  Shard partitioning is resolved at runtime through TEvResolveKeySet to the
+ *  SchemeCache.  Retries use exponential backoff with configurable limits.
+ */
+
 #include "kqp_full_text_source.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
@@ -43,15 +95,44 @@ using namespace NKikimr::NTableIndex::NFulltext;
 
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
 
-// replace with parameters from settings
+// BM25 tuning parameters (Okapi BM25).
+// K1 controls term-frequency saturation: higher K1 means raw TF matters more.
+// B controls document-length normalization: B=1 fully normalizes, B=0 ignores length.
 constexpr double K1_FACTOR_DEFAULT = 1.2;
 constexpr double B_FACTOR_DEFAULT = 0.75;
+
+// Threshold below which floating-point settings are treated as "not set".
 constexpr double EPSILON = 1e-6;
+
+// Sentinel column index used in ResultCellIndices to indicate that the column
+// should be filled with the computed BM25 relevance score rather than a table cell.
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
+
+// When token document-frequencies differ by more than this factor, the rarer tokens
+// are used for L1 merge and the frequent ones are deferred to L2 point lookups.
+// For n-gram queries the frequent n-grams are dropped entirely because n-gram
+// results are post-filtered anyway.
 constexpr double NGRAM_IMBALANCE_FACTOR = 10;
 
 class TDocId;
 
+/**
+ * TTableReader<T> -- CRTP base for partition-aware table reading via TEvRead.
+ *
+ * Each derived reader (TIndexTableImplReader, TDocsTableReader, etc.) inherits
+ * this base to get:
+ *   - Schema storage: key column types, result column types/ids.
+ *   - Partitioning resolution: AddResolvePartitioningRequest() requests the full
+ *     key range from the SchemeCache; SetPartitionInfo() stores the result.
+ *   - Request building: GetReadRequest() constructs a TEvDataShard::TEvRead with
+ *     the correct table id, columns, snapshot, and quota settings.
+ *   - Range splitting: GetRangePartitioning() maps a logical TTableRange to
+ *     (shardId, subrange) pairs by binary-searching the partition boundaries.
+ *   - Stats tracking: ReadRows / ReadBytes accumulation.
+ *
+ * The Arrow format flag (UseArrowFormat) is set when the result schema is a single
+ * Uint64 column (doc_id), enabling columnar batch transfer from the datashard.
+ */
 template <typename T>
 class TTableReader : public TAtomicRefCount<T> {
     TIntrusivePtr<TKqpCounters> Counters;
@@ -136,6 +217,10 @@ public:
         return GetReadRequest(readId, std::deque<TableRange>{range});
     }
 
+    // Build a TEvRead protobuf request addressed to the posting/docs/dict/main table.
+    // Point lookups go into request->Keys; range scans go into request->Ranges.
+    // When the `To` key is a prefix (fewer cells than the full key), the range
+    // endpoint is treated as inclusive to capture all rows sharing that prefix.
     template <typename TableRange>
     std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, const std::deque<TableRange>& ranges) {
         auto request = std::make_unique<TEvDataShard::TEvRead>();
@@ -183,6 +268,9 @@ public:
         return request;
     }
 
+    // Append a full-range key descriptor for this table to a SchemeCache batch
+    // request.  The SchemeCache returns partition boundaries that are later stored
+    // via SetPartitionInfo().
     void AddResolvePartitioningRequest(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>& request) {
         auto keyColumnTypes = KeyColumnTypes;
 
@@ -197,6 +285,10 @@ public:
         Counters->IteratorsShardResolve->Inc();
     }
 
+    // Map a logical TTableRange to a list of (shardId, intersectedRange) pairs.
+    // Uses binary search on PartitionInfo boundaries to find the first partition
+    // that may overlap, then walks forward collecting intersections until the
+    // range is fully covered.
     std::vector<std::pair<ui64, TTableRange>> GetRangePartitioning(const TTableRange& range) {
 
         YQL_ENSURE(PartitionInfo);
@@ -256,6 +348,20 @@ public:
     }
 };
 
+/**
+ * TQueryCtx -- per-query BM25 scoring context.
+ *
+ * Holds corpus-level statistics needed by the BM25 formula:
+ *   - DocCount:  total number of documents in the corpus (from stats table).
+ *   - AvgDL:     average document length = SumDocLength / DocCount.
+ *   - IDFValues: one IDF value per query token, computed as:
+ *                  IDF(t) = ln( (N - df(t) + 0.5) / (df(t) + 0.5) + 1 )
+ *                where N = DocCount, df(t) = document frequency of token t.
+ *   - K1Factor / BFactor: BM25 tuning knobs (overridable per query).
+ *
+ * Also stores the result column mapping (ResultCellIndices) and the boolean
+ * query semantics (DefaultOperator = AND/OR, MinimumShouldMatch).
+ */
 class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     const ui64 DocCount = 0;
     const double AvgDL = 1.0;
@@ -344,6 +450,23 @@ TTableId FromProto(const ::NKqpProto::TKqpPhyTableId & proto) {
     );
 }
 
+/**
+ * TDocumentInfo -- represents a single matched document throughout the pipeline.
+ *
+ * Lifecycle:
+ *   1. Created by a merge algorithm with just DocumentNumId (the synthetic
+ *      Uint64 doc_id from the posting table).
+ *   2. TokenFrequencies[] are populated if relevance scoring is needed --
+ *      one entry per query token giving the term frequency in this document.
+ *   3. DocumentLength is set from the docs table (for BM25 normalization).
+ *   4. RowCells are filled either from the main table read (AddRow) or are
+ *      already available when the query is "covered" by the index key columns.
+ *   5. GetRow() materializes the final NUdf::TUnboxedValue row, substituting
+ *      the BM25 score for any RELEVANCE_COLUMN_MARKER column.
+ *
+ * KeyCells stores (doc_id) as a serialized cell vector, used to build point
+ * read requests against the main/docs tables.
+ */
 class TDocumentInfo : public TSimpleRefCount<TDocumentInfo> {
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
@@ -370,6 +493,9 @@ public:
         return DocumentLength != std::numeric_limits<ui64>::max();
     }
 
+    // Compute the BM25 score for this document:
+    //   score = SUM_over_tokens[ IDF(t) * tf(t,d) / (tf(t,d) + K1*(1-B+B*|d|/avgdl)) ]
+    // where tf(t,d) = TokenFrequencies[t], |d| = DocumentLength.
     double GetBM25Score(const TQueryCtx& queryCtx) const {
         double score = 0;
         const double avgDocLength = queryCtx.GetAvgDL();
@@ -394,10 +520,17 @@ public:
         return RowCells.at(idx);
     }
 
+    // A document is "covered" when all columns the user requested are available
+    // from the index key alone, so no main-table read is needed.
     bool IsCovered(bool external) const {
         return external || Covered;
     }
 
+    // Materialize the final result row as an NUdf::TUnboxedValue array.
+    // Columns are filled according to ResultCellIndices:
+    //   - RELEVANCE_COLUMN_MARKER -> BM25 score (double)
+    //   - index 0 -> DocumentNumId (the synthetic doc_id)
+    //   - other indices -> cells from RowCells (fetched from main table)
     NUdf::TUnboxedValue GetRow(const TQueryCtx& queryCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory, i64& computeBytes) const {
         NUdf::TUnboxedValue* rowItems = nullptr;
         auto row = holderFactory.CreateDirectArrayHolder(
@@ -430,6 +563,14 @@ public:
     }
 };
 
+/**
+ * TL1DocumentInfo -- wraps a TDocumentInfo with the token word for L2 verification.
+ *
+ * When a document matches in the L1 merge (rarest tokens), we need to verify it
+ * against each frequent (L2) token by doing a point lookup in the posting table
+ * for the key (token, doc_id).  TL1DocumentInfo stores that composite key in
+ * IndexKey so it can be used with TReadItemsQueue::Sequential().
+ */
 class TL1DocumentInfo : public TSimpleRefCount<TL1DocumentInfo> {
 public:
     using TPtr = TIntrusivePtr<TL1DocumentInfo>;
@@ -452,6 +593,13 @@ public:
 };
 
 
+/**
+ * TDocId -- lightweight (word_index, doc_id) pair used in the merge priority queue.
+ *
+ * TCompare orders by doc_id descending so that std::priority_queue yields the
+ * *smallest* doc_id first (min-heap).  TEquals checks doc_id equality across
+ * different token streams for match detection.
+ */
 class TDocId {
 public:
     size_t WordIndex;
@@ -487,6 +635,15 @@ public:
     {}
 };
 
+/**
+ * TIndexTableImplReader -- reader for the posting (index impl) table.
+ *
+ * The posting table has key = (token, doc_id) and an optional freq column
+ * (present for relevance indexes).  This reader is configured from settings
+ * to request only doc_id (and optionally freq) columns, skipping the token
+ * column since it is already known from the query.  Arrow batch format is
+ * used for efficient columnar transfer of Uint64 doc_ids.
+ */
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
     i32 FrequencyColumnIndex = 0;
 
@@ -572,6 +729,25 @@ public:
     }
 };
 
+/**
+ * TArrowTokenStream -- streaming buffer for one token's posting list.
+ *
+ * Each token in the search query has its own TArrowTokenStream.  As
+ * TEvReadResult batches arrive from the datashard (in Arrow format), they are
+ * appended to the pending deques.  The merge algorithm consumes entries one at
+ * a time via GetLeastDocId() / MoveToNext().
+ *
+ * The stream tracks:
+ *   - PendingDocumentIds: deque of Arrow UInt64 arrays (doc_id batches).
+ *   - PendingDocumentFrequencies: matching deque of UInt32 arrays (term freq).
+ *   - UnprocessedDocumentPos/Count: cursor within the current front batch.
+ *   - MaxKey: the largest doc_id seen so far (used as a resume key for
+ *     continued reads when partitions span multiple TEvRead responses).
+ *   - ReadFinished: set when the last TEvReadResult for this token arrives.
+ *
+ * IsEof() is true only when all batches have been consumed AND no more reads
+ * are pending.
+ */
 class TArrowTokenStream {
     std::deque<std::shared_ptr<arrow::UInt64Array>> PendingDocumentIds;
     std::deque<std::shared_ptr<arrow::UInt32Array>> PendingDocumentFrequencies;
@@ -663,6 +839,28 @@ public:
     }
 };
 
+/**
+ * TWordReadState -- per-query-token read state for the posting table.
+ *
+ * Each token extracted from the search query gets a TWordReadState that
+ * manages its range reads against the posting table.  The posting table key
+ * is (token, doc_id), so reading all documents for a token means scanning the
+ * range [token, 0] .. [token, +inf).  Because the table is partitioned across
+ * shards, BuildRangesToRead() splits this range using GetRangePartitioning()
+ * into per-shard sub-ranges stored in RangesToRead.
+ *
+ * Key fields:
+ *   - WordIndex: position of this token in the Words[] vector (also the stream
+ *     index for the merge algorithm).
+ *   - Word: the tokenized search term string.
+ *   - L1 / L2: flags controlling which merge layer this token participates in.
+ *     L1 tokens participate in the primary merge; L2 tokens are verified via
+ *     point lookups against L1-matched candidates.
+ *   - StartReadKeyFrom: resume point after a completed shard read; set to
+ *     maxDocId+1 so the next BuildRangesToRead() continues from where we left off.
+ *   - Frequency: document frequency from the dict table (used for IDF and
+ *     imbalance detection).
+ */
 class TWordReadState : public TSimpleRefCount<TWordReadState> {
 public:
     ui64 WordIndex;
@@ -729,6 +927,23 @@ public:
     }
 };
 
+/**
+ * IMergeAlgorithm -- base interface for merging sorted posting lists.
+ *
+ * Subclasses consume TArrowTokenStream entries (one stream per query token)
+ * and emit batches of TDocumentInfo for documents that satisfy the match
+ * criteria (AND / OR with minimum_should_match).
+ *
+ * Key state:
+ *   - Streams[]: one TArrowTokenStream per L1 (or L2) token.
+ *   - MinShouldMatch: minimum number of tokens a document must match.
+ *   - FinishedTokens: count of streams that have been fully consumed.
+ *   - WithFrequencies: whether to extract term frequencies for BM25 scoring.
+ *
+ * The merge is incremental: FindMatches() returns whatever matches can be
+ * determined from the data currently buffered.  New data is fed via AddResult().
+ * Done() returns true when no more matches can ever be produced.
+ */
 class IMergeAlgorithm {
 protected:
     std::vector<std::unique_ptr<TArrowTokenStream>> Streams;
@@ -787,6 +1002,30 @@ public:
 };
 
 
+/**
+ * TAndOptimizedMergeAlgorithm -- leapfrog merge for strict AND semantics.
+ *
+ * All tokens must match (MinShouldMatch == TokenCount).  This algorithm avoids
+ * the overhead of a full priority queue by maintaining a simple ReadyStreams
+ * deque.  The core loop picks a candidate doc_id and "jumps" each other stream
+ * to that candidate:
+ *
+ *   1. Take the front stream's least doc_id as candidate.
+ *   2. For each remaining ready stream, call JumpToBest():
+ *      - If stream's current doc_id == candidate: match (return 0).
+ *      - If stream's current doc_id > candidate: the old candidate is
+ *        impossible; adopt the new (larger) doc_id as candidate and restart
+ *        matching from scratch (return 1).
+ *      - If stream is exhausted trying to reach candidate: this stream
+ *        needs more data (return -1).
+ *   3. When all streams agree on the same doc_id, emit a match.
+ *
+ * Done() is true as soon as ANY stream is fully exhausted, since AND requires
+ * all streams.
+ *
+ * The "ready" concept: a stream is "ready" when it has buffered data to read.
+ * Streams without data are implicitly waiting for the next TEvReadResult.
+ */
 class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm {
     std::deque<ui32> ReadyStreams;
 
@@ -815,6 +1054,9 @@ public:
         return FinishedTokens > 0;
     }
 
+    // Move all currently matched streams past their current entry.
+    // If a stream runs out of buffered data it leaves ReadyStreams (waits for
+    // more TEvReadResult); if it's fully exhausted, FinishedTokens increments.
     void AdvanceStreams() {
         for(ui32 tokenIndex : MatchedTokens) {
             YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
@@ -830,6 +1072,9 @@ public:
         MatchedTokens.clear();
     }
 
+    // Advance a single stream until its doc_id >= candidate.
+    // Returns: 0 = exact match, 1 = found larger doc_id (candidate updated),
+    //         -1 = stream needs more data.
     int JumpToBest(ui64& candidate) {
         ui32 tokenIndex = ReadyStreams.front();
         ReadyStreams.pop_front();
@@ -905,6 +1150,21 @@ public:
     }
 };
 
+/**
+ * TDefaultMergeAlgorithm -- min-heap merge for OR / minimum_should_match.
+ *
+ * Maintains a priority queue (min-heap by doc_id) containing the current
+ * entry from each active stream.  FindMatches() repeatedly:
+ *
+ *   1. Pop the smallest doc_id.
+ *   2. Pop all other entries with the same doc_id (they come from different
+ *      token streams matching the same document).
+ *   3. If the number of matching streams >= MinShouldMatch, emit a match.
+ *   4. Advance each consumed stream and re-insert into the heap.
+ *
+ * Done() is true when the number of non-exhausted streams drops below
+ * MinShouldMatch (no future document can satisfy the threshold).
+ */
 class TDefaultMergeAlgorithm : public IMergeAlgorithm {
     std::priority_queue<TDocId, TStackVec<TDocId, 64>, TDocId::TCompare> MergeQueue;
 
@@ -980,6 +1240,15 @@ public:
     }
 };
 
+/**
+ * TDocsTableReader -- reader for the docs table (indexImplDocsTable).
+ *
+ * Schema: key = (doc_id), value = (doc_length).
+ * Used in relevance mode to fetch per-document lengths needed by BM25's
+ * length normalization factor: K1 * (1 - B + B * |d| / avgdl).
+ *
+ * Reads use Arrow format for batch efficiency (doc_id Uint64, length Uint32).
+ */
 class TDocsTableReader : public TTableReader<TDocsTableReader> {
     NKqpProto::EKqpFullTextIndexType IndexType;
 public:
@@ -1065,6 +1334,14 @@ public:
     }
 };
 
+/**
+ * TStatsTableReader -- reader for the stats table (indexImplStatsTable).
+ *
+ * Schema: key = (partition_id Uint32), value = (doc_count Uint64, sum_doc_length Uint64).
+ * Stores corpus-wide aggregate statistics.  Read once at startup (via
+ * GetTotalStatsRequest) to populate DocCount and SumDocLength in TQueryCtx
+ * for BM25's average document length computation.
+ */
 class TStatsTableReader : public TTableReader<TStatsTableReader> {
     NKqpProto::EKqpFullTextIndexType IndexType;
 public:
@@ -1180,6 +1457,16 @@ public:
     }
 };
 
+/**
+ * TDictTableReader -- reader for the dictionary table (indexImplDictTable).
+ *
+ * Schema: key = (token), value = (document_frequency).
+ * Stores how many documents contain each token.  Read during the enrichment
+ * phase (EnrichWordInfo) to populate TWordReadState::Frequency for each query
+ * token, which is then used for:
+ *   - IDF computation in TQueryCtx::AddIDFValue().
+ *   - Token frequency imbalance detection in StartWordReads().
+ */
 class TDictTableReader : public TTableReader<TDictTableReader> {
 public:
     TDictTableReader(const TIntrusivePtr<TKqpCounters>& counters,
@@ -1247,22 +1534,42 @@ public:
     }
 };
 
+// Discriminator for in-flight TEvRead requests so HandleReadResult can
+// dispatch the response to the correct processing path.
 enum EReadKind : ui32 {
-    EReadKind_Word = 0,
-    EReadKind_WordStats = 1,
-    EReadKind_DocumentStats = 2,
-    EReadKind_Document = 3,
-    EReadKind_TotalStats = 4,
-    EReadKind_Word_L2 = 5,
+    EReadKind_Word = 0,           // L1 posting list range scan
+    EReadKind_WordStats = 1,      // Dict table: per-token document frequency
+    EReadKind_DocumentStats = 2,  // Docs table: per-document length
+    EReadKind_Document = 3,       // Main table: full row data for matched docs
+    EReadKind_TotalStats = 4,     // Stats table: corpus-wide aggregates
+    EReadKind_Word_L2 = 5,        // L2 posting list point lookups
 };
 
+// Metadata stored for each in-flight read so we can route the response.
+// Cookie semantics depend on ReadKind: for EReadKind_Word it's the word index;
+// for EReadKind_Word_L2 it's the word index; for others it may be a read id.
 struct TReadInfo {
     ui64 ReadKind;
     ui64 Cookie;
     ui64 ShardId;
-    ui64 LastSeqNo = 0;
+    ui64 LastSeqNo = 0;  // Last acknowledged sequence number (for flow control)
 };
 
+/**
+ * TMainTableReader -- reader for the user's original table.
+ *
+ * After the merge identifies matching document IDs, this reader fetches the
+ * full row data that the user's SELECT requested.  FromSettings() analyzes
+ * the requested columns to determine:
+ *
+ *   - ResultCellIndices: mapping from output column position to either a table
+ *     cell index or RELEVANCE_COLUMN_MARKER for the BM25 score column.
+ *   - MainTableCovered: true if all requested columns are key columns of the
+ *     main table (so no actual read is needed -- the data is already known
+ *     from the doc_id).
+ *   - WithRelevance: true if the user requested __ydb_full_text_relevance and
+ *     the index type supports it.
+ */
 class TMainTableReader : public TTableReader<TMainTableReader> {
     bool WithRelevance;
 public:
@@ -1346,6 +1653,23 @@ public:
     }
 };
 
+/**
+ * TReadsState -- centralized tracker for all in-flight TEvRead requests.
+ *
+ * Responsibilities:
+ *   - Allocates monotonically increasing ReadIds.
+ *   - Maps ReadId -> TReadInfo (kind, cookie, shard, last seqno).
+ *   - Groups reads by shard (ReadsByShardId) for pipe management and retry
+ *     coordination.
+ *   - Tracks which shard pipes have been created (PipesCreated) to avoid
+ *     redundant pipe creation through PipeCache.
+ *   - Sends TEvRead and TEvReadAck through the per-node PipeCache.
+ *   - Manages per-shard retry counts with exponential backoff (GetDelay /
+ *     CalcDelay from kqp_read_iterator_common.h).
+ *
+ * The "Empty" state (no active reads, no resolve in progress) is used by the
+ * main actor to detect pipeline phase transitions.
+ */
 class TReadsState {
     struct TShardInfo {
         absl::flat_hash_set<ui64> ReadIds;
@@ -1386,6 +1710,9 @@ public:
         return Reads;
     }
 
+    // Send a TEvReadAck to the datashard to replenish the read's row/byte quota.
+    // Called when a non-final TEvReadResult arrives (i.e., more data is expected).
+    // Also reduces the retry counter on successful ack (halves if > 3).
     void AckRead(ui64 readId) {
         auto readIt = FindPtr(readId);
         if (readIt == nullptr) {
@@ -1416,6 +1743,8 @@ public:
             IEventHandle::FlagTrackDelivery));
     }
 
+    // Send a TEvRead request to the target shard via PipeCache, tracking
+    // the read in our internal maps. Creates a pipe on first contact with a shard.
     void SendEvRead(ui64 shardId, std::unique_ptr<TEvDataShard::TEvRead>& request, TReadInfo readInfo) {
         auto& record = request->Record;
         auto readId = request->Record.GetReadId();
@@ -1505,6 +1834,31 @@ public:
     }
 };
 
+/**
+ * TReadItemsQueue<TItem> -- manages batched point-read requests and correlates
+ * responses with the items that triggered them.
+ *
+ * Used for three kinds of reads:
+ *   - DocsReadingQueue (TItem = TDocumentInfo::TPtr): reads from docs table
+ *     (document lengths) and main table (full rows).
+ *   - L2ReadingQueue (TItem = TL1DocumentInfo::TPtr): L2 point lookups in the
+ *     posting table to verify candidates.
+ *   - WordsReadingQueue (TItem = TWordReadState::TPtr): dict table lookups for
+ *     per-token document frequencies.
+ *
+ * Key concepts:
+ *   - TSentReadItems: a group of items sent in a single TEvRead to one shard.
+ *     Items are consumed in order as TEvReadResult rows arrive, using
+ *     GetItem()/PopItem().
+ *   - TPendingSequentialRead: for L2 reads, items must be sent to the same
+ *     shard sequentially (one batch at a time) because the merge algorithm
+ *     needs results in doc_id order.  SentItemsPrefixSize tracks how many
+ *     items from the front are currently in-flight.
+ *   - Enqueue(): groups items by shard (using GetRangePartitioning on each
+ *     item's point key), assigns ReadIds, and sends TEvRead requests.
+ *   - Sequential(): appends items to a per-cookie pending queue and sends
+ *     only the prefix that maps to a single shard.
+ */
 template <typename TItem>
 class TReadItemsQueue {
     struct TSentReadItems {
@@ -1671,6 +2025,50 @@ public:
     }
 };
 
+/**
+ * TFullTextSource -- the main actor implementing full-text search as an
+ * IDqComputeActorAsyncInput source.
+ *
+ * === Actor lifecycle ===
+ *
+ *   Bootstrap() -> StateWork (handles TEvReadResult, TEvResolveKeySetResult,
+ *                              TEvDeliveryProblem, retry timers)
+ *
+ * === Pipeline phases (driven by event handlers, not a state enum) ===
+ *
+ *   Phase 1 - Resolve: PrepareTableReaders() sends a batch SchemeCache resolve
+ *     for all involved tables.  HandleResolve() receives partition info.
+ *
+ *   Phase 2 - Tokenize & enrich: ExtractAndTokenizeExpression() splits the
+ *     search query into tokens.  If relevance mode, ReadTotalStats() and
+ *     EnrichWordInfo() issue reads against the stats and dict tables.
+ *
+ *   Phase 3 - Merge: StartWordReads() configures the L1 (and optionally L2)
+ *     merge algorithms and kicks off posting list reads.  L1WordResult()
+ *     feeds data into L1MergeAlgo; matched documents flow to either
+ *     ScheduleL2Read() or FetchDocumentDetails().
+ *
+ *   Phase 4 - Fetch: FetchDocumentDetails() reads document lengths (if BM25),
+ *     computes scores, maintains a TopK heap (if LIMIT), and finally reads
+ *     full rows from the main table (unless covered).
+ *
+ *   Phase 5 - Deliver: Matched rows are pushed to ResultQueue and the compute
+ *     actor is notified via TEvNewAsyncInputDataArrived.  The compute actor
+ *     pulls rows through GetAsyncInputData().
+ *
+ * === Pull interface ===
+ *
+ *   GetAsyncInputData() is called by the compute actor when it has free buffer
+ *   space.  It drains ResultQueue up to freeSpace bytes or the LIMIT count.
+ *
+ * === Error handling ===
+ *
+ *   - TEvDeliveryProblem (pipe broken): schedule shard-level retry.
+ *   - TEvReadResult with error status: per-status retry or abort.
+ *   - Retries use exponential backoff with a per-shard retry counter.
+ *   - Unhandled exceptions are caught by IActorExceptionHandler and reported
+ *     as INTERNAL_ERROR to the compute actor.
+ */
 class TFullTextSource : public TActorBootstrapped<TFullTextSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
@@ -1702,32 +2100,36 @@ private:
     };
 
 
-    const NKikimrKqp::TKqpFullTextSourceSettings* Settings;
-    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
-    const NActors::TActorId ComputeActorId;
-    const ui64 InputIndex;
-    // const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
-    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    const NKikimrKqp::TKqpFullTextSourceSettings* Settings;  // Protobuf settings (lives in Arena)
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;         // Protobuf arena owning Settings
+    const NActors::TActorId ComputeActorId;                  // Parent compute actor to notify
+    const ui64 InputIndex;                                   // Source index within the compute actor
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;  // Factory for NUdf row values
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;  // Memory allocator for MiniKQL values
     TIntrusivePtr<TKqpCounters> Counters;
 
     const NKikimrSchemeOp::TFulltextIndexDescription& IndexDescription;
 
+    // True when all user-requested columns are available from the index key
+    // alone, so no main table read is required for matched documents.
     bool MainTableCovered = false;
 
     TString Database;
     TString LogPrefix;
     TDqAsyncStats IngressStats;
 
+    // MVCC snapshot for consistent reads across all tables.
     IKqpGateway::TKqpSnapshot Snapshot;
 
     TActorId SchemeCacheRequestTimeoutTimer;
     TDuration SchemeCacheRequestTimeout;
 
-
+    // Mapping from output column position to (table_cell_index, type).
+    // RELEVANCE_COLUMN_MARKER indicates BM25 score column.
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
-    i64 Limit = -1;
+    i64 Limit = -1;  // User-specified LIMIT; -1 means unlimited.
 
+    // Min-heap element for TopK selection when LIMIT + relevance are active.
     struct TTopKDocumentInfo {
         double Score;
         TDocumentInfo::TPtr DocumentInfo;
@@ -1737,35 +2139,43 @@ private:
         }
     };
 
-    TIntrusivePtr<TQueryCtx> QueryCtx;
+    TIntrusivePtr<TQueryCtx> QueryCtx;  // BM25 scoring context (created after stats are loaded)
 
+    // TopK min-heap for selecting the highest-scoring documents when LIMIT is set.
+    // Uses operator< comparing Score descending so pop_heap removes the lowest score.
     std::vector<TTopKDocumentInfo> TopKQueue;
 
-    bool ResolveInProgress = true;
-    bool PendingNotify = false;
+    bool ResolveInProgress = true;   // True while SchemeCache resolve is pending
+    bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
 
-    ui64 ProducedItemsCount = 0;
-    std::deque<TDocumentInfo::TPtr> ResultQueue;
-    std::deque<TDocumentInfo::TPtr> L1MergedDocuments;
-    bool IsNgram = false;
+    ui64 ProducedItemsCount = 0;                          // Rows already delivered to compute actor
+    std::deque<TDocumentInfo::TPtr> ResultQueue;           // Ready-to-deliver document rows
+    std::deque<TDocumentInfo::TPtr> L1MergedDocuments;     // L1-matched docs awaiting L2 verification
+    bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
-    TActorId PipeCacheId;
+    TActorId PipeCacheId;  // Per-node pipe cache for datashard communication
 
+    // Corpus-wide statistics from the stats table.
     ui64 DocCount = 0;
     ui64 SumDocLength = 0;
 
+    // Table readers -- one per involved table.  Null readers indicate that the
+    // table is not needed (e.g., dict/docs/stats are null for plain indexes).
     TIntrusivePtr<TMainTableReader> MainTableReader;
     TIntrusivePtr<TIndexTableImplReader> IndexTableReader;
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TDictTableReader> DictTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
 
-    TReadsState ReadsState;
-    TReadItemsQueue<TDocumentInfo::TPtr> DocsReadingQueue;
-    TReadItemsQueue<TL1DocumentInfo::TPtr> L2ReadingQueue;
-    TReadItemsQueue<TWordReadState::TPtr> WordsReadingQueue;
-    TVector<TWordReadState::TPtr> Words; // Tokenized words from expression
+    // Read infrastructure.
+    TReadsState ReadsState;                                // Tracks all in-flight reads
+    TReadItemsQueue<TDocumentInfo::TPtr> DocsReadingQueue; // Docs table + main table reads
+    TReadItemsQueue<TL1DocumentInfo::TPtr> L2ReadingQueue; // L2 posting list point lookups
+    TReadItemsQueue<TWordReadState::TPtr> WordsReadingQueue; // Dict table lookups
+    TVector<TWordReadState::TPtr> Words;                   // Tokenized query terms
 
+    // Merge algorithms: L1 handles the primary merge (all or rare tokens),
+    // L2 (optional) handles verification of frequent tokens.
     std::unique_ptr<IMergeAlgorithm> L1MergeAlgo;
     std::unique_ptr<IMergeAlgorithm> L2MergeAlgo;
     // Helper to bind allocator
@@ -1773,6 +2183,10 @@ private:
         return TGuard<NMiniKQL::TScopedAlloc>(*Alloc);
     }
 
+    // Parse the search query string and tokenize it using the analyzer
+    // configured on the fulltext index (same analyzer used at index build time).
+    // Each resulting token becomes a TWordReadState entry in Words[].
+    // Returns false if no tokens were extracted (reports BAD_REQUEST error).
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
 
@@ -1805,6 +2219,11 @@ private:
         return true;
     }
 
+    // Route matched documents through the remaining pipeline stages:
+    //   1. If relevance mode and documents lack doc_length -> read from docs table.
+    //   2. If LIMIT + relevance -> insert into TopK heap; drain when merge is done.
+    //   3. If documents are "covered" -> push directly to ResultQueue.
+    //   4. Otherwise -> enqueue main table reads for full row data.
     void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {
         if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
             return;
@@ -1866,10 +2285,28 @@ private:
         return false;
     }
 
+    // Read per-token document frequencies from the dict table.
+    // Results are stored in TWordReadState::Frequency and later used for
+    // IDF computation and token imbalance detection.
     void EnrichWordInfo() {
         WordsReadingQueue.Enqueue(DictTableReader.Get(), EReadKind_WordStats, Words, 0);
     }
 
+    // Configure merge algorithms and begin posting list reads.
+    //
+    // This is the central orchestration point called after stats/dict reads complete.
+    // Steps:
+    //   1. Detect token frequency imbalance.  For n-gram queries, drop the
+    //      most frequent n-grams.  For relevance AND queries, split tokens
+    //      into L1 (rare, full scan) and L2 (frequent, point lookups).
+    //   2. Compute MinimumShouldMatch from the query operator and settings.
+    //   3. Create TQueryCtx with IDF values from dict table frequencies.
+    //   4. Build TArrowTokenStream instances and instantiate the appropriate
+    //      merge algorithm:
+    //        - AND -> TAndOptimizedMergeAlgorithm (leapfrog)
+    //        - OR  -> TDefaultMergeAlgorithm (min-heap)
+    //   5. Apply user-overridden BM25 K1/B factors.
+    //   6. Issue initial posting list reads for all L1 tokens.
     void StartWordReads() {
         bool needL2Layer = false;
         TString explain;
@@ -2009,6 +2446,8 @@ private:
         }
     }
 
+    // Initiate SchemeCache partition resolution for all tables.
+    // Called once from Bootstrap().  The response is handled by HandleResolve().
     void PrepareTableReaders() {
         ResultCellIndices = MainTableReader->ResultCellIndices;
         MainTableCovered = MainTableReader->MainTableCovered;
@@ -2103,6 +2542,9 @@ public:
         return IngressStats;
     }
 
+    // Pull interface called by the compute actor.
+    // Drains ResultQueue into resultBatch up to freeSpace bytes or LIMIT rows.
+    // Sets finished=true when all reads are done and the queue is empty.
     i64 GetAsyncInputData(
         NKikimr::NMiniKQL::TUnboxedValueBatch& resultBatch,
         TMaybe<TInstant>&,
@@ -2144,6 +2586,7 @@ public:
     void CommitState(const NDqProto::TCheckpoint&) override {}
     void LoadState(const TSourceState&) override {}
 
+    // Cancel all in-flight reads and disconnect all pipes on actor destruction.
     void PassAway() override {
         {
             for (auto& [id, state] : ReadsState.GetReads()) {
@@ -2167,6 +2610,8 @@ public:
         return (ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() && TopKQueue.empty()) || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
     }
 
+    // Send TEvNewAsyncInputDataArrived to the compute actor so it calls
+    // GetAsyncInputData().  Coalesced: only one notification in flight at a time.
     void NotifyCA() {
         if (!PendingNotify && (!ResultQueue.empty() || IsFinished())) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -2174,6 +2619,7 @@ public:
         }
     }
 
+    // Main event dispatch.  All actor work happens in this state.
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvReadResult, HandleReadResult);
@@ -2227,6 +2673,8 @@ public:
         ReadTotalStats();
     }
 
+    // Re-issue a single read by its ReadId, dispatching to the appropriate
+    // retry path based on the read's EReadKind.
     void DoRetrySingleRead(ui64 readId) {
         auto readIt = ReadsState.FindPtr(readId);
         if (readIt == nullptr) {
@@ -2270,6 +2718,9 @@ public:
         }
     }
 
+    // Schedule a retry for all reads on a given shard.
+    // Checks max retry limit, computes backoff delay, and either retries
+    // immediately or schedules a TEvRetryRead timer event.
     bool ScheduleShardRetry(ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus) {
         auto shardIt = ReadsState.FindShardPtr(shardId);
         if (shardIt == nullptr) {
@@ -2296,6 +2747,8 @@ public:
         return true;
     }
 
+    // Handle broken pipe to a datashard tablet.
+    // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_E("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
@@ -2306,6 +2759,11 @@ public:
         ScheduleShardRetry(shardId, true, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
     }
 
+    // Phase 1 completion: SchemeCache returns partition boundaries for all tables.
+    // Stores partition info in each reader, then kicks off Phase 2:
+    //   - Tokenize the search query.
+    //   - If relevance mode: read stats + dict tables, then proceed to StartWordReads.
+    //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         CA_LOG_D("TEvResolveKeySetResult was received for table.");
         ResolveInProgress = false;
@@ -2355,6 +2813,9 @@ public:
         ReadsState.SendEvRead(shardId, request, TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId});
     }
 
+    // Process main table read results: match each returned row to the
+    // corresponding TDocumentInfo (by doc_id order), store the row cells,
+    // and push completed documents into ResultQueue for delivery.
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
         auto& readItems = DocsReadingQueue.GetReadItems(readId);
 
@@ -2387,6 +2848,9 @@ public:
         NotifyCA();
     }
 
+    // Process docs table read results (Arrow format): extract doc_id and
+    // doc_length, set each document's length for BM25 scoring, then continue
+    // to FetchDocumentDetails for the next pipeline step.
     void DocumentStatsResultArrow(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
 
         auto& readItems = DocsReadingQueue.GetReadItems(readId);
@@ -2421,6 +2885,8 @@ public:
         DocumentStatsResultArrow(msg, readId, finished);
     }
 
+    // Process stats table result: extract DocCount and SumDocLength.
+    // When all prerequisite reads (stats + dict) are done, proceed to StartWordReads.
     void HandleTotalStatsResult(TEvDataShard::TEvReadResult& msg) {
         size_t rows = msg.GetRowsCount();
         size_t bytes = 0;
@@ -2441,6 +2907,9 @@ public:
         }
     }
 
+    // Process dict table results: match returned (token, doc_frequency) rows to
+    // TWordReadState entries.  Words not found in the dict get Frequency=0.
+    // When all prerequisite reads are done, proceed to StartWordReads.
     void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
         auto& readItems = WordsReadingQueue.GetReadItems(readId);
 
@@ -2479,6 +2948,9 @@ public:
         }
     }
 
+    // Process L2 posting list point-lookup results for a frequent token.
+    // Feeds results into L2MergeAlgo, advances the sequential read schedule,
+    // and runs L2 merge to find documents that pass both L1 and L2 checks.
     void L2WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 recReadId, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& wordInfo = Words[wordIndex];
@@ -2517,6 +2989,11 @@ public:
         FetchDocumentDetails(matches);
     }
 
+    // For each L1-matched document, schedule point lookups in the posting table
+    // for every L2 (frequent) token.  Uses Sequential() to ensure reads go to
+    // one shard at a time, preserving doc_id order for the L2 merge.
+    // Saves L1 matches in L1MergedDocuments so their token frequencies can be
+    // merged with L2 results later.
     void ScheduleL2Read(std::vector<TDocumentInfo::TPtr>& l1matched) {
         for(int i = Words.size() - 1; i >= 0; i--) {
             auto& word = Words[i];
@@ -2544,6 +3021,10 @@ public:
         FetchDocumentDetails(matches);
     }
 
+    // Combine token frequencies from L1 and L2 matches into a single vector
+    // covering all query tokens.  L1 frequencies come from L1MergedDocuments,
+    // L2 frequencies come from the L2 merge result.  The combined vector is
+    // stored in the match's TokenFrequencies for BM25 scoring.
     void MergeL2MatchFrequencies(std::vector<TDocumentInfo::TPtr>& matches) {
         for (auto& match : matches) {
             while (!L1MergedDocuments.empty() &&
@@ -2570,6 +3051,11 @@ public:
         }
     }
 
+    // Process L1 posting list read results for a token.
+    // Feeds data into L1MergeAlgo, updates the resume key (StartReadKeyFrom),
+    // and when the current shard is exhausted, tries to continue from the next
+    // shard partition.  Runs L1 merge and routes matches to either L2 verification
+    // (if L2MergeAlgo exists) or directly to FetchDocumentDetails.
     void L1WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
@@ -2653,6 +3139,10 @@ public:
         }
     }
 
+    // Handle error statuses in TEvReadResult.
+    // OVERLOADED / INTERNAL_ERROR -> schedule retry with backoff.
+    // NOT_FOUND (shard moved/split) -> reset pipe and retry.
+    // Other statuses -> abort with ABORTED status.
     void HandleReadResultError(ui64 readId, const TReadInfo& readInfo, const NKikimrTxDataShard::TEvReadResult& record) {
         ui64 shardId = readInfo.ShardId;
         auto statusCode = record.GetStatus().GetCode();
@@ -2683,6 +3173,10 @@ public:
         }
     }
 
+    // Central TEvReadResult dispatcher.
+    // Validates the read id, logs diagnostics, handles errors, sends acks for
+    // non-final results, then dispatches to the appropriate handler based on
+    // the read's EReadKind.
     void HandleReadResult(TEvDataShard::TEvReadResult::TPtr& ev) {
         ui64 readId = ev->Get()->Record.GetReadId();
         auto& record = ev->Get()->Record;
@@ -2762,6 +3256,10 @@ private:
     using TBase = TActorBootstrapped<TFullTextSource>;
 };
 
+// Factory function: creates a TFullTextSource actor and returns both the
+// IDqComputeActorAsyncInput interface pointer and the IActor pointer (they
+// are the same object, but the compute actor needs both to register the
+// source and to register the actor in the actor system).
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
     const NActors::TActorId& computeActorId,
@@ -2779,6 +3277,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 
+// Register the full-text search source type with the DQ async I/O factory.
+// Called once at system startup.  The factory uses the protobuf settings type
+// (TKqpFullTextSourceSettings) as the discriminator to route source creation
+// requests to CreateKqpFullTextSource.
 void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrKqp::TKqpFullTextSourceSettings>(
         TString(NYql::KqpFullTextSourceName),

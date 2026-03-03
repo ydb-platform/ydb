@@ -152,7 +152,11 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
+<<<<<<< HEAD
         for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId}) {
+=======
+        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId, S3Manager->GetWrapperId()}) {
+>>>>>>> 6340984ef68... Add support for recommissioning in BlobDepot (WIP) (#35185)
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

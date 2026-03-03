@@ -167,12 +167,6 @@ private:
     void ResolveShard(TShardState& state);
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-        auto field = [](TStringBuf name, size_t width = 33) {
-            TString label = TStringBuilder() << name << ":";
-            label.resize(Max(label.size(), width), ' ');
-            return label;
-        };
-
         TStringStream str;
         HTML(str) {
             PRE() {
@@ -188,47 +182,68 @@ private:
                     << ", TotalBytesReceived: " << TotalBytesReceived << Endl;
                 str << "Stats: TotalReadRows=" << Stats.TotalReadRows
                     << " CompletedShards=" << Stats.CompletedShards << Endl;
+            }
 
-                str << Endl << "Compute Actor(s):" << Endl;
-                str << "  # DataChunksSent             - total chunks sent to compute actor" << Endl;
-                str << "  # AcksReceived               - total acks received back from compute actor" << Endl;
-                str << "  # DataChunksSent-AcksReceived - events currently stuck in actor mailbox" << Endl;
-                str << "  # DataQueue                  - packs queued locally, waiting for ack before sending" << Endl;
-                InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
-                    str << Endl << "  ";
-                    HREF(ActorLink(actorId)) {
-                        str << actorId;
+            str << Endl << "Compute Actor(s):" << Endl;
+            TABLE_SORTABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Total chunks sent to compute actor"}}) { str << "DataChunksSent"; }
+                        TABLEH_ATTRS({{"title", "Total acks received back from compute actor"}}) { str << "AcksReceived"; }
+                        TABLEH_ATTRS({{"title", "Events currently stuck in actor mailbox"}}) { str << "Sent-Acked"; }
+                        TABLEH_ATTRS({{"title", "Packs queued locally, waiting for ack before sending"}}) { str << "DataQueue"; }
                     }
-                    str << Endl;
-                    str << "    " << field("DataChunksSent") << info.GetDataChunksSent() << Endl;
-                    str << "    " << field("AcksReceived") << info.GetAcksReceived() << Endl;
-                    str << "    " << field("DataChunksSent-AcksReceived") << info.GetDataChunksSent() - info.GetAcksReceived() << Endl;
-                    str << "    " << field("DataQueue") << info.GetPacksToSendCount() << Endl;
-                });
-
-                str << Endl << "Shard Scanner(s):" << Endl;
-                str << "  # DataChunksInFlightCount - total chunks not yet processed; shard blocked until 0" << Endl;
-                str << "  # PendingMessageCount     - subset of above stuck in queue, no free compute actor" << Endl;
-                str << "  # WaitOutputTime          - cumulative time waiting for a free compute actor" << Endl;
-                InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
-                    str << Endl << "  TabletId=";
-                    HREF(TabletLink(tabletId)) {
-                        str << tabletId;
-                    }
-                    if (scanner.HasActorId()) {
-                        str << " ActorId=";
-                        HREF(ActorLink(scanner.GetActorId())) {
-                            str << scanner.GetActorIdStr();
+                }
+                TABLEBODY() {
+                    InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
+                        TABLER() {
+                            TABLED() {
+                                HREF(ActorLink(actorId)) { str << actorId; }
+                            }
+                            TABLED() { str << info.GetDataChunksSent(); }
+                            TABLED() { str << info.GetAcksReceived(); }
+                            TABLED() { str << info.GetDataChunksSent() - info.GetAcksReceived(); }
+                            TABLED() { str << info.GetPacksToSendCount(); }
                         }
-                    } else {
-                        str << " ActorId=none";
+                    });
+                }
+            }
+
+            str << Endl << "Shard Scanner(s):" << Endl;
+            TABLE_SORTABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "TabletId"; }
+                        TABLEH() { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Total chunks not yet processed; shard blocked until 0"}}) { str << "InFlight"; }
+                        TABLEH_ATTRS({{"title", "Subset of InFlight stuck in queue, no free compute actor"}}) { str << "Pending"; }
+                        TABLEH() { str << "NeedAck"; }
+                        TABLEH_ATTRS({{"title", "Cumulative time waiting for a free compute actor"}}) { str << "WaitOutputTime"; }
+                        TABLEH() { str << "Finished"; }
                     }
-                    str << " Finished=" << scanner.IsFinished() << Endl;
-                    str << "    " << field("DataChunksInFlightCount") << scanner.GetDataChunksInFlightCount() << Endl;
-                    str << "    " << field("PendingMessageCount") << scanner.GetPendingMessageCount() << Endl;
-                    str << "    " << field("NeedAck") << scanner.IsNeedAck() << Endl;
-                    str << "    " << field("WaitOutputTime") << scanner.GetWaitOutputTime() << Endl;
-                });
+                }
+                TABLEBODY() {
+                    InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
+                        TABLER() {
+                            TABLED() {
+                                HREF(TabletLink(tabletId)) { str << tabletId; }
+                            }
+                            TABLED() {
+                                if (scanner.HasActorId()) {
+                                    HREF(ActorLink(scanner.GetActorId())) { str << scanner.GetActorIdStr(); }
+                                } else {
+                                    str << "none";
+                                }
+                            }
+                            TABLED() { str << scanner.GetDataChunksInFlightCount(); }
+                            TABLED() { str << scanner.GetPendingMessageCount(); }
+                            TABLED() { str << scanner.IsNeedAck(); }
+                            TABLED() { str << scanner.GetWaitOutputTime(); }
+                            TABLED() { str << scanner.IsFinished(); }
+                        }
+                    });
+                }
             }
         }
         this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));

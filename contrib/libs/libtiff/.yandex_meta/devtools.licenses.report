@@ -52,7 +52,34 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ChangeLog [14240:14242]
+        ChangeLog [15519:15521]
+
+KEEP     BSD-3-Clause         5e68e5fa256f5c915df403f2dbe89b29
+BELONGS ya.make
+    License text:
+        	Merge branch 'doc_add_LZW_BSD_license_to_LICENSE_md_issue_431' into 'master'
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [14:14]
+
+KEEP     BSD-3-Clause         6026b27d46a2307943d2716fcd5b7d79
+BELONGS ya.make
+FILE_INCLUDE LICENSE.md found in files: ChangeLog at line 104, ChangeLog at line 15
+FILE_INCLUDE tif_lzw.c found in files: ChangeLog at line 104, ChangeLog at line 15
+    License text:
+        	Add BSD license for Lempel-Ziv & Welch compression (tif_lzw.c) to LICENSE.md
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [15:15]
+        ChangeLog [104:104]
 
 KEEP     MIT                  85545b6051abd36fce0fc9cd8d2d53cc
 BELONGS ya.make
@@ -75,7 +102,18 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla.LICENSE
     Files with this license:
-        tif_lzw.c [1444:1454]
+        tif_lzw.c [1452:1462]
+
+KEEP     BSLA                 99516a4e1b8d6f6054da2439715a8bda
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsla
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla.LICENSE
+    Files with this license:
+        LICENSE.md [39:49]
 
 KEEP     libtiff              a9ebcbf36a981b235e0c3e99fd1fad00
 BELONGS ya.make

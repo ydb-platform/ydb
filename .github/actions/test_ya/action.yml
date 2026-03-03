@@ -418,6 +418,20 @@ runs:
 
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
+          # Legacy RAM monitor (grep/awk, for comparison with new)
+          monitor_memory() {
+              set +x
+              rm -f ram_usage_legacy.txt
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage_legacy.txt
+                  sleep 3
+              done
+          }
+          monitor_memory &
+          MONITOR_LEGACY_PID=$!
+
           # Resource monitor: CPU (total + per PID), RAM, disk I/O every 3 sec
           rm -f ram_usage.txt resources_monitor.jsonl
           python3 .github/scripts/monitor_resources.py \
@@ -439,7 +453,9 @@ runs:
           set -e
           RC=`cat exit_code`
 
-          kill $MONITOR_PID 2>/dev/null || true
+          kill $MONITOR_PID $MONITOR_LEGACY_PID 2>/dev/null || true
+
+          cp -f ram_usage_legacy.txt $CURRENT_PUBLIC_DIR/ram_usage_legacy.txt 2>/dev/null || true
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 

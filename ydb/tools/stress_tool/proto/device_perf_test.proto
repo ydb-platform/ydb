@@ -22,7 +22,7 @@ message TUringRouterTest {
     // Register buffers and submit I/O via io_uring write_fixed
     optional bool UseWriteFixed = 6 [default = false];
     // Share SQPOLL kernel backend between uring instances
-    optional bool UseSharedSQPoll = 7 [default = true];
+    optional bool UseSharedSQPoll = 7 [default = false];
 }
 
 message TTrimTest {

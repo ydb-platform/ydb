@@ -1,6 +1,6 @@
 items:
 - name: Initial deployment
-  href: initial-deployment.md
+  href: initial-deployment/index.md
 - name: Preparing VMs with Terraform
   href: preparing-vms-with-terraform.md
 - name: Restart

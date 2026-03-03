@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/engines/storage/actualizer/index
     ydb/core/tx/columnshard/counters

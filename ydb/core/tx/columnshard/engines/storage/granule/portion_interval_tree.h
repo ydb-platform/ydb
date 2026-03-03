@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/range_treap/range_treap.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <algorithm>
 #include <compare>
 #include <memory>
@@ -87,9 +89,13 @@ public:
     using TRange = TImpl::TRange;
     using TBorder = TImpl::TBorder;
 
-    explicit TPortionIntervalTree(bool useHeap)
+    explicit TPortionIntervalTree(bool useHeap,
+        NMonitoring::TDynamicCounters::TCounterPtr maxIntersectionsCounter)
         : UseHeap(useHeap)
-    {}
+        , MaxIntersectionsCounter(std::move(maxIntersectionsCounter))
+    {
+        AFL_VERIFY(MaxIntersectionsCounter);
+    }
 
     void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
         ui32 intersectionsCount = 0;
@@ -176,11 +182,14 @@ private:
             return a->GetIntervalTreeRangesCount() < b->GetIntervalTreeRangesCount();
         });
         HeapDirty = false;
+        AFL_VERIFY(MaxIntersectionsCounter);
+        MaxIntersectionsCounter->Set(Heap.empty() ? 0 : Heap.front()->GetIntervalTreeRangesCount());
     }
 
 private:
     TImpl Impl;
     const bool UseHeap;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxIntersectionsCounter;
     mutable std::vector<std::shared_ptr<TPortionInfo>> Heap;
     mutable bool HeapDirty = true;
 };

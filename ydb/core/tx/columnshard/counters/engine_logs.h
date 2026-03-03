@@ -102,9 +102,20 @@ class TPortionsIndexCounters {
 public:
     const TIntervalMemoryCounters RawBytes;
     const TIntervalMemoryCounters BlobBytes;
-    TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes)
+    const NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxIntersections;
+
+    TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes,
+        NMonitoring::TDynamicCounters::TCounterPtr intervalTreeMaxIntersections)
         : RawBytes(std::move(rawBytes))
-        , BlobBytes(std::move(blobBytes)) {
+        , BlobBytes(std::move(blobBytes))
+        , IntervalTreeMaxIntersections(std::move(intervalTreeMaxIntersections))
+    {
+        AFL_VERIFY(IntervalTreeMaxIntersections);
+    }
+
+    void SetIntervalTreeMaxIntersections(ui32 value) const {
+        AFL_VERIFY(IntervalTreeMaxIntersections);
+        IntervalTreeMaxIntersections->Set(value);
     }
 };
 
@@ -155,6 +166,7 @@ private:
     using TBase = TCommonCountersOwner;
     TIntervalMemoryAgentCounters ReadRawBytes;
     TIntervalMemoryAgentCounters ReadBlobBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxIntersections;
 
 public:
 
@@ -162,11 +174,12 @@ public:
         : TBase(baseName)
         , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
         , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob")
+        , IntervalTreeMaxIntersections(TBase::GetValue("IntervalTree/MaxIntersections"))
     {
     }
 
     TPortionsIndexCounters BuildCounters() const {
-        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient());
+        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient(), IntervalTreeMaxIntersections);
     }
 };
 

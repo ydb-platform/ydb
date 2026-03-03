@@ -4,6 +4,7 @@
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | ------ | ------------ | ------- | ----------------- |
+| v2.0.0 | 23.12.2025   | [ydb-ansible-2.0.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v2.0.0/ydb_platform-ydb-2.0.0.tar.gz) | |
 | v1.3.2 | 02.12.2025   | [ydb-ansible-1.3.2.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3.2/ydb_platform-ydb-1.3.2.tar.gz) | |
 | v1.3.1 | 01.12.2025   | [ydb-ansible-1.3.1.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3.1/ydb_platform-ydb-1.3.1.tar.gz) | |
 | v1.3.0 | 26.11.2025   | [ydb-ansible-1.3.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3/ydb_platform-ydb-1.3.0.tar.gz) | |

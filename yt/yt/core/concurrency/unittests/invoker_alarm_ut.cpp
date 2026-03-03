@@ -3,6 +3,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/invoker_alarm.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/future.h>
@@ -23,10 +24,9 @@ protected:
     template <class F>
     void Do(F func)
     {
-        BIND(func)
+        WaitUntilSet(BIND(func)
             .AsyncVia(ActionQueue_->GetInvoker())
-            .Run()
-            .BlockingGet();
+            .Run());
     }
 };
 
@@ -73,7 +73,7 @@ TEST_F(TInvokerAlarmTest, CheckInvokesCallback)
     Do([&] {
         auto invoked = std::make_shared<std::atomic<bool>>();
         Alarm_->Arm(BIND([=] { *invoked = true; }), TDuration::MilliSeconds(100));
-        Invoker_->Suspend().BlockingGet();
+        WaitUntilSet(Invoker_->Suspend());
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         EXPECT_FALSE(*invoked);
         EXPECT_TRUE(Alarm_->Check());

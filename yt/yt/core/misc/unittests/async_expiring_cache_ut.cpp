@@ -297,7 +297,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache1)
         auto future = cache->Get(0);
         EXPECT_EQ(i + 1, cache->GetCount());
         Sleep(TDuration::MilliSeconds(100));
-        auto valueOrError = future.BlockingGet();
+        auto valueOrError = WaitForFast(future);
         EXPECT_TRUE(valueOrError.IsOK());
         EXPECT_EQ(i + 1, valueOrError.Value());
         Sleep(TDuration::MilliSeconds(100));
@@ -320,7 +320,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache2)
     }
 
     for (const auto& future : futures) {
-        auto result = future.BlockingGet();
+        auto result = WaitForFast(future);
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(1, result.Value());
     }
@@ -338,7 +338,7 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
 
     auto cache = New<TDelayedExpiringCache>(config, TDuration::MilliSeconds(100));
     {
-        auto result = cache->Get(0).BlockingGet();
+        auto result = WaitForFast(cache->Get(0));
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(1, result.Value());
     }
@@ -346,7 +346,7 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
     cache->Set(0, 2);
     EXPECT_EQ(1, cache->GetCount());
     {
-        auto result = cache->Get(0).BlockingGet();
+        auto result = WaitForFast(cache->Get(0));
         EXPECT_TRUE(result.IsOK());
         EXPECT_EQ(2, result.Value());
     }
@@ -521,22 +521,22 @@ TEST(TAsyncExpiringCacheTest, ForceUpdate)
     auto cache = New<TRevisionCache>(config);
 
     auto rev0 = cache->Get(0);
-    ASSERT_EQ(rev0.BlockingGet().Value(), 0);
+    ASSERT_EQ(WaitForFast(rev0).Value(), 0);
 
     Sleep(TDuration::MilliSeconds(500));
 
     rev0 = cache->Get(0);
-    ASSERT_EQ(rev0.BlockingGet().Value(), 0);
+    ASSERT_EQ(WaitForFast(rev0).Value(), 0);
     ASSERT_GE(cache->PeriodicUpdateCount.load(), 0);
 
     cache->ForceRefresh(0, 0);
     auto rev1 = cache->Get(0);
-    ASSERT_EQ(rev1.BlockingGet().Value(), 1);
+    ASSERT_EQ(WaitForFast(rev1).Value(), 1);
     ASSERT_EQ(cache->ForcedUpdateCount.load(), 1);
 
     cache->ForceRefresh(0, 0);
     rev1 = cache->Get(0);
-    ASSERT_EQ(rev1.BlockingGet().Value(), 1);
+    ASSERT_EQ(WaitForFast(rev1).Value(), 1);
     ASSERT_EQ(cache->ForcedUpdateCount.load(), 1);
 }
 

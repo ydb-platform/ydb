@@ -12,12 +12,16 @@
 
 #include <yt/yt/core/misc/fs.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <library/cpp/testing/common/network.h>
 
 #include <library/cpp/yt/threading/event_count.h>
 
 namespace NYT::NBus {
 namespace {
+
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -165,14 +169,13 @@ public:
         }
 
         for (const auto& result : results) {
-            auto error = result.BlockingGet();
+            auto error = WaitForFast(result);
             EXPECT_TRUE(error.IsOK());
         }
 
         handler->WaitUntilDone();
 
-        server->Stop()
-            .BlockingGet()
+        WaitForFast(server->Stop())
             .ThrowOnError();
     }
 };
@@ -203,11 +206,9 @@ TEST_F(TBusTest, OK)
     auto client = CreateBusClient(TBusClientConfig::CreateTcp(Address));
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full})
-        .BlockingGet();
+    auto result = WaitForFast(bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
     EXPECT_TRUE(result.IsOK());
-    server->Stop()
-        .BlockingGet()
+    WaitForFast(server->Stop())
         .ThrowOnError();
 }
 
@@ -226,15 +227,14 @@ TEST_F(TBusTest, Terminate)
     auto error = TError(TErrorCode(54321), "Terminated");
     bus->Terminate(error);
     bus->Terminate(TError(TErrorCode(12345), "Ignored"));
-    EXPECT_EQ(terminated.BlockingGet().GetCode(), error.GetCode());
+    EXPECT_EQ(WaitForFast(terminated.ToFuture()).GetCode(), error.GetCode());
     bus->Terminate(TError(TErrorCode(12345), "Ignored"));
 
     auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(result.IsSet());
-    EXPECT_EQ(result.BlockingGet().GetCode(), error.GetCode());
+    EXPECT_EQ(WaitForFast(result).GetCode(), error.GetCode());
 
-    server->Stop()
-        .BlockingGet()
+    WaitForFast(server->Stop())
         .ThrowOnError();
 }
 
@@ -263,7 +263,7 @@ TEST_F(TBusTest, TerminateBeforeAccept)
     auto clientSocket = NNet::AcceptSocket(serverSocket, &clientAddress);
     EXPECT_NE(clientSocket, INVALID_SOCKET);
 
-    EXPECT_EQ(terminated.BlockingGet().GetCode(), error.GetCode());
+    EXPECT_EQ(WaitForFast(terminated.ToFuture()).GetCode(), error.GetCode());
 
     NNet::CloseSocket(clientSocket);
     NNet::CloseSocket(serverSocket);
@@ -276,7 +276,7 @@ TEST_F(TBusTest, Failed)
     auto client = CreateBusClient(TBusClientConfig::CreateTcp(Format("localhost:%v", port)));
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}).BlockingGet();
+    auto result = WaitForFast(bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
     EXPECT_FALSE(result.IsOK());
 }
 
@@ -292,17 +292,15 @@ TEST_F(TBusTest, BlackHole)
     auto message = CreateMessage(1);
     auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
 
-    bus->Send(message, options)
-        .BlockingGet()
+    WaitForFast(bus->Send(message, options))
         .ThrowOnError();
 
     bus->SetTosLevel(BlackHoleTosLevel);
 
-    auto result = bus->Send(message, options).BlockingGet();
+    auto result = WaitForFast(bus->Send(message, options));
     EXPECT_FALSE(result.IsOK());
 
-    server->Stop()
-        .BlockingGet()
+    WaitForFast(server->Stop())
         .ThrowOnError();
 }
 
@@ -335,8 +333,7 @@ TEST_F(TBusTest, SendCancel)
     ASSERT_LE(handler->Count, 16);
     handler->Count = 0;
 
-    server->Stop()
-        .BlockingGet()
+    WaitForFast(server->Stop())
         .ThrowOnError();
 }
 

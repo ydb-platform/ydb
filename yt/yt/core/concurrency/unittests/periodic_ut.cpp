@@ -117,9 +117,9 @@ TEST_W(TPeriodicTest, ParallelStart)
 
     auto callback = BIND([&] {
         ++countStarted;
-        threadStartBarrier.ToFuture().BlockingGet();
+        WaitUntilSet(threadStartBarrier.ToFuture());
         callbackStartBarrier.Set();
-        callbackEndBarrier.ToFuture().BlockingGet();
+        WaitUntilSet(callbackEndBarrier.ToFuture());
         ++countFinished;
     });
 
@@ -147,7 +147,7 @@ TEST_W(TPeriodicTest, ParallelStart)
     // Check that start futures are set correctly in all threads
     // after the first execution, but before the second one.
 
-    callbackStartBarrier.ToFuture().BlockingGet();
+    WaitUntilSet(callbackStartBarrier.ToFuture());
     EXPECT_THAT(
         futures,
         Each(
@@ -327,10 +327,10 @@ TEST_W(TPeriodicTest, OnStartCancelled)
 
     // NB(pavook): cancellation of a start future shouldn't cause an executor stop
     // and should not propagate to the underlying promise (and other futures).
-    EXPECT_TRUE(callbackStarted.ToFuture().BlockingGet().IsOK());
+    EXPECT_TRUE(WaitForFast(callbackStarted.ToFuture()).IsOK());
     EXPECT_TRUE(executor->IsStarted());
     EXPECT_TRUE(startFuture2.IsSet());
-    EXPECT_TRUE(startFuture2.BlockingGet().IsOK());
+    EXPECT_TRUE(WaitForFast(startFuture2).IsOK());
     WaitFor(executor->Stop())
         .ThrowOnError();
 }
@@ -357,9 +357,9 @@ TEST_W(TPeriodicTest, Stop)
         .ThrowOnError();
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.BlockingGet().GetCode());
-    EXPECT_FALSE(startFuture.BlockingGet().IsOK());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, startFuture.BlockingGet().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(immediatelyCancelableFuture).GetCode());
+    EXPECT_FALSE(WaitForFast(startFuture).IsOK());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(startFuture).GetCode());
 
     startFuture = executor->StartAndGetFirstExecutedEvent();
     Sleep(TDuration::MilliSeconds(200));
@@ -367,7 +367,7 @@ TEST_W(TPeriodicTest, Stop)
         .ThrowOnError();
     // startFuture should be set after the first execution.
     EXPECT_TRUE(startFuture.IsSet());
-    EXPECT_TRUE(startFuture.BlockingGet().IsOK());
+    EXPECT_TRUE(WaitForFast(startFuture).IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

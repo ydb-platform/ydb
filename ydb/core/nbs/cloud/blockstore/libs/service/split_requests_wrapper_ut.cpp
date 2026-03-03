@@ -118,12 +118,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         constexpr ui32 StripeSize = 100;
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 
@@ -175,12 +174,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 
@@ -242,12 +240,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 
@@ -309,12 +306,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 
@@ -371,12 +367,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 
@@ -434,12 +429,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         TString diskId("disk-1");
 
-        auto volumeConfig(
-            std::make_shared<TVolumeConfig>(
-                diskId,
-                BlockSize,
-                TotalBlockCount,
-                StripeSize));
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
 
         TTestEnvironment env;
 

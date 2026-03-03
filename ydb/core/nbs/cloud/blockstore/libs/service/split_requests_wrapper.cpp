@@ -99,10 +99,8 @@ public:
         IStorage* storage)
     {
         if (SubRequests.empty()) {
-            return MakeFuture(
-                TResponse{
-                    .Error =
-                        MakeError(E_CANCELLED, "failed to acquire sglist")});
+            return MakeFuture(TResponse{
+                .Error = MakeError(E_CANCELLED, "failed to acquire sglist")});
         }
 
         for (const auto& subRequest: SubRequests) {

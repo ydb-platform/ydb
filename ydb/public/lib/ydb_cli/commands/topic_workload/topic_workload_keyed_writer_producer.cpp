@@ -25,9 +25,9 @@ TTopicWorkloadKeyedWriterProducer::TTopicWorkloadKeyedWriterProducer(
               TStringBuilder() << "Created keyed producer with id " << ProducerId_);
 }
 
-void TTopicWorkloadKeyedWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> writeSession)
+void TTopicWorkloadKeyedWriterProducer::SetProducer(std::shared_ptr<NYdb::NTopic::IProducer> producer)
 {
-    WriteSession_ = std::move(writeSession);
+    Producer_ = producer;
     InflightMessagesCount_.store(0);
 }
 
@@ -43,7 +43,7 @@ std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
 void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
                                              std::optional<NYdb::NTable::TTransaction> transaction)
 {
-    Y_ASSERT(WriteSession_);
+    Y_ASSERT(Producer_);
 
     const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
     const std::string key = GetKey();
@@ -56,14 +56,13 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
+    writeMessage.Key(key);
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
     }
 
-    TTransactionBase* txPtr = writeMessage.GetTxPtr();
-    auto continuationToken = GetContinuationToken();
-    WriteSession_->Write(std::move(continuationToken), key, std::move(writeMessage), txPtr);
+    Y_ASSERT(Producer_->Write(std::move(writeMessage)).IsSuccess());
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_
@@ -79,17 +78,13 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
 
 void TTopicWorkloadKeyedWriterProducer::Close()
 {
-    if (WriteSession_) {
-        WriteSession_->Close(TDuration::Zero());
+    if (Producer_) {
+        Y_ASSERT(Producer_->Close(TDuration::Zero()).IsSuccess());
     }
 }
 
-void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration& timeout)
-{
-    std::unique_lock lk(Lock_);
-    auto deadline = Clock_.Now() + timeout;
-    ContinuationTokenCondition_.wait(lk, [&]() { return !ContinuationTokens_.empty() || Clock_.Now() > deadline; });
-}
+void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration&)
+{}
 
 void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event)
 {

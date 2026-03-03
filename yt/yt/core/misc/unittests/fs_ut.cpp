@@ -81,6 +81,13 @@ TEST(TFSTest, TestGetRelativePath)
     EXPECT_EQ(GetRelativePath(CombinePaths(NFs::CurrentWorkingDirectory(), "dir")), "dir");
 }
 
+#ifdef _unix_
+TEST(TFSTest, TestCombinePathsWithBackslashUnix)
+{
+    EXPECT_EQ(CombinePaths("/", "path/with/back\\slashed/file"), "/path/with/back\\slashed/file");
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

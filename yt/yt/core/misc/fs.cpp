@@ -551,12 +551,12 @@ std::string JoinPaths(const std::string& path1, const std::string& path2)
 std::string NormalizePathSeparators(const std::string& path)
 {
 #ifdef _unix_
-    constexpr char platformPathSeparator = '/';
-    constexpr char foreignPathSeparator = '\\';
+    // NB(pavook): normalizing path separators can yield unexpected (or even insecure) behavior on filenames
+    // containing foreign separators, so we avoid doing it on the common unix platforms.
+    return path;
 #else
     constexpr char platformPathSeparator = '\\';
     constexpr char foreignPathSeparator = '/';
-#endif
     std::string result;
     result.reserve(path.length());
     for (int i = 0; i < std::ssize(path); ++i) {
@@ -567,6 +567,7 @@ std::string NormalizePathSeparators(const std::string& path)
         }
     }
     return result;
+#endif
 }
 
 void SetPermissions(const std::string& path, int permissions)

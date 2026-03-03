@@ -98,11 +98,11 @@ TAlignedDeviceHandler::TAlignedDeviceHandler(
     , MaxBlockCount(maxSubRequestSize / BlockSize)
     , MaxBlockCountForZeroBlocksRequest(
           params.MaxZeroBlocksSubRequestSize / BlockSize)
-    , VolumeConfig(std::make_shared<TVolumeConfig>(
-          DiskId,
-          BlockSize,
-          params.BlockCount,
-          StripeSize / BlockSize))
+    , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
+          .DiskId = DiskId,
+          .BlockSize = BlockSize,
+          .BlockCount = params.BlockCount,
+          .BlocksPerStripe = params.BlocksPerStripeCount}))
 {
     Y_ABORT_UNLESS(MaxBlockCount > 0);
     Y_ABORT_UNLESS(MaxBlockCountForZeroBlocksRequest > 0);

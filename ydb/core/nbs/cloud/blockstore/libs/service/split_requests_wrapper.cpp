@@ -29,7 +29,7 @@ bool NeedToSplitRequest(const TRequestHeaders& headers, TBlockRange64 range)
 template <typename TRequest>
 TVector<std::shared_ptr<TRequest>> SplitRequest(const TRequest& request)
 {
-    const ui64 stripSize = request.Headers.VolumeConfig->BlocksPerStripe;
+    const ui64 stripeSize = request.Headers.VolumeConfig->BlocksPerStripe;
     const ui32 blockSize = request.Headers.VolumeConfig->BlockSize;
 
     TVector<std::shared_ptr<TRequest>> result;
@@ -40,7 +40,7 @@ TVector<std::shared_ptr<TRequest>> SplitRequest(const TRequest& request)
     }
     const TSgList& sgList = guard.Get();
 
-    auto subRanges = request.Range.Split(stripSize);
+    auto subRanges = request.Range.Split(stripeSize);
     result.reserve(subRanges.size());
     for (auto subRange: subRanges) {
         auto subRequest = std::make_shared<TRequest>(request.Headers, subRange);
@@ -60,11 +60,11 @@ template <>
 TVector<std::shared_ptr<TZeroBlocksLocalRequest>> SplitRequest(
     const TZeroBlocksLocalRequest& request)
 {
-    const ui64 stripSize = request.Headers.VolumeConfig->BlocksPerStripe;
+    const ui64 stripeSize = request.Headers.VolumeConfig->BlocksPerStripe;
 
     TVector<std::shared_ptr<TZeroBlocksLocalRequest>> result;
 
-    auto subRanges = request.Range.Split(stripSize);
+    auto subRanges = request.Range.Split(stripeSize);
     result.reserve(subRanges.size());
     for (auto subRange: subRanges) {
         auto subRequest = std::make_shared<TZeroBlocksLocalRequest>(

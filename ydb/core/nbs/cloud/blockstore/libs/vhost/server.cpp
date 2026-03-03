@@ -419,7 +419,7 @@ public:
             .ClientId = options.ClientId,
             .BlockSize = options.BlockSize,
             .BlockCount = options.BlocksCount,
-            .BlocksPerStripeCount = StripeSize / options.BlockSize,
+            .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
             .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
             .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
             .StorageMediaKind = options.StorageMediaKind};

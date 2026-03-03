@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from statistics import median
 from typing import Any, Optional
 
 try:
@@ -212,6 +213,26 @@ def build_dashboard_payload(
             }
         suite_event_times = merged
 
+    # Derive UTC offset between evlog monotonic timeline (start_us/end_us) and
+    # report wall-clock timestamps when available.
+    utc_offsets: list[float] = []
+    for rr in runs:
+        start_ts = rr.get("report_suite_start_ts")
+        finish_ts = rr.get("report_suite_finish_ts")
+        try:
+            start_ev = float(rr.get("start_us", 0.0) or 0.0) / 1_000_000.0
+        except (TypeError, ValueError):
+            start_ev = 0.0
+        try:
+            end_ev = float(rr.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        except (TypeError, ValueError):
+            end_ev = 0.0
+        if isinstance(start_ts, (int, float)) and start_ev > 0:
+            utc_offsets.append(float(start_ts) - start_ev)
+        if isinstance(finish_ts, (int, float)) and end_ev > 0:
+            utc_offsets.append(float(finish_ts) - end_ev)
+    utc_offset_sec = float(median(utc_offsets)) if utc_offsets else 0.0
+
     return {
         "suite_filter": suite_filter,
         "stats": stats,
@@ -283,4 +304,6 @@ def build_dashboard_payload(
         "track_suite": track_suite,
         "track_has_synthetic": track_has_synthetic,
         "suite_event_times": suite_event_times,
+        "utc_offset_sec": utc_offset_sec,
+        "utc_offset_samples": len(utc_offsets),
     }

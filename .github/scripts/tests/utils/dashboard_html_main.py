@@ -103,6 +103,10 @@ def build_html_dashboard(
     <summary><b>Config</b></summary>
     <pre id="runConfig"></pre>
   </details>
+  <div id="monitoringLinkWrap" style="display:none;margin: -6px 0 12px 0;font-size:13px;">
+    <b>Runner monitoring:</b>
+    <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+  </div>
   <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
     <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
       <span>CPU suggestions (recommended_cpu for runner)</span>
@@ -136,6 +140,13 @@ def build_html_dashboard(
     <label for="suiteSearch"><b>Search suite:</b></label>
     <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
     <button onclick="clearSuiteSearch()">Clear</button>
+    <label for="tzSelect"><b>Timezone:</b></label>
+    <select id="tzSelect" onchange="applyTimezoneToAllCharts()" style="padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;">
+      <option value="Europe/Moscow">MSK</option>
+      <option value="UTC">UTC</option>
+      <option value="Etc/GMT">GMT</option>
+      <option value="local" selected>Local</option>
+    </select>
     <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
     <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;">
       <b>Marker types:</b>
@@ -246,8 +257,145 @@ def build_html_dashboard(
     }}
 
     const data = {json.dumps(payload, ensure_ascii=False)};
+    const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
+    const _fmtCache = {{}};
+    function _selectedTimeZone() {{
+      const sel = document.getElementById('tzSelect');
+      const v = sel ? String(sel.value || 'Europe/Moscow') : 'Europe/Moscow';
+      return v === 'local' ? null : v;
+    }}
+    function _selectedTimeZoneLabel() {{
+      const sel = document.getElementById('tzSelect');
+      const v = sel ? String(sel.value || 'Europe/Moscow') : 'Europe/Moscow';
+      if (v === 'Europe/Moscow') return 'MSK';
+      if (v === 'UTC') return 'UTC';
+      if (v === 'Etc/GMT') return 'GMT';
+      return 'Local';
+    }}
+    function _fmtKey(tz, withDate) {{
+      return String(tz || 'local') + '|' + (withDate ? 'd' : 't');
+    }}
+    function _getFormatter(withDate) {{
+      const tz = _selectedTimeZone();
+      const key = _fmtKey(tz, withDate);
+      if (_fmtCache[key]) return _fmtCache[key];
+      const base = {{
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      }};
+      if (!withDate) {{
+        delete base.year; delete base.month; delete base.day;
+      }}
+      const opts = tz ? Object.assign(base, {{ timeZone: tz }}) : base;
+      _fmtCache[key] = new Intl.DateTimeFormat('sv-SE', opts);
+      return _fmtCache[key];
+    }}
+    function _formatTick(ms) {{
+      return _getFormatter(false).format(new Date(Number(ms)));
+    }}
+    function _buildTickVals(minMs, maxMs, n=7) {{
+      if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) return [];
+      if (maxMs <= minMs) return [minMs];
+      const out = [];
+      const cnt = Math.max(2, n);
+      for (let i = 0; i < cnt; i += 1) {{
+        out.push(minMs + ((maxMs - minMs) * i) / (cnt - 1));
+      }}
+      return out;
+    }}
+    function xToDisplay(xSec) {{
+      const x = Number(xSec);
+      if (!Number.isFinite(x)) return xSec;
+      return (x + UTC_OFFSET_SEC) * 1000.0;
+    }}
+    function xFromDisplay(xDisp) {{
+      const ms = Number(xDisp);
+      if (!Number.isFinite(ms)) return xDisp;
+      return (ms / 1000.0) - UTC_OFFSET_SEC;
+    }}
+    function axisTitle() {{
+      return 'time (' + _selectedTimeZoneLabel() + ')';
+    }}
+    function formatTimeLabel(xDisp) {{
+      const ms = Number(xDisp);
+      if (!Number.isFinite(ms)) return String(xDisp);
+      return _getFormatter(true).format(new Date(ms));
+    }}
+    function axisLayout(xsDisp) {{
+      const arr = Array.isArray(xsDisp) ? xsDisp.filter(v => Number.isFinite(Number(v))).map(Number) : [];
+      const minMs = arr.length ? Math.min(...arr) : 0;
+      const maxMs = arr.length ? Math.max(...arr) : 0;
+      const tickvals = _buildTickVals(minMs, maxMs);
+      return {{
+        title: axisTitle(),
+        tickmode: 'array',
+        tickvals: tickvals,
+        ticktext: tickvals.map(_formatTick),
+      }};
+    }}
+    function applyTimezoneToAllCharts() {{
+      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite'];
+      ids.forEach((id) => {{
+        const el = document.getElementById(id);
+        if (!el || !el.data || !el.layout || !window.Plotly) return;
+        const xs = [];
+        el.data.forEach(tr => {{
+          if (tr && Array.isArray(tr.x)) {{
+            tr.x.forEach(v => {{
+              const n = Number(v);
+              if (Number.isFinite(n)) xs.push(n);
+            }});
+          }}
+        }});
+        if (!xs.length) return;
+        const xaxis = axisLayout(xs);
+        Plotly.relayout(el, {{ xaxis: Object.assign({{}}, el.layout.xaxis || {{}}, xaxis) }});
+      }});
+      applyMarkersToCharts();
+    }}
     document.getElementById('stats').textContent = JSON.stringify(data.stats, null, 2);
     document.getElementById('runConfig').textContent = JSON.stringify(data.run_config || {{}}, null, 2);
+    function setupMonitoringLink() {{
+      const cfg = data.run_config || {{}};
+      const runner = String(cfg.runner || '').trim();
+      const wrap = document.getElementById('monitoringLinkWrap');
+      const link = document.getElementById('monitoringLink');
+      if (!wrap || !link || !runner) return;
+      const xSources = [
+        data.xs_active,
+        data.xs_active_suite,
+        data.xs_cpu_suite,
+        data.xs_ram_suite,
+        data.xs_active_chunk,
+        data.xs_cpu,
+        data.xs_ram,
+      ];
+      let minSec = Number.POSITIVE_INFINITY;
+      let maxSec = Number.NEGATIVE_INFINITY;
+      xSources.forEach(arr => {{
+        if (!Array.isArray(arr)) return;
+        arr.forEach(v => {{
+          const n = Number(v);
+          if (!Number.isFinite(n)) return;
+          if (n < minSec) minSec = n;
+          if (n > maxSec) maxSec = n;
+        }});
+      }});
+      if (!Number.isFinite(minSec) || !Number.isFinite(maxSec)) return;
+      const fromMs = Math.floor((minSec + UTC_OFFSET_SEC) * 1000.0);
+      const toMs = Math.ceil((maxSec + UTC_OFFSET_SEC) * 1000.0);
+      const qs = new URLSearchParams();
+      qs.set('from', String(fromMs));
+      qs.set('to', String(toMs));
+      qs.set('refresh', 'off');
+      qs.set('p[host]', runner);
+      const url = 'https://monitoring.yandex.cloud/folders/b1grf3mpoatgflnlavjd/dashboards/runner-summary?' + qs.toString();
+      link.href = url;
+      link.textContent = url;
+      wrap.style.display = '';
+    }}
+    setupMonitoringLink();
 
     // Marker state lives at top scope so all functions can access it.
     const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite'];
@@ -817,10 +965,11 @@ def build_html_dashboard(
         const name = tr.name || '';
         const base = colorForTrack(name);
         const matched = name === 'other' ? true : isMatch(name, q);
-        lineColors.push(matched ? base : '#cfcfcf');
-        lineWidths.push(matched ? 1 : 0);
-        fillColors.push(matched ? base : '#cfcfcf');
-        opacities.push(matched ? (name === 'other' ? 0.35 : 0.75) : 0.12);
+        lineColors.push(matched ? base : hexToRgba(base, 0.65));
+        lineWidths.push(matched ? 1 : 0.8);
+        // Keep original per-suite color, make non-matching traces only moderately dim.
+        fillColors.push(matched ? base : hexToRgba(base, 0.55));
+        opacities.push(matched ? (name === 'other' ? 0.35 : 0.78) : 0.52);
         idx.push(i);
       }});
       Plotly.restyle(el, {{
@@ -843,28 +992,22 @@ def build_html_dashboard(
       Plotly.restyle(el, {{'marker.colors': [colors]}}, [0]);
     }}
 
-    function collapseTracksByQuery(tracks, q) {{
-      if (!tracks) return tracks;
-      if (!q) return tracks;
-      const out = {{}};
-      let refLen = 0;
-      for (const vals of Object.values(tracks)) {{
-        refLen = Math.max(refLen, Array.isArray(vals) ? vals.length : 0);
+    function reorderStackedPlotByQuery(plotId, q) {{
+      const el = document.getElementById(plotId);
+      if (!el || !el.data || !window.Plotly) return;
+      const names = el.data.map(t => String(t?.name || ''));
+      const matched = [];
+      const rest = [];
+      names.forEach((name, i) => {{
+        if (name !== 'other' && isMatch(name, q)) matched.push(i);
+        else rest.push(i);
+      }});
+      // In stackgroup the first traces are the lowest layers.
+      const order = matched.concat(rest);
+      const identity = order.every((v, i) => v === i);
+      if (!identity) {{
+        Plotly.moveTraces(el, order, [...Array(order.length).keys()]);
       }}
-      const other = new Array(refLen).fill(0);
-      for (const [name, valsRaw] of Object.entries(tracks)) {{
-        const vals = Array.isArray(valsRaw) ? valsRaw : [];
-        const matched = name !== 'other' && isMatch(name, q);
-        if (matched) {{
-          out[name] = vals;
-          continue;
-        }}
-        for (let i = 0; i < vals.length; i += 1) {{
-          other[i] += Number(vals[i] || 0);
-        }}
-      }}
-      out.other = other;
-      return out;
     }}
 
     function applySuiteSearch() {{
@@ -876,16 +1019,18 @@ def build_html_dashboard(
       const ramChunkBase = inc ? data.ram_tracks : data.ram_tracks_no_synthetic;
 
       if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
-        updateStackedPlotTracks('activeLayerChunk', collapseTracksByQuery(data.active_tracks_chunk, q));
-        updateStackedPlotTracks('cpuLayer', collapseTracksByQuery(cpuChunkBase, q));
-        updateStackedPlotTracks('ramLayer', collapseTracksByQuery(ramChunkBase, q));
+        updateStackedPlotTracks('activeLayerChunk', data.active_tracks_chunk);
+        updateStackedPlotTracks('cpuLayer', cpuChunkBase);
+        updateStackedPlotTracks('ramLayer', ramChunkBase);
       }}
-      updateStackedPlotTracks('activeLayerSuite', collapseTracksByQuery(data.active_tracks_suite, q));
-      updateStackedPlotTracks('cpuLayerSuite', collapseTracksByQuery(cpuSuiteBase, q));
-      updateStackedPlotTracks('ramLayerSuite', collapseTracksByQuery(ramSuiteBase, q));
+      updateStackedPlotTracks('activeLayerSuite', data.active_tracks_suite);
+      updateStackedPlotTracks('cpuLayerSuite', cpuSuiteBase);
+      updateStackedPlotTracks('ramLayerSuite', ramSuiteBase);
 
       ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
         .forEach(id => updateStackedPlotColors(id, q));
+      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+        .forEach(id => reorderStackedPlotByQuery(id, q));
       ['cpuPie', 'ramPie', 'activePie', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite']
         .forEach(id => updatePieColors(id, q));
       if (window.renderSuggestionsTable) {{
@@ -984,7 +1129,7 @@ def build_html_dashboard(
         }}
       }}
       if (!Number.isFinite(bestY) || bestY <= 0 || !Number.isFinite(Number(bestX))) return null;
-      return Number(bestX);
+      return xFromDisplay(Number(bestX));
     }}
 
     function applyMarkersToCharts() {{
@@ -1034,7 +1179,7 @@ def build_html_dashboard(
       const yAnchor = Math.max(0.05, 0.95 - suiteIdx * 0.12);
       const addLine = (t, dash, width, label, title, kind, lineColor) => {{
         if (t == null || !Number.isFinite(Number(t))) return;
-        const x = Number(t);
+        const x = xToDisplay(Number(t));
         markers.push({{
           x, dash, width, label, title, kind,
           color: lineColor || color,
@@ -1117,10 +1262,11 @@ def build_html_dashboard(
 
     function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
       const names = Object.keys(tracks);
+      const xDisp = (xs || []).map(xToDisplay);
       const traces = names.map((n) => {{
         const c = colorForTrack(n);
         return {{
-          x: xs,
+          x: xDisp,
           y: tracks[n],
           mode: 'lines',
           line: {{width: 1, color: c, shape: stepMode ? 'hv' : 'linear'}},
@@ -1133,7 +1279,7 @@ def build_html_dashboard(
       }});
       Plotly.newPlot(divId, traces, {{
         title,
-        xaxis: {{title: 'time (sec)'}},
+        xaxis: axisLayout(xDisp),
         yaxis: {{title: yTitle}},
         hovermode: 'x unified',
         showlegend: false,
@@ -1147,6 +1293,13 @@ def build_html_dashboard(
       return y.toFixed(3);
     }}
 
+    function minVisibleValue(unit) {{
+      if (unit === 'active') return 0.5;
+      if (unit === 'GB') return 0.001;   // ~1 MB
+      if (unit === 'cores') return 0.01; // suppress tiny CPU noise shown as 0.000
+      return 0.0;
+    }}
+
     function attachSortedHover(plotId, panelId, unit) {{
       const plot = document.getElementById(plotId);
       const panel = document.getElementById(panelId);
@@ -1154,13 +1307,14 @@ def build_html_dashboard(
       plot.on('plotly_hover', (ev) => {{
         if (!ev || !ev.points || !ev.points.length) return;
         const t = ev.points[0].x;
+        const eps = minVisibleValue(unit);
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > 0)
+          .filter(p => p.y > eps)
           .sort((a, b) => b.y - a.y);
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
-        panel.textContent = `t=${{Number(t).toFixed(2)}}s\\n` + lines.join('\\n');
+        panel.textContent = `t=${{formatTimeLabel(t)}}\\n` + lines.join('\\n');
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
@@ -1184,7 +1338,7 @@ def build_html_dashboard(
         );
       }}).join('');
       panel.innerHTML =
-        '<div><b>t=' + Number(t).toFixed(2) + 's</b> | rows: ' + top.length + '</div>' +
+        '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
         '<table><thead><tr><th>#</th><th>suite+chunk</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
     }}
 
@@ -1194,16 +1348,17 @@ def build_html_dashboard(
       plot.on('plotly_click', (ev) => {{
         if (!ev || !ev.points || !ev.points.length) return;
         const t = ev.points[0].x;
+        const eps = minVisibleValue(unit);
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > 0)
+          .filter(p => p.y > eps)
           .sort((a, b) => b.y - a.y);
         renderClickTable(panelId, rows, t, unit);
       }});
     }}
 
     Plotly.newPlot('activeChunks', [{{
-      x: data.xs_active,
+      x: (data.xs_active || []).map(xToDisplay),
       y: data.ys_active,
       mode: 'lines',
       name: 'active_chunks',
@@ -1211,7 +1366,7 @@ def build_html_dashboard(
       hoverinfo: 'none',
     }}], {{
       title: 'Concurrent running chunks',
-      xaxis: {{title: 'time (sec)'}},
+      xaxis: axisLayout((data.xs_active || []).map(xToDisplay)),
       yaxis: {{title: 'count'}},
       hovermode: 'x unified',
     }}, {{responsive: true}});

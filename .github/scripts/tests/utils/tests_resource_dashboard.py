@@ -261,6 +261,8 @@ def parse_report_chunks(
             "duration_sec": float(item.get("duration") or 0.0),
             "cpu_sec": cpu_seconds(metrics),
             "ram_kb": ram_kb(metrics),
+            "suite_start_timestamp": metrics.get("suite_start_timestamp"),
+            "suite_finish_timestamp": metrics.get("suite_finish_timestamp"),
             "hid": item.get("hid"),
             "id": item.get("id"),
         }
@@ -785,6 +787,8 @@ def build_trace(
                     "uid": r.get("uid"),
                     "report_hid": meta.get("hid") if meta else None,
                     "report_id": meta.get("id") if meta else None,
+                    "report_suite_start_ts": meta.get("suite_start_timestamp") if meta else None,
+                    "report_suite_finish_ts": meta.get("suite_finish_timestamp") if meta else None,
                     "synthetic_metrics": synthetic_metrics,
                 },
             }
@@ -808,6 +812,8 @@ def build_trace(
         er["status"] = status
         er["error_type"] = error_type
         er["is_muted"] = is_muted
+        er["report_suite_start_ts"] = meta.get("suite_start_timestamp") if meta else None
+        er["report_suite_finish_ts"] = meta.get("suite_finish_timestamp") if meta else None
         enriched_runs.append(er)
 
     add_counter_series(out, pid_counters, "active_chunks", active_delta)

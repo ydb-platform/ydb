@@ -372,6 +372,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TAggregatedStats AggrStats; 
     ui64 LastCpuTime = 0;
     NActors::TActorId NodesManagerId;
+    TInstant LastUpdateMetricsTime = TInstant::Now();
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -683,7 +684,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
     LastUpdateMetricsTime = now;

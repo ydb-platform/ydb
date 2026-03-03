@@ -184,7 +184,8 @@ private:
                     << " CompletedShards=" << Stats.CompletedShards << Endl;
 
                 str << Endl << "Compute Actor(s):" << Endl;
-                str << "  (FreeSpace: bytes available for next data pack, DataQueue: packs waiting to be sent)" << Endl;
+                str << "  # FreeSpace - bytes available for next data pack" << Endl;
+                str << "  # DataQueue - packs waiting to be sent" << Endl;
                 InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
                     str << "  ";
                     HREF(ActorLink(actorId)) {
@@ -195,9 +196,9 @@ private:
                 });
 
                 str << Endl << "Shard Scanner(s):" << Endl;
-                str << "  (DataChunksInFlightCount: total chunks from this shard not yet processed by compute; shard is blocked until 0)" << Endl;
-                str << "  (PendingMessageCount: subset of InFlight stuck in queue because no compute actor was free)" << Endl;
-                str << "  (WaitOutputTime: cumulative time chunks spent waiting in queue for a free compute actor)" << Endl;
+                str << "  # DataChunksInFlightCount - total chunks not yet processed by compute; shard blocked until 0" << Endl;
+                str << "  # PendingMessageCount     - subset of above stuck in queue, no free compute actor" << Endl;
+                str << "  # WaitOutputTime          - cumulative time waiting for a free compute actor" << Endl;
                 InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
                     str << "  TabletId=";
                     HREF(TabletLink(tabletId)) {
@@ -211,11 +212,11 @@ private:
                     } else {
                         str << " ActorId=none";
                     }
-                    str << " DataChunksInFlightCount=" << scanner.GetDataChunksInFlightCount()
+                    str << " Finished=" << scanner.IsFinished() << Endl;
+                    str << "    DataChunksInFlightCount=" << scanner.GetDataChunksInFlightCount()
                         << " PendingMessageCount=" << scanner.GetPendingMessageCount()
                         << " NeedAck=" << scanner.IsNeedAck()
-                        << " WaitOutputTime=" << scanner.GetWaitOutputTime()
-                        << " Finished=" << scanner.IsFinished() << Endl;
+                        << " WaitOutputTime=" << scanner.GetWaitOutputTime() << Endl;
                 });
             }
         }

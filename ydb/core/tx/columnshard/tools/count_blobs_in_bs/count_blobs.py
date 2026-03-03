@@ -380,29 +380,6 @@ def max_part_size(blob_size: int, erasure: Erasure) -> int:
             raise ValueError(f"Unknown erasure: {erasure}")
 
 
-def estimate_blob_size(blob_size: int, erasure: Erasure) -> int:
-    match erasure:
-        case Erasure.BLOCK_4_2:
-            # Lower-bound physical payload estimate for one logical blob in 4:2:
-            # 6 parts, each roughly ceil(blob_size / 4).
-            return 6 * max_part_size(blob_size, erasure)
-        case Erasure.MIRROR_3_DC:
-            # Lower-bound physical payload estimate for one logical blob in mirror3dc:
-            # 3 full copies.
-            return 3 * blob_size
-        case _:
-            raise ValueError(f"Unknown erasure: {erasure}")
-
-
-def min_records_per_blob(erasure: Erasure) -> int:
-    match erasure:
-        case Erasure.BLOCK_4_2:
-            return 6
-        case Erasure.MIRROR_3_DC:
-            return 3
-    raise ValueError(f"Unknown erasure: {erasure}")
-
-
 def is_small(
     blob_size: int,
     media: str = DEFAULT_BS_MEDIA,
@@ -411,12 +388,6 @@ def is_small(
 ) -> bool:
     threshold = MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA[media]
     return max_part_size(blob_size, erasure) + header_size_bytes < threshold
-
-
-def fail(line_no: int, line: str, reason: str) -> None:
-    print(f"ERROR: line {line_no}: {reason}", file=sys.stderr)
-    print(f"ROW: {line.rstrip()}", file=sys.stderr)
-    raise ValueError(f"Unexpected input at line {line_no}")
 
 
 def format_duration(seconds: float) -> str:

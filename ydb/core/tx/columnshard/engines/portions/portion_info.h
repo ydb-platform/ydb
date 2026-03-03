@@ -96,7 +96,7 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
-    ui32 IntervalTreeRangesCount = 0;
+    ui32 IntersectionsCount = 0;
 
     virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
 
@@ -164,7 +164,9 @@ public:
         return sizeof(TPortionInfo) + Meta.GetDataSize() - sizeof(TPortionMeta);
     }
 
-    virtual ~TPortionInfo() = default;
+    virtual ~TPortionInfo() {
+        AFL_VERIFY(0 == IntersectionsCount);
+    }
 
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -306,24 +308,17 @@ public:
         return PortionId;
     }
 
-    ui32 GetIntervalTreeRangesCount() const {
-        return IntervalTreeRangesCount;
+    ui32 GetPortionIntersections() const {
+        return IntersectionsCount;
     }
 
-    void AddIntervalTreeRangesCount(ui32 delta = 1) {
-        IntervalTreeRangesCount += delta;
+    void IncrementPortionIntersections() {
+        ++IntersectionsCount;
     }
 
-    void DecrementIntervalTreeRangesCount(ui32 delta = 1) {
-        if (IntervalTreeRangesCount >= delta) {
-            IntervalTreeRangesCount -= delta;
-        } else {
-            IntervalTreeRangesCount = 0;
-        }
-    }
-
-    void ResetIntervalTreeRangesCount() {
-        IntervalTreeRangesCount = 0;
+    void DecrementPortionIntersections() {
+        AFL_VERIFY(IntersectionsCount > 0);
+        --IntersectionsCount;
     }
 
     NJson::TJsonValue SerializeToJsonVisual() const {

@@ -163,7 +163,8 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
     if (HasAppData() && AppData()->ColumnShardConfig.GetEnableIntervalTreeForMetadataSelect()) {
         IntervalTree = std::make_unique<NPortionIntervalTree::TPortionIntervalTree>(true,
-            Counters.GetPortionsIndexCounters().IntervalTreeMaxIntersections);
+            Counters.GetPortionsIndexCounters().IntervalTreeMaxPortionIntersections);
+        SetMaxPortionIntersectionsLimitCounter(versionedIndex.GetLastSchema()->GetIndexInfo().GetMaxPortionIntersectionsLimit().value_or(0));
     }
 }
 

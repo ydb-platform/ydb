@@ -1,5 +1,8 @@
 #include "portion_interval_tree.h"
 
+#include <algorithm>
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NOlap::NPortionIntervalTree {
 
 TPositionView::TPositionView(NArrow::TSimpleRow&& simpleRow)
@@ -86,6 +89,87 @@ int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rh
 
 void TPositionViewBorderComparator::ValidateKey(const TPositionView& /*key*/) {
     // Do nothing
+}
+
+TPortionIntervalTree::TPortionIntervalTree(bool countPortionIntersections,
+    NMonitoring::TDynamicCounters::TCounterPtr maxPortionIntersectionsCounter)
+    : CountPortionIntersections(countPortionIntersections)
+    , MaxPortionIntersectionsCounter(std::move(maxPortionIntersectionsCounter))
+{
+    AFL_VERIFY(MaxPortionIntersectionsCounter);
+}
+
+void TPortionIntervalTree::AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
+    if (CountPortionIntersections) {
+        Impl.EachIntersection(range, [&value](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+            p->IncrementPortionIntersections();
+            value->IncrementPortionIntersections();
+            return true;
+        });
+        SetHeapDirty();
+    }
+    Impl.AddRange(std::move(range), value);
+}
+
+void TPortionIntervalTree::RemoveRanges(const std::shared_ptr<TPortionInfo>& value) {
+    if (CountPortionIntersections) {
+        std::vector<TRange> rangesOfValue;
+        Impl.EachRange([&value, &rangesOfValue](const TRange& r, const std::shared_ptr<TPortionInfo>& p) {
+            if (p == value) {
+                rangesOfValue.push_back(r);
+            }
+            return true;
+        });
+        for (const auto& r : rangesOfValue) {
+            Impl.EachIntersection(r, [&value](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+                if (p != value) {
+                    p->DecrementPortionIntersections();
+                    value->DecrementPortionIntersections();
+                }
+                return true;
+            });
+        }
+        SetHeapDirty();
+    }
+    Impl.RemoveRanges(value);
+}
+
+std::shared_ptr<TPortionInfo> TPortionIntervalTree::GetPortionWithMaxIntersections() const {
+    if (!CountPortionIntersections) {
+        return nullptr;
+    }
+    if (HeapDirty) {
+        RebuildHeap();
+    }
+    return Heap.empty() ? nullptr : Heap.front();
+}
+
+size_t TPortionIntervalTree::Size() const noexcept {
+    return Impl.Size();
+}
+
+void TPortionIntervalTree::SetHeapDirty() const {
+    if (!CountPortionIntersections) {
+        return;
+    }
+    HeapDirty = true;
+}
+
+void TPortionIntervalTree::RebuildHeap() const {
+    std::vector<std::shared_ptr<TPortionInfo>> portions;
+    THashSet<TPortionAddress> seen;
+    Impl.EachRange([&seen, &portions](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
+        if (seen.insert(p->GetAddress()).second) {
+            portions.push_back(p);
+        }
+        return true;
+    });
+    Heap = std::move(portions);
+    std::make_heap(Heap.begin(), Heap.end(), [](const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) {
+        return a->GetPortionIntersections() < b->GetPortionIntersections();
+    });
+    HeapDirty = false;
+    MaxPortionIntersectionsCounter->Set(Heap.empty() ? 0 : Heap.front()->GetPortionIntersections());
 }
 
 } // namespace NKikimr::NOlap::NPortionIntervalTree

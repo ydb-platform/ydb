@@ -77,7 +77,8 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
             return EOverloadStatus::OverloadCompaction;
         }
         const auto& indexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        if (granule.IsOverloadedByPortionIntersections(indexInfo.GetMaxPortionIntersectionsLimit())) {
+        const auto& portionIntersectionsLimit = indexInfo.GetMaxPortionIntersectionsLimit();
+        if (granule.IsOverloadedByPortionIntersections(portionIntersectionsLimit)) {
             return EOverloadStatus::OverloadPortionIntersections;
         }
     }

@@ -89,57 +89,15 @@ public:
     using TRange = TImpl::TRange;
     using TBorder = TImpl::TBorder;
 
-    explicit TPortionIntervalTree(bool useHeap,
-        NMonitoring::TDynamicCounters::TCounterPtr maxIntersectionsCounter)
-        : UseHeap(useHeap)
-        , MaxIntersectionsCounter(std::move(maxIntersectionsCounter))
-    {
-        AFL_VERIFY(MaxIntersectionsCounter);
-    }
+    explicit TPortionIntervalTree(bool countPortionIntersections,
+        NMonitoring::TDynamicCounters::TCounterPtr maxPortionIntersectionsCounter);
 
-    void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value) {
-        ui32 intersectionsCount = 0;
-        Impl.EachIntersection(range, [&intersectionsCount](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
-            p->AddIntervalTreeRangesCount(1);
-            ++intersectionsCount;
-            return true;
-        });
-        Impl.AddRange(std::move(range), value);
-        value->AddIntervalTreeRangesCount(intersectionsCount);
-        SetHeapDirty();
-    }
+    void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value);
 
-    void RemoveRanges(const std::shared_ptr<TPortionInfo>& value) {
-        std::vector<TRange> rangesOfValue;
-        Impl.EachRange([&value, &rangesOfValue](const TRange& r, const std::shared_ptr<TPortionInfo>& p) {
-            if (p == value) {
-                rangesOfValue.push_back(r);
-            }
-            return true;
-        });
-        for (const auto& r : rangesOfValue) {
-            Impl.EachIntersection(r, [&value](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
-                if (p != value) {
-                    p->DecrementIntervalTreeRangesCount(1);
-                }
-                return true;
-            });
-        }
-        value->ResetIntervalTreeRangesCount();
-        Impl.RemoveRanges(value);
-        SetHeapDirty();
-    }
+    void RemoveRanges(const std::shared_ptr<TPortionInfo>& value);
 
     /** Порция с максимальным числом пересечений (вершина кучи). nullptr если дерево пусто или куча отключена. */
-    std::shared_ptr<TPortionInfo> GetPortionWithMaxIntersections() const {
-        if (!UseHeap) {
-            return nullptr;
-        }
-        if (HeapDirty) {
-            RebuildHeap();
-        }
-        return Heap.empty() ? nullptr : Heap.front();
-    }
+    std::shared_ptr<TPortionInfo> GetPortionWithMaxIntersections() const;
 
     template <class TCallback>
     bool EachRange(TCallback&& callback) const {
@@ -156,40 +114,16 @@ public:
         return Impl.EachIntersection(left, right, std::forward<TCallback>(callback));
     }
 
-    size_t Size() const noexcept {
-        return Impl.Size();
-    }
+    size_t Size() const noexcept;
 
 private:
-    void SetHeapDirty() const {
-        if (!UseHeap) {
-            return;
-        }
-        HeapDirty = true;
-    }
-
-    void RebuildHeap() const {
-        std::vector<std::shared_ptr<TPortionInfo>> portions;
-        THashSet<TPortionAddress> seen;
-        Impl.EachRange([&seen, &portions](const TRange&, const std::shared_ptr<TPortionInfo>& p) {
-            if (seen.insert(p->GetAddress()).second) {
-                portions.push_back(p);
-            }
-            return true;
-        });
-        Heap = std::move(portions);
-        std::make_heap(Heap.begin(), Heap.end(), [](const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) {
-            return a->GetIntervalTreeRangesCount() < b->GetIntervalTreeRangesCount();
-        });
-        HeapDirty = false;
-        AFL_VERIFY(MaxIntersectionsCounter);
-        MaxIntersectionsCounter->Set(Heap.empty() ? 0 : Heap.front()->GetIntervalTreeRangesCount());
-    }
+    void SetHeapDirty() const;
+    void RebuildHeap() const;
 
 private:
     TImpl Impl;
-    const bool UseHeap;
-    NMonitoring::TDynamicCounters::TCounterPtr MaxIntersectionsCounter;
+    const bool CountPortionIntersections;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxPortionIntersectionsCounter;
     mutable std::vector<std::shared_ptr<TPortionInfo>> Heap;
     mutable bool HeapDirty = true;
 };

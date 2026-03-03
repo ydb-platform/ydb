@@ -380,11 +380,16 @@ public:
             return 0;
         }
         auto portion = GetPortionIntervalTreeVerified().GetPortionWithMaxIntersections();
-        return portion ? portion->GetIntervalTreeRangesCount() : 0;
+        return portion ? portion->GetPortionIntersections() : 0;
     }
 
     /** Возвращает true, если гранула перегружена по числу пересечений порций (limit задаётся опциями таблицы через ALTER). */
     bool IsOverloadedByPortionIntersections(std::optional<ui64> limit) const;
+
+    /** Обновляет счётчик настроенного лимита пересечений (вызывается при изменении опций схемы и при создании гранулы). */
+    void SetMaxPortionIntersectionsLimitCounter(ui64 value) const {
+        Counters.GetPortionsIndexCounters().SetIntervalTreeMaxPortionIntersectionsLimit(value);
+    }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {
         return InsertedPortions;

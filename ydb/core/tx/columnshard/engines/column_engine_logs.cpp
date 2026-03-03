@@ -259,6 +259,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));
+    const ui64 portionIntersectionsLimit = indexInfoActual->GetMaxPortionIntersectionsLimit().value_or(0);
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->SetMaxPortionIntersectionsLimitCounter(portionIntersectionsLimit);
+    }
     if (isCriticalScheme) {
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {

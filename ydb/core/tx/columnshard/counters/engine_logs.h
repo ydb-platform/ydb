@@ -102,20 +102,29 @@ class TPortionsIndexCounters {
 public:
     const TIntervalMemoryCounters RawBytes;
     const TIntervalMemoryCounters BlobBytes;
-    const NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxIntersections;
+    const NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxPortionIntersections;
+    const NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxPortionIntersectionsLimit;
 
     TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes,
-        NMonitoring::TDynamicCounters::TCounterPtr intervalTreeMaxIntersections)
+        NMonitoring::TDynamicCounters::TCounterPtr intervalTreeMaxPortionIntersections,
+        NMonitoring::TDynamicCounters::TCounterPtr intervalTreeMaxPortionIntersectionsLimit)
         : RawBytes(std::move(rawBytes))
         , BlobBytes(std::move(blobBytes))
-        , IntervalTreeMaxIntersections(std::move(intervalTreeMaxIntersections))
+        , IntervalTreeMaxPortionIntersections(std::move(intervalTreeMaxPortionIntersections))
+        , IntervalTreeMaxPortionIntersectionsLimit(std::move(intervalTreeMaxPortionIntersectionsLimit))
     {
-        AFL_VERIFY(IntervalTreeMaxIntersections);
+        AFL_VERIFY(IntervalTreeMaxPortionIntersections);
+        AFL_VERIFY(IntervalTreeMaxPortionIntersectionsLimit);
     }
 
-    void SetIntervalTreeMaxIntersections(ui32 value) const {
-        AFL_VERIFY(IntervalTreeMaxIntersections);
-        IntervalTreeMaxIntersections->Set(value);
+    void SetIntervalTreeMaxPortionIntersections(ui32 value) const {
+        AFL_VERIFY(IntervalTreeMaxPortionIntersections);
+        IntervalTreeMaxPortionIntersections->Set(value);
+    }
+
+    void SetIntervalTreeMaxPortionIntersectionsLimit(ui64 value) const {
+        AFL_VERIFY(IntervalTreeMaxPortionIntersectionsLimit);
+        IntervalTreeMaxPortionIntersectionsLimit->Set(value);
     }
 };
 
@@ -166,7 +175,8 @@ private:
     using TBase = TCommonCountersOwner;
     TIntervalMemoryAgentCounters ReadRawBytes;
     TIntervalMemoryAgentCounters ReadBlobBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxIntersections;
+    NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxPortionIntersections;
+    NMonitoring::TDynamicCounters::TCounterPtr IntervalTreeMaxPortionIntersectionsLimit;
 
 public:
 
@@ -174,12 +184,13 @@ public:
         : TBase(baseName)
         , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
         , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob")
-        , IntervalTreeMaxIntersections(TBase::GetValue("IntervalTree/MaxIntersections"))
+        , IntervalTreeMaxPortionIntersections(TBase::GetValue("IntervalTree/MaxPortionIntersections"))
+        , IntervalTreeMaxPortionIntersectionsLimit(TBase::GetValue("IntervalTree/MaxPortionIntersectionsLimit"))
     {
     }
 
     TPortionsIndexCounters BuildCounters() const {
-        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient(), IntervalTreeMaxIntersections);
+        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient(), IntervalTreeMaxPortionIntersections, IntervalTreeMaxPortionIntersectionsLimit);
     }
 };
 

@@ -10,12 +10,13 @@ LOGO_BLOB_ID_RE = re.compile(r"\[(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)\]")
 LOCAL_VECTOR_RE = re.compile(r"\blocal:\s+([01](?:\s+[01])*)\b")
 
 # BlobStorage huge/inplaced thresholds by media (runtime values, bytes).
-MIN_HUGE_BLOB_IN_BYTES_BY_MEDIA = {
+MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA = {
     "nvme": 64 * 1024 + 1,
     "ssd": 64 * 1024 + 1,
     "hdd": 512 * 1024 + 1,
+    "calculated_by_alex_rutkovsky": 259968 // 4 + 1
 }
-DEFAULT_BS_MEDIA = "ssd"
+DEFAULT_BS_MEDIA = "calculated_by_alex_rutkovsky"
 ERASURE_BLOCK_4_2 = "block-4-2"
 ERASURE_MIRROR_3_DC = "mirror-3-dc"
 DEFAULT_ERASURE = ERASURE_BLOCK_4_2
@@ -198,7 +199,6 @@ class LBRecord:
         logoblob_record: str,
         erasure: str,
         media: str = DEFAULT_BS_MEDIA,
-        min_huge_blob_in_bytes: int | None = None,
     ) -> "LBRecord":
         table_parts = logoblob_record.split(maxsplit=1)
         table_type = table_parts[0] if table_parts else ""
@@ -217,7 +217,6 @@ class LBRecord:
             blob_size,
             media=media,
             erasure=erasure,
-            min_huge_blob_in_bytes=min_huge_blob_in_bytes,
         )
 
         local = 0
@@ -246,7 +245,6 @@ class LBRecord:
 class Report:
     erasure: str = DEFAULT_ERASURE
     media: str = DEFAULT_BS_MEDIA
-    min_huge_blob_in_bytes: int | None = None
     channels: list[Channel] = field(default_factory=list)
     blocks_total: int = 0
     barriers_total: int = 0
@@ -283,7 +281,6 @@ class Report:
                 logoblob_record,
                 erasure=self.erasure,
                 media=self.media,
-                min_huge_blob_in_bytes=self.min_huge_blob_in_bytes,
             )
         except ValueError:
             self.non_data_lines_skipped += 1
@@ -388,11 +385,8 @@ def is_small(
     media: str = DEFAULT_BS_MEDIA,
     erasure: str = DEFAULT_ERASURE,
     header_size_bytes: int = DEFAULT_BLOB_HEADER_SIZE_BYTES,
-    min_huge_blob_in_bytes: int | None = None,
 ) -> bool:
-    threshold = min_huge_blob_in_bytes
-    if threshold is None:
-        threshold = MIN_HUGE_BLOB_IN_BYTES_BY_MEDIA[media]
+    threshold = MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA[media]
     return max_part_size(blob_size, erasure) + header_size_bytes < threshold
 
 
@@ -482,14 +476,8 @@ class Logger:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Parse blobsan text output and calculate counters")
     parser.add_argument("input_path", nargs="?", default="group-dump.txt", help="Path to blobsan text dump")
-    parser.add_argument("--disk-type", choices=["ssd", "nvme", "hdd"], default=DEFAULT_BS_MEDIA)
+    parser.add_argument("--disk-type", choices=MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA.keys(), default=DEFAULT_BS_MEDIA)
     parser.add_argument("--erasure", choices=[ERASURE_BLOCK_4_2, ERASURE_MIRROR_3_DC], default=DEFAULT_ERASURE)
-    parser.add_argument(
-        "--min-huge-blob-in-bytes",
-        type=int,
-        default=None,
-        help="Override huge blob threshold in bytes (if omitted, threshold is derived from --disk-type)",
-    )
     return parser.parse_args()
 
 
@@ -501,7 +489,6 @@ def main() -> None:
     report = Report(
         erasure=args.erasure,
         media=args.disk_type,
-        min_huge_blob_in_bytes=args.min_huge_blob_in_bytes,
     )
     progress = Progress(total_bytes)
 

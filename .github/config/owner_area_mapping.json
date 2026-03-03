@@ -1,20 +1,14 @@
 {
   "qp": "area/queryprocessor",
   "topics": "area/topics",
-  "cs": [
-    "area/cs"
-  ],
+  "cs": "area/cs",
   "datashard": "area/datashard",
   "system-infra": "area/system-infra",
   "yql": "area/yql",
   "docs": "area/docs",
-  "core": [
-    "area/core"
-  ],
+  "core": "area/core",
   "fq": "area/fq",
-  "blobstorage": [
-    "area/blobstorage"
-  ],
+  "blobstorage": "area/blobstorage",
   "ci": "area/ci",
   "cli": "area/cli",
   "cpp-sdk": "area/sdk",
@@ -22,9 +16,7 @@
   "ui-backend": "area/ui-backend",
   "appteam": "area/appteam",
   "duty": "area/duty",
-  "engineering": [
-    "area/engineering"
-  ],
+  "engineering": "area/engineering",
   "postgres-compatibility": "area/pg",
   "security": "area/security",
   "changelog-reviewers": "area/changelog"

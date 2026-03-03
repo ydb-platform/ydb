@@ -493,7 +493,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     auto success = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
             TabletID(), requestId.RequestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
 
-    for (;;) {
+    while (!state.Result) {
         bool reschedule = false;
         TLockInfo::TPtr waitForLock;
 
@@ -540,7 +540,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     } else {
                         lock = guardLocks.Lock;
                         lock->SetPessimistic();
-                        StartLockRowsLockWatcher(requestId, tableId, lock);
+                        StartLockRowsBrokenWatcher(requestId, tableId, lock);
                     }
                     SubscribeNewLocks();
                     break;
@@ -702,8 +702,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         });
 
         if (state.Result) {
-            Send(ev->Sender, state.Result.release(), 0, ev->Cookie);
-            co_return;
+            break;
         }
 
         if (reschedule) {
@@ -740,6 +739,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         // Cycle in the low-priority queue before doing anything expensive
         co_await LowPriorityQueue.Next();
     }
+
+    Send(ev->Sender, state.Result.release(), 0, ev->Cookie);
 }
 
 void TDataShard::HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev) {
@@ -772,15 +773,15 @@ void TDataShard::HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock
     }
 }
 
-void TDataShard::StartLockRowsLockWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock) {
+void TDataShard::StartLockRowsBrokenWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock) {
     // Note: this watcher uses unstructured concurrency to watch when an
     // acquired lock breaks while the request is waiting. This function starts
     // recursively while inside the transaction, so we can be sure the request
     // is still valid and lock is not broken yet. However the request may exit
     // at any time, invalidating the state.
     TLockRowsRequestState* state = LockRowsRequests.FindPtr(requestId);
-    Y_ENSURE(state, "TEvLockRows request state must be wait in StartLockRowsLockWatcher");
-    Y_ENSURE(!lock->IsBroken(), "Unexpected broken lock in StartLockRowsLockWatcher");
+    Y_ENSURE(state, "TEvLockRows request state must be wait in StartLockRowsBrokenWatcher");
+    Y_ENSURE(!lock->IsBroken(), "Unexpected broken lock in StartLockRowsBrokenWatcher");
     // We attach to the same scope, which will cancel the wait along with the
     // request. The return value will be true when the callback returns
     // normally, i.e. when the lock becomes broken or is removed.

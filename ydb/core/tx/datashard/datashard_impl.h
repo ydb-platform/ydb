@@ -1277,7 +1277,7 @@ class TDataShard
     void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
     void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
     void HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev);
-    void StartLockRowsLockWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock);
+    void StartLockRowsBrokenWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx);

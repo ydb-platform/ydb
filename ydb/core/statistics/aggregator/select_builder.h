@@ -10,12 +10,16 @@ namespace NKikimr::NStat {
 // Class that is used to build internal SELECT queries used to calculate column statistics.
 class TSelectBuilder {
 public:
+    explicit TSelectBuilder(bool final) : Final_(final) {}
+
+    bool Final() const { return Final_; }
+
     ui32 AddBuiltinAggregation(std::optional<TString> columnName, TString aggName);
 
     template<typename... TArgs>
     ui32 AddUDAFAggregation(TString columnName, const TStringBuf& udafName, TArgs&&... params);
 
-    TString Build(const TStringBuf& table) const;
+    TString Build(const TStringBuf& table, std::optional<ui64> shardId) const;
 
     size_t ColumnCount() const {
         return Columns.size();
@@ -25,6 +29,8 @@ private:
     ui32 AddFactory(const TStringBuf& udafName, size_t paramCount);
 
 private:
+    bool Final_;
+
     struct TFactory {
         TFactory(ui32 id, const TStringBuf& udaf, size_t paramCount)
             : Id(id), Udaf(udaf), ParamCount(paramCount)
@@ -47,6 +53,19 @@ private:
 
     TVector<TAggColumn> Columns;
 };
+
+template<>
+inline ui32 TSelectBuilder::AddUDAFAggregation(TString columnName, const TStringBuf& udafName) {
+    auto factory = AddFactory(udafName, 0);
+
+    auto column = TAggColumn{
+        .Seq = static_cast<ui32>(Columns.size()),
+        .ColumnName = std::move(columnName),
+        .UdafFactory = factory,
+    };
+    Columns.push_back(std::move(column));
+    return Columns.back().Seq;
+}
 
 template<typename... TArgs>
 ui32 TSelectBuilder::AddUDAFAggregation(TString columnName, const TStringBuf& udafName, TArgs&&... params) {

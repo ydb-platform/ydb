@@ -1,5 +1,4 @@
 #include "analyze_actor.h"
-#include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
@@ -146,6 +145,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     // TODO: escape table path
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
+    IsColumnTable = !!entry.ColumnTableInfo;
 
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
@@ -232,21 +232,21 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
         ShardIds.push_back(part.ShardId);
     }
 
-    DispatchScanActor();
+    DispatchScanActors();
     Become(&TThis::StateScan);
 }
 
-void TAnalyzeActor::DispatchScanActor() {
-    Y_ENSURE(!ScanActorId);
+void TAnalyzeActor::DispatchScanActors() {
+    Y_ENSURE(ScanActorIds.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
 
-    TSelectBuilder selectBuilder;
+    SelectBuilder.emplace(/*final=*/!IsColumnTable);
     size_t totalSize = 0;
 
-    if (!CountSeq) {
+    if (!CountSeq && !RowCount) {
         // Calculate total row count in the first scan we dispatch
-        CountSeq = selectBuilder.AddBuiltinAggregation({}, "count");
+        CountSeq = SelectBuilder->AddBuiltinAggregation({}, "count");
     }
 
     while (!PendingTasks.empty()) {
@@ -262,21 +262,33 @@ void TAnalyzeActor::DispatchScanActor() {
         const auto& col = Columns.at(task.ColumnIdx);
         totalSize += resultSize;
         if (task.SimpleStatEval) {
-            task.SimpleStatEval->AddAggregations(col.Name, selectBuilder);
+            task.SimpleStatEval->AddAggregations(col.Name, *SelectBuilder);
         } else if (task.Stage2StatEval) {
-            task.Stage2StatEval->AddAggregations(col.Name, selectBuilder);
+            task.Stage2StatEval->AddAggregations(col.Name, *SelectBuilder);
         }
         InProgressTasks.push_back(std::move(task));
         PendingTasks.pop();
     }
 
-    auto actor = std::make_unique<TScanActor>(
-        SelfId(), DatabaseName, selectBuilder.Build(TableName), selectBuilder.ColumnCount());
-    ScanActorId = Register(actor.release());
+    auto addScanActor = [&](std::optional<ui64> shardId) {
+        auto actor = std::make_unique<TScanActor>(
+            SelfId(), DatabaseName,
+            SelectBuilder->Build(TableName, shardId), SelectBuilder->ColumnCount());
+        ScanActorIds.insert(Register(actor.release()));
+    };
+
+    if (IsColumnTable) {
+        for (ui64 shardId : ShardIds) {
+            addScanActor(shardId);
+        }
+    } else {
+        addScanActor(std::nullopt);
+    }
 }
 
 void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
-    ScanActorId = {};
+    Y_ENSURE(ScanActorIds.erase(ev->Sender));
+
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
@@ -286,16 +298,34 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         return;
     }
 
+    if (CountSeq) {
+        NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
+        ui64 count = val.GetUint64();
+        RowCount = count + RowCount.value_or(0);
+    }
+
+    if (!ScanActorIds.empty()) {
+        for (const auto& task : InProgressTasks) {
+            Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
+            if (task.SimpleStatEval) {
+                task.SimpleStatEval->Merge(result.AggColumns);
+            } else {
+                task.Stage2StatEval->Merge(result.AggColumns);
+            }
+        }
+        return;
+    }
+
+    // Finalize results for the current column batch.
+
     std::vector<TStatisticsItem> resultItems;
 
-    if (!RowCount) {
-        NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
-        RowCount = val.GetUint64();
-
+    if (CountSeq) {
         NKikimrStat::TTableSummaryStatistics tableSummary;
         tableSummary.SetRowCount(*RowCount);
         resultItems.emplace_back(
             std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
+        CountSeq.reset();
     }
 
     auto supportedStatTypes = IStage2ColumnStatisticEval::SupportedTypes();
@@ -305,7 +335,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
 
         if (task.SimpleStatEval) {
-            auto simpleStats = task.SimpleStatEval->Extract(*RowCount, result.AggColumns);
+            auto simpleStats = task.SimpleStatEval->Extract(RowCount.value(), result.AggColumns);
             resultItems.emplace_back(
                 col.Tag,
                 task.SimpleStatEval->GetType(),
@@ -331,6 +361,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 task.Stage2StatEval->ExtractData(result.AggColumns));
         }
     }
+
     InProgressTasks.clear();
 
     const bool isFinalResult = PendingTasks.empty();
@@ -341,13 +372,13 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     if (isFinalResult) {
         PassAway();
     } else {
-        DispatchScanActor();
+        DispatchScanActors();
     }
 }
 
 void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
-    if (ScanActorId) {
-        Send(ScanActorId, new TEvents::TEvPoison());
+    for (const auto& id : ScanActorIds){
+        Send(id, new TEvents::TEvPoison());
     }
 
     PassAway();

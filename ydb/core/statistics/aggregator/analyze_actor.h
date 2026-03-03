@@ -1,6 +1,7 @@
 #pragma once
 
 #include "column_statistic_eval.h"
+#include "select_builder.h"
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -55,6 +56,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     };
 
     TString TableName;
+    bool IsColumnTable = false;
     TVector<TColumnDesc> Columns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
@@ -62,9 +64,10 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     std::queue<TEvalTask> PendingTasks;
 
+    std::optional<TSelectBuilder> SelectBuilder;
     std::optional<ui32> CountSeq;
     std::vector<TEvalTask> InProgressTasks;
-    TActorId ScanActorId;
+    THashSet<TActorId> ScanActorIds;
 
     std::optional<ui64> RowCount;
 
@@ -101,7 +104,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     class TScanActor;
 
-    void DispatchScanActor();
+    void DispatchScanActors();
 
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvents::TEvPoison::TPtr& ev);

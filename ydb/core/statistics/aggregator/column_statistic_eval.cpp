@@ -3,6 +3,7 @@
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/yql/udfs/statistics_internal/all_agg_funcs.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -11,43 +12,146 @@
 
 namespace NKikimr::NStat {
 
+struct TSimpleColumnStatisticEval::TState {
+    using THLLState = NAggFuncs::THybridHyperLogLog<std::allocator>;
+
+    THLLState Hll;
+    std::optional<NYdb::TValue> Min;
+    std::optional<NYdb::TValue> Max;
+
+    TState()
+        : Hll(THLLState::Create(NAggFuncs::THLLAggFunc::DEFAULT_PRECISION))
+    {}
+};
+
+TSimpleColumnStatisticEval::TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod)
+    : Type(std::move(type))
+    , PgTypeMod(std::move(pgTypeMod))
+{}
+
+TSimpleColumnStatisticEval::~TSimpleColumnStatisticEval() = default;
+
 EStatType TSimpleColumnStatisticEval::GetType() const {
     return EStatType::SIMPLE_COLUMN;
 }
 
 size_t TSimpleColumnStatisticEval::EstimateSize() const {
-    constexpr size_t DEFAULT_HLL_PRECISION = 14;
-    return 1u << DEFAULT_HLL_PRECISION;
+    return 1u << NAggFuncs::THLLAggFunc::DEFAULT_PRECISION;
 }
 
 void TSimpleColumnStatisticEval::AddAggregations(
         const TString& columnName, TSelectBuilder& builder) {
-    CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
+    if (builder.Final()) {
+        CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
+    } else {
+        State = std::make_unique<TState>();
+        CountDistinctSeq = builder.AddUDAFAggregation(columnName, "HLL");
+    }
+
     if (IStage2ColumnStatisticEval::AreMinMaxNeeded(Type)) {
         MinSeq = builder.AddBuiltinAggregation(columnName, "min");
         MaxSeq = builder.AddBuiltinAggregation(columnName, "max");
     }
 }
 
+template<template<typename> class TCmp>
+static void UpdateMinmax(std::optional<NYdb::TValue>& left, const NYdb::TValue& right) {
+    if (!left) {
+        left = right;
+        return;
+    }
+
+    TCmp cmp;
+    auto& leftProto = left->GetProto();
+    const auto& rightProto = right.GetProto();
+    switch (leftProto.value_case()) {
+    case Ydb::Value::kInt32Value:
+        if (cmp(rightProto.int32_value(), leftProto.int32_value())) {
+            leftProto.set_int32_value(rightProto.int32_value());
+        }
+        break;
+    case Ydb::Value::kUint32Value:
+        if (cmp(rightProto.uint32_value(), leftProto.uint32_value())) {
+            leftProto.set_uint32_value(rightProto.uint32_value());
+        }
+        break;
+    case Ydb::Value::kInt64Value:
+        if (cmp(rightProto.int64_value(), leftProto.int64_value())) {
+            leftProto.set_int64_value(rightProto.int64_value());
+        }
+        break;
+    case Ydb::Value::kUint64Value:
+        if (cmp(rightProto.uint64_value(), leftProto.uint64_value())) {
+            leftProto.set_uint64_value(rightProto.uint64_value());
+        }
+        break;
+    case Ydb::Value::kFloatValue:
+        if (cmp(rightProto.float_value(), leftProto.float_value())) {
+            leftProto.set_float_value(rightProto.float_value());
+        }
+        break;
+    case Ydb::Value::kDoubleValue:
+        if (cmp(rightProto.double_value(), leftProto.double_value())) {
+            leftProto.set_double_value(rightProto.double_value());
+        }
+        break;
+    default:
+        Y_ENSURE(false, "unexpected value type");
+    }
+};
+
+void TSimpleColumnStatisticEval::Merge(const TVector<NYdb::TValue>& aggColumns) {
+    Y_ENSURE(State);
+
+    {
+        NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+        hllVal.OpenOptional();
+        if (hllVal.IsNull()) {
+            return;
+        }
+        TMemoryInput is(hllVal.GetBytes().data(), hllVal.GetBytes().size());
+        auto hll = TState::THLLState::Load(is);
+        State->Hll.Merge(hll);
+    }
+
+    if (MinSeq) {
+        UpdateMinmax<std::less>(State->Min, aggColumns.at(*MinSeq));
+    }
+    if (MaxSeq) {
+        UpdateMinmax<std::greater>(State->Max, aggColumns.at(*MaxSeq));
+    }
+}
+
 NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
-        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) const {
+        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) {
     NKikimrStat::TSimpleColumnStatistics result;
     result.SetCount(rowCount);
-
-    NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
-    ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
-    result.SetCountDistinct(countDistinct);
 
     result.SetTypeId(Type.GetTypeId());
     if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
         NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
     }
 
-    if (MinSeq) {
-        result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
-    }
-    if (MaxSeq) {
-        result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+    if (State) {
+        Merge(aggColumns);
+        result.SetCountDistinct(State->Hll.Estimate());
+        if (State->Min) {
+            result.MutableMin()->CopyFrom(State->Min->GetProto());
+        }
+        if (State->Max) {
+            result.MutableMax()->CopyFrom(State->Max->GetProto());
+        }
+    } else {
+        NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+        ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
+        result.SetCountDistinct(countDistinct);
+
+        if (MinSeq) {
+            result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
+        }
+        if (MaxSeq) {
+            result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+        }
     }
 
     return result;
@@ -56,7 +160,9 @@ NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
 class TCMSEval : public IStage2ColumnStatisticEval {
     ui64 Width;
     ui64 Depth = DEFAULT_DEPTH;
+
     std::optional<ui32> Seq;
+    std::unique_ptr<TCountMinSketch> State;
 
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
@@ -91,9 +197,31 @@ public:
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
+
+        if (!builder.Final()) {
+            State = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
+        }
     }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
+        Y_ENSURE(State);
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (val.IsNull()) {
+            return;
+        }
+        auto cms = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(
+            val.GetBytes().data(), val.GetBytes().size()));
+        *State += *cms;
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
+        if (State) {
+            Merge(aggColumns);
+            auto bytes = State->AsStringBuf();
+            return TString(bytes.data(), bytes.size());
+        }
+
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
         if (!val.IsNull()) {
@@ -110,21 +238,36 @@ public:
 
 struct TBorder {
     std::variant<ui64, i64, float, double> Val;
+    NYql::NUdf::TUnboxedValuePod YqlVal;
 
     template<typename T>
-    explicit TBorder(T val) : Val(val) {}
+    explicit TBorder(T val) : Val(val), YqlVal(val) {}
 };
 
 class TEWHEval : public IStage2ColumnStatisticEval {
+    NScheme::TTypeInfo ColumnType;
+
     ui32 NumBuckets;
     TBorder RangeStart;
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
+    std::unique_ptr<TEqWidthHistogram> State;
+
+private:
+    TEqWidthHistogram CreateEmpty() const {
+        std::array<NYql::NUdf::TUnboxedValuePod, 3> params {
+            NYql::NUdf::TUnboxedValuePod(NumBuckets),
+            RangeStart.YqlVal,
+            RangeEnd.YqlVal,
+        };
+        return NAggFuncs::TEWHAggFunc::CreateState(ColumnType.GetTypeId(), params);
+    }
 
 public:
-    TEWHEval(ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
-        : NumBuckets(numBuckets)
+    TEWHEval(NScheme::TTypeInfo columnType, ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
+        : ColumnType(columnType)
+        , NumBuckets(numBuckets)
         , RangeStart(std::move(rangeStart))
         , RangeEnd(std::move(rangeEnd))
     {}
@@ -236,7 +379,7 @@ public:
             return TPtr{};
         }
         return std::make_unique<TEWHEval>(
-            numBuckets, domainRange->first, domainRange->second);
+            type, numBuckets, domainRange->first, domainRange->second);
     }
 
     EStatType GetType() const final { return EStatType::EQ_WIDTH_HISTOGRAM; }
@@ -245,14 +388,41 @@ public:
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);
+
+        if (!builder.Final()) {
+            State = std::make_unique<TEqWidthHistogram>(CreateEmpty());
+        }
     }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
+        Y_ENSURE(State);
+
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
-        Y_ENSURE(!val.IsNull()); // Makes no sense to calculate histograms for empty tables.
+        if (val.IsNull()) {
+            return;
+        }
+
         const auto& bytes = val.GetBytes();
-        return TString(bytes.data(), bytes.size());
+        TEqWidthHistogram merged(bytes.data(), bytes.size());
+        State->Aggregate(merged);
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
+        if (State) {
+            Merge(aggColumns);
+            return State->Serialize();
+        }
+
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            return TString(bytes.data(), bytes.size());
+        } else {
+            auto empty = CreateEmpty();
+            return empty.Serialize();
+        }
     }
 };
 

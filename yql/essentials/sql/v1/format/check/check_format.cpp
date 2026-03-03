@@ -18,17 +18,19 @@
 namespace NSQLFormat {
 
 bool Validate(
-    const NYql::TAstParseResult& original,
+    const NYql::TAstNode* original,
     const NYql::TAstParseResult& formatted,
     NYql::TIssues& issues)
 {
-    if (original.IsOk() != formatted.IsOk()) {
+    const bool originalIsOk = static_cast<bool>(original);
+
+    if (originalIsOk != formatted.IsOk()) {
         issues.AddIssue(
             TStringBuilder()
             << "Formatter changed semantics: "
-            << "original was " << (original.IsOk() ? "OK" : "BAD")
+            << "original was " << (originalIsOk ? "OK" : "BAD")
             << ", but "
-            << "formatted is " << (original.IsOk() ? "OK" : "BAD"));
+            << "formatted is " << (formatted.IsOk() ? "OK" : "BAD"));
         return false;
     }
 
@@ -37,6 +39,7 @@ bool Validate(
 
 TMaybe<TString> CheckedFormat(
     const TString& query,
+    const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     NYql::TIssues& issues,
     bool isIdempotencyChecked)
@@ -63,20 +66,20 @@ TMaybe<TString> CheckedFormat(
         return Nothing();
     }
 
-    NYql::TAstParseResult expectedYQLs = NSQLTranslation::SqlToYql(translators, query, settings);
+    const NYql::TAstNode* expectedYQLs = ast;
     NYql::TAstParseResult formattedYQLs = NSQLTranslation::SqlToYql(translators, formatted, settings);
     if (!Validate(expectedYQLs, formattedYQLs, issues)) {
         return Nothing();
     }
 
-    if (expectedYQLs.IsOk() && formattedYQLs.IsOk()) {
+    if (expectedYQLs && formattedYQLs.IsOk()) {
         const auto printFlags = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote;
 
         TStringStream formattedYQLsText;
         formattedYQLs.Root->PrettyPrintTo(formattedYQLsText, printFlags);
 
         TStringStream expectedYQLsText;
-        expectedYQLs.Root->PrettyPrintTo(expectedYQLsText, printFlags);
+        expectedYQLs->PrettyPrintTo(expectedYQLsText, printFlags);
 
         if (expectedYQLsText.Str() != formattedYQLsText.Str()) {
             issues.AddIssue("Source query's AST and formatted query's AST are not same");

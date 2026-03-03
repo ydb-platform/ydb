@@ -2155,7 +2155,42 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     "value": 23333
   }
 ])";
-        UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+
+        // TODO canonize order and avoid duplication
+        TString expectedMetrics2 = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert-2"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 23333
+  },
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 13333
+  }
+])";
+        auto results = GetSolomonMetrics(soLocation);
+        if (results != expectedMetrics2) {
+            UNIT_ASSERT_VALUES_EQUAL(results, expectedMetrics);
+        }
     }
 }
 

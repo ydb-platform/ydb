@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_scan_common.h"
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>

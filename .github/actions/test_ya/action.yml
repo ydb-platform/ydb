@@ -418,18 +418,13 @@ runs:
 
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
-          monitor_memory() {
-              set +x
-              rm -f ram_usage.txt
-              while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
-                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
-                  echo "$(date +%s) $used_kb" >> ram_usage.txt
-                  sleep 3
-              done
-          }
-
-          monitor_memory &
+          # Resource monitor: CPU (total + per PID), RAM, disk I/O every 3 sec
+          rm -f ram_usage.txt resources_monitor.jsonl
+          python3 .github/scripts/monitor_resources.py \
+            --output $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
+            --ram-usage-file ram_usage.txt \
+            --interval 3 \
+            --top-pids 50 &
           MONITOR_PID=$!
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
@@ -456,6 +451,14 @@ runs:
             --ram-usage-file ram_usage.txt \
             --chat-id "$GH_ALERTS_TG_CHAT" \
             --memory-threshold 97 || true
+
+          # Resource consumption dashboard (CPU, RAM, disk + test intervals overlay)
+          python3 .github/scripts/analyze_resources.py \
+            --resources-jsonl $CURRENT_PUBLIC_DIR/resources_monitor.jsonl \
+            --report "$CURRENT_REPORT" \
+            --output-html $CURRENT_PUBLIC_DIR/resources_report.html \
+            --output-trace $CURRENT_PUBLIC_DIR/resources_trace.json || true
+          echo "25 [Resources (CPU/RAM/disk)](${CURRENT_PUBLIC_DIR_URL}/resources_report.html)" >> $SUMMARY_LINKS
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

@@ -236,6 +236,37 @@ class Test(TestBase):
             self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
         ]
 
+    def test_capacity_metrics(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+
+        vdisk_columns = [
+            'VDiskId',
+            'NodeId:PDiskId',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+            'GroupSizeInUnits',
+        ]
+        group_columns = [
+            'GroupId',
+            'SizeInUnits',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+        ]
+
+        return [
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '-H', '--columns', *group_columns),
+        ]
+
     def test_infer_pdisk_slot_count(self):
         dynconfig_client = DynConfigClient(self.host, self.grpc_port)
 

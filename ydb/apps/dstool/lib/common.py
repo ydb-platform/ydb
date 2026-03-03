@@ -298,6 +298,13 @@ def get_pdisk_inferred_settings(pdisk):
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
 
+def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
+    # Identical to blobstorage/pdisk/blobstorage_pdisk_config.h GetOwnerWeight()
+    vu = group_size_in_units if group_size_in_units else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
+    return int(vu / pu) + (1 if (vu % pu) else 0)
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int

@@ -21,6 +21,9 @@ namespace {
 bool NeedToSplitRequest(const TRequestHeaders& headers, TBlockRange64 range)
 {
     const ui64 blocksPerStripe = headers.VolumeConfig->BlocksPerStripe;
+    if (!blocksPerStripe) {
+        return false;
+    }
     const bool needToSplit =
         range.Start / blocksPerStripe != range.End / blocksPerStripe;
     return needToSplit;

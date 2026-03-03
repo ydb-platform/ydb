@@ -1,0 +1,5 @@
+items:
+- name: Deployment preparation
+  href: deployment-preparation.md
+- name: Deploying a cluster using configuration V1
+  href: deployment-configuration-v1.md

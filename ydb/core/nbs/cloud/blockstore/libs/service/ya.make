@@ -9,6 +9,8 @@ SRCS(
     device_handler.cpp
     overlapped_requests_guard_wrapper.cpp
     request.cpp
+    split_requests_wrapper.cpp
+    storage.cpp
     unaligned_device_handler.cpp
 )
 

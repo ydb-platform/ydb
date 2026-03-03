@@ -1,5 +1,6 @@
 #include "aligned_device_handler.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 
@@ -97,6 +98,11 @@ TAlignedDeviceHandler::TAlignedDeviceHandler(
     , MaxBlockCount(maxSubRequestSize / BlockSize)
     , MaxBlockCountForZeroBlocksRequest(
           params.MaxZeroBlocksSubRequestSize / BlockSize)
+    , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
+          .DiskId = DiskId,
+          .BlockSize = BlockSize,
+          .BlockCount = params.BlockCount,
+          .BlocksPerStripe = params.BlocksPerStripeCount}))
 {
     Y_ABORT_UNLESS(MaxBlockCount > 0);
     Y_ABORT_UNLESS(MaxBlockCountForZeroBlocksRequest > 0);
@@ -180,6 +186,7 @@ TFuture<TReadBlocksLocalResponse> TAlignedDeviceHandler::ExecuteReadRequest(
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(
         TRequestHeaders{
+            .VolumeConfig = VolumeConfig,
             .RequestId = ctx->RequestId,
             .ClientId = ClientId,
             .Timestamp = TInstant::Now()},
@@ -266,6 +273,7 @@ TFuture<TWriteBlocksLocalResponse> TAlignedDeviceHandler::ExecuteWriteRequest(
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(
         TRequestHeaders{
+            .VolumeConfig = VolumeConfig,
             .RequestId = ctx->RequestId,
             .ClientId = ClientId,
             .Timestamp = TInstant::Now()},
@@ -350,6 +358,7 @@ TFuture<TZeroBlocksLocalResponse> TAlignedDeviceHandler::ExecuteZeroRequest(
 
     auto request = std::make_shared<TZeroBlocksLocalRequest>(
         TRequestHeaders{
+            .VolumeConfig = VolumeConfig,
             .RequestId = ctx->RequestId,
             .ClientId = ClientId,
             .Timestamp = TInstant::Now()},

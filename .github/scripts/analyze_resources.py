@@ -65,6 +65,23 @@ def load_report_tests(path: Path) -> list[dict[str, Any]]:
     return tests
 
 
+def load_ram_usage_legacy(path: Path) -> list[tuple[int, float]]:
+    """Parse ram_usage_legacy.txt (ts used_kb per line). Returns [(ts, gb), ...]."""
+    out = []
+    for line in path.read_text().strip().splitlines():
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                ts = int(parts[0])
+                kb = float(parts[1])
+                out.append((ts, kb / (1024 * 1024)))
+            except (ValueError, TypeError):
+                continue
+    return out
+
+
 def build_html_dashboard(
     resources: list[dict],
     tests: list[dict],
@@ -72,6 +89,7 @@ def build_html_dashboard(
     interval_sec: float | None = None,
     try_num: int | None = None,
     try_boundaries: list[dict] | None = None,
+    ram_usage_legacy_path: Path | None = None,
 ) -> None:
     if not resources:
         output_path.write_text("<html><body>No resource data</body></html>")
@@ -90,6 +108,15 @@ def build_html_dashboard(
     cpu_ya = [r.get("cpu_ya_pct", 0) for r in resources]
     ram_gb = [r.get("ram_used_kb", 0) / (1024 * 1024) for r in resources]
     ram_ya_gb = [r.get("ram_ya_kb", 0) / (1024 * 1024) for r in resources]
+
+    # Peak comparison: new monitor vs legacy (ram_usage_legacy.txt)
+    peak_ram_total_gb = max(ram_gb) if ram_gb else 0
+    peak_ram_ya_gb = max(ram_ya_gb) if ram_ya_gb else 0
+    peak_legacy_gb: float | None = None
+    if ram_usage_legacy_path and ram_usage_legacy_path.exists():
+        legacy_data = load_ram_usage_legacy(ram_usage_legacy_path)
+        if legacy_data:
+            peak_legacy_gb = max(gb for _, gb in legacy_data)
     disk_r = [r.get("disk_read_mb_delta", 0) for r in resources]
     disk_w = [r.get("disk_write_mb_delta", 0) for r in resources]
     disk_ya_r = [r.get("disk_ya_read_mb_delta", 0) for r in resources]
@@ -162,15 +189,24 @@ def build_html_dashboard(
         row=5, col=1,
     )
 
-    # Y-axis: 0 to max possible
-    fig.update_yaxes(range=[0, cpu_cores * 1.05], row=1, col=1)
-    fig.update_yaxes(range=[0, ram_total_gb * 1.05], row=2, col=1)
+    # Y-axis: 0 to max; scale max must be >= max displayed value
+    cpu_data_max = max((cpu_total_cores or [0]) + (cpu_ya_cores or [0]))
+    cpu_y_max = max(cpu_cores * 1.05, cpu_data_max * 1.05, 0.1)
+    fig.update_yaxes(range=[0, cpu_y_max], row=1, col=1)
+
+    ram_data_max = max((ram_gb or [0]) + (ram_ya_gb or [0]))
+    ram_y_max = max(ram_total_gb * 1.05, ram_data_max * 1.05, 0.1)
+    fig.update_yaxes(range=[0, ram_y_max], row=2, col=1)
+
     disk_all = (disk_r or [0]) + (disk_w or [0]) + (disk_ya_r or [0]) + (disk_ya_w or [0])
-    disk_max = max(max(disk_all) * 1.5, 1) if disk_all else 1
-    fig.update_yaxes(range=[0, disk_max], row=3, col=1)
-    fig.update_yaxes(range=[0, disk_max], row=4, col=1)
-    active_max = max(max(active_tests) if active_tests else 0, 1)
-    fig.update_yaxes(range=[0, active_max * 1.1], row=5, col=1)
+    disk_data_max = max(disk_all) if disk_all else 0
+    disk_y_max = max(disk_data_max * 1.1, 1)
+    fig.update_yaxes(range=[0, disk_y_max], row=3, col=1)
+    fig.update_yaxes(range=[0, disk_y_max], row=4, col=1)
+
+    active_data_max = max(active_tests) if active_tests else 0
+    active_y_max = max(active_data_max * 1.1, 1)
+    fig.update_yaxes(range=[0, active_y_max], row=5, col=1)
 
     # Try boundary markers (vertical lines when try ends / next starts)
     for b in try_boundaries:
@@ -190,9 +226,12 @@ def build_html_dashboard(
             )
 
     boundary_note = " Метки: try N end = граница между попытками." if try_boundaries else ""
+    peak_note = f" Пики: RAM total {peak_ram_total_gb:.1f} GB, RAM ya make {peak_ram_ya_gb:.1f} GB."
+    if peak_legacy_gb is not None:
+        peak_note += f" Legacy (grep/awk meminfo): {peak_legacy_gb:.1f} GB. Δ={peak_ram_total_gb - peak_legacy_gb:+.1f} GB."
     fig.update_layout(
-        height=850,
-        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Общий отчёт по всем try.{boundary_note} RAM ya может быть > total (RSS считает shared memory на каждый процесс). Нижний график: кол-во тестов.</sup>",
+        height=1105,
+        title_text=f"Resource consumption during ya make{try_suffix}<br><sup>Общий отчёт по всем try.{boundary_note} RAM ya может быть > total (RSS считает shared memory на каждый процесс). Нижний график: кол-во тестов.{peak_note}</sup>",
         showlegend=True,
         template="plotly_white",
     )
@@ -224,6 +263,7 @@ def main() -> int:
     parser.add_argument("--output-trace", type=Path, default=None)
     parser.add_argument("--try-num", type=int, default=None, help="Try number for report title (per-try mode)")
     parser.add_argument("--try-boundaries", type=Path, default=None, help="JSON file with try boundaries [{try,start,end}...] for combined report")
+    parser.add_argument("--ram-usage-legacy", type=Path, default=None, help="ram_usage_legacy.txt for peak comparison (new vs legacy monitor)")
     args = parser.parse_args()
 
     if not args.resources_jsonl.exists():
@@ -250,6 +290,7 @@ def main() -> int:
         resources, tests, args.output_html,
         try_num=args.try_num,
         try_boundaries=try_boundaries,
+        ram_usage_legacy_path=args.ram_usage_legacy,
     )
     if args.output_trace:
         build_chromium_trace(resources, args.output_trace)

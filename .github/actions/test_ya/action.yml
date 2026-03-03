@@ -462,13 +462,7 @@ runs:
 
           TRY_END_TS=$(date +%s)
           # Append try boundary
-          python3 -c "
-import json
-p='$TRY_BOUNDARIES_FILE'
-d=json.load(open(p))
-d.append({'try':$RETRY,'start':$TRY_START_TS,'end':$TRY_END_TS})
-json.dump(d,open(p,'w'))
-" 2>/dev/null || true
+          python3 -c "import json;p='$TRY_BOUNDARIES_FILE';d=json.load(open(p));d.append({'try':$RETRY,'start':$TRY_START_TS,'end':$TRY_END_TS});json.dump(d,open(p,'w'))" 2>/dev/null || true
 
           # Keep monitoring 60 sec after ya make to capture post-completion metrics
           sleep 60
@@ -610,25 +604,17 @@ json.dump(d,open(p,'w'))
 
         # Kill combined monitor, build combined resources report with try markers
         kill $MONITOR_PID $MONITOR_LEGACY_PID 2>/dev/null || true
+        cp -f ram_usage_legacy.txt $PUBLIC_DIR/ram_usage_legacy.txt 2>/dev/null || true
         MERGED_REPORT=$PUBLIC_DIR/report_merged.json
-        python3 -c "
-import json,glob
-reports=glob.glob('$PUBLIC_DIR/try_*/report.json')
-all=[]
-for p in sorted(reports):
-    try:
-        d=json.load(open(p))
-        all.extend(d.get('results',[]))
-    except: pass
-json.dump({'results':all},open('$MERGED_REPORT','w'))
-" 2>/dev/null || true
+        python3 -c "import json,glob;r=glob.glob('$PUBLIC_DIR/try_*/report.json');a=[];[a.extend(json.load(open(p)).get('results',[])) for p in sorted(r) if open(p)];exec('a=[x for p in sorted(r) for x in json.load(open(p)).get(\"results\",[])]') if not a else None;json.dump({'results':a},open('$MERGED_REPORT','w'))" 2>/dev/null || true
         if [ -s "$RESOURCES_COMBINED_JSONL" ] && [ -f "$MERGED_REPORT" ]; then
           python3 .github/scripts/analyze_resources.py \
             --resources-jsonl $RESOURCES_COMBINED_JSONL \
             --report "$MERGED_REPORT" \
             --output-html $PUBLIC_DIR/resources_report.html \
             --output-trace $PUBLIC_DIR/resources_trace.json \
-            --try-boundaries $TRY_BOUNDARIES_FILE || true
+            --try-boundaries $TRY_BOUNDARIES_FILE \
+            --ram-usage-legacy $PUBLIC_DIR/ram_usage_legacy.txt || true
         fi
         echo "25 [Resources (all tries)](${PUBLIC_DIR_URL}/resources_report.html)" >> $SUMMARY_LINKS
 

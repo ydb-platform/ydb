@@ -3,14 +3,16 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
+#include <absl/container/flat_hash_set.h>
+#include <absl/container/flat_hash_map.h>
+
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <deque>
 #include <map>
-#include <unordered_map>
-#include <unordered_set>
+
 
 namespace NKikimr::NPQ::NMLP {
 

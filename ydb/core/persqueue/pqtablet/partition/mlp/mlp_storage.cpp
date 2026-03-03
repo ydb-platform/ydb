@@ -500,9 +500,6 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
     auto it = DLQMessages.find(message.Offset);
     if (it == DLQMessages.end()) {
         // message removed or message queued second time after changed dead letter policy
-        if (it != DLQMessages.end()) {
-            DLQMessages.erase(it);
-        }
         return true;
     }
 

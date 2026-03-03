@@ -755,7 +755,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             if (!msg) {
                 continue;
             }
-            if (retentionDeadlineDelta && msg->DeadlineDelta <= retentionDeadlineDelta.value()) {
+            if (retentionDeadlineDelta && msg->WriteTimestampDelta <= retentionDeadlineDelta.value()) {
                 continue;
             }
 

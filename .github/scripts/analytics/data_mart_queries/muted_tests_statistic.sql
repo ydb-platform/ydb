@@ -15,7 +15,7 @@ $prepared = (
       AND tm.is_muted = 1
 );
 
--- Дневная метрика
+-- Daily metric
 $daily = (
     SELECT
         date_window,
@@ -33,7 +33,7 @@ $daily = (
         owner
 );
 
--- Последняя дата в каждом месяце по группе
+-- Last date in each month per group
 $month_last_day = (
     SELECT
         ym,
@@ -49,7 +49,7 @@ $month_last_day = (
         owner
 );
 
--- Значение метрики на последнюю дату месяца
+-- Metric value on the last day of month
 $month_value = (
     SELECT
         m.ym AS ym,

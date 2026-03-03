@@ -19,7 +19,7 @@
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$pr_check_lookback_days = 1;  -- use 1 for one-day refresh
+$pr_check_lookback_days = 70;
 $regression_window_days = 4;
 
 -- PR-check failures in the last $pr_check_lookback_days days (branch, full_name, run_timestamp)
@@ -121,6 +121,7 @@ $all_failures_with_pr_base = (
         base.branch AS branch,
         base.status_description AS status_description,
         base.stderr AS stderr,
+        base.stderr AS stderr,
         ListHead(
             Unicode::SplitToList(
                 CASE 
@@ -168,15 +169,18 @@ $all_failures_with_pr_base = (
 );
 
 $all_pr_check_runs = (
-    -- All PR-check jobs (not only failures) so we can determine the latest PR run correctly
+    -- Все PR-check job'ы (не только failure), чтобы корректно определить последний запуск PR.
+    -- Учитываем branch: последний job считаем отдельно по каждой (pr_number, branch).
     SELECT
         job_id,
         pr_number,
+        branch,
         MAX(run_timestamp) AS run_timestamp
     FROM (
         SELECT
             job_id,
             run_timestamp,
+            branch,
             ListHead(
                 Unicode::SplitToList(
                     CASE
@@ -207,20 +211,24 @@ $all_pr_check_runs = (
             AND pull != ''
             AND String::Contains(pull, 'PR_')
             AND job_id IS NOT NULL
+            AND branch IS NOT NULL
     ) AS runs
     GROUP BY
         job_id,
-        pr_number
+        pr_number,
+        branch
 );
 
 $last_job_per_pr = (
     SELECT
         pr_number,
+        branch,
         MAX_BY(job_id, run_timestamp) AS last_job_id
     FROM
         $all_pr_check_runs
     GROUP BY
-        pr_number
+        pr_number,
+        branch
 );
 
 $all_failures_with_pr = (
@@ -233,6 +241,7 @@ $all_failures_with_pr = (
         f.branch AS branch,
         f.status_description AS status_description,
         f.stderr AS stderr,
+        f.stderr AS stderr,
         f.pr_number AS pr_number,
         f.attempt_number AS attempt_number,
         CASE WHEN f.job_id = l.last_job_id THEN 1 ELSE 0 END AS is_last_run_in_pr
@@ -241,33 +250,55 @@ $all_failures_with_pr = (
     LEFT JOIN
         $last_job_per_pr AS l
         ON f.pr_number = l.pr_number
+        AND f.branch = l.branch
 );
 
--- Only failures from the latest PR-check run per PR that passed the regression check for that run
--- (branch, full_name, run_timestamp) must be in $pr_check_with_regression_ok
-$failures_in_last_pr_run = (
-    SELECT
-        f.full_name AS full_name,
-        f.suite_folder AS suite_folder,
-        f.test_name AS test_name,
-        f.pr_number AS pr_number,
-        f.job_id AS job_id,
-        f.run_timestamp AS run_timestamp,
-        f.branch AS branch,
-        f.status_description AS status_description,
-        f.stderr AS stderr,
-        f.attempt_number AS attempt_number
-    FROM
-        $all_failures_with_pr AS f
-    INNER JOIN
-        $pr_check_with_regression_ok AS ok
-        ON ok.branch = f.branch
-        AND ok.full_name = f.full_name
-        AND ok.run_timestamp = f.run_timestamp
-    WHERE
-        f.pr_number IS NOT NULL
-        AND f.job_id IS NOT NULL
-        AND f.is_last_run_in_pr = 1
+$test_pr_failures = (
+    SELECT 
+        full_name,
+        suite_folder,
+        test_name,
+        pr_number,
+        job_id,
+        branch,
+        MAX(run_timestamp) AS last_run_timestamp,
+        MAX_BY(status_description, run_timestamp) AS status_description,
+        MAX_BY(stderr, run_timestamp) AS stderr,
+        MAX_BY(attempt_number, run_timestamp) AS attempt_number,
+        MAX_BY(is_last_run_in_pr, run_timestamp) AS is_last_run_in_pr
+    FROM 
+        $all_failures_with_pr
+    WHERE 
+        pr_number IS NOT NULL
+        AND job_id IS NOT NULL
+    GROUP BY 
+        full_name,
+        suite_folder,
+        test_name,
+        pr_number,
+        job_id,
+        branch
+);
+
+$last_run_per_test_pr = (
+    SELECT 
+        full_name,
+        suite_folder,
+        test_name,
+        pr_number,
+        job_id,
+        branch,
+        last_run_timestamp,
+        status_description,
+        stderr,
+        attempt_number,
+        is_last_run_in_pr,
+        ROW_NUMBER() OVER (
+            PARTITION BY full_name, pr_number, branch
+            ORDER BY last_run_timestamp DESC, job_id DESC
+        ) AS rn
+    FROM 
+        $test_pr_failures
 );
 
 SELECT
@@ -281,7 +312,7 @@ SELECT
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
-    CAST(COALESCE(stderr, '') AS String) AS stderr,
+    CAST(COALESCE(stderr, '') AS Utf8) AS stderr,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
     1 AS is_last_run_in_pr
 FROM

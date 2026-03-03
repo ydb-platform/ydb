@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_disk_color_pb2 as kikimr_disk_color
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import sys
@@ -20,6 +21,7 @@ def do(args):
     base_config = base_config_and_storage_pools['BaseConfig']
     group_map = common.build_group_map(base_config)
     vslot_map = common.build_vslot_map(base_config)
+    pdisk_map = common.build_pdisk_map(base_config)
 
     storage_pools = base_config_and_storage_pools['StoragePools']
     sp_name = common.build_storage_pool_names_map(storage_pools)
@@ -41,10 +43,13 @@ def do(args):
         'VDisks_ERROR',
         'VDisks_REPLICATING',
         'VDisks_INIT_PENDING',
-        'Usage',
         'UsedSize',
         'AvailableSize',
         'TotalSize',
+        'VDiskSlotUsage',
+        'VDiskRawUsage',
+        'NormalizedOccupancy',
+        'CapacityAlert',
         'VirtualGroupState',
         'VirtualGroupName',
         'BlobDepotId',
@@ -59,20 +64,22 @@ def do(args):
         'ErasureSpecies',
         'SizeInUnits',
         'OperatingStatus',
+        'CapacityAlert',
         'VDisks_TOTAL',
     ]
     col_units = {
-        'Usage': '%',
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
         'TotalSize': 'bytes',
+        'VDiskSlotUsage': '%',
+        'VDiskRawUsage': '%',
     }
 
     if args.show_vdisk_status or args.all_columns:
         visible_columns.extend(['VDisks_READY', 'VDisks_ERROR', 'VDisks_REPLICATING', 'VDisks_INIT_PENDING'])
 
     if args.show_vdisk_usage or args.all_columns:
-        visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage'])
 
     if args.virtual_groups_only:
         visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])
@@ -103,6 +110,10 @@ def do(args):
         group_stat['UsedSize'] = 0
         group_stat['TotalSize'] = 0
         group_stat['AvailableSize'] = 0
+        group_stat['VDiskSlotUsage'] = None
+        group_stat['VDiskRawUsage'] = None
+        group_stat['NormalizedOccupancy'] = None
+        group_stat['CapacityAlert'] = None
 
     for vslot_id, vslot in vslot_map.items():
         group_id = vslot.GroupId
@@ -122,6 +133,35 @@ def do(args):
         group_stat['AvailableSize'] += vslot.VDiskMetrics.AvailableSize
         group_stat['TotalSize'] += vslot.VDiskMetrics.AvailableSize
 
+        # Aggregate capacity metrics - use max values
+        if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
+            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage / 100)
+
+        pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
+        if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage / 100)
+        elif pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+            # VDiskRawUsage metric was added in 26.1.1
+            # For older versions we calculate it on client side
+            #
+            # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+            #   VDiskRawUsage = 100.0 * (used / hardLimit)
+            # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+            #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+            #
+            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
+            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vdisk_raw_usage = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vdisk_raw_usage)
+
+        if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
+            group_stat['NormalizedOccupancy'] = max(group_stat['NormalizedOccupancy'] or 0, vslot.VDiskMetrics.NormalizedOccupancy)
+
+        if vslot.VDiskMetrics.HasField('CapacityAlert'):
+            # Take the worst (maximum) alert level across all VDisks
+            group_stat['CapacityAlert'] = max(group_stat['CapacityAlert'] or 0, vslot.VDiskMetrics.CapacityAlert)
+
         for key in ['VDisks_TOTAL', 'VDisks_' + vslot.Status]:
             group_stat[key] += 1
 
@@ -132,8 +172,9 @@ def do(args):
             if column not in group_stat:
                 group_stat[column] = 0
 
-        # calculate usage at the end
-        group_stat['Usage'] = group_stat['UsedSize'] / group_stat['TotalSize'] if group_stat['TotalSize'] != 0 else 0.0
+        # Convert CapacityAlert from enum to string name
+        if isinstance(group_stat['CapacityAlert'], int):
+            group_stat['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(group_stat['CapacityAlert'])
 
         rows.append(group_stat)
 

@@ -2614,7 +2614,7 @@ Y_UNIT_TEST(MarkDLQMoved_unexpected) {
         UNIT_ASSERT_VALUES_EQUAL(messages[1].SeqNo, 3);
     }
 
-    utils.Storage.Commit(1);
+    utils.Storage.Compact();
     utils.Storage.Commit(2);
 
     {

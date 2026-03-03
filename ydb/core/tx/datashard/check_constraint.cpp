@@ -36,7 +36,7 @@ bool CheckNotNullConstraint(const TConstArrayRef<TCell>& cells) {
     return true;
 }
 
-class TCheckColumnScan final: public TActor<TCheckColumnScan>, public NTable::IScan {
+class TCheckColumnsScan final: public TActor<TCheckColumnsScan>, public NTable::IScan {
 private:
     ui64 BuildIndexId;
     TString TargetTable;
@@ -62,7 +62,7 @@ public:
         return NKikimrServices::TActivity::CHECK_CONSTRAINT_ACTOR;
     }
 
-    TCheckColumnScan(
+    TCheckColumnsScan(
         ui64 buildIndexId,
         TString targetTable,
         const TScanRecord::TSeqNo& seqNo,
@@ -93,7 +93,7 @@ public:
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
     }
 
-    ~TCheckColumnScan() final = default;
+    ~TCheckColumnsScan() final = default;
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
         LOG_D("Prepare " << Debug());
@@ -186,7 +186,7 @@ public:
     }
 
     TString Debug() const {
-        return TStringBuilder() << "TCheckColumnScan: "
+        return TStringBuilder() << "TCheckColumnsScan: "
                                 << "datashard id: " << DataShardId
                                 << ", generation: " << SeqNo.Generation
                                 << ", round: " << SeqNo.Round
@@ -197,7 +197,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("TCheckColumnScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+                LOG_E("TCheckColumnsScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
         }
     }
 };
@@ -213,7 +213,7 @@ TAutoPtr<NTable::IScan> CreateCheckConstraintScan(
     const TSerializedTableRange& range
 )
 {
-    return new TCheckColumnScan(
+    return new TCheckColumnsScan(
         buildIndexId,
         targetTable,
         seqNo,

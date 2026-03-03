@@ -2,6 +2,7 @@
 
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -61,7 +62,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
     return std::move(session);
 }
 
-std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSimpleKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
@@ -69,31 +70,27 @@ std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSim
             alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
         }
 
+        bool handlersSet = settings.EventHandlers_.AcksHandler_ ||
+            settings.EventHandlers_.SessionClosedHandler_ ||
+            settings.EventHandlers_.CommonHandler_;
+
         if (!settings.EventHandlers_.HandlersExecutor_) {
-            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+            if (handlersSet) {
+                alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+            } else {
+                alteredSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
+            }
+        }
+
+        // As we don't support continuation tokens in IProducer interface
+        alteredSettings.EventHandlers_.ReadyToAcceptHandler({});
+
+        if (!settings.EventHandlers_.AcksHandler_) {
+            alteredSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent&) {});
         }
     }
 
-    auto session = std::make_shared<TSimpleBlockingKeyedWriteSession>(
-        alteredSettings, shared_from_this(), Connections_, DbDriverState_
-    );
-    return session;
-}
-
-std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
-    auto alteredSettings = settings;
-    {
-        std::lock_guard guard(Lock);
-        if (!settings.CompressionExecutor_) {
-            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
-        }
-
-        if (!settings.EventHandlers_.HandlersExecutor_) {
-            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
-        }
-    }
-
-    return std::make_shared<TKeyedWriteSession>(
+    return std::make_shared<TProducer>(
         alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
 }

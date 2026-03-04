@@ -281,7 +281,7 @@ namespace NYql::NUdf {
 template <bool CheckOptional, bool CheckBlock, const char* TFuncName, template <class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
 public:
     static const ::NYql::NUdf::TStringRef& Name() {

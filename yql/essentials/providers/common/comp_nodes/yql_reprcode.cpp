@@ -12,7 +12,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TReprCodeWrapper: public TMutableComputationNode<TReprCodeWrapper> {
-    typedef TMutableComputationNode<TReprCodeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TReprCodeWrapper>;
 
 public:
     TReprCodeWrapper(TComputationMutables& mutables, IComputationNode* value, TString yson, ui32 exprCtxMutableIndex, NYql::TPosition pos)

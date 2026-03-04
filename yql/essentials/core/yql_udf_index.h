@@ -71,7 +71,7 @@ struct TDownloadLink {
 };
 
 struct TResourceInfo : public TThrRefBase {
-    typedef TIntrusiveConstPtr<TResourceInfo> TPtr;
+    using TPtr = TIntrusiveConstPtr<TResourceInfo>;
 
     bool IsTrusted = false;
     TDownloadLink Link;
@@ -93,7 +93,7 @@ inline bool operator<(const TResourceInfo::TPtr& p1, const TResourceInfo::TPtr& 
 
 class TUdfIndex : public TThrRefBase {
 public:
-    typedef TIntrusivePtr<TUdfIndex> TPtr;
+    using TPtr = TIntrusivePtr<TUdfIndex>;
 
 public:
     // todo: trusted resources should not be replaceble regardless of specified mode

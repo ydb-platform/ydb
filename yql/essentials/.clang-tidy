@@ -69,7 +69,8 @@ Checks: >
   modernize-use-bool-literals,
   modernize-use-equals-delete,
   modernize-use-noexcept,
-  modernize-use-override
+  modernize-use-override,
+  modernize-use-using
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

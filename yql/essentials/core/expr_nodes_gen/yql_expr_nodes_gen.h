@@ -497,7 +497,7 @@ class TNodeBuilder {};
 
 class TNodeBuilderBase {
 protected:
-    typedef std::function<TExprBase(const TStringBuf& arg)> GetArgFuncType;
+    using GetArgFuncType = std::function<TExprBase(const TStringBuf& arg)>;
 
     TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
         : Ctx_(ctx)
@@ -515,7 +515,7 @@ protected:
 template <typename TParent, typename TDerived, typename TItem>
 class TListBuilderBase: public TNodeBuilderBase {
 protected:
-    typedef std::function<TParent&(const TDerived&)> BuildFuncType;
+    using BuildFuncType = std::function<TParent&(const TDerived&)>;
 
     TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
@@ -527,7 +527,7 @@ protected:
     BuildFuncType BuildFunc_;
 
 public:
-    typedef TDerived ResultType;
+    using ResultType = TDerived;
 
     TParent& Build() {
         TDerived node = static_cast<TNodeBuilder<TParent, TDerived>*>(this)->DoBuild();
@@ -605,7 +605,7 @@ public:
 template <typename TParent>
 class TNodeBuilder<TParent, TVector<TExprBase>>: public TListBuilderBase<TParent, TVector<TExprBase>, TExprBase> {
 public:
-    typedef std::function<TParent&(const TVector<TExprBase>&)> BuildFuncType;
+    using BuildFuncType = std::function<TParent&(const TVector<TExprBase>&)>;
 
     TNodeBuilder<TParent, TVector<TExprBase>>(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc,
                                               TNodeBuilderBase::GetArgFuncType getArgFunc)
@@ -641,7 +641,7 @@ public:
 template <typename TNode>
 class TBuildValueHolder {
 public:
-    typedef TNode ResultType;
+    using ResultType = TNode;
 
     void SetValue(const TNode& node) {
         Node_ = node.template Maybe<TNode>();

@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_flags = SA_RESETHAND | SA_SIGINFO;
-        typedef void (*TSigSysHandler)(int, siginfo_t*, void*);
+        using TSigSysHandler = void (*)(int, siginfo_t*, void*);
         sa.sa_sigaction = (TSigSysHandler)SigSysHandler;
         sigfillset(&sa.sa_mask);
         if (sigaction(SIGSYS, &sa, nullptr) == -1) {

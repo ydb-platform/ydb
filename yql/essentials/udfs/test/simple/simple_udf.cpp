@@ -167,7 +167,7 @@ UDF_IMPL(TIncrementWithCounters,
 
 class TGenericAsStruct: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;

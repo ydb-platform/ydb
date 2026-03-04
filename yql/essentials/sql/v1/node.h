@@ -47,7 +47,7 @@ enum class ENodeState {
     Failed,
     End,
 };
-typedef TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)> TNodeState;
+using TNodeState = TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)>;
 
 enum class ESQLWriteColumnMode {
     InsertInto,
@@ -92,7 +92,7 @@ class ITableKeys;
 class ISource;
 class IAggregation;
 class TObjectOperatorContext;
-typedef TIntrusivePtr<IAggregation> TAggregationPtr;
+using TAggregationPtr = TIntrusivePtr<IAggregation>;
 class TColumnNode;
 class TTupleNode;
 class TCallNode;
@@ -100,10 +100,10 @@ class TStructNode;
 class TAccessNode;
 class TLambdaNode;
 class TUdfNode;
-typedef TIntrusivePtr<ISource> TSourcePtr;
+using TSourcePtr = TIntrusivePtr<ISource>;
 
 struct TScopedState;
-typedef TIntrusivePtr<TScopedState> TScopedStatePtr;
+using TScopedStatePtr = TIntrusivePtr<TScopedState>;
 
 inline TString DotJoin(const TString& lhs, const TString& rhs) {
     TStringBuilder sb;
@@ -116,7 +116,7 @@ TString ErrorDistinctWithoutCorrelation(const TString& column);
 
 class INode: public TSimpleRefCount<INode> {
 public:
-    typedef TIntrusivePtr<INode> TPtr;
+    using TPtr = TIntrusivePtr<INode>;
 
     struct TIdPart {
         TString Name;
@@ -300,7 +300,7 @@ protected:
     bool AsInner_ = false;
     bool DisableSort_ = false;
 };
-typedef INode::TPtr TNodePtr;
+using TNodePtr = INode::TPtr;
 
 bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes);
 
@@ -802,7 +802,7 @@ public:
 private:
     const TNodePtr CleanOrderExpr_;
 };
-typedef TIntrusivePtr<TSortSpecification> TSortSpecificationPtr;
+using TSortSpecificationPtr = TIntrusivePtr<TSortSpecification>;
 
 enum EFrameType {
     FrameByRows,
@@ -832,7 +832,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     ~TFrameBound() {
     }
 };
-typedef TIntrusivePtr<TFrameBound> TFrameBoundPtr;
+using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
 struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameType FrameType = FrameByRows;
@@ -844,7 +844,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     ~TFrameSpecification() {
     }
 };
-typedef TIntrusivePtr<TFrameSpecification> TFrameSpecificationPtr;
+using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
 struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec> {
     TNodePtr TimeExtractor;
@@ -857,7 +857,7 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     ~TLegacyHoppingWindowSpec() {
     }
 };
-typedef TIntrusivePtr<TLegacyHoppingWindowSpec> TLegacyHoppingWindowSpecPtr;
+using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
 struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TMaybe<TString> ExistingWindowName;
@@ -871,8 +871,8 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     ~TWindowSpecification() {
     }
 };
-typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
-typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
+using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
+using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
 
 TWinSpecs CloneContainer(const TWinSpecs& specs);
 

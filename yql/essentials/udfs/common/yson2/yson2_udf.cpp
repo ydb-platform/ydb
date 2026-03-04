@@ -840,7 +840,7 @@ namespace {
 
 class TBase: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TBase(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
         : Pos_(pos)
@@ -1081,7 +1081,7 @@ public:
 template <typename TYJson, bool DecodeUtf8 = false>
 class TParse: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
 private:
     const TSourcePosition Pos_;

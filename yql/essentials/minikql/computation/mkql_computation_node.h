@@ -165,8 +165,8 @@ using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNo
 
 class IComputationNode {
 public:
-    typedef TIntrusivePtr<IComputationNode> TPtr;
-    typedef std::map<ui32, EValueRepresentation> TIndexesMap;
+    using TPtr = TIntrusivePtr<IComputationNode>;
+    using TIndexesMap = std::map<ui32, EValueRepresentation>;
 
     virtual ~IComputationNode() {
     }
@@ -339,8 +339,8 @@ public:
 };
 
 class TNodeFactory;
-typedef std::function<IComputationNode*(TNode* node, bool pop)> TNodeLocator;
-typedef std::function<void(IComputationNode*)> TNodePushBack;
+using TNodeLocator = std::function<IComputationNode*(TNode* node, bool pop)>;
+using TNodePushBack = std::function<void(IComputationNode*)>;
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
@@ -492,7 +492,7 @@ struct TComputationPatternOpts {
 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
-    typedef TIntrusivePtr<IComputationPattern> TPtr;
+    using TPtr = TIntrusivePtr<IComputationPattern>;
 
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;

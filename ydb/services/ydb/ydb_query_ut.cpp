@@ -3,6 +3,11 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/shutdown/events.h>
+#include <ydb/core/kqp/common/shutdown/state.h>
+#include <ydb/core/kqp/common/simple/services.h>
+
 #include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NYdb;
@@ -172,6 +177,40 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
             CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
         }
 
+        UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(TestAttachSessionNodeShutdownHint) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        EnsureSessionClosedWithHint(p,
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Query::SessionState::SHUTDOWN_HINT_NODE,
+            allDoneOk);
+
+        p->Cancel();
         UNIT_ASSERT(allDoneOk);
     }
 

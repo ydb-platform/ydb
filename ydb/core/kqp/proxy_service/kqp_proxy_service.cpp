@@ -561,7 +561,9 @@ public:
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
             if (sessionInfo.AttachedRpcId) {
-                Send(sessionInfo.AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo.SessionId).release());
+                Send(sessionInfo.AttachedRpcId,
+                    CreateEvCloseSessionResponse(sessionInfo.SessionId,
+                        NKikimrKqp::TCloseSessionResponse::NODE).release());
             }
         }
     }
@@ -1128,7 +1130,9 @@ public:
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         if (sessionInfo->AttachedRpcId) {
-            Send(sessionInfo->AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo->SessionId).release());
+            Send(sessionInfo->AttachedRpcId,
+                CreateEvCloseSessionResponse(sessionInfo->SessionId,
+                    NKikimrKqp::TCloseSessionResponse::SESSION).release());
         }
     }
 
@@ -1974,11 +1978,15 @@ private:
     TResourcePoolsCache ResourcePoolsCache;
     TDatabasesCache DatabasesCache;
 
-    std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(const TString& sessionId) {
+    std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(
+        const TString& sessionId,
+        NKikimrKqp::TCloseSessionResponse::EShutdownHint hint = NKikimrKqp::TCloseSessionResponse::UNSPECIFIED)
+    {
         auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
         closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         closeEv->Record.MutableResponse()->SetSessionId(sessionId);
         closeEv->Record.MutableResponse()->SetClosed(true);
+        closeEv->Record.MutableResponse()->SetShutdownHint(hint);
         return closeEv;
     }
 };

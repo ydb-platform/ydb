@@ -192,10 +192,10 @@ def build_html_dashboard(
       </label>
     </span>
     <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fff;">
-      <b>CPU/RAM layers:</b>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerBySuites" checked onchange="applyLayerToggles()">By suites</label>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerTotal" checked onchange="applyLayerToggles()">Total (monitor)</label>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerYaMake" checked onchange="applyLayerToggles()">Ya make (monitor)</label>
+      <b>Layers:</b>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()">Metrics by suite</label>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()">System CPU</label>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerSystemRam" checked onchange="applyLayerToggles()">System RAM</label>
     </span>
   </div>
   <details class="metrics-help">
@@ -203,7 +203,7 @@ def build_html_dashboard(
     <div class="box">
       <ul>
         <li><b>By suites (stacked):</b> Sum of <i>peak</i> RAM/CPU per active chunk at each time. Can exceed actual system RAM because peaks occurred at different moments.</li>
-        <li><b>Total / Ya make (monitor):</b> Real-time from <code>/proc</code> — actual system and ya process tree.</li>
+        <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code>.</li>
         <li><b>Chunk duration (seconds):</b> <code>evlog_dur_sec = (end_us - start_us) / 1e6</code> from evlog B/E events.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
         <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / evlog_dur_sec</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
@@ -442,10 +442,11 @@ def build_html_dashboard(
     document.getElementById('headerRow1').style.display = hasCiData ? 'flex' : 'none';
     const overlayStatusEl = document.getElementById('overlayStatus');
     if (overlayStatusEl) {{
-      overlayStatusEl.textContent = data.resources_overlay
-        ? 'Monitor overlays (CPU total/ya make, RAM total/ya make, Disk I/O): shown on charts'
-        : 'Monitor overlays: not available (no resources_monitor.jsonl or time alignment failed)';
-      overlayStatusEl.style.color = data.resources_overlay ? '#16a34a' : '#94a3b8';
+      const ro = data.resources_overlay;
+      overlayStatusEl.textContent = ro
+        ? 'Monitor: CPU/RAM total (red), Disk I/O — shown'
+        : 'Monitor: not available';
+      overlayStatusEl.style.color = ro ? '#16a34a' : '#94a3b8';
     }}
     function setupMonitoringLink() {{
       const cfg = data.run_config || {{}};
@@ -1496,12 +1497,10 @@ def build_html_dashboard(
         const ro = data.resources_overlay;
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
         Plotly.addTraces('cpuLayer', [
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#dc2626', width: 4 }}, legendrank: 1000 }},
-          {{ x: xDisp, y: ro.cpu_ya_cores || [], mode: 'lines', name: 'CPU ya make (monitor)', line: {{ color: '#0f172a', width: 4, dash: 'dash' }}, legendrank: 1001 }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         Plotly.addTraces('ramLayer', [
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#dc2626', width: 4 }}, legendrank: 1000 }},
-          {{ x: xDisp, y: ro.ram_ya_gb || [], mode: 'lines', name: 'RAM ya make (monitor)', line: {{ color: '#0f172a', width: 4, dash: 'dash' }}, legendrank: 1001 }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         const diskEl = document.getElementById('diskLayer');
         if (diskEl) {{
@@ -1538,12 +1537,10 @@ def build_html_dashboard(
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       Plotly.addTraces('cpuLayerSuite', [
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#dc2626', width: 4 }}, legendrank: 1000 }},
-        {{ x: xDisp, y: ro.cpu_ya_cores || [], mode: 'lines', name: 'CPU ya make (monitor)', line: {{ color: '#0f172a', width: 4, dash: 'dash' }}, legendrank: 1001 }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#dc2626', width: 4 }}, legendrank: 1000 }},
-        {{ x: xDisp, y: ro.ram_ya_gb || [], mode: 'lines', name: 'RAM ya make (monitor)', line: {{ color: '#0f172a', width: 4, dash: 'dash' }}, legendrank: 1001 }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       const diskEl = document.getElementById('diskLayerSuite');
       if (diskEl) {{
@@ -1652,28 +1649,28 @@ def build_html_dashboard(
     }}
     function applyLayerToggles() {{
       if (!data.resources_overlay) return;
-      const bySuites = document.getElementById('layerBySuites')?.checked ?? true;
-      const total = document.getElementById('layerTotal')?.checked ?? true;
-      const yaMake = document.getElementById('layerYaMake')?.checked ?? true;
-      function setVisibility(el, nStacked) {{
+      const bySuite = document.getElementById('layerBySuite')?.checked ?? true;
+      const systemCpu = document.getElementById('layerSystemCpu')?.checked ?? true;
+      const systemRam = document.getElementById('layerSystemRam')?.checked ?? true;
+      function setCpuVisibility(el, nSuite) {{
         if (!el || !el.data || !window.Plotly) return;
-        const vis = el.data.map((_, i) => {{
-          if (i < nStacked) return bySuites;
-          if (i === nStacked) return total;
-          if (i === nStacked + 1) return yaMake;
-          return true;
-        }});
+        const vis = el.data.map((_, i) => i < nSuite ? bySuite : (i === nSuite ? systemCpu : true));
+        Plotly.restyle(el, {{ visible: vis }}, [...Array(el.data.length).keys()]);
+      }}
+      function setRamVisibility(el, nSuite) {{
+        if (!el || !el.data || !window.Plotly) return;
+        const vis = el.data.map((_, i) => i < nSuite ? bySuite : (i === nSuite ? systemRam : true));
         Plotly.restyle(el, {{ visible: vis }}, [...Array(el.data.length).keys()]);
       }}
       const nCpuSuite = Number(data.cpu_suite_trace_count) || 0;
       const nRamSuite = Number(data.ram_suite_trace_count) || 0;
-      setVisibility(document.getElementById('cpuLayerSuite'), nCpuSuite);
-      setVisibility(document.getElementById('ramLayerSuite'), nRamSuite);
+      setCpuVisibility(document.getElementById('cpuLayerSuite'), nCpuSuite);
+      setRamVisibility(document.getElementById('ramLayerSuite'), nRamSuite);
       if (data.by_chunk) {{
         const nCpuChunk = Number(data.cpu_chunk_trace_count) || 0;
         const nRamChunk = Number(data.ram_chunk_trace_count) || 0;
-        setVisibility(document.getElementById('cpuLayer'), nCpuChunk);
-        setVisibility(document.getElementById('ramLayer'), nRamChunk);
+        setCpuVisibility(document.getElementById('cpuLayer'), nCpuChunk);
+        setRamVisibility(document.getElementById('ramLayer'), nRamChunk);
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;

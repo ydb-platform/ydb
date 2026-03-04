@@ -41,19 +41,22 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
     def _validate_bridge_piles(self, cluster):
         bridge_pile_to_nodes = collections.defaultdict(list)
+        pile_id_to_name = {}
         self.logger.info("Validating bridge piles for %d nodes", len(cluster.nodes))
 
         for node_id, node in cluster.nodes.items():
             self.logger.info("Node %d: host=%s, bridge_pile_name=%s, bridge_pile_id=%s",
                              node_id, node.host, node.bridge_pile_name, node.bridge_pile_id)
-            if node.bridge_pile_id is not None:
+            if node.bridge_pile_id is not None and node.bridge_pile_name is not None:
                 bridge_pile_to_nodes[node.bridge_pile_id].append(node)
+                pile_id_to_name[node.bridge_pile_id] = node.bridge_pile_name
 
         bridge_piles = list(bridge_pile_to_nodes.keys())
         self.logger.info("Found bridge piles: %s", bridge_piles)
         self.logger.info("Bridge pile to nodes mapping: %s",
                          {pile_id: [node.host for node in nodes] for pile_id, nodes in bridge_pile_to_nodes.items()})
-        return bridge_pile_to_nodes, bridge_piles
+        self.logger.info("Pile ID to name mapping: %s", pile_id_to_name)
+        return bridge_pile_to_nodes, bridge_piles, pile_id_to_name
 
     def _create_bridge_pile_cycle(self):
         while True:
@@ -72,7 +75,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         return bridge_clients
 
     def prepare_state(self):
-        self._bridge_pile_to_nodes, self._bridge_piles = self._validate_bridge_piles(self._cluster)
+        self._bridge_pile_to_nodes, self._bridge_piles, self._pile_id_to_name = self._validate_bridge_piles(self._cluster)
         if len(self._bridge_piles) < 2:
             self.logger.error("Bridge piles: %s", self._bridge_piles)
             self.logger.error("No bridge piles found in cluster or only one bridge pile found")
@@ -149,8 +152,10 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             raise Exception("Could not find another pile for bridge operations")
 
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
-        self.logger.info("OPERATION: failover (pile_id=%d)", self._current_pile_id)
-        result = self._bridge_clients[another_pile_id].failover(self._current_pile_id)
+        # Convert pile ID to pile name for bridge operations
+        pile_name = self._pile_id_to_name[self._current_pile_id]
+        self.logger.info("OPERATION: failover (pile_id=%d, pile_name=%s)", self._current_pile_id, pile_name)
+        result = self._bridge_clients[another_pile_id].failover(pile_name)
 
         if not result:
             self.logger.error("Failed to failover pile %d", self._current_pile_id)
@@ -198,8 +203,10 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             raise Exception("Could not find another pile for bridge restoration operations")
 
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
-        self.logger.info("OPERATION: rejoin for pile %d", self._current_pile_id)
-        result = self._bridge_clients[another_pile_id].rejoin(self._current_pile_id)
+        # Convert pile ID to pile name for bridge operations
+        pile_name = self._pile_id_to_name[self._current_pile_id]
+        self.logger.info("OPERATION: rejoin for pile %d (pile_name=%s)", self._current_pile_id, pile_name)
+        result = self._bridge_clients[another_pile_id].rejoin(pile_name)
         if not result:
             self.logger.error("Failed to rejoin pile %d", self._current_pile_id)
             raise Exception("Failed to rejoin pile")

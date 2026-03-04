@@ -1324,9 +1324,16 @@ def build_html_dashboard(
     function updateStackedPlotTracks(divId, tracks) {{
       const el = document.getElementById(divId);
       if (!el || !el.data || !window.Plotly) return;
-      const names = el.data.map(t => t.name);
-      const yArrays = names.map(n => (tracks[n] != null ? tracks[n] : []));
-      Plotly.restyle(el, {{y: yArrays}}, names.map((_, i) => i));
+      const indicesToUpdate = [];
+      const yArrays = [];
+      el.data.forEach((tr, i) => {{
+        const n = tr && tr.name;
+        if (n != null && tracks[n] != null) {{
+          indicesToUpdate.push(i);
+          yArrays.push(tracks[n]);
+        }}
+      }});
+      if (indicesToUpdate.length) Plotly.restyle(el, {{y: yArrays}}, indicesToUpdate);
     }}
 
     function applySyntheticToCharts() {{

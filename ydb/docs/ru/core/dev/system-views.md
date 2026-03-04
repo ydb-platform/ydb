@@ -302,6 +302,7 @@ LIMIT 100
 | `CompilationDurationMs` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
+| `QueryType` | Метка SQL_GENERIC_QUERY или SQL_DML_QUERY, обозначающая, был ли использован Query Service или Table Service при компиляции запроса.<br/>Тип: `Utf8`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 

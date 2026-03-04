@@ -378,6 +378,9 @@ namespace TEvDataShard {
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
 
+        EvCheckConstraintRequest,
+        EvCheckConstraintResponse,
+
         EvEnd
     };
 
@@ -1986,6 +1989,20 @@ namespace TEvDataShard {
         : public TEventPB<TEvValidateUniqueIndexResponse,
                           NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
                           TEvDataShard::EvValidateUniqueIndexResponse>
+    {
+    };
+
+    struct TEvCheckConstraintRequest
+        : public TEventPB<TEvCheckConstraintRequest,
+                          NKikimrTxDataShard::TEvCheckConstraintRequest,
+                          TEvDataShard::EvCheckConstraintRequest>
+    {
+    };
+
+    struct TEvCheckConstraintResponse
+        : public TEventPB<TEvCheckConstraintResponse,
+                          NKikimrTxDataShard::TEvCheckConstraintResponse,
+                          TEvDataShard::EvCheckConstraintResponse>
     {
     };
 };

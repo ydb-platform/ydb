@@ -7,20 +7,20 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <ydb/core/protos/set_column_constraint.pb.h>
 
 namespace NKikimr::NDataShard {
-
-using namespace NKikimr::NDataShard::NKikimrTxDataShard;
 
 class TCheckColumnsScan final : public TActor<TCheckColumnsScan>, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::CHECK_CONSTRAINT_ACTOR;
+        return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
     TCheckColumnsScan(
-        const TEvCheckConstraintRequest::ProtoRecordType& request,
+        const NKikimrTxDataShard::TEvCheckConstraintRequest& request,
         const TActorId& sender,
         ui64 tabletId,
         const TUserTable& tableInfo
@@ -40,8 +40,8 @@ public:
 
     ~TCheckColumnsScan() final = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
+    TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept final {
+        TActivationContext::AsActorContext().RegisterWithSameMailbox(static_cast<IActor*>(this));
         return {EScan::Feed, {}};
     }
 
@@ -51,7 +51,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> cells, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept final {
         const TConstArrayRef<TCell> rowCells = *row;
         for (const auto& cell : rowCells) {
             if (cell.IsNull()) {
@@ -62,13 +62,8 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        if (abort != EAbort::None) {
-            PassAway();
-            return nullptr;
-        }
-
-        auto response = MakeHolder<TEvCheckConstraintResponse>();
+    TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus) noexcept final {
+        auto response = MakeHolder<TEvDataShard::TEvCheckConstraintResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
 
@@ -105,7 +100,7 @@ private:
         }
     }
 
-    const TEvCheckConstraintRequest::ProtoRecordType Request;
+    const NKikimrTxDataShard::TEvCheckConstraintRequest Request;
     const TActorId Sender;
     const ui64 TabletId;
     TTags ScanTags;
@@ -114,7 +109,7 @@ private:
 
 class TDataShard::TTxHandleSafeCheckConstraintScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeCheckConstraintScan(TDataShard* self, TEvCheckConstraintRequest::TPtr&& ev)
+    TTxHandleSafeCheckConstraintScan(TDataShard* self, TEvDataShard::TEvCheckConstraintRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -127,14 +122,14 @@ public:
     void Complete(const TActorContext&) override {}
 
 private:
-    TEvCheckConstraintRequest::TPtr Ev;
+    TEvDataShard::TEvCheckConstraintRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvCheckConstraintRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeCheckConstraintScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvCheckConstraintRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -144,7 +139,7 @@ void TDataShard::HandleSafe(TEvCheckConstraintRequest::TPtr& ev, const TActorCon
     }
 
     auto sendResponse = [&](NKikimrSetColumnConstraint::ECheckStatus status, const TString& error = "") {
-        auto response = MakeHolder<TEvCheckConstraintResponse>();
+        auto response = MakeHolder<TEvDataShard::TEvCheckConstraintResponse>();
         response->Record.SetId(record.GetId());
         response->Record.SetTabletId(TabletID());
         response->Record.SetStatus(status);
@@ -175,7 +170,9 @@ void TDataShard::HandleSafe(TEvCheckConstraintRequest::TPtr& ev, const TActorCon
             sendResponse(NKikimrSetColumnConstraint::ECheckStatus::IN_PROGRESS);
             return;
         }
-        CancelScan(userTable.LocalTid, recCard->ScanId);
+        for (ui64 scanId : recCard->ScanIds) {
+            CancelScan(userTable.LocalTid, scanId);
+        }
         ScanManager.Drop(record.GetId());
     }
 
@@ -208,8 +205,8 @@ void TDataShard::HandleSafe(TEvCheckConstraintRequest::TPtr& ev, const TActorCon
     
     ui64 scanId = QueueScan(userTable.LocalTid, scan, ev->Cookie, scanOpts);
     
-    TScanRecord scanRecord = {scanId, seqNo};
-    ScanManager.Set(record.GetId(), scanRecord);
+    auto& scanIds = ScanManager.Set(record.GetId(), seqNo);
+    scanIds.push_back(scanId);
 
     sendResponse(NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
 }

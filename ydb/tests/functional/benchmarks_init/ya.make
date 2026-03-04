@@ -10,7 +10,7 @@ SIZE(MEDIUM)
 IF(NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:8 cpu:4)
 ELSE()
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:4)
 ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

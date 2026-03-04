@@ -567,12 +567,15 @@ void TLockInfo::AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>
 // TTableLocks
 
 TTableLocks::~TTableLocks() {
-    for (auto it = RuntimeLocks.begin(); it != RuntimeLocks.end(); ++it) {
-        // Make sure to detach all lock holders
-        while (it->second) {
-            it->second.PopFront();
-        }
+}
+
+TTableLocks::TRuntimeLockHolderList::~TRuntimeLockHolderList() {
+    while (!Empty()) {
+        // We must detach all lock holders and make them invalid
+        TRuntimeLockHolder* holder = PopFront();
+        holder->Self = nullptr;
     }
+    LockTails.clear();
 }
 
 void TTableLocks::AddShardLock(TLockInfo* lock) {
@@ -642,17 +645,46 @@ TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell
         it = res.first;
     }
     TRuntimeLockHolder holder(this, it, std::move(lock));
-    it->second.PushBack(&holder);
+    auto& tail = it->second.LockTails[holder.Lock];
+    if (!tail) {
+        it->second.PushBack(&holder);
+    } else {
+        // Note: we don't need to activate the next lock holder because the lock doesn't change
+        holder.LinkAfter(tail);
+    }
+    tail = &holder;
     return holder;
+}
+
+void TTableLocks::MovedRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder, TRuntimeLockHolder* was) {
+    Y_ENSURE(key->second);
+    auto& tail = key->second.LockTails[holder->Lock];
+    Y_ENSURE(tail, "Unexpected move of an unregistered lock holder");
+    if (tail == was) {
+        tail = holder;
+    }
 }
 
 void TTableLocks::RemoveRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder) {
     Y_ENSURE(key->second);
+    auto& tail = key->second.LockTails[holder->Lock];
+    Y_ENSURE(tail, "Unexpected remove of an unregistered lock holder");
+    TRuntimeLockHolder* prev = key->second.Front() != holder ? holder->Prev()->Node() : nullptr;
     TRuntimeLockHolder* next = key->second.Back() != holder ? holder->Next()->Node() : nullptr;
+    bool predecessorChanged = !prev || prev->Lock != holder->Lock;
+    if (tail == holder) {
+        if (predecessorChanged) {
+            key->second.LockTails.erase(holder->Lock);
+        } else {
+            tail = prev;
+        }
+    }
     holder->Unlink();
     if (next) {
-        // Activate the next lock holder (predecessor changed)
-        next->OnChangedEvent.NotifyAll();
+        // Activate the next lock holder when predecessor lock changes
+        if (predecessorChanged) {
+            next->OnChangedEvent.NotifyAll();
+        }
     } else if (!key->second) {
         // This key has no holders, remove
         RuntimeLocks.erase(key);

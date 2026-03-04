@@ -9,7 +9,7 @@ Produces:
     can be merged with ya timeline trace for unified view in chrome://tracing.
 
 Usage:
-  python3 analyze_resources.py \
+  python3 .github/scripts/utils/dashboard/analyze_resources.py \
     --resources-jsonl resources_monitor.jsonl \
     --report report.json \
     --output-html resources_report.html \

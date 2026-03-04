@@ -420,7 +420,7 @@ runs:
           RESOURCES_JSONL=$CURRENT_PUBLIC_DIR/resources_monitor.jsonl
 
           rm -f ram_usage.txt $RESOURCES_JSONL
-          python3 .github/scripts/monitor_resources.py \
+          python3 .github/scripts/utils/metrics/monitor_resources.py \
             --output $RESOURCES_JSONL \
             --ram-usage-file ram_usage.txt \
             --interval 1 &
@@ -462,7 +462,7 @@ runs:
           TRY_LINKS=""
           for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
           TRY_LINKS="${TRY_LINKS%,}"
-          python3 .github/scripts/tests/utils/tests_resource_dashboard.py \
+          python3 .github/scripts/utils/dashboard/tests/tests_resource_dashboard.py \
             --report $CURRENT_REPORT \
             --evlog $CURRENT_PUBLIC_DIR/ya_evlog.jsonl \
             --out-html $TESTS_METRICS_DIR/dashboard.html \
@@ -478,7 +478,7 @@ runs:
             --repo "${{ github.repository }}" \
             --repo-root . 2>/dev/null || true
           cp -f $RESOURCES_JSONL $TESTS_METRICS_DIR/resources_monitor.jsonl 2>/dev/null || true
-          echo "31 [Tests metrics](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
+          echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

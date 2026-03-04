@@ -561,7 +561,7 @@ public:
     TBlockTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type);
 
     explicit operator bool() const {
-        return ItemType_ != 0;
+        return ItemType_ != nullptr;
     }
     const TType* GetItemType() const {
         return ItemType_;
@@ -591,7 +591,7 @@ public:
     TLinearTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type);
 
     explicit operator bool() const {
-        return ItemType_ != 0;
+        return ItemType_ != nullptr;
     }
     const TType* GetItemType() const {
         return ItemType_;

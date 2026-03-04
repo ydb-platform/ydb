@@ -558,10 +558,10 @@ public:
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
                     "timezone",                            // mediawiki
-                    NULL,
+                    nullptr,
                 };
 
-                for (int i = 0; skip_statements[i] != NULL; i++) {
+                for (int i = 0; skip_statements[i] != nullptr; i++) {
                     const char* skip_name = skip_statements[i];
                     if (stricmp(node_name, skip_name) == 0) {
                         return true;
@@ -965,7 +965,7 @@ public:
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
-                if (linitial(x->distinctClause) == NULL) {
+                if (linitial(x->distinctClause) == nullptr) {
                     hasDistinctAll = true;
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {

@@ -1,12 +1,19 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/events/object_exists.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/system/mutex.h>
 
 #include <memory>
 
@@ -157,7 +164,7 @@ public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
-    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings);
+    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
 };
 } // NExternalStorage
 

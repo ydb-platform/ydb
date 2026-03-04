@@ -10,11 +10,11 @@ IExternalStorageOperator::TPtr IExternalStorageConfig::ConstructStorageOperator(
     return DoConstructStorageOperator(verbose);
 }
 
-IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings) {
+IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters) {
     if (settings.GetEndpoint() == "fake.fake") {
         return std::make_shared<TFakeExternalStorageConfig>(settings.GetBucket(), settings.GetSecretKey());
     } else {
-        return std::make_shared<TS3ExternalStorageConfig>(defaultAwsClientSettings, settings);
+        return std::make_shared<TS3ExternalStorageConfig>(defaultAwsClientSettings, settings, std::move(rootCounters));
     }
 }
 

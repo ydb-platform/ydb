@@ -276,7 +276,7 @@ protected:
     TNodePtr Lambda_;
 };
 
-typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
+using TAggrFuncPtr = THolder<TBasicAggrFunc>;
 
 class TLiteralStringAtom: public INode {
 public:

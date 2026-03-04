@@ -11,7 +11,7 @@ namespace NKikimr::NMiniKQL {
 
 template <bool Pretty>
 class TFormatTypeDiffWrapper: public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
-    typedef TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>>;
 
 public:
     TFormatTypeDiffWrapper(TComputationMutables& mutables, IComputationNode* handle_left, IComputationNode* handle_right)

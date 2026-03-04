@@ -14,7 +14,7 @@ auto g_TestStreamData = std::to_array<ui64>({0, 0, 1, 0, 0, 0, 1, 2, 3});
 auto g_TestYieldStreamData = std::to_array<ui64>({0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2});
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
-    typedef TMutableComputationNode<TTestStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
 
 public:
     class TStreamValue: public TComputationValue<TStreamValue> {
@@ -61,7 +61,7 @@ private:
 };
 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
-    typedef TMutableComputationNode<TTestYieldStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestYieldStreamWrapper>;
 
 public:
     class TStreamValue: public TComputationValue<TStreamValue> {

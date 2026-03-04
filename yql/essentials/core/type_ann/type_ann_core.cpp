@@ -657,11 +657,9 @@ namespace NTypeAnnImpl {
         return true;
     }
 
-    typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TContext& ctx)>
-        TAnnotationFunc;
+    using TAnnotationFunc = std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TContext& ctx)>;
 
-    typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExtContext& ctx)>
-        TExtendedAnnotationFunc;
+    using TExtendedAnnotationFunc = std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExtContext& ctx)>;
 
     struct TSyncFunctionsMap {
         TSyncFunctionsMap();

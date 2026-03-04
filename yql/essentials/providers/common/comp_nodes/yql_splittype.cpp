@@ -11,7 +11,7 @@ namespace NKikimr::NMiniKQL {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TSplitTypeWrapper: public TMutableComputationNode<TSplitTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TSplitTypeWrapper<Kind>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSplitTypeWrapper<Kind>>;
 
 public:
     TSplitTypeWrapper(TComputationMutables& mutables, IComputationNode* handle, ui32 exprCtxMutableIndex, NYql::TPosition pos)

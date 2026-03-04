@@ -7,7 +7,7 @@ namespace NSQLTranslationV1 {
 using TColumnsSets = NSorted::TSimpleSet<NSorted::TSimpleSet<TString>>;
 
 class ISource;
-typedef TIntrusivePtr<ISource> TSourcePtr;
+using TSourcePtr = TIntrusivePtr<ISource>;
 
 struct TTableRef {
     TString RefName;
@@ -25,7 +25,7 @@ struct TTableRef {
     TString ShortName() const;
 };
 
-typedef TVector<TTableRef> TTableList;
+using TTableList = TVector<TTableRef>;
 
 class IJoin;
 class ISource: public INode {

@@ -34,7 +34,7 @@ namespace NSQLTranslationV0 {
         Failed,
         End,
     };
-    typedef TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)> TNodeState;
+    using TNodeState = TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)>;
 
     enum class ESQLWriteColumnMode {
         InsertInto,
@@ -72,7 +72,7 @@ namespace NSQLTranslationV0 {
     class ITableKeys;
     class ISource;
     class IAggregation;
-    typedef TIntrusivePtr<IAggregation> TAggregationPtr;
+    using TAggregationPtr = TIntrusivePtr<IAggregation>;
 
     inline TString DotJoin(const TString& lhs, const TString& rhs) {
         TStringBuilder sb;
@@ -85,7 +85,7 @@ namespace NSQLTranslationV0 {
 
     class INode: public TSimpleRefCount<INode> {
     public:
-        typedef TIntrusivePtr<INode> TPtr;
+        using TPtr = TIntrusivePtr<INode>;
 
         struct TIdPart {
             TString Name;
@@ -217,7 +217,7 @@ namespace NSQLTranslationV0 {
         mutable TNodeState State_;
         bool AsInner_ = false;
     };
-    typedef INode::TPtr TNodePtr;
+    using TNodePtr = INode::TPtr;
 
     template<class T>
     inline T SafeClone(const T& node) {
@@ -484,7 +484,7 @@ namespace NSQLTranslationV0 {
         TIntrusivePtr<TSortSpecification> Clone() const;
         ~TSortSpecification() {}
     };
-    typedef TIntrusivePtr<TSortSpecification> TSortSpecificationPtr;
+    using TSortSpecificationPtr = TIntrusivePtr<TSortSpecification>;
 
     enum EFrameType {
         FrameByRows,
@@ -524,12 +524,12 @@ namespace NSQLTranslationV0 {
         ~THoppingWindowSpec() {}
     };
 
-    typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
-    typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
+    using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
+    using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
 
-    typedef TVector<TTableRef> TTableList;
+    using TTableList = TVector<TTableRef>;
 
-    typedef TIntrusivePtr<THoppingWindowSpec> THoppingWindowSpecPtr;
+    using THoppingWindowSpecPtr = TIntrusivePtr<THoppingWindowSpec>;
 
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
 
@@ -800,7 +800,7 @@ namespace NSQLTranslationV0 {
         TVector<TString> TmpWindowColumns_;
     };
 
-    typedef TIntrusivePtr<ISource> TSourcePtr;
+    using TSourcePtr = TIntrusivePtr<ISource>;
     template<>
     inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
         TVector<TSourcePtr> cloneArgs;
@@ -930,7 +930,7 @@ namespace NSQLTranslationV0 {
     TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 
 
-    typedef std::function<TNodePtr (const TString& baseName, const TNodePtr& node)> TFuncPrepareNameNode;
+    using TFuncPrepareNameNode = std::function<TNodePtr (const TString& baseName, const TNodePtr& node)>;
     // Implemented in builtin.cpp
     TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args);
     TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args);

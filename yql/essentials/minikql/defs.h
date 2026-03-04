@@ -46,14 +46,16 @@ struct TThrowable {
     }
 };
 
-typedef
 #ifdef _win_
-    struct {
+
+struct TRawUV {
     ui64 Data, Meta;
-}
+};
+
 #else
-    unsigned __int128
+
+using TRawUV = unsigned __int128;
+
 #endif
-TRawUV;
 
 } // namespace NKikimr

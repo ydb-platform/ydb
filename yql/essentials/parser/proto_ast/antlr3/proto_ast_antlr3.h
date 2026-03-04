@@ -10,7 +10,7 @@ using namespace NAST;
 
 template <typename TParser, typename TLexer>
 class TProtoASTBuilder3 {
-    typedef ANTLR_UINT8 TChar;
+    using TChar = ANTLR_UINT8;
 
 public:
     explicit TProtoASTBuilder3(TStringBuf data, TString queryName = "query", google::protobuf::Arena* arena = nullptr)
@@ -47,7 +47,7 @@ private:
 
 template <typename TLexer>
 class TLexerTokensCollector3 {
-    typedef ANTLR_UINT8 TChar;
+    using TChar = ANTLR_UINT8;
 
 public:
     TLexerTokensCollector3(TStringBuf data, const char** tokenNames, TString queryName = "query")

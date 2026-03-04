@@ -7,7 +7,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TFormatTypeWrapper: public TMutableComputationNode<TFormatTypeWrapper> {
-    typedef TMutableComputationNode<TFormatTypeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFormatTypeWrapper>;
 
 public:
     TFormatTypeWrapper(TComputationMutables& mutables, IComputationNode* handle)

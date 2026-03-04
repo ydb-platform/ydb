@@ -126,7 +126,7 @@ struct TMakeTypeArgs<NYql::ETypeAnnotationKind::DynamicLinear> {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TMakeTypeWrapper: public TMutableComputationNode<TMakeTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TMakeTypeWrapper<Kind>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TMakeTypeWrapper<Kind>>;
 
 public:
     TMakeTypeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)

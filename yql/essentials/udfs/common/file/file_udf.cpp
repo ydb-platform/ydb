@@ -180,12 +180,12 @@ bool SkipElements(IBoxedValue& iter, ui64 skip) {
     return true;
 }
 
-typedef std::function<void(const TString& message)> TTerminateFunc;
+using TTerminateFunc = std::function<void(const TString& message)>;
 
 class TStreamMeta: public TThrRefBase {
 public:
-    typedef TBuffered<TUnbufferedFileInput> TStream;
-    typedef TIntrusivePtr<TStreamMeta> TPtr;
+    using TStream = TBuffered<TUnbufferedFileInput>;
+    using TPtr = TIntrusivePtr<TStreamMeta>;
 
     explicit TStreamMeta(TString filePath)
         : FilePath_(std::move(filePath))

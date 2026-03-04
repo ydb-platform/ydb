@@ -401,9 +401,9 @@ public:
         }
     };
 
-    typedef std::vector<const TTypeAnnotationNode*> TListType;
-    typedef std::span<const TTypeAnnotationNode*> TSpanType;
-    typedef std::span<const TTypeAnnotationNode* const> TConstSpanType;
+    using TListType = std::vector<const TTypeAnnotationNode*>;
+    using TSpanType = std::span<const TTypeAnnotationNode*>;
+    using TConstSpanType = std::span<const TTypeAnnotationNode* const>;
 
 protected:
     template <typename T>
@@ -1781,10 +1781,10 @@ private:
     };
 
 public:
-    typedef TIntrusivePtr<TExprNode> TPtr;
-    typedef std::vector<TPtr> TListType;
-    typedef TArrayRef<const TPtr> TChildrenType;
-    typedef std::span<const TPtr> TExprNodeSpan;
+    using TPtr = TIntrusivePtr<TExprNode>;
+    using TListType = std::vector<TPtr>;
+    using TChildrenType = TArrayRef<const TPtr>;
+    using TExprNodeSpan = std::span<const TPtr>;
 
     struct TPtrHash: private std::hash<const TExprNode*> {
         size_t operator()(const TPtr& p) const {
@@ -2597,7 +2597,7 @@ using TModulesTable = THashMap<TString, TExportTable>;
 
 class IModuleResolver {
 public:
-    typedef std::shared_ptr<IModuleResolver> TPtr;
+    using TPtr = std::shared_ptr<IModuleResolver>;
     virtual bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;

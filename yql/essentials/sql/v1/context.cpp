@@ -41,7 +41,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     return result.Build();
 }
 
-typedef bool TContext::*TPragmaField;
+using TPragmaField = bool TContext::*;
 
 // TODO(vitya-smirnov): register thsese names automatically using TABLE_ELEM macro.
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
@@ -82,7 +82,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
-typedef TMaybe<bool> TContext::*TPragmaMaybeField;
+using TPragmaMaybeField = TMaybe<bool> TContext::*;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},

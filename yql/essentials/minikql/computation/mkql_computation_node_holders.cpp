@@ -565,7 +565,7 @@ private:
 
 class TSortedSetHolder: public TComputationValue<TSortedSetHolder> {
 public:
-    typedef TUnboxedValueVector TItems;
+    using TItems = TUnboxedValueVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
@@ -779,7 +779,7 @@ private:
 
 class TSortedDictHolder: public TComputationValue<TSortedDictHolder> {
 public:
-    typedef TKeyPayloadPairVector TItems;
+    using TItems = TKeyPayloadPairVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {

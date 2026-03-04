@@ -20,7 +20,7 @@ namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
-    typedef TSaver<TExprTypeSaver<TSaver>> TBase;
+    using TBase = TSaver<TExprTypeSaver<TSaver>>;
 
     struct TStructAdaptor {
         const TStructExprType* Type;
@@ -286,7 +286,7 @@ TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat form
 }
 
 struct TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
 
     TExprContext& Ctx;
     TPosition Pos;
@@ -435,7 +435,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 }
 
 struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
     TColumnOrder& TopLevelColumns;
 
     TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TColumnOrder& topLevelColumns)

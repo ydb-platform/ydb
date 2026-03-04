@@ -122,6 +122,8 @@ struct aws_mqtt_client_connection_vtable {
 
     int (*get_stats_fn)(void *impl, struct aws_mqtt_connection_operation_statistics *stats);
 
+    int (*set_metrics_fn)(void *impl, const struct aws_mqtt_iot_metrics *metrics);
+
     enum aws_mqtt311_impl_type (*get_impl_type)(const void *impl);
 
     struct aws_event_loop *(*get_event_loop)(const void *impl);

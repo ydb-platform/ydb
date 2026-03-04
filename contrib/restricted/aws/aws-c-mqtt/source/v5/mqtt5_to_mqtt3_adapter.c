@@ -8,7 +8,7 @@
 #include <aws/common/clock.h>
 #include <aws/common/rw_lock.h>
 
-#include <aws/mqtt/private/client_impl_shared.h>
+#include <aws/mqtt/private/mqtt_iot_metrics.h>
 #include <aws/mqtt/private/mqtt_subscription_set.h>
 #include <aws/mqtt/private/v5/mqtt5_client_impl.h>
 #include <aws/mqtt/private/v5/mqtt5_to_mqtt3_adapter_impl.h>
@@ -1639,7 +1639,7 @@ static void s_set_login_task_fn(struct aws_task *task, void *arg, enum aws_task_
 
     struct aws_mqtt5_packet_connect_storage *new_connect =
         aws_mem_calloc(adapter->allocator, 1, sizeof(struct aws_mqtt5_packet_connect_storage));
-    aws_mqtt5_packet_connect_storage_init(new_connect, adapter->allocator, &new_connect_view);
+    aws_mqtt5_packet_connect_storage_init(new_connect, adapter->allocator, &new_connect_view, adapter->client->config);
 
     adapter->client->config->connect = new_connect;
     aws_mqtt5_packet_connect_storage_clean_up(old_connect);
@@ -2779,6 +2779,94 @@ static int s_aws_mqtt_client_connection_5_get_stats(
     return AWS_OP_SUCCESS;
 }
 
+struct aws_mqtt_set_metrics_task {
+    struct aws_task task;
+    struct aws_allocator *allocator;
+    struct aws_mqtt_client_connection_5_impl *adapter;
+
+    struct aws_mqtt_iot_metrics_storage *metrics_storage;
+};
+
+static void s_aws_mqtt_set_metrics_task_destroy(struct aws_mqtt_set_metrics_task *task) {
+    if (task == NULL) {
+        return;
+    }
+
+    aws_mqtt_iot_metrics_storage_destroy(task->metrics_storage);
+    aws_mem_release(task->allocator, task);
+}
+
+static void s_set_metrics_task_fn(struct aws_task *task, void *arg, enum aws_task_status status) {
+    (void)task;
+
+    struct aws_mqtt_set_metrics_task *set_task = arg;
+    struct aws_mqtt_client_connection_5_impl *adapter = set_task->adapter;
+    if (status != AWS_TASK_STATUS_RUN_READY) {
+        goto done;
+    }
+
+    /* we're in the mqtt5 client's event loop; it's safe to access internal state */
+    struct aws_mqtt5_client_options_storage *client_options = adapter->client->config;
+    if (client_options->metrics_storage) {
+        aws_mqtt_iot_metrics_storage_destroy(client_options->metrics_storage);
+        client_options->metrics_storage = NULL;
+    }
+
+    client_options->metrics_storage = set_task->metrics_storage;
+    set_task->metrics_storage = NULL;
+
+done:
+    aws_ref_count_release(&adapter->internal_refs);
+    s_aws_mqtt_set_metrics_task_destroy(set_task);
+}
+
+static struct aws_mqtt_set_metrics_task *s_aws_mqtt_set_metrics_task_new(
+    struct aws_allocator *allocator,
+    struct aws_mqtt_client_connection_5_impl *adapter,
+    const struct aws_mqtt_iot_metrics *metrics) {
+
+    struct aws_mqtt_set_metrics_task *set_task = aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt_set_metrics_task));
+
+    aws_task_init(&set_task->task, s_set_metrics_task_fn, (void *)set_task, "SetMetricsTask");
+    set_task->allocator = allocator;
+    set_task->adapter = (struct aws_mqtt_client_connection_5_impl *)aws_ref_count_acquire(&adapter->internal_refs);
+
+    if (metrics != NULL) {
+        set_task->metrics_storage = aws_mqtt_iot_metrics_storage_new(allocator, metrics);
+        if (!set_task->metrics_storage) {
+            s_aws_mqtt_set_metrics_task_destroy(set_task);
+            return NULL;
+        }
+    }
+
+    return set_task;
+}
+
+static int s_aws_mqtt_client_connection_5_set_metrics(void *impl, const struct aws_mqtt_iot_metrics *metrics) {
+    struct aws_mqtt_client_connection_5_impl *adapter = impl;
+
+    if (metrics && aws_mqtt_validate_iot_metrics(metrics) == AWS_OP_ERR) {
+        AWS_LOGF_DEBUG(AWS_LS_MQTT5_TO_MQTT3_ADAPTER, "id=%p: Invalid metrics.", (void *)adapter);
+        return AWS_OP_ERR;
+    }
+
+    struct aws_mqtt_set_metrics_task *task = s_aws_mqtt_set_metrics_task_new(adapter->allocator, adapter, metrics);
+    if (task == NULL) {
+        int error_code = aws_last_error();
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT5_TO_MQTT3_ADAPTER,
+            "id=%p: failed to create set metrics task, error code %d(%s)",
+            (void *)adapter,
+            error_code,
+            aws_error_debug_str(error_code));
+        return AWS_OP_ERR;
+    }
+
+    aws_event_loop_schedule_task_now(adapter->loop, &task->task);
+
+    return AWS_OP_SUCCESS;
+}
+
 static uint16_t s_aws_mqtt_5_resubscribe_existing_topics(
     void *impl,
     aws_mqtt_suback_multi_fn *on_suback,
@@ -2805,7 +2893,8 @@ static uint16_t s_aws_mqtt_5_resubscribe_existing_topics(
         int error_code = aws_last_error();
         AWS_LOGF_ERROR(
             AWS_LS_MQTT5_TO_MQTT3_ADAPTER,
-            "id=%p: mqtt3-to-5-adapter, resubscribe_existing_topics failed on operation creation, error code %d(%s)",
+            "id=%p: mqtt3-to-5-adapter, resubscribe_existing_topics failed on operation creation, error code "
+            "%d(%s)",
             (void *)adapter,
             error_code,
             aws_error_debug_str(error_code));
@@ -2885,6 +2974,7 @@ static struct aws_mqtt_client_connection_vtable s_aws_mqtt_client_connection_5_v
     .unsubscribe_fn = s_aws_mqtt_client_connection_5_unsubscribe,
     .publish_fn = s_aws_mqtt_client_connection_5_publish,
     .get_stats_fn = s_aws_mqtt_client_connection_5_get_stats,
+    .set_metrics_fn = s_aws_mqtt_client_connection_5_set_metrics,
     .get_impl_type = s_aws_mqtt_client_connection_5_get_impl,
     .get_event_loop = s_aws_mqtt_client_connection_5_get_event_loop,
 };

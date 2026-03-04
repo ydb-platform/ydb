@@ -52,6 +52,9 @@ NYql::NNodes::TExprBase KqpRewriteTopSortOverFlatMap(const NYql::NNodes::TExprBa
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
+NYql::NNodes::TExprBase KqpRewriteFlatMapOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
+
 NYql::NNodes::TExprBase KqpDeleteOverLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext &kqpCtx, const NYql::TParentsMap& parentsMap);
 

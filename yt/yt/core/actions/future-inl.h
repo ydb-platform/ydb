@@ -355,8 +355,8 @@ public:
         return CancelationError_;
     }
 
-    bool Wait(TDuration timeout) const;
-    bool Wait(TInstant deadline) const;
+    bool BlockingWait(TDuration timeout) const;
+    bool BlockingWait(TInstant deadline) const;
 
 protected:
     //! Number of promises.
@@ -1129,17 +1129,29 @@ const TErrorOr<T>& TFutureBase<T>::GetOrCrash() const
 }
 
 template <class T>
-bool TFutureBase<T>::Wait(TDuration timeout) const
+bool TFutureBase<T>::BlockingWait(TDuration timeout) const
 {
     YT_ASSERT(Impl_);
-    return Impl_->Wait(timeout);
+    return Impl_->BlockingWait(timeout);
+}
+
+template <class T>
+bool TFutureBase<T>::BlockingWait(TInstant deadline) const
+{
+    YT_ASSERT(Impl_);
+    return Impl_->BlockingWait(deadline);
+}
+
+template <class T>
+bool TFutureBase<T>::Wait(TDuration timeout) const
+{
+    return BlockingWait(timeout);
 }
 
 template <class T>
 bool TFutureBase<T>::Wait(TInstant deadline) const
 {
-    YT_ASSERT(Impl_);
-    return Impl_->Wait(deadline);
+    return BlockingWait(deadline);
 }
 
 template <class T>

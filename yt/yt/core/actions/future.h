@@ -223,11 +223,23 @@ public:
     /*!
      *  This call blocks until either the value is set or #timeout (if given) expires.
      */
-    bool Wait(TDuration timeout = TDuration::Max()) const;
+    bool BlockingWait(TDuration timeout = TDuration::Max()) const;
 
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #deadline is reached.
+     */
+    bool BlockingWait(TInstant deadline) const;
+
+    //! The same as #BlockingWait.
+    /*!
+     *  \deprecated Use #BlockingWait instead.
+     */
+    bool Wait(TDuration timeout = TDuration::Max()) const;
+
+    //! The same as #BlockingWait.
+    /*!
+     *  \deprecated Use #BlockingWait instead.
      */
     bool Wait(TInstant deadline) const;
 

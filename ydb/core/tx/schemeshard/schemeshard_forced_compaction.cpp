@@ -307,6 +307,7 @@ void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
 }
 
 void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
+    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_TIMEOUT].Increment(1);
     auto ctx = ActorContext();
 
     auto it = ShardInfos.find(shardIdx);

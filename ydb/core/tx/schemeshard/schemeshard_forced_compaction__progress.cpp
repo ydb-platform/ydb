@@ -13,6 +13,10 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         : TRwTxBase(self)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_PROGRESS_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxProgress DoExecute, CompactionsToPersist size: " << CompactionsToPersist.size());
         NIceDb::TNiceDb db(txc.DB);

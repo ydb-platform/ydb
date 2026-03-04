@@ -1969,7 +1969,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         // block result, so first compaction will stuck in progress
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
@@ -2010,7 +2009,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         // block first CompactTableResult, should be retried
         bool blocked = false;
@@ -2044,7 +2042,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         // fail first CompactTableResult, should be retried
         bool failed = false;
@@ -2076,7 +2073,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2135,7 +2131,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2160,7 +2155,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2243,7 +2237,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2269,7 +2262,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2289,7 +2281,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2317,7 +2308,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2355,7 +2345,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 

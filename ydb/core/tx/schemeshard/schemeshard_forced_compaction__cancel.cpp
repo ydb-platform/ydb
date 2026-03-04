@@ -12,6 +12,10 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         , Request(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_CANCEL_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
         LOG_N("TForcedCompaction::TTxCancel DoExecute " << request.ShortDebugString());

@@ -277,6 +277,10 @@ enum ESimpleCounters {
     COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215 [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
     
     COUNTER_IN_FLIGHT_OPS_TxReadOnlyCopyColumnTable = 216 [(CounterOpts) = {Name: "InFlightOps/ReadOnlyCopyColumnTable"}];
+
+    COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE = 217    [(CounterOpts) = {Name: "ForcedCompactionOperationsQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE = 218    [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 }
 
 enum ECumulativeCounters {
@@ -452,15 +456,11 @@ enum ECumulativeCounters {
     
     COUNTER_FINISHED_OPS_TxReadOnlyCopyColumnTable = 134 [(CounterOpts) = {Name: "FinishedOps/ReadOnlyCopyColumnTable"}];
 
-    COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE = 135    [(CounterOpts) = {Name: "ForcedCompactionOperationsQueueSize"}];
-    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE = 136    [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueSize"}];
-    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 137 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
-
-    COUNTER_FORCED_COMPACTION_OK = 138            [(CounterOpts) = {Name: "ForcedCompactionOk"}];
-    COUNTER_FORCED_COMPACTION_FAILED = 139        [(CounterOpts) = {Name: "ForcedCompactionFailed"}];
-    COUNTER_FORCED_COMPACTION_TIMEOUT = 140       [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
-    COUNTER_FORCED_COMPACTION_NOT_NEEDED = 141    [(CounterOpts) = {Name: "ForcedCompactionNotNeeded"}];
-    COUNTER_FORCED_COMPACTION_LOANED = 142        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
+    COUNTER_FORCED_COMPACTION_OK = 135            [(CounterOpts) = {Name: "ForcedCompactionOk"}];
+    COUNTER_FORCED_COMPACTION_FAILED = 136        [(CounterOpts) = {Name: "ForcedCompactionFailed"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT = 137       [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
+    COUNTER_FORCED_COMPACTION_NOT_NEEDED = 138    [(CounterOpts) = {Name: "ForcedCompactionNotNeeded"}];
+    COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
 }
 
 enum EPercentileCounters {
@@ -716,4 +716,11 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+
+    TXTYPE_CANCEL_FORCED_COMPACTION = 110   [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
+    TXTYPE_CREATE_FORCED_COMPACTION = 111   [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
+    TXTYPE_FORGET_FORCED_COMPACTION = 112   [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
+    TXTYPE_GET_FORCED_COMPACTION = 113      [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
+    TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
+    TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
 }

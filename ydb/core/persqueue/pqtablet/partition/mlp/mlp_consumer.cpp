@@ -847,7 +847,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
         if (Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
             return Config.GetDeadLetterQueue();
         } else {
-            return TStringBuilder() << databasePrefix << Config.GetDeadLetterQueue();
+            return databasePrefix << Config.GetDeadLetterQueue();
         }
     };
 

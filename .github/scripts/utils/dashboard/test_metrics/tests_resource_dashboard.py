@@ -26,7 +26,10 @@ if __name__ != "__main__":
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
 else:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _script_dir = Path(__file__).resolve().parent
+    _dashboard_dir = _script_dir.parent
+    sys.path.insert(0, str(_script_dir))
+    sys.path.insert(0, str(_dashboard_dir))
     import ya_make_requirements
     from dashboard_cpu_suggestions import build_cpu_suggestions
     from dashboard_html_main import build_html_dashboard
@@ -691,14 +694,11 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
 
 def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
-    records = []
-    for line in resources_path.read_text(encoding="utf-8", errors="replace").strip().splitlines():
-        if not line.strip():
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    try:
+        from ..resources_loader import load_resources_jsonl
+    except ImportError:
+        from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
+    records = load_resources_jsonl(resources_path)
     if not records or not enriched_runs:
         return None
     # Time alignment: evlog_sec = ref_start_ev + (resource_ts - ref_report_ts)
@@ -708,9 +708,14 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
     if ref_report_ts is None:
         ref_report_ts = ref_run.get("report_suite_finish_ts")
     if ref_report_ts is None:
-        return None
-    ref_report_ts = float(ref_report_ts)
+        # Fallback: assume first resource sample aligns with first evlog run start
+        ref_report_ts = float(records[0].get("ts", 0) or 0)
+        ref_start_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+    else:
+        ref_report_ts = float(ref_report_ts)
     cpu_cores = records[0].get("cpu_cores") or 1
+    min_evlog = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+    max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
     cpu_total_cores: list[float] = []
     cpu_ya_cores: list[float] = []
@@ -721,6 +726,8 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
     for r in records:
         ts = float(r.get("ts", 0) or 0)
         evlog_sec = ref_start_ev + (ts - ref_report_ts)
+        if not (min_evlog <= evlog_sec <= max_evlog):
+            continue
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
         cpu_ya_cores.append(float(r.get("cpu_ya_pct", 0) or 0) / 100.0 * cpu_cores)
@@ -728,6 +735,8 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         ram_ya_gb.append(float(r.get("ram_ya_kb", 0) or 0) / (1024 * 1024))
         disk_read_mb.append(float(r.get("disk_read_mb_delta", 0) or 0))
         disk_write_mb.append(float(r.get("disk_write_mb_delta", 0) or 0))
+    if not xs_evlog:
+        return None
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
@@ -736,6 +745,7 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         "ram_ya_gb": ram_ya_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
+        "evlog_range_sec": [min_evlog, max_evlog],
     }
 
 

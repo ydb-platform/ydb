@@ -256,12 +256,12 @@ namespace NLongTxService {
                 Record.SetLockNode(lockNode);
                 Record.SetStatus(status);
                 if (lockTimestamp) {
-                    Record.SetLockTimestamp(lockTimestamp.MicroSeconds());
+                    Record.SetLockTimestampUs(lockTimestamp.MicroSeconds());
                 }
             }
 
             TInstant GetLockTimestamp() const {
-                return TInstant::MicroSeconds(Record.GetLockTimestamp());
+                return TInstant::MicroSeconds(Record.GetLockTimestampUs());
             }
         };
 

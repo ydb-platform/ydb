@@ -27,10 +27,10 @@ else:
 
 
 class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
-    """
-    Default directories for Unix/Linux without XDG environment variable overrides.
+    """Default directories for Unix/Linux without XDG environment variable overrides.
 
     The XDG env var handling is in :class:`~platformdirs._xdg.XDGMixin`.
+
     """
 
     @cached_property
@@ -39,10 +39,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def user_data_dir(self) -> str:
-        """
-        :return: data directory tied to the user, e.g. ``~/.local/share/$appname/$version`` or
-         ``$XDG_DATA_HOME/$appname/$version``
-        """
+        """:returns: data directory tied to the user, e.g. ``~/.local/share/$appname/$version`` or ``$XDG_DATA_HOME/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/.local/share"))  # noqa: PTH111
 
     @property
@@ -51,10 +48,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def user_config_dir(self) -> str:
-        """
-        :return: config directory tied to the user, e.g. ``~/.config/$appname/$version`` or
-         ``$XDG_CONFIG_HOME/$appname/$version``
-        """
+        """:returns: config directory tied to the user, e.g. ``~/.config/$appname/$version`` or ``$XDG_CONFIG_HOME/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/.config"))  # noqa: PTH111
 
     @property
@@ -63,33 +57,27 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def user_cache_dir(self) -> str:
-        """
-        :return: cache directory tied to the user, e.g. ``~/.cache/$appname/$version`` or
-         ``$XDG_CACHE_HOME/$appname/$version``
-        """
+        """:returns: cache directory tied to the user, e.g. ``~/.cache/$appname/$version`` or ``$XDG_CACHE_HOME/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/.cache"))  # noqa: PTH111
 
     @property
     def site_cache_dir(self) -> str:
-        """:return: cache directory shared by users, e.g. ``/var/cache/$appname/$version``"""
+        """:returns: cache directory shared by users, e.g. ``/var/cache/$appname/$version``"""
         return self._append_app_name_and_version("/var/cache")
 
     @property
     def user_state_dir(self) -> str:
-        """
-        :return: state directory tied to the user, e.g. ``~/.local/state/$appname/$version`` or
-         ``$XDG_STATE_HOME/$appname/$version``
-        """
+        """:returns: state directory tied to the user, e.g. ``~/.local/state/$appname/$version`` or ``$XDG_STATE_HOME/$appname/$version``"""
         return self._append_app_name_and_version(os.path.expanduser("~/.local/state"))  # noqa: PTH111
 
     @property
     def site_state_dir(self) -> str:
-        """:return: state directory shared by users, e.g. ``/var/lib/$appname/$version``"""
+        """:returns: state directory shared by users, e.g. ``/var/lib/$appname/$version``"""
         return self._append_app_name_and_version("/var/lib")
 
     @property
     def user_log_dir(self) -> str:
-        """:return: log directory tied to the user, same as `user_state_dir` if not opinionated else ``log`` in it"""
+        """:returns: log directory tied to the user, same as `user_state_dir` if not opinionated else ``log`` in it"""
         path = self.user_state_dir
         if self.opinion:
             path = os.path.join(path, "log")  # noqa: PTH118
@@ -98,56 +86,56 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def site_log_dir(self) -> str:
-        """
-        :return: log directory shared by users, e.g. ``/var/log/$appname/$version``
+        """:returns: log directory shared by users, e.g. ``/var/log/$appname/$version``
 
         Unlike `user_log_dir`, ``opinion`` has no effect since ``/var/log`` is inherently a log directory.
+
         """
         return self._append_app_name_and_version("/var/log")
 
     @property
     def user_documents_dir(self) -> str:
-        """:return: documents directory tied to the user, e.g. ``~/Documents``"""
+        """:returns: documents directory tied to the user, e.g. ``~/Documents``"""
         return _get_user_media_dir("XDG_DOCUMENTS_DIR", "~/Documents")
 
     @property
     def user_downloads_dir(self) -> str:
-        """:return: downloads directory tied to the user, e.g. ``~/Downloads``"""
+        """:returns: downloads directory tied to the user, e.g. ``~/Downloads``"""
         return _get_user_media_dir("XDG_DOWNLOAD_DIR", "~/Downloads")
 
     @property
     def user_pictures_dir(self) -> str:
-        """:return: pictures directory tied to the user, e.g. ``~/Pictures``"""
+        """:returns: pictures directory tied to the user, e.g. ``~/Pictures``"""
         return _get_user_media_dir("XDG_PICTURES_DIR", "~/Pictures")
 
     @property
     def user_videos_dir(self) -> str:
-        """:return: videos directory tied to the user, e.g. ``~/Videos``"""
+        """:returns: videos directory tied to the user, e.g. ``~/Videos``"""
         return _get_user_media_dir("XDG_VIDEOS_DIR", "~/Videos")
 
     @property
     def user_music_dir(self) -> str:
-        """:return: music directory tied to the user, e.g. ``~/Music``"""
+        """:returns: music directory tied to the user, e.g. ``~/Music``"""
         return _get_user_media_dir("XDG_MUSIC_DIR", "~/Music")
 
     @property
     def user_desktop_dir(self) -> str:
-        """:return: desktop directory tied to the user, e.g. ``~/Desktop``"""
+        """:returns: desktop directory tied to the user, e.g. ``~/Desktop``"""
         return _get_user_media_dir("XDG_DESKTOP_DIR", "~/Desktop")
 
     @property
     def user_bin_dir(self) -> str:
-        """:return: bin directory tied to the user, e.g. ``~/.local/bin``"""
+        """:returns: bin directory tied to the user, e.g. ``~/.local/bin``"""
         return os.path.expanduser("~/.local/bin")  # noqa: PTH111
 
     @property
     def site_bin_dir(self) -> str:
-        """:return: bin directory shared by users, e.g. ``/usr/local/bin``"""
+        """:returns: bin directory shared by users, e.g. ``/usr/local/bin``"""
         return "/usr/local/bin"
 
     @property
     def user_applications_dir(self) -> str:
-        """:return: applications directory tied to the user, e.g. ``~/.local/share/applications``"""
+        """:returns: applications directory tied to the user, e.g. ``~/.local/share/applications``"""
         return os.path.join(os.path.expanduser("~/.local/share"), "applications")  # noqa: PTH111, PTH118
 
     @property
@@ -156,18 +144,16 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def site_applications_dir(self) -> str:
-        """:return: applications directory shared by users, e.g. ``/usr/share/applications``"""
+        """:returns: applications directory shared by users, e.g. ``/usr/share/applications``"""
         dirs = self._site_applications_dirs
         return os.pathsep.join(dirs) if self.multipath else dirs[0]
 
     @property
     def user_runtime_dir(self) -> str:
-        """
-        :return: runtime directory tied to the user, e.g. ``$XDG_RUNTIME_DIR/$appname/$version``.
+        """:returns: runtime directory tied to the user, e.g. ``$XDG_RUNTIME_DIR/$appname/$version``.
 
-        If ``$XDG_RUNTIME_DIR`` is unset, tries the platform default (``/tmp/run/user/$(id -u)`` on
-        OpenBSD, ``/var/run/user/$(id -u)`` on FreeBSD/NetBSD, ``/run/user/$(id -u)`` otherwise).
-        If the default is not writable, falls back to a temporary directory.
+        If ``$XDG_RUNTIME_DIR`` is unset, tries the platform default (``/tmp/run/user/$(id -u)`` on OpenBSD, ``/var/run/user/$(id -u)`` on FreeBSD/NetBSD, ``/run/user/$(id -u)`` otherwise). If the default is not writable, falls back to a temporary directory.
+
         """
         if sys.platform.startswith("openbsd"):
             path = f"/tmp/run/user/{getuid()}"  # noqa: S108
@@ -181,17 +167,14 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def site_runtime_dir(self) -> str:
-        """
-        :return: runtime directory shared by users, e.g. ``/run/$appname/$version`` or \
-        ``$XDG_RUNTIME_DIR/$appname/$version``.
+        """:returns: runtime directory shared by users, e.g. ``/run/$appname/$version`` or ``$XDG_RUNTIME_DIR/$appname/$version``.
 
-        Note that this behaves almost exactly like `user_runtime_dir` if ``$XDG_RUNTIME_DIR`` is set, but will
-        fall back to paths associated to the root user instead of a regular logged-in user if it's not set.
+        Note that this behaves almost exactly like `user_runtime_dir` if ``$XDG_RUNTIME_DIR`` is set, but will fall back to paths associated to the root user instead of a regular logged-in user if it's not set.
 
-        If you wish to ensure that a logged-in root user path is returned e.g. ``/run/user/0``, use `user_runtime_dir`
-        instead.
+        If you wish to ensure that a logged-in root user path is returned e.g. ``/run/user/0``, use `user_runtime_dir` instead.
 
         For FreeBSD/OpenBSD/NetBSD, it would return ``/var/run/$appname/$version`` if ``$XDG_RUNTIME_DIR`` is not set.
+
         """
         if sys.platform.startswith(("freebsd", "openbsd", "netbsd")):
             path = "/var/run"
@@ -201,17 +184,17 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
     @property
     def site_data_path(self) -> Path:
-        """:return: data path shared by users. Only return the first item, even if ``multipath`` is set to ``True``"""
+        """:returns: data path shared by users. Only return the first item, even if ``multipath`` is set to ``True``"""
         return self._first_item_as_path_if_multipath(self.site_data_dir)
 
     @property
     def site_config_path(self) -> Path:
-        """:return: config path shared by users, returns the first item, even if ``multipath`` is set to ``True``"""
+        """:returns: config path shared by users, returns the first item, even if ``multipath`` is set to ``True``"""
         return self._first_item_as_path_if_multipath(self.site_config_dir)
 
     @property
     def site_cache_path(self) -> Path:
-        """:return: cache path shared by users. Only return the first item, even if ``multipath`` is set to ``True``"""
+        """:returns: cache path shared by users. Only return the first item, even if ``multipath`` is set to ``True``"""
         return self._first_item_as_path_if_multipath(self.site_cache_dir)
 
     def iter_config_dirs(self) -> Iterator[str]:
@@ -226,54 +209,54 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
 
 class Unix(XDGMixin, _UnixDefaults):
-    """
-    On Unix/Linux, we follow the `XDG Basedir Spec <https://specifications.freedesktop.org/basedir/latest/>`_.
+    """On Unix/Linux, we follow the `XDG Basedir Spec <https://specifications.freedesktop.org/basedir/latest/>`_.
 
     The spec allows overriding directories with environment variables. The examples shown are the default values,
     alongside the name of the environment variable that overrides them. Makes use of the `appname
     <platformdirs.api.PlatformDirsABC.appname>`, `version <platformdirs.api.PlatformDirsABC.version>`, `multipath
     <platformdirs.api.PlatformDirsABC.multipath>`, `opinion <platformdirs.api.PlatformDirsABC.opinion>`, `ensure_exists
     <platformdirs.api.PlatformDirsABC.ensure_exists>`.
+
     """
 
     @property
     def user_data_dir(self) -> str:
-        """:return: data directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: data directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_data_dir if self._use_site else super().user_data_dir
 
     @property
     def user_config_dir(self) -> str:
-        """:return: config directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: config directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_config_dir if self._use_site else super().user_config_dir
 
     @property
     def user_cache_dir(self) -> str:
-        """:return: cache directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: cache directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_cache_dir if self._use_site else super().user_cache_dir
 
     @property
     def user_state_dir(self) -> str:
-        """:return: state directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: state directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_state_dir if self._use_site else super().user_state_dir
 
     @property
     def user_log_dir(self) -> str:
-        """:return: log directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: log directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_log_dir if self._use_site else super().user_log_dir
 
     @property
     def user_applications_dir(self) -> str:
-        """:return: applications directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: applications directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_applications_dir if self._use_site else super().user_applications_dir
 
     @property
     def user_runtime_dir(self) -> str:
-        """:return: runtime directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: runtime directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_runtime_dir if self._use_site else super().user_runtime_dir
 
     @property
     def user_bin_dir(self) -> str:
-        """:return: bin directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
+        """:returns: bin directory tied to the user, or site equivalent when root with ``use_site_for_root``"""
         return self.site_bin_dir if self._use_site else super().user_bin_dir
 
 
@@ -284,8 +267,7 @@ def _get_user_media_dir(env_var: str, fallback_tilde_path: str) -> str:
 
 
 def _get_user_dirs_folder(key: str) -> str | None:
-    """
-    Return directory from user-dirs.dirs config file.
+    """Return directory from user-dirs.dirs config file.
 
     See https://freedesktop.org/wiki/Software/xdg-user-dirs/.
 

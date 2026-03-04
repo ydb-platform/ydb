@@ -38,8 +38,8 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
 #ifndef _win_
         mlockall(MCL_CURRENT);
 #endif
-        EnableYDBBacktraceFormat();
-        return NDriverClient::NewClient(argc, argv, std::move(factories));
+        NKikimr::EnableYDBBacktraceFormat();
+        return NKikimr::NDriverClient::NewClient(argc, argv, std::move(factories));
     }
     catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;

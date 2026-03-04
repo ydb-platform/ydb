@@ -26,21 +26,34 @@ public:
     int Run(TConfig& config) override {
         Y_UNUSED(config);
 
-        Y_ABORT_UNLESS(NodeId != 0);
+        if (NodeId == 0) {
+            throw NYdb::NConsoleClient::TMisuseException()
+                << "Node ID must be non-zero";
+        }
 
         TAutoPtr<NKikimrConfig::TBlobStorageFormatConfig> formatConfig;
         formatConfig.Reset(new NKikimrConfig::TBlobStorageFormatConfig());
-        Y_ABORT_UNLESS(ParsePBFromFile(FormatFile, formatConfig.Get()));
+        if (!ParsePBFromFile(FormatFile, formatConfig.Get())) {
+            throw NYdb::NConsoleClient::TMisuseException()
+                << "Failed to parse format file: " << FormatFile;
+        }
 
         size_t driveSize = formatConfig->DriveSize();
         bool isFirst = true;
         for (size_t driveIdx = 0; driveIdx < driveSize; ++driveIdx) {
             const NKikimrConfig::TBlobStorageFormatConfig::TDrive& drive = formatConfig->GetDrive(driveIdx);
-            Y_ABORT_UNLESS(drive.HasNodeId());
-            Y_ABORT_UNLESS(drive.HasType());
-            Y_ABORT_UNLESS(drive.HasPath());
-            Y_ABORT_UNLESS(drive.HasGuid());
-            Y_ABORT_UNLESS(drive.HasPDiskId());
+            auto checkField = [&](bool has, const char* name) {
+                if (!has) {
+                    throw NYdb::NConsoleClient::TMisuseException()
+                        << "Drive entry at index " << driveIdx << " in " << FormatFile
+                        << " is missing required field: " << name;
+                }
+            };
+            checkField(drive.HasNodeId(), "NodeId");
+            checkField(drive.HasType(), "Type");
+            checkField(drive.HasPath(), "Path");
+            checkField(drive.HasGuid(), "Guid");
+            checkField(drive.HasPDiskId(), "PDiskId");
             if (drive.GetNodeId() == NodeId) {
                 if (isFirst) {
                     isFirst = false;

@@ -29,11 +29,17 @@ public:
     int Run(TConfig& config) override {
         Y_UNUSED(config);
 
-        Y_ABORT_UNLESS(Port == -1 || (Port >= 0 && Port <= 0xffff));
+        if (Port != -1 && (Port < 0 || Port > 0xffff)) {
+            throw NYdb::NConsoleClient::TMisuseException()
+                << "Invalid port value: " << Port << ". Must be in range [0, 65535]";
+        }
 
         TAutoPtr<NKikimrConfig::TStaticNameserviceConfig> nameserviceConfig;
         nameserviceConfig.Reset(new NKikimrConfig::TStaticNameserviceConfig());
-        Y_ABORT_UNLESS(ParsePBFromFile(NamingFile, nameserviceConfig.Get()));
+        if (!ParsePBFromFile(NamingFile, nameserviceConfig.Get())) {
+            throw NYdb::NConsoleClient::TMisuseException()
+                << "Failed to parse naming file: " << NamingFile;
+        }
 
         size_t nodeSize = nameserviceConfig->NodeSize();
         ui32 nodeId = 0;
@@ -41,18 +47,35 @@ public:
         bool isPortPresent = (Port != -1);
         for (size_t nodeIdx = 0; nodeIdx < nodeSize; ++nodeIdx) {
             const NKikimrConfig::TStaticNameserviceConfig::TNode& node = nameserviceConfig->GetNode(nodeIdx);
-            Y_ABORT_UNLESS(node.HasPort());
-            Y_ABORT_UNLESS(node.HasHost());
-            Y_ABORT_UNLESS(node.HasNodeId());
+            auto checkField = [&](bool has, const char* name) {
+                if (!has) {
+                    throw NYdb::NConsoleClient::TMisuseException()
+                        << "Node entry at index " << nodeIdx << " in " << NamingFile
+                        << " is missing required field: " << name;
+                }
+            };
+            checkField(node.HasPort(), "Port");
+            checkField(node.HasHost(), "Host");
+            checkField(node.HasNodeId(), "NodeId");
             if (node.GetHost() == Hostname) {
                 if (!isPortPresent || (ui32)Port == node.GetPort()) {
-                    Y_ABORT_UNLESS(!isMatchingNodeFound);
+                    if (isMatchingNodeFound) {
+                        throw NYdb::NConsoleClient::TMisuseException()
+                            << "Multiple nodes match hostname '" << Hostname << "'"
+                            << (isPortPresent ? TString(" and port ") + ToString(Port) : TString())
+                            << " in " << NamingFile;
+                    }
                     isMatchingNodeFound = true;
                     nodeId = node.GetNodeId();
                 }
             }
         }
-        Y_ABORT_UNLESS(isMatchingNodeFound);
+        if (!isMatchingNodeFound) {
+            throw NYdb::NConsoleClient::TMisuseException()
+                << "No node found for hostname '" << Hostname << "'"
+                << (isPortPresent ? TString(" with port ") + ToString(Port) : TString())
+                << " in " << NamingFile;
+        }
         Cout << nodeId;
         Cout.Flush();
 

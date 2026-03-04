@@ -76,6 +76,10 @@ public:
     void Config(TConfig& config) override {
         TClientCommandOptions& opts = *config.Opts;
         HideOptions(config.Opts->GetOpts());
+        // Restore --help visibility after HideOptions hid everything
+        if (auto* helpOpt = config.Opts->GetOpts().FindLongOption("help")) {
+            helpOpt->Hidden_ = false;
+        }
         opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
         opts.AddLongOption('s', "server", "server address to connect")
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);

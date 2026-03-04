@@ -37,7 +37,7 @@ public:
         bool hasMasterOption = parseResult.FindLongOptParseResult("master-key");
         bool hasKOption = parseResult.FindCharOptParseResult('k');
         if (!hasMainOption && !hasMasterOption && !hasKOption) {
-            ythrow yexception() << "missing main-key param";
+            throw NYdb::NConsoleClient::TMisuseException() << "Missing required key option: --main-key (-k) or --master-key";
         }
 
         MainKey = {};

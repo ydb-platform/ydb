@@ -70,8 +70,8 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
                 } else if (name == "@set") {
                     set = value;
                 }
-            } else {
-                parts.push_back(part);
+            } else if (name == "labels") {
+                StringSplitter(value).Split(',').SkipEmpty().Collect(&parts);
             }
             return true;
         });
@@ -168,13 +168,49 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
     TStringBuf params = GetParams(request);
     TStringBuilder base;
-    base << Path << '?';
-    if (!params.empty()) {
-        base << params << '&';
+    TString labels;
+    bool wasParam = false;
+    base << Path;
+    StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
+        TStringBuf name;
+        TStringBuf value;
+        part.Split('=', name, value);
+        if (name == "labels") {
+            if (!labels.empty()) {
+                labels += ',';
+            }
+            labels += value;
+        }
+        if (name != "labels") {
+            if (!wasParam) {
+                base << '?';
+                wasParam = true;
+            } else {
+                base << '&';
+            }
+            base << name << '=' << value;
+        }
+    });
+
+    if (labels) {
+        if (!wasParam) {
+            base << '?';
+            wasParam = true;
+        } else {
+            base << '&';
+        }
+        base << "labels=" << labels;
     }
+
     HTML(out) {
         DIV() {
-            out << "<a href='" << base << "@format=json'>Counters as JSON</a>";
+            out << "<a href='" << base;
+            if (!wasParam) {
+                out << '?';
+            } else {
+                out << '&';
+            }
+            out << "@format=json'>Counters as JSON</a>";
             out << " for Solomon";
         }
 
@@ -188,7 +224,18 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     auto escValue = value;
                     Quote(escName);
                     Quote(escValue);
-                    out << "\n<a href='" << base << escName << '=' << escValue << "'>" << name << " " << value << "</a>";
+                    out << "\n<a href='" << base;
+                    if (labels.empty()) {
+                        if (!wasParam) {
+                            out << '?';
+                        } else {
+                            out << '&';
+                        }
+                        out << "labels=";
+                    } else {
+                        out << ',';
+                    }
+                    out << escName << '=' << escValue << "'>" << name << " " << value << "</a>";
                 }
             });
         }

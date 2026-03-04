@@ -29,6 +29,22 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
 
 namespace {
 
+TString HtmlEscape(TStringBuf str) {
+    TString result;
+    result.reserve(str.size());
+    for (char c : str) {
+        switch (c) {
+            case '&': result += "&amp;"; break;
+            case '<': result += "&lt;"; break;
+            case '>': result += "&gt;"; break;
+            case '"': result += "&quot;"; break;
+            case '\'': result += "&#39;"; break;
+            default: result += c; break;
+        }
+    }
+    return result;
+}
+
 TStringBuf GetParams(NMonitoring::IMonHttpRequest& request) {
     TStringBuf uri = request.GetUri();
     TStringBuf params = uri.After('?');
@@ -204,11 +220,11 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
 
     HTML(out) {
         DIV() {
-            out << "<a href='" << base;
+            out << "<a href='" << HtmlEscape(base);
             if (!wasParam) {
                 out << '?';
             } else {
-                out << '&';
+                out << "&amp;";
             }
             out << "@format=json'>Counters as JSON</a>";
             out << " for Solomon";
@@ -224,18 +240,18 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     auto escValue = value;
                     Quote(escName);
                     Quote(escValue);
-                    out << "\n<a href='" << base;
+                    out << "\n<a href='" << HtmlEscape(base);
                     if (labels.empty()) {
                         if (!wasParam) {
                             out << '?';
                         } else {
-                            out << '&';
+                            out << "&amp;";
                         }
                         out << "labels=";
                     } else {
                         out << ',';
                     }
-                    out << escName << '=' << escValue << "'>" << name << " " << value << "</a>";
+                    out << escName << '=' << escValue << "'>" << HtmlEscape(name) << " " << HtmlEscape(value) << "</a>";
                 }
             });
         }

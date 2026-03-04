@@ -1174,7 +1174,8 @@ static void s_change_current_state_to_mqtt_connect(struct aws_mqtt5_client *clie
     aws_mqtt5_negotiated_settings_reset(&client->negotiated_settings, &connect_view);
     connect_view.client_id = aws_byte_cursor_from_buf(&client->negotiated_settings.client_id_storage);
 
-    struct aws_mqtt5_operation_connect *connect_op = aws_mqtt5_operation_connect_new(client->allocator, &connect_view);
+    struct aws_mqtt5_operation_connect *connect_op =
+        aws_mqtt5_operation_connect_new(client->allocator, &connect_view, client->config);
     if (connect_op == NULL) {
         int error_code = aws_last_error();
         AWS_LOGF_ERROR(

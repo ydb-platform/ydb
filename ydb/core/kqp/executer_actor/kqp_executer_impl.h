@@ -618,6 +618,7 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
+            ProcessStreamingQueryCounters();
         }
 
         YQL_ENSURE(Planner);
@@ -649,7 +650,6 @@ protected:
                 ; // ignore all other states.
         }
 
-        ProcessStreamingQueryCounters();
         return ack;
     }
 
@@ -1646,6 +1646,9 @@ protected:
             StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
         }
         auto now = TInstant::Now();
+        if (!LastStreamingQueryUpdateCounters) {
+            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+        }
         if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
             TAggExecStat stats;
             Stats->ExportAggExecStats(&stats);

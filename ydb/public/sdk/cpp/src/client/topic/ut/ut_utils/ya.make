@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/grpc/server
     library/cpp/testing/unittest
     library/cpp/threading/chunk_queue
+    ydb/core/base
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public
     ydb/public/sdk/cpp/src/client/driver

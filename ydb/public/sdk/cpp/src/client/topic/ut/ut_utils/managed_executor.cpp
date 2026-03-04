@@ -52,6 +52,7 @@ void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
             Y_ABORT_UNLESS(Funcs[index]);
 
             RunTask(std::move(Funcs[index]));
+            Funcs[index] = nullptr;
         }
     }
 }
@@ -84,6 +85,7 @@ void TManagedExecutor::RunAllTasks()
         for (auto& func : Funcs) {
             if (func) {
                 RunTask(std::move(func));
+                func = nullptr;
             }
         }
     }

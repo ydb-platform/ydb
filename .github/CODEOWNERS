@@ -1,5 +1,9 @@
 /*.md @ydb-platform/docs
+
 /CHANGELOG.md @ydb-platform/changelog-reviewers
+/AGENTS.md @ydb-platform/ci
+/BUILD.md @ydb-platform/ci
+/CLAUDE.md @ydb-platform/ci
 
 /.github/docker @ydb-platform/appteam
 

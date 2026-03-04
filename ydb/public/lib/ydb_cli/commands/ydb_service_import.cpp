@@ -280,8 +280,18 @@ void TCommandImportBase::FillItemsFromItemParam(TSettings& settings) const {
 
 template <typename TSettings>
 void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
-    for (const TString& path : IncludePaths) {
-        settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
+    if constexpr (std::is_same_v<TSettings, NImport::TImportFromS3Settings>) {
+        for (const TString& path : IncludePaths) {
+            NImport::TImportFromS3Settings::TItem item;
+            item.Src = {};
+            item.Dst = {};
+            item.SrcPath = path;
+            settings.AppendItem(item);
+        }
+    } else {
+        if (!IncludePaths.empty()) {
+            throw TMisuseException() << "--include parameter is not supported for this import type";
+        }
     }
 }
 

@@ -67,13 +67,15 @@ public:
 class TArrowOutputSpec: public TOutputSpecBase {
 private:
     const NYT::TNode Schema_;
+    const bool UntrackBatches_;
 
 public:
-    explicit TArrowOutputSpec(NYT::TNode schema);
+    explicit TArrowOutputSpec(NYT::TNode schema, bool untrackBatches = false);
     const NYT::TNode& GetSchema() const override;
     bool AcceptsBlocks() const override {
         return true;
     }
+    bool UntrackBatches() const;
 };
 
 template <>

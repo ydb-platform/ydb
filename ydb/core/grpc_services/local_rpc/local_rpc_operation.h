@@ -74,7 +74,7 @@ private:
             .RequestType = operationSettings.RequestType_.empty() ? Nothing() : TMaybe<TString>(operationSettings.RequestType_),
             .PeerName = TStringBuilder() << "localhost/" << settings.OperationName,
             .TraceId = TString(operationSettings.TraceId_),
-            .Deadline = TInstant::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(operationSettings.Deadline_.GetTimePoint().time_since_epoch()).count()),
+            .Deadline = TInstant::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(operationSettings.ClientTimeout_.GetTimePoint().time_since_epoch()).count()),
             .ClientLostStatus = clientLostStatus,
         });
 

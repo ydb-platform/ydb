@@ -14,6 +14,8 @@
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+
 namespace NFq {
 
 using namespace NActors;

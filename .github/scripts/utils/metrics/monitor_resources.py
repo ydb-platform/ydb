@@ -8,7 +8,9 @@ Logs metrics every N seconds to JSONL file. Data can be correlated with:
 
 Output format (JSONL, one JSON object per line):
   - ts, ts_us: Unix timestamp
-  - cpu_total_pct, ram_used_kb, disk_*: ABSOLUTE (system-wide)
+  - cpu_total_pct, ram_used_kb: system-wide CPU/RAM usage
+  - disk_*_sectors: ABSOLUTE system-wide disk I/O counters (cumulative)
+  - disk_*_mb_delta (e.g. disk_read_mb_delta): per-sample delta in MB
   - cpu_ya_pct, ram_ya_kb, disk_ya_*: ya make process tree only
   - cpu_per_pid: ALL processes in ya tree (no top-N limit)
 """
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -47,10 +50,18 @@ def _read_cmdline(pid: int) -> str:
 
 
 def _is_ya_root(cmdline: str, comm: str) -> bool:
-    """Process is a ya root (ya, ya-tc, ya.make etc)."""
-    cmd = cmdline.lower()
-    c = comm.lower()
-    return "ya" in cmd or c in ("ya", "ya-tc", "ya.make", "ya.make")
+    """Process is a ya root (ya, ya-tc, ya.make). Match by executable basename or comm."""
+    ya_names = ("ya", "ya-tc", "ya.make")
+    c = (comm or "").lower()
+    if c in ya_names:
+        return True
+    cmd = (cmdline or "").strip()
+    if not cmd:
+        return False
+    parts = cmd.split()
+    exe = parts[0].lower() if parts else ""
+    exe_basename = exe.rsplit("/", 1)[-1] if exe else ""
+    return exe_basename in ya_names
 
 
 def find_ya_process_tree() -> set[int]:
@@ -107,12 +118,18 @@ def get_process_stats(pid: int) -> dict | None:
         stime = int(rest[12])
         rss_pages = int(rest[21])
         comm = stat[stat.find("(") + 1 : rparen][:80]
+        try:
+            page_size_kb = os.sysconf("SC_PAGE_SIZE") // 1024
+        except (OSError, ValueError):
+            page_size_kb = 4
+        if page_size_kb <= 0:
+            page_size_kb = 4
         return {
             "pid": pid,
             "comm": comm,
             "utime": utime,
             "stime": stime,
-            "rss_kb": rss_pages * 4,
+            "rss_kb": rss_pages * page_size_kb,
         }
     except (OSError, ValueError):
         return None
@@ -217,7 +234,6 @@ def run_monitor(
 ) -> None:
     """Main monitoring loop."""
     prev_stat = read_proc_stat()
-    prev_uptime = read_proc_uptime()
     prev_disk = read_diskstats()
     prev_pid_cpu: dict[int, tuple[int, int]] = {}
     prev_ya_io: tuple[int, int] = (0, 0)
@@ -233,7 +249,6 @@ def run_monitor(
 
             # CPU total (absolute)
             curr_stat = read_proc_stat()
-            curr_uptime = read_proc_uptime()
             total_delta = curr_stat[0] - prev_stat[0]
             idle_delta = curr_stat[1] - prev_stat[1]
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
@@ -316,7 +331,6 @@ def run_monitor(
                 with open(ram_usage_txt, "a") as rf:
                     rf.write(f"{int(ts)} {ram_used_kb}\n")
 
-            prev_uptime = curr_uptime
             time.sleep(interval_sec)
 
 

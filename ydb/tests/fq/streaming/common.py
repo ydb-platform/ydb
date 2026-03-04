@@ -132,3 +132,12 @@ class StreamingTestBase(TestYdsBase):
                 sum += sensor
         assert found or not expect_counters_exist
         return sum
+
+    def wait_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), expected_value: int = 1) -> None:
+        deadline = time.time() + timeout
+        while True:
+            value = self.get_streaming_query_metric(kikimr, path, metric_name)
+            if value >= expected_value:
+                break
+            assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))

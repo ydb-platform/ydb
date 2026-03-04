@@ -144,8 +144,13 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
-            const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters)
         {
@@ -162,7 +167,11 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
                 Source = SubGroup->GetSubgroup("tx_id", TxId);
-                Task = Source->GetSubgroup("task_id", ToString(taskId));
+                if (enableCountersPerTask) {
+                    Task = Source->GetSubgroup("task_id", ToString(taskId));
+                } else {
+                    Task = Source;
+                }
             }
             InFlyAsyncInputData = Task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = Task->GetCounter("InFlySubscribe");
@@ -430,7 +439,11 @@ private:
     }
 
     void NotifyCA() {
-        Metrics.InFlyAsyncInputData->Set(1);
+        if (!CaNotified) {
+            Metrics.InFlyAsyncInputData->Inc();
+            CaNotified = true;
+        }
+
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -625,7 +638,10 @@ private:
 
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         // called with bound allocator
-        Metrics.InFlyAsyncInputData->Set(0);
+        if (CaNotified) {
+            Metrics.InFlyAsyncInputData->Dec();
+            CaNotified = false;
+        }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -1003,6 +1019,7 @@ private:
     bool WithoutConsumer = false;
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
+    bool CaNotified = false;
 };
 
 ui32 ExtractPartitionsFromParams(

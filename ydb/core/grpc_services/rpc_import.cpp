@@ -36,6 +36,45 @@ using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFrom
 using TEvImportFromFsRequest = TGrpcRequestOperationCall<Ydb::Import::ImportFromFsRequest,
     Ydb::Import::ImportFromFsResponse>;
 
+template<typename TEvRequest>
+struct TImportTraits;
+
+template<>
+struct TImportTraits<TEvImportFromS3Request> {
+    using TSettings = Ydb::Import::ImportFromS3Settings;
+    using TItem = Ydb::Import::ImportFromS3Settings::Item;
+
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.source_prefix();
+    }
+
+    static const auto& GetSourcePath(const TItem& item) {
+        return item.source_prefix();
+    }
+
+    static bool IsEmptyItem(const TItem& item) {
+        return item.source_prefix().empty() && item.source_path().empty() && item.destination_path().empty();
+    }
+};
+
+template<>
+struct TImportTraits<TEvImportFromFsRequest> {
+    using TSettings = Ydb::Import::ImportFromFsSettings;
+    using TItem = Ydb::Import::ImportFromFsSettings::Item;
+
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.base_path();
+    }
+
+    static const auto& GetSourcePath(const TItem& item) {
+        return item.source_path();
+    }
+
+    static bool IsEmptyItem(const TItem& item) {
+        return item.source_path().empty() && item.destination_path().empty();
+    }
+};
+
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
     static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
@@ -95,51 +134,46 @@ public:
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
 
-        if constexpr (IsS3Import) {
-            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
-            const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
-            if (!encryptedExportFeatureFlag) {
-                // Check that no new fields are specified
-                if (commonSourcePrefixSpecified) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
-                }
-                if (!settings.destination_path().empty()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
-                }
-                if (settings.has_encryption_settings()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
-                }
+        using TTraits = TImportTraits<TEvRequest>;
+        const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
+        const bool commonSourcePrefixSpecified = !TTraits::GetSourcePath(settings).empty();
+        if (!encryptedExportFeatureFlag) {
+            // Check that no new fields are specified
+            if (commonSourcePrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
             }
-            if (settings.items().empty() && !commonSourcePrefixSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
-            }
-            for (const auto& item : settings.items()) {
-                if (item.source_prefix().empty() && !commonSourcePrefixSpecified) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No source prefix or common source prefix specified for item \"" << item.destination_path() << "\"");
-                }
-                if (!item.source_path().empty()) {
-                    if (!encryptedExportFeatureFlag) {
-                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
-                    }
-                    if (!commonSourcePrefixSpecified) {
-                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
-                    }
-                }
-                if (item.source_prefix().empty() && item.source_path().empty() && item.destination_path().empty()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
-                }
+            if (!settings.destination_path().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
             }
             if (settings.has_encryption_settings()) {
-                if (settings.encryption_settings().symmetric_key().key().empty()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+            }
+        }
+        if (settings.items().empty() && !commonSourcePrefixSpecified) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
+        }
+        for (const auto& item : settings.items()) {
+            if (TTraits::GetSourcePath(item).empty() && !commonSourcePrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No source prefix or common source prefix specified for item \"" << item.destination_path() << "\"");
+            }
+            if (!TTraits::GetSourcePath(item).empty()) {
+                if (!encryptedExportFeatureFlag) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
                 }
                 if (!commonSourcePrefixSpecified) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
                 }
             }
-        } else {
-            if (settings.items().empty()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            if (TTraits::IsEmptyItem(item)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
+            }
+        }
+        if (settings.has_encryption_settings()) {
+            if (settings.encryption_settings().symmetric_key().key().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
+            }
+            if (!commonSourcePrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
             }
         }
 
@@ -165,10 +199,6 @@ public:
             }
 
             for (const auto& item : settings.items()) {
-                if (item.destination_path().empty() && item.source_path().empty()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
-                }
-
                 if (!item.source_path().empty()) {
                     const auto pathDesc = TStringBuilder() << "source_path for item to \"" << item.destination_path() << "\"";
                     if (!ValidateFsPath(item.source_path(), pathDesc, error)) {

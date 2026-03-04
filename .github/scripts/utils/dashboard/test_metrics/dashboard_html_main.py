@@ -1147,6 +1147,7 @@ def build_html_dashboard(
       }}
       // Plot restyle/recolor can drop layout overlays; re-apply selected markers.
       applyMarkersToCharts();
+      if (window.applyLayerToggles) applyLayerToggles();
     }}
 
     function clearSuiteSearch() {{
@@ -1497,9 +1498,11 @@ def build_html_dashboard(
         const ro = data.resources_overlay;
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
         Plotly.addTraces('cpuLayer', [
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         Plotly.addTraces('ramLayer', [
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         const diskEl = document.getElementById('diskLayer');
@@ -1537,9 +1540,11 @@ def build_html_dashboard(
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       Plotly.addTraces('cpuLayerSuite', [
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       const diskEl = document.getElementById('diskLayerSuite');
@@ -1652,25 +1657,29 @@ def build_html_dashboard(
       const bySuite = document.getElementById('layerBySuite')?.checked ?? true;
       const systemCpu = document.getElementById('layerSystemCpu')?.checked ?? true;
       const systemRam = document.getElementById('layerSystemRam')?.checked ?? true;
-      function setCpuVisibility(el, nSuite) {{
+      const CPU_OVERLAY_NAMES = ['CPU total (monitor)', 'CPU total (monitor) outline'];
+      const RAM_OVERLAY_NAMES = ['RAM total (monitor)', 'RAM total (monitor) outline'];
+      function setCpuVisibility(el) {{
         if (!el || !el.data || !window.Plotly) return;
-        const vis = el.data.map((_, i) => i < nSuite ? bySuite : (i === nSuite ? systemCpu : true));
+        const vis = el.data.map((tr) => {{
+          if (tr && CPU_OVERLAY_NAMES.includes(tr.name)) return systemCpu;
+          return bySuite;
+        }});
         Plotly.restyle(el, {{ visible: vis }}, [...Array(el.data.length).keys()]);
       }}
-      function setRamVisibility(el, nSuite) {{
+      function setRamVisibility(el) {{
         if (!el || !el.data || !window.Plotly) return;
-        const vis = el.data.map((_, i) => i < nSuite ? bySuite : (i === nSuite ? systemRam : true));
+        const vis = el.data.map((tr) => {{
+          if (tr && RAM_OVERLAY_NAMES.includes(tr.name)) return systemRam;
+          return bySuite;
+        }});
         Plotly.restyle(el, {{ visible: vis }}, [...Array(el.data.length).keys()]);
       }}
-      const nCpuSuite = Number(data.cpu_suite_trace_count) || 0;
-      const nRamSuite = Number(data.ram_suite_trace_count) || 0;
-      setCpuVisibility(document.getElementById('cpuLayerSuite'), nCpuSuite);
-      setRamVisibility(document.getElementById('ramLayerSuite'), nRamSuite);
+      setCpuVisibility(document.getElementById('cpuLayerSuite'));
+      setRamVisibility(document.getElementById('ramLayerSuite'));
       if (data.by_chunk) {{
-        const nCpuChunk = Number(data.cpu_chunk_trace_count) || 0;
-        const nRamChunk = Number(data.ram_chunk_trace_count) || 0;
-        setCpuVisibility(document.getElementById('cpuLayer'), nCpuChunk);
-        setRamVisibility(document.getElementById('ramLayer'), nRamChunk);
+        setCpuVisibility(document.getElementById('cpuLayer'));
+        setRamVisibility(document.getElementById('ramLayer'));
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;

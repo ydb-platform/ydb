@@ -99,8 +99,14 @@ def find_ya_process_tree() -> set[int]:
             continue
 
     roots = {p for p, cmd in cmdline_map.items() if _is_ya_root(cmd, comm_map.get(p, ""))}
-    # Include descendants of roots
     ya_pids: set[int] = set(roots)
+    # Include ancestors (e.g. main "ya" is parent of "ya-tc" workers)
+    for r in roots:
+        pid = ppid_map.get(r)
+        while pid and pid != 1:
+            ya_pids.add(pid)
+            pid = ppid_map.get(pid)
+    # Include descendants of roots
     changed = True
     while changed:
         changed = False

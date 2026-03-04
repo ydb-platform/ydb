@@ -713,7 +713,13 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         ref_start_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     else:
         ref_report_ts = float(ref_report_ts)
-    cpu_cores = records[0].get("cpu_cores") or 1
+    # cpu_cores is in the first record; fallback: search all records (monitor adds it only to first)
+    cpu_cores = 1
+    for rec in records:
+        v = rec.get("cpu_cores")
+        if v is not None and (isinstance(v, (int, float)) and v > 0):
+            cpu_cores = int(v)
+            break
     min_evlog = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
@@ -746,6 +752,7 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
         "evlog_range_sec": [min_evlog, max_evlog],
+        "cpu_cores": cpu_cores,  # machine cores used for %->cores conversion; shown in dashboard for verification
     }
 
 

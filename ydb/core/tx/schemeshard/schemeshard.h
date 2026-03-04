@@ -119,6 +119,8 @@ namespace TEvSchemeShard {
         EvAckSchemeChangeRecordsResult,
         EvForceAdvanceSubscriber,
         EvForceAdvanceSubscriberResult,
+        EvUnregisterSubscriber,
+        EvUnregisterSubscriberResult,
         EvWakeupToRunSchemeChangeRecordsCleanup,
         // Test-only:
         EvInternalReadSchemeChangeRecords,
@@ -761,6 +763,10 @@ namespace TEvSchemeShard {
         NKikimrSchemeShard::TEvForceAdvanceSubscriber, EvForceAdvanceSubscriber> {};
     struct TEvForceAdvanceSubscriberResult : public TEventPB<TEvForceAdvanceSubscriberResult,
         NKikimrSchemeShard::TEvForceAdvanceSubscriberResult, EvForceAdvanceSubscriberResult> {};
+    struct TEvUnregisterSubscriber : public TEventPB<TEvUnregisterSubscriber,
+        NKikimrSchemeShard::TEvUnregisterSubscriber, EvUnregisterSubscriber> {};
+    struct TEvUnregisterSubscriberResult : public TEventPB<TEvUnregisterSubscriberResult,
+        NKikimrSchemeShard::TEvUnregisterSubscriberResult, EvUnregisterSubscriberResult> {};
 
     // Test-only: non-proto-backed events for reading scheme change records in tests
     struct TEvInternalReadSchemeChangeRecords : public TEventLocal<TEvInternalReadSchemeChangeRecords, EvInternalReadSchemeChangeRecords> {

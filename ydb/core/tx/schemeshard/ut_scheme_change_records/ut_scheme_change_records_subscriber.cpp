@@ -1,67 +1,26 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include "ut_scheme_change_records_helpers.h"
+
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <util/string/printf.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NSchemeChangeRecordTestHelpers;
 
 namespace {
 
-TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
-    TAutoPtr<IEventHandle>& handle)
+TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> ReadSchemeChangeRecords(
+    TTestBasicRuntime& runtime)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvRegisterSubscriber>();
-    req->Record.SetSubscriberId(subscriberId);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 afterSeqId, ui32 maxCount,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecords>();
-    req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetAfterSequenceId(afterSeqId);
-    req->Record.SetMaxCount(maxCount);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFetchSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-TEvSchemeShard::TEvAckSchemeChangeRecordsResult* AckSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 upToSeqId,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvAckSchemeChangeRecords>();
-    req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetUpToSequenceId(upToSeqId);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvAckSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-TEvSchemeShard::TEvForceAdvanceSubscriberResult* ForceAdvanceSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriber>();
-    req->Record.SetSubscriberId(subscriberId);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvForceAdvanceSubscriberResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
+        new TEvSchemeShard::TEvInternalReadSchemeChangeRecords());
+    TAutoPtr<IEventHandle> handle;
+    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult>(handle);
+    UNIT_ASSERT(event);
+    return event->Entries;
 }
 
 } // anonymous namespace
@@ -244,5 +203,45 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> advHandle;
         auto result = ForceAdvanceSubscriber(runtime, "nonexistent:sub", advHandle);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+    }
+
+    Y_UNIT_TEST(CleanupTriggeredAfterAck) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "cleanup:sub", regHandle);
+
+        for (int i = 1; i <= 3; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "T%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Fetch all records
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "cleanup:sub", 0, 100, fetchHandle);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT(fetch->Record.EntriesSize() >= 3);
+        ui64 lastSeq = fetch->Record.GetLastSequenceId();
+
+        // Ack all -- this schedules cleanup after 5s
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "cleanup:sub", lastSeq, ackHandle);
+
+        // Manually trigger cleanup instead of waiting for timer
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
+            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+
+        // ReadSchemeChangeRecords dispatches events, so the cleanup tx
+        // (sent before the read) will execute first
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(entries.empty(),
+            "Records should be cleaned up after ack, got " << entries.size());
     }
 }

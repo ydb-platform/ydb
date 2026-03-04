@@ -1,57 +1,11 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include "ut_scheme_change_records_helpers.h"
 
 #include <util/string/printf.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
-
-namespace {
-
-TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvRegisterSubscriber>();
-    req->Record.SetSubscriberId(subscriberId);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 afterSeqId, ui32 maxCount,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecords>();
-    req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetAfterSequenceId(afterSeqId);
-    req->Record.SetMaxCount(maxCount);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFetchSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-TEvSchemeShard::TEvAckSchemeChangeRecordsResult* AckSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 upToSeqId,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvAckSchemeChangeRecords>();
-    req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetUpToSequenceId(upToSeqId);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvAckSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(result);
-    return result;
-}
-
-} // anonymous namespace
+using namespace NSchemeChangeRecordTestHelpers;
 
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
     Y_UNIT_TEST(RegisterSubscriberCreatesEmptyCursor) {
@@ -82,6 +36,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub:1", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
             Columns { Name: "key" Type: "Uint64" }
@@ -96,8 +53,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TAutoPtr<IEventHandle> regHandle;
-        RegisterSubscriber(runtime, "test:sub:1", regHandle);
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
@@ -109,6 +64,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub:1", regHandle);
+
         for (int i = 1; i <= 5; ++i) {
             TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 Name: "T%d"
@@ -118,8 +76,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        TAutoPtr<IEventHandle> regHandle;
-        RegisterSubscriber(runtime, "test:sub:1", regHandle);
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 2, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
@@ -132,6 +88,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub:1", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
             Columns { Name: "key" Type: "Uint64" }
@@ -145,9 +104,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-
-        TAutoPtr<IEventHandle> regHandle;
-        RegisterSubscriber(runtime, "test:sub:1", regHandle);
 
         TAutoPtr<IEventHandle> fetch1Handle;
         auto fetch1 = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetch1Handle);
@@ -179,6 +135,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
+        RegisterSubscriber(runtime, "sub1", reg1Handle);
+        RegisterSubscriber(runtime, "sub2", reg2Handle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
             Columns { Name: "key" Type: "Uint64" }
@@ -192,10 +152,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-
-        TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
-        RegisterSubscriber(runtime, "sub1", reg1Handle);
-        RegisterSubscriber(runtime, "sub2", reg2Handle);
 
         TAutoPtr<IEventHandle> fetch1Handle, fetch2Handle;
         auto fetch1 = FetchSchemeChangeRecords(runtime, "sub1", 0, 100, fetch1Handle);
@@ -214,5 +170,79 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         auto fetch2b = FetchSchemeChangeRecords(runtime, "sub2", firstSeq, 100, fetch2bHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch1b->Record.EntriesSize(), 0);
         UNIT_ASSERT(fetch2b->Record.EntriesSize() > 0);
+    }
+
+    Y_UNIT_TEST(UnregisterSubscriberRemovesSubscriber) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub:1", regHandle);
+
+        TAutoPtr<IEventHandle> unregHandle;
+        auto unregResult = UnregisterSubscriber(runtime, "test:sub:1", unregHandle);
+        UNIT_ASSERT_VALUES_EQUAL(unregResult->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+
+        // Fetch should fail -- subscriber no longer exists
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+    }
+
+    Y_UNIT_TEST(UnregisterLastSubscriberStopsRecordCreation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub:1", regHandle);
+
+        // Create T1 with subscriber -- record expected
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
+        UNIT_ASSERT(fetch->Record.EntriesSize() >= 1);
+
+        // Unregister
+        TAutoPtr<IEventHandle> unregHandle;
+        UnregisterSubscriber(runtime, "test:sub:1", unregHandle);
+
+        // Create T2 without subscriber -- no record expected
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Re-register to check
+        TAutoPtr<IEventHandle> reg2Handle;
+        RegisterSubscriber(runtime, "test:sub:2", reg2Handle);
+
+        TAutoPtr<IEventHandle> fetch2Handle;
+        auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:2", 0, 100, fetch2Handle);
+        // Should only see T1 record, not T2
+        bool foundT2 = false;
+        for (int i = 0; i < (int)fetch2->Record.EntriesSize(); ++i) {
+            if (fetch2->Record.GetEntries(i).GetPathName() == "T2") {
+                foundT2 = true;
+            }
+        }
+        UNIT_ASSERT_C(!foundT2, "T2 record should not exist (created after last subscriber unregistered)");
+    }
+
+    Y_UNIT_TEST(UnregisterNonexistentSubscriberReturnsError) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TAutoPtr<IEventHandle> unregHandle;
+        auto result = UnregisterSubscriber(runtime, "nonexistent:sub", unregHandle);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
     }
 }

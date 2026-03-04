@@ -61,7 +61,14 @@ def _is_ya_root(cmdline: str, comm: str) -> bool:
     parts = cmd.split()
     exe = parts[0].lower() if parts else ""
     exe_basename = exe.rsplit("/", 1)[-1] if exe else ""
-    return exe_basename in ya_names
+    if exe_basename in ya_names:
+        return True
+    # Fallback: ya invoked via python/wrapper (e.g. "python3 /path/to/ya make")
+    for part in parts[1:3]:  # check first few args
+        p = (part or "").lower()
+        if p.endswith("/ya") or p.endswith("/ya-tc") or p.endswith("/ya.make"):
+            return True
+    return False
 
 
 def find_ya_process_tree() -> set[int]:

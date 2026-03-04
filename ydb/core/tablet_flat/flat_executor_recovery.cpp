@@ -1,5 +1,6 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
 #include "flat_part_iface.h"
 #include "tablet_flat_executed.h"
@@ -15,13 +16,11 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -192,6 +191,14 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
                 NTable::ECellOp::Set,
                 MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool)
             ));
+        }
+    }
+
+    for (size_t i = 0; i < key.size(); ++i) {
+        if (key[i].IsEmpty()) {
+            ui32 keyColId = table->KeyColumns.at(i);
+            const auto& col = table->Columns.at(keyColId);
+            throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
         }
     }
 
@@ -435,6 +442,7 @@ public:
 
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
+        PreviousChangelogChecksum = NBackup::ComputeInitialChecksum(ev->Get()->Generation, ev->Get()->Step);
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
@@ -461,6 +469,7 @@ public:
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
         RestoreState = ERestoreState::InProgress;
+        SkipChecksumValidation = skipChecksumValidation;
         DryRun = dryRun;
 
         BackupPath = backupPath;
@@ -684,6 +693,8 @@ private:
 
     TActorId RestoreSubscriber; // only for tests
 
+    TString PreviousChangelogChecksum;
+    bool SkipChecksumValidation = false;
     bool DryRun = false;
 }; // TRecoveryShard
 
@@ -866,6 +877,7 @@ public:
 
         while (i < Changelog->Get()->Lines.size()) {
             const auto& line = Changelog->Get()->Lines[i];
+            TString lineChecksum;
 
             NJson::TJsonValue json;
             try {
@@ -878,6 +890,44 @@ public:
             if (!json.IsMap()) {
                 Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
                 return true;
+            }
+
+            if (!Self->SkipChecksumValidation) {
+                if (!json.Has("sha256")) {
+                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
+                    return true;
+                }
+
+                if (!json["sha256"].IsString()) {
+                    Result.Error(TStringBuilder() << "Invalid 'sha256' field in changelog line: " << line);
+                    return true;
+                }
+
+                const TString& expectedChecksum = json["sha256"].GetString();
+
+                static constexpr TStringBuf sha256Prefix = "\"sha256\":\"";
+                auto pos = line.rfind(sha256Prefix);
+                if (pos == TString::npos) {
+                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
+                    return true;
+                }
+
+                auto valueStart = pos + sha256Prefix.size();
+                auto valueEnd = line.find('"', valueStart);
+                if (valueEnd == TString::npos) {
+                    Result.Error(TStringBuilder() << "Malformed sha256 field in changelog line: " << line);
+                    return true;
+                }
+
+                TStringBuf before(line.data(), pos);
+                TStringBuf after(line.data() + valueEnd + 1, line.size() - valueEnd - 1);
+                lineChecksum = NBackup::ComputeChecksum(before, after, Self->PreviousChangelogChecksum);
+    
+                if (lineChecksum != expectedChecksum) {
+                    Result.Error(TStringBuilder() << "Changelog checksum mismatch:"
+                        << " expected " << expectedChecksum << ", got " << lineChecksum);
+                    return true;
+                }
             }
 
             if (json.Has("schema_changes")) {
@@ -931,6 +981,7 @@ public:
                 }
             }
 
+            Self->PreviousChangelogChecksum = std::move(lineChecksum);
             processedBytes += line.size() + 1; // +1 for newline;
             ++i;
 
@@ -995,6 +1046,10 @@ public:
     {}
 
     void Bootstrap() {
+        if (!BackupPath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
+        }
+
         if (!SnapshotDirPath.Exists()) {
             return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
         }
@@ -1018,7 +1073,7 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        Send(Owner, new TEvBackupInfo(totalBytes));
+        Send(Owner, new TEvBackupInfo(totalBytes, Generation, Step));
         Become(&TThis::StateWork);
     }
 
@@ -1142,8 +1197,7 @@ public:
                 return false;
             }
 
-            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            TString actualManifestChecksum = NBackup::ComputeChecksum(manifestStr);
             if (actualManifestChecksum != expectedManifestChecksum) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
                                                          << "expected " << expectedManifestChecksum
@@ -1187,6 +1241,18 @@ public:
                 << ", got " << actualTabletId);
             return false;
         }
+
+        if (!manifest.Has("generation") || !manifest["generation"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'generation' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+        Generation = manifest["generation"].GetUInteger();
+
+        if (!manifest.Has("step") || !manifest["step"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'step' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+        Step = manifest["step"].GetUInteger();
 
         if (!manifest.Has("files") || !manifest["files"].IsArray()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
@@ -1235,7 +1301,7 @@ public:
                 }
 
                 auto fileDigest = calcer.Final();
-                TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+                TString actualFileSha256 = NBackup::FormatChecksumDigest(fileDigest);
                 if (actualFileSha256 != expectedFileSha256) {
                     SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
                                              << ": expected " << expectedFileSha256
@@ -1281,6 +1347,9 @@ private:
     const bool SkipChecksumValidation;
 
     TDeque<TFsPath> SnapshotFiles;
+
+    ui32 Generation = 0;
+    ui32 Step = 0;
 
     TFsPath CurrentFilePath;
     TString CurrentTableName;

@@ -1794,11 +1794,7 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-<<<<<<< HEAD
         if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
-=======
-        if (!AppData()->FeatureFlags.GetEnableStreamingQueries() || !FederatedQuerySetup) {
->>>>>>> 907366fe6f4 (YQ-4648 Shared reading: local kesus (#32487))
             return;
         }
 

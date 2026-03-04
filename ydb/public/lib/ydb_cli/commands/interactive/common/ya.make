@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    api_utils.cpp
     config_ui.cpp
     interactive_config.cpp
     interactive_settings.cpp
@@ -20,18 +21,6 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     yql/essentials/sql/v1/complete
 )
-
-# TODO: Use simpler HTTP library (e.g. curl wrapper) instead of http_gateway
-# to avoid heavy dependencies (actors/interconnect -> crc32c -> crcutil with SSE4)
-IF (NOT OS_WINDOWS OR USE_SSE4)
-    SRCS(
-        api_utils.cpp
-    )
-    PEERDIR(
-        ydb/library/yql/providers/common/http_gateway
-    )
-    CFLAGS(-DYDB_CLI_AI_ENABLED=1)
-ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(interactive_config.h)
 

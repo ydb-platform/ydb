@@ -14,8 +14,8 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-class TDescribeTool final : public TToolBase {
-    using TBase = TToolBase;
+class TDescribeTool final : public TDatabaseToolBase {
+    using TBase = TDatabaseToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
 Displays comprehensive meta-information about a database object at the specified path.
@@ -49,8 +49,7 @@ NEVER guess column names, types or keys without verifying them with this tool fi
 
 public:
     explicit TDescribeTool(const TDescribeToolSettings& settings)
-        : TBase(CreateParametersSchema(), DESCRIPTION)
-        , Database(CanonizeYdbPath(settings.Database))
+        : TBase(settings.Database, CreateParametersSchema(), DESCRIPTION)
         , Driver(settings.Driver)
     {}
 
@@ -58,27 +57,29 @@ protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
 
-        Path = Strip(parser.GetKey(PATH_PROPERTY).GetString());
-        if (!Path.StartsWith('/')) {
-            Path = JoinYdbPath({Database, Path});
-        } else if (!Path.StartsWith(Database)) {
-            // If path starts with '/' but not with Database prefix, assume it is relative to Database.
-            // This is a common confusion for AI agents who see file lists without full path prefix.
-            Path = JoinYdbPath({Database, Path});
-        }
-        Path = CanonizeYdbPath(Path);
+        Path = CanonizePath(parser.GetKey(PATH_PROPERTY).GetString());
 
-        if (auto p = parser.MaybeKey(PERMISSIONS_PROPERTY)) Options.ShowPermissions = p->GetBooleanSafe(false);
-        if (auto p = parser.MaybeKey(PARTITION_BOUNDARIES_PROPERTY)) Options.ShowKeyShardBoundaries = p->GetBooleanSafe(false);
-        if (auto p = parser.MaybeKey(STATS_PROPERTY)) Options.ShowStats = p->GetBooleanSafe(false);
-        if (auto p = parser.MaybeKey(PARTITION_STATS_PROPERTY)) Options.ShowPartitionStats = p->GetBooleanSafe(false);
+        if (auto p = parser.MaybeKey(PERMISSIONS_PROPERTY)) {
+            Options.ShowPermissions = p->GetBooleanSafe(false);
+        }
+
+        if (auto p = parser.MaybeKey(PARTITION_BOUNDARIES_PROPERTY)) {
+            Options.ShowKeyShardBoundaries = p->GetBooleanSafe(false);
+        }
+
+        if (auto p = parser.MaybeKey(STATS_PROPERTY)) {
+            Options.ShowStats = p->GetBooleanSafe(false);
+        }
+
+        if (auto p = parser.MaybeKey(PARTITION_STATS_PROPERTY)) {
+            Options.ShowPartitionStats = p->GetBooleanSafe(false);
+        }
+
         Options.Database = Database;
     }
 
     bool AskPermissions() final {
         PrintFtxuiMessage("", TStringBuilder() << "Describing path " << Path, ftxui::Color::Green);
-        Cout << Endl;
-
         return true;
     }
 
@@ -93,16 +94,17 @@ protected:
                 TStringStream prettyStream;
                 TDescribeLogic prettyLogic(Driver, prettyStream);
                 if (prettyLogic.Describe(Path, Options, EDataFormat::Pretty) == EXIT_SUCCESS) {
-                    Cout << prettyStream.Str() << Endl;
+                    Cout << Endl << prettyStream.Str() << Endl;
                 } else {
-                    Cout << FormatJsonValue(outputStream.Str()) << Endl << Endl;
+                    Cout << Endl << FormatJsonValue(outputStream.Str()) << Endl;
                 }
             } else {
-                Cout << FormatJsonValue(outputStream.Str()) << Endl << Endl;
+                Cout << Endl << FormatJsonValue(outputStream.Str()) << Endl;
             }
         }
 
         if (status != EXIT_SUCCESS) {
+            Cout << Endl << Colors.Red() << "Describe path \"" << Path << "\" failed: " << Strip(outputStream.Str()) << Colors.OldColor() << Endl;
             outputStream << "\nCommand failed.";
             return TResponse::Error(outputStream.Str());
         }
@@ -138,7 +140,6 @@ private:
     }
 
 private:
-    const TString Database;
     TDriver Driver;
 
     TString Path;

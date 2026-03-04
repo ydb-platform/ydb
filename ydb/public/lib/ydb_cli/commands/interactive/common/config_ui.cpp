@@ -109,7 +109,7 @@ std::optional<size_t> RunThemeSelector(
     std::optional<size_t> result;
 
     try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
         screen.TrackMouse(false);
         auto exit = screen.ExitLoopClosure();
 
@@ -237,9 +237,10 @@ std::optional<size_t> RunThemeSelector(
                 innerContent,
                 ftxui::separator() | ftxui::color(borderColor),
                 ftxui::text("Use arrows ↑ and ↓ to choose, Enter to confirm, Esc to cancel"),
-            }) | ftxui::borderStyled(borderColor) | ftxui::center;
+            }) | ftxui::borderStyled(borderColor);
         });
 
+        Cout << Endl;
         screen.Loop(renderer);
     } catch (const std::exception& e) {
         Cerr << "FTXUI theme selector failed: " << e.what() << Endl;
@@ -253,8 +254,6 @@ std::optional<size_t> RunThemeSelector(
 } // anonymous namespace
 
 bool TConfigUI::Run(const TContext& ctx) {
-    Cout << Endl;
-
     // Set border color based on current theme (respects colors mode via GetCurrentColorSchema)
     auto updateBorderColor = []() {
         auto schema = TInteractiveSettings::GetCurrentColorSchema();
@@ -269,8 +268,10 @@ bool TConfigUI::Run(const TContext& ctx) {
         bool hintsEnabled = TInteractiveSettings::IsHintsEnabled();
         options.emplace_back(
             TStringBuilder() << "Enable/Disable hints\t" << (hintsEnabled ? "ON" : "OFF"),
-            [&ctx]() {
-                RunEnableHints(ctx);
+            [&ctx, &exit]() {
+                if (!RunEnableHints(ctx)) {
+                    exit = true;
+                }
             }
         );
 
@@ -278,8 +279,11 @@ bool TConfigUI::Run(const TContext& ctx) {
         EGlobalColorsMode colorsMode = TInteractiveSettings::GetColorsMode();
         options.emplace_back(
             TStringBuilder() << "Enable/Disable colors\t" << ColorsModeToString(colorsMode),
-            [&ctx, &updateBorderColor]() {
-                RunColorsMode(ctx);
+            [&ctx, &updateBorderColor, &exit]() {
+                if (!RunColorsMode(ctx)) {
+                    exit = true;
+                    return;
+                }
                 updateBorderColor();  // Update border color after colors mode change
             }
         );
@@ -288,8 +292,11 @@ bool TConfigUI::Run(const TContext& ctx) {
         TString currentTheme = TInteractiveSettings::GetCurrentThemeName();
         options.emplace_back(
             TStringBuilder() << "Choose color theme\t" << currentTheme,
-            [&ctx, &updateBorderColor]() {
-                RunChooseTheme(ctx);
+            [&ctx, &updateBorderColor, &exit]() {
+                if (!RunChooseTheme(ctx)) {
+                    exit = true;
+                    return;
+                }
                 updateBorderColor();  // Update border color after theme change
             }
         );
@@ -297,14 +304,15 @@ bool TConfigUI::Run(const TContext& ctx) {
         // Clone color theme
         options.emplace_back(
             "Clone color theme...",
-            [&ctx]() {
-                RunCloneTheme(ctx);
+            [&ctx, &exit]() {
+                if (!RunCloneTheme(ctx)) {
+                    exit = true;
+                }
             }
         );
 
         if (!RunFtxuiMenuWithActions("Interactive Mode Settings:", options)) {
             exit = true;
-            Cout << Endl;
         }
     }
 
@@ -504,7 +512,6 @@ bool TConfigUI::RunCloneTheme(const TContext& ctx) {
             Cout << Endl << "Switched to theme: " << themeName << Endl;
         }
 
-        Cout << Endl;
         return true;
     } else {
         Cerr << "Failed to clone theme." << Endl;

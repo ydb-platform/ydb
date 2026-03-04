@@ -26,13 +26,17 @@ bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>
 std::optional<TString> RunFtxuiInput(
     const TString& title,
     const TString& initial = "",
-    const std::function<bool(const TString&, TString&)>& validator = {});
+    const std::function<bool(const TString&, TString&)>& validator = {},
+    const TString& placeholder = "");
 
 std::optional<TString> RunFtxuiInputWithSuffix(
     const TString& title,
     const TString& initial,
     const TString& suffix,
-    const std::function<bool(const TString&, TString&)>& validator = {});
+    const std::function<bool(const TString&, TString&)>& validator = {},
+    const TString& placeholder = "");
+
+std::optional<bool> AskYesNoFtxuiOptional(const ftxui::Element& question, bool defaultAnswer = false, std::optional<ftxui::Color> color = std::nullopt);
 
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer = false);
 

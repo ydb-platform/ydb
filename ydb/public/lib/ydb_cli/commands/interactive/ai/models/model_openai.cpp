@@ -4,6 +4,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -95,11 +96,13 @@ protected:
         if (hasToolsCalls) {
             tollCalls->Iterate([&](TJsonParser toolCall) {
                 auto function = toolCall.GetKey("function");
+                const auto& arguments = function.GetKey("arguments").GetString();
 
                 NJson::TJsonValue argumentsJson;
                 try {
-                    NJson::ReadJsonTree(function.GetKey("arguments").GetString(), &argumentsJson, /* throwOnError */ true);
+                    NJson::ReadJsonTree(arguments, &argumentsJson, /* throwOnError */ true);
                 } catch (const std::exception& e) {
+                    YDB_CLI_LOG(Notice, "Tool call arguments is not valid JSON: '" << arguments << "', reason: " << e.what());
                     throw yexception() << "Tool call arguments is not valid JSON, reason: " << e.what();
                 }
 

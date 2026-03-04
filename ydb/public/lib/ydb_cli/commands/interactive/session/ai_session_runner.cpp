@@ -111,14 +111,8 @@ public:
     ILineReader::TPtr Setup() final {
         ModelHandler.reset();
 
-        AiModel = ConfigurationManager->GetAiProfile(ConfigurationManager->GetActiveAiProfileName());
+        AiModel = ConfigurationManager->ActivateAiProfile();
         if (!AiModel) {
-            Cout << "Welcome to AI interactive mode, please select AI model to continue. Type /config to setup AI mode by default." << Endl;
-            AiModel = ConfigurationManager->SelectAiModelProfile();
-        }
-
-        if (!AiModel) {
-            Cout << Endl << "AI profile is not set, returning to YQL interactive mode" << Endl;
             return nullptr;
         }
 
@@ -129,7 +123,7 @@ public:
 
     void HandleLine(const TString& line) final {
         Y_VALIDATE(AiModel, "Can not handle input while AiModel is not initialized");
-        Y_VALIDATE(ConfigurationManager->GetActiveAiProfileName() == AiModel->GetName(), "Unexpected active AI profile");
+        Y_VALIDATE(ConfigurationManager->GetActiveAiProfileId() == AiModel->GetId(), "Unexpected active AI profile");
 
         if (!ModelHandler) {
             try {
@@ -142,9 +136,7 @@ public:
         }
 
         if (to_lower(line) == "/help") {
-            Cout << Endl;
             PrintFtxuiMessage(CreateHelpMessage(), "YDB CLI AI Interactive Mode – Hotkeys", ftxui::Color::White);
-            Cout << Endl;
             return;
         }
 
@@ -158,8 +150,6 @@ public:
             return;
         }
 
-        Cout << Endl;
-
         std::shared_ptr<TProgressWaiterBase> spinner;
         double lastThinkingTime = 0.0;
         auto onStart = [&spinner]() {
@@ -167,7 +157,7 @@ public:
         };
         auto onFinish = [&spinner, &lastThinkingTime]() {
             if (spinner) {
-                lastThinkingTime = spinner->Stop(true).SecondsFloat();
+                lastThinkingTime = spinner->Success().SecondsFloat();
                 spinner.reset();
             }
         };
@@ -214,74 +204,58 @@ private:
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
             .HistoryFilePath = NAi::GetHistoryFile(),
             .AdditionalCommands = {"/help", "/model", "/config"},
-            .Placeholder = "Type message (Enter to send, Ctrl+J for newline, Ctrl+T for YQL mode, Ctrl+D to exit)",
+            .Placeholder = "Type message (Enter to send, Ctrl+Enter for newline, Ctrl+T for YQL mode, Ctrl+D to exit)",
             .EnableYqlCompletion = false,
         };
     }
 
     void ChangeSessionSettings() {
-        Cout << Endl;
-
         for (bool exit = false; !exit;) {
             std::vector<TMenuEntry> options;
 
-            const auto& profile = ConfigurationManager->GetActiveAiProfileName();
-            const auto& profiles = ConfigurationManager->ListAiProfiles();
-            if (const auto it = profiles.find(profile); profile && it != profiles.end()) {
-                options.emplace_back(TStringBuilder() << "Change current AI model \"" << profile << "\" settings", [profile = it->second, &exit, this]() {
-                    Cout << Endl << "Changing current AI model \"" << profile->GetName() << "\" settings." << Endl << Endl;
-                    if (!profile->SetupProfile()) {
-                        exit = true;
-                        return;
-                    }
-
-                    ChangeAiProfile(profile);
-                });
-            }
-
-            options.emplace_back("Switch AI model", [&]() {
-                if (!SwitchAiProfile()) {
-                    exit = true;
-                }
-            });
-
             options.push_back({"Clear session context", [&]() {
-                Cout << Endl << "Session context cleared." << Endl << Endl;
+                Cout << Endl << "Session context cleared." << Endl;
                 if (ModelHandler) {
                     ModelHandler->ClearContext();
                 }
                 exit = true;
             }});
 
-            switch (ConfigurationManager->GetDefaultMode()) {
-                case TInteractiveConfigurationManager::EMode::YQL:
-                    options.push_back({"Set AI interactive mode by default", [&]() {
-                        Cout << Endl << "Setting AI interactive mode by default." << Endl << Endl;
-                        ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
-                        exit = true;
-                    }});
-                    break;
-                case TInteractiveConfigurationManager::EMode::AI:
-                    options.push_back({"Set YQL interactive mode by default", [&]() {
-                        Cout << Endl << "Setting YQL interactive mode by default." << Endl << Endl;
-                        ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
-                        exit = true;
-                    }});
-                    break;
-                case TInteractiveConfigurationManager::EMode::Invalid:
-                    Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
-            }
+            Y_VALIDATE(AiModel, "Can not change session settings while AiModel is not initialized");
+            options.emplace_back("Change current AI model settings", [&]() {
+                if (!AiModel->Edit()) {
+                    exit = true;
+                    return;
+                }
 
-            if (!RunFtxuiMenuWithActions("Please choose AI session setting to change:", options)) {
+                ChangeAiProfile(AiModel);
+            });
+
+            options.emplace_back(TStringBuilder() << "Switch AI model\t" << AiModel->GetName(), [&]() {
+                if (!SwitchAiProfile()) {
+                    exit = true;
+                }
+            });
+
+            options.emplace_back("Remove current AI model", [&]() {
+                ConfigurationManager->RemoveAiProfile(AiModel->GetId());
+                AiModel = ConfigurationManager->ActivateAiProfile();
+                if (!AiModel) {
+                    // Can not continue in AI mode
+                    std::exit(EXIT_FAILURE);
+                }
+
+                ChangeAiProfile(AiModel);
+            });
+
+            if (!RunFtxuiMenuWithActions("Please choose setting to change:", options)) {
                 exit = true;
-                Cout << Endl;
             }
         }
     }
 
     bool SwitchAiProfile() {
-        Cout << Endl;
-        auto newProfile = ConfigurationManager->SelectAiModelProfile();
+        auto newProfile = ConfigurationManager->SelectAiProfile();
 
         if (newProfile) {
             ChangeAiProfile(std::move(newProfile));
@@ -291,20 +265,20 @@ private:
         return false;
     }
 
-    void ChangeAiProfile(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
+    void ChangeAiProfile(TAiModelConfig::TPtr profile) {
         Y_VALIDATE(profile, "Profile is not set");
         Y_VALIDATE(AiModel, "AI session is not initialized");
 
         const auto& newProfileName = profile->GetName();
         if (ModelHandler) {
-            Cout << Colors.Yellow() << "Active AI profile is changed"
+            Cout << Endl << Colors.Yellow() << "Active AI profile is changed"
                 << (newProfileName != AiModel->GetName() ? TStringBuilder() << " to \"" << newProfileName << "\"" : TStringBuilder())
-                << ", session context will be reset" << Colors.OldColor() << Endl << Endl;
+                << ", session context will be reset" << Colors.OldColor() << Endl;
         } else if (newProfileName != AiModel->GetName()) {
-            Cout << "Switching AI profile to \"" << newProfileName << "\"" << Endl << Endl;
+            Cout << Endl << "Switching AI profile to \"" << newProfileName << "\"" << Endl;
         }
 
-        ConfigurationManager->ChangeActiveAiProfile(newProfileName);
+        ConfigurationManager->Flush();
         AiModel = profile;
         ModelHandler.reset();
     }
@@ -315,7 +289,7 @@ private:
     const TDriver Driver;
     const TString ConnectionString;
 
-    TInteractiveConfigurationManager::TAiProfile::TPtr AiModel;
+    TAiModelConfig::TPtr AiModel;
     std::optional<TModelHandler> ModelHandler;
 };
 

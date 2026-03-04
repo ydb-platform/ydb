@@ -18,8 +18,8 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-class TListDirectoryTool final : public TToolBase, public TInterruptableCommand {
-    using TBase = TToolBase;
+class TListDirectoryTool final : public TDatabaseToolBase, public TInterruptableCommand {
+    using TBase = TDatabaseToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
 List directory in Yandex Data Base (YDB) scheme tree. Returns list of item names inside directory and their types.
@@ -34,8 +34,7 @@ For example if called on directory "data/", which contains two tables "my_table1
 
 public:
     explicit TListDirectoryTool(const TListDirectoryToolSettings& settings)
-        : TBase(CreateParametersSchema(), DESCRIPTION)
-        , Database(CanonizeYdbPath(settings.Database))
+        : TBase(settings.Database, CreateParametersSchema(), DESCRIPTION)
         , Client(settings.Driver)
     {}
 
@@ -43,11 +42,7 @@ protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
 
-        Directory = Strip(parser.GetKey(DIRECTORY_PROPERTY).GetString());
-        if (!Directory.StartsWith('/')) {
-            Directory = JoinYdbPath({Database, Directory});
-        }
-        Directory = CanonizeYdbPath(Directory);
+        Directory = CanonizePath(parser.GetKey(DIRECTORY_PROPERTY).GetString());
     }
 
     bool AskPermissions() final {
@@ -59,7 +54,6 @@ protected:
         }
 
         PrintFtxuiMessage("", message, ftxui::Color::Green);
-        Cout << Endl;
 
         // Directory listing is always allowed
         return true;
@@ -75,7 +69,7 @@ protected:
 
         const auto& response = feature.GetValue();
         if (!response.IsSuccess()) {
-            Cout << Colors.Red() << "Listing directory \"" << Directory << "\" failed: " << Colors.OldColor() << response.GetStatus() << Endl;
+            Cout << Endl << Colors.Red() << "Listing directory \"" << Directory << "\" failed: " << Strip(response.GetIssues().ToString()) << Colors.OldColor() << Endl;
             return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
         }
 
@@ -108,8 +102,8 @@ private:
     }
 
 private:
-    const TString Database;
     NScheme::TSchemeClient Client;
+
     TString Directory;
 };
 

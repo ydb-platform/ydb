@@ -109,7 +109,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             if (onFinishWaiting) {
                 onFinishWaiting();
             }
-            Cerr << Colors.Red() << e.what() << Colors.OldColor() << Endl;
+            Cerr << Endl << Colors.Red() << e.what() << Colors.OldColor() << Endl;
             break;
         }
 
@@ -126,10 +126,6 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 }
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
-
-            if (!output.ToolCalls.empty()) {
-                Cout << Endl;
-            }
         }
 
         bool interrupted = false;
@@ -148,8 +144,6 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             break;
         }
     }
-
-    Cout << Endl;
 }
 
 void TModelHandler::ClearContext() {
@@ -191,7 +185,7 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
         userMessages.emplace_back(std::move(result->UserMessage));
     }
     if (!result->IsSuccess) {
-        YDB_CLI_LOG(Warning, "Tool call failed: " << result->ToolResult);
+        YDB_CLI_LOG(Notice, "Tool call failed: " << result->ToolResult);
     }
     response.IsSuccess = result->IsSuccess;
     response.Text = std::move(result->ToolResult);
@@ -199,7 +193,7 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
     return response;
 }
 
-void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TSettings& settings) {
+void TModelHandler::SetupModel(TAiModelConfig::TPtr profile, const TSettings& settings) {
     Y_VALIDATE(profile, "AI profile must be initialized");
 
     TString ValidationError;
@@ -208,10 +202,14 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
     const auto apiType = profile->GetApiType();
     Y_VALIDATE(apiType, "AI profile must have API type");
 
-    const auto& endpoint = profile->GetApiEndpoint();
+    const auto& endpoint = profile->GetEndpoint();
     Y_VALIDATE(endpoint, "AI profile must have API endpoint");
 
     const auto& apiKey = profile->GetApiToken();
+    if (!apiKey) {
+        throw yexception() << "API key resolving was interrupted";
+    }
+
     const auto& modelName = profile->GetModelName();
 
     TString systemPrompt = SYSTEM_PROMPT;
@@ -222,13 +220,13 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
     }
 
     switch (*apiType) {
-        case TInteractiveConfigurationManager::EAiApiType::OpenAI:
-            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
+        case TAiPresets::EApiType::OpenAI:
+            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = *apiKey, .SystemPrompt = systemPrompt});
             break;
-        case TInteractiveConfigurationManager::EAiApiType::Anthropic:
-            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
+        case TAiPresets::EApiType::Anthropic:
+            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = *apiKey, .SystemPrompt = systemPrompt});
             break;
-        case TInteractiveConfigurationManager::EAiApiType::Invalid:
+        case TAiPresets::EApiType::Max:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 }
@@ -241,7 +239,7 @@ void TModelHandler::SetupTools(const TSettings& settings) {
         {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
         {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
         {"ydb_help", CreateYdbHelpTool({.Driver = settings.Driver})},
-        {"exec_shell", CreateExecShellTool({.Driver = settings.Driver})},
+        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt, .Driver = settings.Driver})},
     };
 
     for (const auto& [name, tool] : Tools) {

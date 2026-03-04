@@ -70,9 +70,7 @@ Y_UNIT_TEST(PrettyPrintAst) {
     TAstParseResult ast = ParseAst(TEST_PROGRAM);
     UNIT_ASSERT(ast.IsOk());
 
-    for (ui32 i = 0; i < testFlags.size(); ++i) {
-        ui32 prettyFlags = testFlags[i];
-
+    for (ui32 prettyFlags : testFlags) {
         TString printedProgram1 = ast.Root->ToString(prettyFlags);
         TAstParseResult parsedAst = ParseAst(printedProgram1);
         UNIT_ASSERT(parsedAst.IsOk());

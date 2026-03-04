@@ -63,6 +63,12 @@ Checks: >
   modernize-concat-nested-namespaces,
   modernize-deprecated-headers,
   modernize-deprecated-ios-base-aliases,
+  modernize-loop-convert,
+  modernize-pass-by-value,
+  modernize-redundant-void-arg,
+  modernize-use-bool-literals,
+  modernize-use-equals-delete,
+  modernize-use-noexcept,
   modernize-use-override
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays

@@ -599,8 +599,8 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
 
 } // namespace
 
-TWindowFrameSettings::TWindowFrameSettings(const TFrame& frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty)
-    : FrameBounds_(frameBounds)
+TWindowFrameSettings::TWindowFrameSettings(TFrame frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty)
+    : FrameBounds_(std::move(frameBounds))
     , NeverEmpty_(neverEmpty)
     , Compact_(compact)
     , IsAlwaysEmpty_(isAlwaysEmpty)

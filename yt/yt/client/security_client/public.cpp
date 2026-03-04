@@ -16,7 +16,7 @@ const std::string GuestUserName("guest");
 const std::string JobUserName("job");
 const std::string SchedulerUserName("scheduler");
 const std::string ReplicatorUserName("replicator");
-const std::string BundleControllerUserName("bundle_controller");
+const std::string BundleControllerUserName("yt-bundle-controller");
 const std::string OwnerUserName("owner");
 const std::string FileCacheUserName("file_cache");
 const std::string OperationsCleanerUserName("operations_cleaner");

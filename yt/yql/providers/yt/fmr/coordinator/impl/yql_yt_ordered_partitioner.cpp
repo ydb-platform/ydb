@@ -184,10 +184,18 @@ TPartitionResult PartitionInputTablesIntoTasksOrdered(
 ) {
     auto [tasks, status] = partitioner.PartitionTablesIntoTasksOrdered(inputTables, ytCoordinatorService, clusterConnections);
 
+    if (!status) {
+        return TPartitionResult{.Error = TFmrError{
+            .Component = EFmrComponent::Coordinator,
+            .Reason = EFmrErrorReason::RestartQuery,
+            .ErrorMessage = "Failed to partition input tables into tasks (ordered): max parts exceeded"
+        }};
+    }
+
     YQL_CLOG(DEBUG, FastMapReduce) << "Successfully partitioned " << inputTables.size()
                                    << " input tables (ordered) into " << tasks.size() << " tasks";
 
-    return TPartitionResult{.TaskInputs = tasks, .PartitionStatus = status};
+    return TPartitionResult{.TaskInputs = tasks};
 }
 
 }  // namespace NYql::NFmr

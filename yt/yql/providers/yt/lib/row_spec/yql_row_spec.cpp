@@ -150,6 +150,23 @@ ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMem
     return flags;
 }
 
+void UpdateNativeYtTypeFlags(NYT::TNode& spec, ui64 nativeTypeCompat) {
+    if (spec.HasKey(YqlRowSpecAttribute)) {
+        auto& rowSpec = spec[YqlRowSpecAttribute];
+        ui64 nativeYtTypeFlags = 0;
+        if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
+            nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
+        } else {
+            if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
+                nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
+            } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
+                nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
+            }
+        }
+        rowSpec[RowSpecAttrNativeYtTypeFlags] = ui64(nativeYtTypeFlags & nativeTypeCompat);
+    }
+}
+
 TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers) {
     TVector<TString> order;
     order.insert(order.end(), sortMembers.begin(), sortMembers.end());

@@ -28,9 +28,8 @@
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/types/optional.h"
 
-#include <grpc/impl/channel_arg_names.h>
+#include <grpc/grpc.h>
 #include <grpc/status.h>
-#include <grpc/support/json.h>
 #include <grpc/support/log.h>
 
 #include "src/core/lib/channel/channel_args.h"
@@ -58,8 +57,8 @@ const JsonLoaderInterface* RetryGlobalConfig::JsonLoader(const JsonArgs&) {
 void RetryGlobalConfig::JsonPostLoad(const Json& json, const JsonArgs& args,
                                      ValidationErrors* errors) {
   // Parse maxTokens.
-  auto max_tokens =
-      LoadJsonObjectField<uint32_t>(json.object(), args, "maxTokens", errors);
+  auto max_tokens = LoadJsonObjectField<uint32_t>(json.object_value(), args,
+                                                  "maxTokens", errors);
   if (max_tokens.has_value()) {
     ValidationErrors::ScopedField field(errors, ".maxTokens");
     if (*max_tokens == 0) {
@@ -71,17 +70,17 @@ void RetryGlobalConfig::JsonPostLoad(const Json& json, const JsonArgs& args,
   }
   // Parse tokenRatio.
   ValidationErrors::ScopedField field(errors, ".tokenRatio");
-  auto it = json.object().find("tokenRatio");
-  if (it == json.object().end()) {
+  auto it = json.object_value().find("tokenRatio");
+  if (it == json.object_value().end()) {
     errors->AddError("field not present");
     return;
   }
-  if (it->second.type() != Json::Type::kNumber &&
-      it->second.type() != Json::Type::kString) {
+  if (it->second.type() != Json::Type::NUMBER &&
+      it->second.type() != Json::Type::STRING) {
     errors->AddError("is not a number");
     return;
   }
-  y_absl::string_view buf = it->second.string();
+  y_absl::string_view buf = it->second.string_value();
   uint32_t multiplier = 1;
   uint32_t decimal_value = 0;
   auto decimal_point = buf.find('.');
@@ -173,7 +172,7 @@ void RetryMethodConfig::JsonPostLoad(const Json& json, const JsonArgs& args,
   }
   // Parse retryableStatusCodes.
   auto status_code_list = LoadJsonObjectField<std::vector<TString>>(
-      json.object(), args, "retryableStatusCodes", errors,
+      json.object_value(), args, "retryableStatusCodes", errors,
       /*required=*/false);
   if (status_code_list.has_value()) {
     for (size_t i = 0; i < status_code_list->size(); ++i) {

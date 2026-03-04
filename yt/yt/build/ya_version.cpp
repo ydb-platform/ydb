@@ -56,6 +56,22 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     out << "-asan";
 #endif
 
+#if defined(_lsan_enabled_)
+    out << "-lsan";
+#endif
+
+#if defined(_msan_enabled_)
+    out << "-msan";
+#endif
+
+#if defined(_tsan_enabled_)
+    out << "-tsan";
+#endif
+
+#if defined(_ubsan_enabled_)
+    out << "-ubsan";
+#endif
+
 // Future-proofing. The check for YT_ROPSAN_ENABLE_PTR_TAGGING is technically
 // redundant as it follows from access or serialization checks.
 #if defined(YT_ROPSAN_ENABLE_ACCESS_CHECK) || \

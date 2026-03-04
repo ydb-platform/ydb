@@ -24,8 +24,7 @@
 
 #include <vector>
 
-#include "y_absl/strings/string_view.h"
-#include "upb/mem/arena.h"
+#include "upb/arena.h"
 
 #include <grpc/slice.h>
 
@@ -57,8 +56,7 @@ struct GrpcLbResponse {
 };
 
 // Creates a serialized grpclb request.
-grpc_slice GrpcLbRequestCreate(y_absl::string_view lb_service_name,
-                               upb_Arena* arena);
+grpc_slice GrpcLbRequestCreate(const char* lb_service_name, upb_Arena* arena);
 
 // Creates a serialized grpclb load report request.
 grpc_slice GrpcLbLoadReportRequestCreate(

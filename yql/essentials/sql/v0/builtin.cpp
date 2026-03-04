@@ -16,6 +16,7 @@
 #include <util/string/join.h>
 
 #include <unordered_map>
+#include <utility>
 
 using namespace NYql;
 
@@ -68,10 +69,10 @@ private:
 
 class TBasicAggrFunc final: public TAstListNode {
 public:
-    TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFunc(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {}
 
@@ -121,10 +122,10 @@ protected:
 
 class TBasicAggrFactory final : public TAstListNode {
 public:
-    TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFactory(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {}
 
@@ -145,8 +146,8 @@ public:
             apply = L(apply, "extractor");
         } else {
             // make several extractors from main that returns a tuple
-            for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
-                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
+            for (ui32 index : columnIndices) {
+                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(index))));
                 apply = L(apply, partial);
             }
         }
@@ -185,10 +186,10 @@ typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
 
 class TLiteralStringAtom: public INode {
 public:
-    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info)
+    TLiteralStringAtom(TPosition pos, TNodePtr node, TString info)
         : INode(pos)
-        , Node_(node)
-        , Info_(info)
+        , Node_(std::move(node))
+        , Info_(std::move(info))
     {
     }
 
@@ -345,9 +346,9 @@ public:
 
 class TTableName : public TCallNode {
 public:
-    TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& cluster)
+    TTableName(TPosition pos, const TVector<TNodePtr>& args, TString cluster)
         : TCallNode(pos, "TableName", 0, 2, args)
-        , Cluster_(cluster)
+        , Cluster_(std::move(cluster))
     {
     }
 
@@ -676,8 +677,8 @@ public:
             ctx.Error(Pos_) << "CombineMembers requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            Args_[i] = Q(Y(Q(""), Args_[i])); // flatten without prefix
+        for (auto& arg : Args_) {
+            arg = Q(Y(Q(""), arg)); // flatten without prefix
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -698,15 +699,15 @@ public:
             ctx.Error(Pos_) << OpName_ << " requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            if (!Args_[i]->Init(ctx, src)) {
+        for (auto& arg : Args_) {
+            if (!arg->Init(ctx, src)) {
                 return false;
             }
-            if (Args_[i]->GetTupleSize() == 2) {
+            if (arg->GetTupleSize() == 2) {
                 // flatten with prefix
-                Args_[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args_[i]->GetTupleElement(0)).Build(),
-                    Args_[i]->GetTupleElement(1)
+                arg = Q(Y(
+                    MakeAtomFromExpression(ctx, arg->GetTupleElement(0)).Build(),
+                    arg->GetTupleElement(1)
                 ));
             } else {
                 ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
@@ -1377,10 +1378,10 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 
 class TCallableNode final: public INode {
 public:
-    TCallableNode(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args)
+    TCallableNode(TPosition pos, const TString& module, TString name, const TVector<TNodePtr>& args)
         : INode(pos)
         , Module_(module)
-        , Name_(name)
+        , Name_(std::move(name))
         , Args_(args)
     {}
 
@@ -1468,10 +1469,10 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
+    TScriptUdf(TPosition pos, TString moduleName, TString funcName, const TVector<TNodePtr>& args)
         : INode(pos)
-        , ModuleName_(moduleName)
-        , FuncName_(funcName)
+        , ModuleName_(std::move(moduleName))
+        , FuncName_(std::move(funcName))
         , Args_(args)
     {}
 
@@ -1554,9 +1555,9 @@ private:
 template <bool Sorted>
 class TYqlToDict final: public TCallNode {
 public:
-    TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
+    TYqlToDict(TPosition pos, TString mode, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ToDict", 4, 4, args)
-        , Mode_(mode)
+        , Mode_(std::move(mode))
     {}
 
 private:
@@ -1621,9 +1622,9 @@ private:
 
 class TInvalidBuiltin final: public INode {
 public:
-    TInvalidBuiltin(TPosition pos, const TString& info)
+    TInvalidBuiltin(TPosition pos, TString info)
         : INode(pos)
-        , Info_(info)
+        , Info_(std::move(info))
     {
     }
 

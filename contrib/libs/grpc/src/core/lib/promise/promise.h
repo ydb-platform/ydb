@@ -18,6 +18,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <type_traits>
+#include <utility>
 
 #include "y_absl/functional/any_invocable.h"
 #include "y_absl/status/status.h"

@@ -1,9 +1,11 @@
 #include "ast_nodes.h"
 
+#include <utility>
+
 namespace NYql::NJsonPath {
 
 TAstNode::TAstNode(TPosition pos)
-    : Pos_(pos)
+    : Pos_(std::move(pos))
 {
 }
 
@@ -17,7 +19,7 @@ EReturnType TAstNode::GetReturnType() const {
 
 TRootNode::TRootNode(TPosition pos, TAstNodePtr expr, EJsonPathMode mode)
     : TAstNode(pos)
-    , Expr_(expr)
+    , Expr_(std::move(expr))
     , Mode_(mode)
 {
 }
@@ -47,9 +49,9 @@ void TContextObjectNode::Accept(IAstNodeVisitor& visitor) const {
     return visitor.VisitContextObject(*this);
 }
 
-TVariableNode::TVariableNode(TPosition pos, const TString& name)
+TVariableNode::TVariableNode(TPosition pos, TString name)
     : TAstNode(pos)
-    , Name_(name)
+    , Name_(std::move(name))
 {
 }
 
@@ -84,10 +86,10 @@ void TNumberLiteralNode::Accept(IAstNodeVisitor& visitor) const {
     return visitor.VisitNumberLiteral(*this);
 }
 
-TMemberAccessNode::TMemberAccessNode(TPosition pos, const TString& member, TAstNodePtr input)
+TMemberAccessNode::TMemberAccessNode(TPosition pos, TString member, TAstNodePtr input)
     : TAstNode(pos)
-    , Member_(member)
-    , Input_(input)
+    , Member_(std::move(member))
+    , Input_(std::move(input))
 {
 }
 
@@ -105,7 +107,7 @@ void TMemberAccessNode::Accept(IAstNodeVisitor& visitor) const {
 
 TWildcardMemberAccessNode::TWildcardMemberAccessNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input_(input)
+    , Input_(std::move(input))
 {
 }
 
@@ -119,8 +121,8 @@ void TWildcardMemberAccessNode::Accept(IAstNodeVisitor& visitor) const {
 
 TArrayAccessNode::TArrayAccessNode(TPosition pos, TVector<TSubscript> subscripts, TAstNodePtr input)
     : TAstNode(pos)
-    , Subscripts_(subscripts)
-    , Input_(input)
+    , Subscripts_(std::move(subscripts))
+    , Input_(std::move(input))
 {
 }
 
@@ -138,7 +140,7 @@ void TArrayAccessNode::Accept(IAstNodeVisitor& visitor) const {
 
 TWildcardArrayAccessNode::TWildcardArrayAccessNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input_(input)
+    , Input_(std::move(input))
 {
 }
 
@@ -153,7 +155,7 @@ void TWildcardArrayAccessNode::Accept(IAstNodeVisitor& visitor) const {
 TUnaryOperationNode::TUnaryOperationNode(TPosition pos, EUnaryOperation op, TAstNodePtr expr)
     : TAstNode(pos)
     , Operation_(op)
-    , Expr_(expr)
+    , Expr_(std::move(expr))
 {
 }
 
@@ -176,8 +178,8 @@ EReturnType TUnaryOperationNode::GetReturnType() const {
 TBinaryOperationNode::TBinaryOperationNode(TPosition pos, EBinaryOperation op, TAstNodePtr leftExpr, TAstNodePtr rightExpr)
     : TAstNode(pos)
     , Operation_(op)
-    , LeftExpr_(leftExpr)
-    , RightExpr_(rightExpr)
+    , LeftExpr_(std::move(leftExpr))
+    , RightExpr_(std::move(rightExpr))
 {
 }
 
@@ -237,9 +239,9 @@ void TNullLiteralNode::Accept(IAstNodeVisitor& visitor) const {
     return visitor.VisitNullLiteral(*this);
 }
 
-TStringLiteralNode::TStringLiteralNode(TPosition pos, const TString& value)
+TStringLiteralNode::TStringLiteralNode(TPosition pos, TString value)
     : TAstNode(pos)
-    , Value_(value)
+    , Value_(std::move(value))
 {
 }
 
@@ -262,8 +264,8 @@ void TFilterObjectNode::Accept(IAstNodeVisitor& visitor) const {
 
 TFilterPredicateNode::TFilterPredicateNode(TPosition pos, TAstNodePtr predicate, TAstNodePtr input)
     : TAstNode(pos)
-    , Predicate_(predicate)
-    , Input_(input)
+    , Predicate_(std::move(predicate))
+    , Input_(std::move(input))
 {
 }
 
@@ -282,7 +284,7 @@ void TFilterPredicateNode::Accept(IAstNodeVisitor& visitor) const {
 TMethodCallNode::TMethodCallNode(TPosition pos, EMethodType type, TAstNodePtr input)
     : TAstNode(pos)
     , Type_(type)
-    , Input_(input)
+    , Input_(std::move(input))
 {
 }
 
@@ -300,8 +302,8 @@ void TMethodCallNode::Accept(IAstNodeVisitor& visitor) const {
 
 TStartsWithPredicateNode::TStartsWithPredicateNode(TPosition pos, TAstNodePtr input, TAstNodePtr prefix)
     : TAstNode(pos)
-    , Input_(input)
-    , Prefix_(prefix)
+    , Input_(std::move(input))
+    , Prefix_(std::move(prefix))
 {
 }
 
@@ -323,7 +325,7 @@ void TStartsWithPredicateNode::Accept(IAstNodeVisitor& visitor) const {
 
 TExistsPredicateNode::TExistsPredicateNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input_(input)
+    , Input_(std::move(input))
 {
 }
 
@@ -341,7 +343,7 @@ void TExistsPredicateNode::Accept(IAstNodeVisitor& visitor) const {
 
 TIsUnknownPredicateNode::TIsUnknownPredicateNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input_(input)
+    , Input_(std::move(input))
 {
 }
 
@@ -359,7 +361,7 @@ void TIsUnknownPredicateNode::Accept(IAstNodeVisitor& visitor) const {
 
 TLikeRegexPredicateNode::TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NReWrapper::IRePtr&& regex)
     : TAstNode(pos)
-    , Input_(input)
+    , Input_(std::move(input))
     , Regex_(std::move(regex))
 {
 }

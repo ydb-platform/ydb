@@ -133,7 +133,7 @@ public:
     TACL() = default;
     TACL(const TString& string); // proto format
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
-    std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    std::pair<ui32, ui32> RemoveAccess(EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();

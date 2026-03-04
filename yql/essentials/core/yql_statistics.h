@@ -89,8 +89,8 @@ struct TOptimizerStatistics {
         TVector<NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
             TVector<NDq::TJoinColumn> columns;
             columns.reserve(Data.size());
-            for (std::size_t i = 0; i < Data.size(); ++i) {
-                columns.push_back(NDq::TJoinColumn(alias, Data[i]));
+            for (const auto& column : Data) {
+                columns.push_back(NDq::TJoinColumn(alias, column));
             }
 
             return columns;

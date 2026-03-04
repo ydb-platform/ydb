@@ -22,6 +22,8 @@
 
 #include <stdlib.h>
 
+#include <initializer_list>
+
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_format.h"
 
@@ -29,7 +31,6 @@
 #include <grpc/support/log.h>
 
 #include "src/core/ext/transport/chttp2/transport/internal.h"
-#include "src/core/lib/experiments/experiments.h"
 #include "src/core/lib/gprpp/status_helper.h"
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_buffer.h"
@@ -78,9 +79,7 @@ void grpc_chttp2_encode_data(uint32_t id, grpc_slice_buffer* inbuf,
   grpc_slice_buffer_move_first_no_ref(inbuf, write_bytes, outbuf);
 
   stats->framing_bytes += header_size;
-  if (!grpc_core::IsHttp2StatsFixEnabled()) {
-    stats->data_bytes += write_bytes;
-  }
+  stats->data_bytes += write_bytes;
 }
 
 grpc_core::Poll<grpc_error_handle> grpc_deframe_unprocessed_incoming_frames(

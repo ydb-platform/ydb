@@ -4,6 +4,8 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
+#include <utility>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
@@ -282,9 +284,9 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
 
 class TTranslator: public NSQLTranslation::ITranslator {
 public:
-    TTranslator(const TLexers& lexers, const TParsers& parsers)
-        : Lexers_(lexers)
-        , Parsers_(parsers)
+    TTranslator(TLexers lexers, TParsers parsers)
+        : Lexers_(std::move(lexers))
+        , Parsers_(std::move(parsers))
     {
     }
 

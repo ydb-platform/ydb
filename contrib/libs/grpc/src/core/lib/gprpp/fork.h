@@ -31,7 +31,7 @@
 
 namespace grpc_core {
 
-class GPR_DLL Fork {
+class Fork {
  public:
   typedef void (*child_postfork_func)(void);
 

@@ -7,6 +7,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -131,7 +133,7 @@ public:
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

@@ -691,7 +691,7 @@ TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(const std::vecto
 
     for (std::size_t fdIdx : fdIdxes) {
         if (FdMapping_[fdIdx] != -1) {
-            fdSet[FdMapping_[fdIdx]] = 1;
+            fdSet[FdMapping_[fdIdx]] = true;
         }
     }
 
@@ -835,8 +835,8 @@ bool TOrderingsStateMachine::TNFSM::TEdge::operator==(const TEdge& other) const 
 
 void TOrderingsStateMachine::TNFSM::AddEdge(std::size_t srcNodeIdx, std::size_t dstNodeIdx, i64 fdIdx) {
     auto newEdge = TNFSM::TEdge(srcNodeIdx, dstNodeIdx, fdIdx);
-    for (std::size_t i = 0; i < Edges_.size(); ++i) {
-        if (Edges_[i] == newEdge) {
+    for (const auto& edge : Edges_) {
+        if (edge == newEdge) {
             return;
         }
     }
@@ -1093,7 +1093,7 @@ void TOrderingsStateMachine::TDFSM::Build(
             }
             AddEdge(nodeIdx, dstNodeIdx, fdIdx);
 
-            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = 1;
+            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = true;
         }
     }
 
@@ -1153,20 +1153,20 @@ void TOrderingsStateMachine::TDFSM::Precompute(
         TransitionMatrix_[edge.SrcNodeIdx][edge.FdIdx] = edge.DstNodeIdx;
     }
 
-    for (std::size_t dfsmNodeIdx = 0; dfsmNodeIdx < Nodes_.size(); ++dfsmNodeIdx) {
-        for (std::size_t nfsmNodeIdx : Nodes_[dfsmNodeIdx].NFSMNodes) {
+    for (auto& node : Nodes_) {
+        for (std::size_t nfsmNodeIdx : node.NFSMNodes) {
             auto interestingOrderIdx = nfsm.Nodes_[nfsmNodeIdx].InterestingOrderingIdx;
             if (interestingOrderIdx == -1) {
                 continue;
             }
 
-            Nodes_[dfsmNodeIdx].InterestingOrderings[interestingOrderIdx] = 1;
+            node.InterestingOrderings[interestingOrderIdx] = true;
         }
     }
 
     for (auto& node : Nodes_) {
         for (auto& nfsmNodeIdx : node.NFSMNodes) {
-            node.NFSMNodesBitset[nfsmNodeIdx] = 1;
+            node.NFSMNodesBitset[nfsmNodeIdx] = true;
         }
     }
 }

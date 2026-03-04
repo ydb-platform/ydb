@@ -149,8 +149,7 @@ y_absl::Status PrepareSocket(const PosixTcpOptions& options,
     }
   });
   if (PosixSocketWrapper::IsSocketReusePortSupported() &&
-      options.allow_reuse_port && socket.addr.address()->sa_family != AF_UNIX &&
-      !ResolvedAddressIsVSock(socket.addr)) {
+      options.allow_reuse_port && socket.addr.address()->sa_family != AF_UNIX) {
     GRPC_RETURN_IF_ERROR(socket.sock.SetSocketReusePort(1));
   }
 
@@ -166,8 +165,7 @@ y_absl::Status PrepareSocket(const PosixTcpOptions& options,
   GRPC_RETURN_IF_ERROR(socket.sock.SetSocketNonBlocking(1));
   GRPC_RETURN_IF_ERROR(socket.sock.SetSocketCloexec(1));
 
-  if (socket.addr.address()->sa_family != AF_UNIX &&
-      !ResolvedAddressIsVSock(socket.addr)) {
+  if (socket.addr.address()->sa_family != AF_UNIX) {
     GRPC_RETURN_IF_ERROR(socket.sock.SetSocketLowLatency(1));
     GRPC_RETURN_IF_ERROR(socket.sock.SetSocketReuseAddr(1));
     socket.sock.TrySetSocketTcpUserTimeout(options, false);

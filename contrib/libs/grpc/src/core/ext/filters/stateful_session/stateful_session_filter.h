@@ -21,51 +21,20 @@
 
 #include <stddef.h>
 
-#include <utility>
-
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
+#include "y_absl/types/optional.h"
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/promise_based_filter.h"
-#include "src/core/lib/gprpp/ref_counted_string.h"
 #include "src/core/lib/gprpp/unique_type_name.h"
 #include "src/core/lib/promise/arena_promise.h"
-#include "src/core/lib/service_config/service_config_call_data.h"
 #include "src/core/lib/transport/transport.h"
 
 namespace grpc_core {
 
-// A call attribute to be passed to the xds_override_host LB policy.
-// The StatefulSession filter will populate the cookie's address list,
-// if set.  The xds_override_host LB policy will use that info, and then
-// set the actual address list based on the chosen endpoint.  The
-// StatefulSession filter will then use the actual address list to
-// update the cookie.
-class XdsOverrideHostAttribute
-    : public ServiceConfigCallData::CallAttributeInterface {
- public:
-  static UniqueTypeName TypeName();
-
-  explicit XdsOverrideHostAttribute(y_absl::string_view cookie_address_list)
-      : cookie_address_list_(cookie_address_list) {}
-
-  y_absl::string_view cookie_address_list() const { return cookie_address_list_; }
-
-  y_absl::string_view actual_address_list() const {
-    return actual_address_list_.as_string_view();
-  }
-  void set_actual_address_list(RefCountedStringValue actual_address_list) {
-    actual_address_list_ = std::move(actual_address_list);
-  }
-
- private:
-  UniqueTypeName type() const override { return TypeName(); }
-
-  y_absl::string_view cookie_address_list_;
-  RefCountedStringValue actual_address_list_;
-};
+UniqueTypeName XdsOverrideHostTypeName();
 
 // A filter to provide cookie-based stateful session affinity.
 class StatefulSessionFilter : public ChannelFilter {
@@ -81,6 +50,11 @@ class StatefulSessionFilter : public ChannelFilter {
 
  private:
   explicit StatefulSessionFilter(ChannelFilter::Args filter_args);
+
+  y_absl::optional<y_absl::string_view> GetOverrideHostFromCookie(
+      const ClientMetadataHandle& initial_metadata,
+      y_absl::string_view cookie_name);
+
   // The relative index of instances of the same filter.
   const size_t index_;
   // Index of the service config parser.

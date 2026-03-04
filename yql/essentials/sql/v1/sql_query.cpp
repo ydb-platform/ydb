@@ -10,10 +10,15 @@
 #include "object_processing.h"
 #include "antlr_token.h"
 #include "secret_settings.h"
+
+#include <yql/essentials/sql/v1/proto_parser/token.h>
+
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
+
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+
 #ifdef GetMessage
     #undef GetMessage
 #endif
@@ -349,7 +354,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(Beginning(stmt)));
 
             if (!node) {
                 return false;
@@ -769,7 +775,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(stmt.GetToken1()));
 
             if (!node) {
                 return false;

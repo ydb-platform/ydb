@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <util/system/env.h>
@@ -15,7 +16,7 @@ namespace {
 template <class T>
 void ExpectSuccessfullySetFuture(const TFuture<T>& future)
 {
-    YT_VERIFY(future.WithTimeout(TDuration::Seconds(15)).Get().IsOK());
+    YT_VERIFY(WaitForFast(future.WithTimeout(TDuration::Seconds(15))).IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

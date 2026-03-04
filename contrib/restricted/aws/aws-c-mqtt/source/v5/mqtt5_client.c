@@ -2058,7 +2058,7 @@ struct aws_mqtt5_client *aws_mqtt5_client_new(
     }
 
     if (aws_mqtt5_negotiated_settings_init(
-            allocator, &client->negotiated_settings, &options->connect_options->client_id)) {
+            allocator, &client->negotiated_settings, &client->config->connect->storage_view.client_id)) {
         goto on_error;
     }
 

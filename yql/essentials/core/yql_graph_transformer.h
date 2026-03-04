@@ -9,6 +9,7 @@
 #include <util/datetime/base.h>
 
 #include <functional>
+#include <utility>
 
 namespace NYql {
 
@@ -197,18 +198,18 @@ struct TTransformStage {
     EYqlIssueCode IssueCode;
     TString IssueMessage;
 
-    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, TString name, EYqlIssueCode issueCode, TString  issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(transformer.Get())
         , Transformer_(transformer)
     {}
 
-    TTransformStage(IGraphTransformer& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(IGraphTransformer& transformer, TString name, EYqlIssueCode issueCode, TString issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(&transformer)
     {}
 

@@ -46,7 +46,7 @@ TEST(TCodicilTest, CodicilGuardedInvoker)
     })
         .AsyncVia(invoker)
         .Run()
-        .Get();
+        .BlockingGet();
     actionQueue->Shutdown();
 }
 

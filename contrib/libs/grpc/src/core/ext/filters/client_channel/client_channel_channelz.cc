@@ -20,10 +20,6 @@
 
 #include "src/core/ext/filters/client_channel/client_channel_channelz.h"
 
-#include "y_absl/strings/str_cat.h"
-
-#include <grpc/support/json.h>
-
 #include "src/core/lib/transport/connectivity_state.h"
 
 // IWYU pragma: no_include <type_traits>
@@ -53,24 +49,27 @@ Json SubchannelNode::RenderJson() {
   grpc_connectivity_state state =
       connectivity_state_.load(std::memory_order_relaxed);
   Json::Object data = {
-      {"state", Json::FromObject({
-                    {"state", Json::FromString(ConnectivityStateName(state))},
-                })},
-      {"target", Json::FromString(target_)},
+      {"state",
+       Json::Object{
+           {"state", ConnectivityStateName(state)},
+       }},
+      {"target", target_},
   };
+
   // Fill in the channel trace if applicable
   Json trace_json = trace_.RenderJson();
-  if (trace_json.type() != Json::Type::kNull) {
+  if (trace_json.type() != Json::Type::JSON_NULL) {
     data["trace"] = std::move(trace_json);
   }
   // Ask CallCountingHelper to populate call count data.
   call_counter_.PopulateCallCounts(&data);
   // Construct top-level object.
   Json::Object object{
-      {"ref", Json::FromObject({
-                  {"subchannelId", Json::FromString(y_absl::StrCat(uuid()))},
-              })},
-      {"data", Json::FromObject(std::move(data))},
+      {"ref",
+       Json::Object{
+           {"subchannelId", ::ToString(uuid())},
+       }},
+      {"data", std::move(data)},
   };
   // Populate the child socket.
   RefCountedPtr<SocketNode> child_socket;
@@ -79,14 +78,14 @@ Json SubchannelNode::RenderJson() {
     child_socket = child_socket_;
   }
   if (child_socket != nullptr && child_socket->uuid() != 0) {
-    object["socketRef"] = Json::FromArray({
-        Json::FromObject({
-            {"socketId", Json::FromString(y_absl::StrCat(child_socket->uuid()))},
-            {"name", Json::FromString(child_socket->name())},
-        }),
-    });
+    object["socketRef"] = Json::Array{
+        Json::Object{
+            {"socketId", ::ToString(child_socket->uuid())},
+            {"name", child_socket->name()},
+        },
+    };
   }
-  return Json::FromObject(object);
+  return object;
 }
 
 }  // namespace channelz

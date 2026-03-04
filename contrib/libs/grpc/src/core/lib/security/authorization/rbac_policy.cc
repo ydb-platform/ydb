@@ -16,11 +16,12 @@
 
 #include "src/core/lib/security/authorization/rbac_policy.h"
 
+#include <algorithm>
+#include <initializer_list>
 #include <utility>
 
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/str_join.h"
-#include "y_absl/strings/string_view.h"
 
 namespace grpc_core {
 
@@ -28,56 +29,25 @@ namespace grpc_core {
 // Rbac
 //
 
-Rbac::Rbac(TString name, Rbac::Action action,
-           std::map<TString, Policy> policies)
-    : name(std::move(name)),
-      action(action),
-      policies(std::move(policies)),
-      audit_condition(Rbac::AuditCondition::kNone) {}
+Rbac::Rbac(Rbac::Action action, std::map<TString, Policy> policies)
+    : action(action), policies(std::move(policies)) {}
 
 Rbac::Rbac(Rbac&& other) noexcept
-    : name(std::move(other.name)),
-      action(other.action),
-      policies(std::move(other.policies)),
-      audit_condition(other.audit_condition),
-      logger_configs(std::move(other.logger_configs)) {}
+    : action(other.action), policies(std::move(other.policies)) {}
 
 Rbac& Rbac::operator=(Rbac&& other) noexcept {
-  name = std::move(other.name);
   action = other.action;
   policies = std::move(other.policies);
-  audit_condition = other.audit_condition;
-  logger_configs = std::move(other.logger_configs);
   return *this;
 }
 
 TString Rbac::ToString() const {
   std::vector<TString> contents;
-  y_absl::string_view condition_str;
-  switch (audit_condition) {
-    case Rbac::AuditCondition::kNone:
-      condition_str = "None";
-      break;
-    case AuditCondition::kOnDeny:
-      condition_str = "OnDeny";
-      break;
-    case AuditCondition::kOnAllow:
-      condition_str = "OnAllow";
-      break;
-    case AuditCondition::kOnDenyAndAllow:
-      condition_str = "OnDenyAndAllow";
-      break;
-  }
   contents.push_back(y_absl::StrFormat(
-      "Rbac name=%s action=%s audit_condition=%s{", name,
-      action == Rbac::Action::kAllow ? "Allow" : "Deny", condition_str));
+      "Rbac action=%s{", action == Rbac::Action::kAllow ? "Allow" : "Deny"));
   for (const auto& p : policies) {
     contents.push_back(y_absl::StrFormat("{\n  policy_name=%s\n%s\n}", p.first,
                                        p.second.ToString()));
-  }
-  for (const auto& config : logger_configs) {
-    contents.push_back(y_absl::StrFormat("{\n  audit_logger=%s\n%s\n}",
-                                       config->name(), config->ToString()));
   }
   contents.push_back("}");
   return y_absl::StrJoin(contents, "\n");

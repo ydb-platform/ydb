@@ -42,7 +42,7 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic", local_topics, entity_name)
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -89,7 +89,7 @@ class TestStreamingInYdb(StreamingTestBase):
     def test_restart_query(self, kikimr, entity_name, local_topics, use_partition_balancing):
         inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
 
-        name = "test_restart_query"
+        name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -127,7 +127,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "shared_reading_insert_to_topic", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -140,8 +140,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        query_name1 = "test_read_topic_shared_reading_insert_to_topic1"
-        query_name2 = "test_read_topic_shared_reading_insert_to_topic2"
+        query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
+        query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
@@ -149,10 +149,8 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path1)
 
         # Check that streaming.query.tasks.count metric exists for both queries
-        tasks_count1 = self.get_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expect_counters_exist=True)
-        tasks_count2 = self.get_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expect_counters_exist=True)
-        assert tasks_count1 > 0, f"Expected tasks count > 0 for {query_name1}, got {tasks_count1}"
-        assert tasks_count2 > 0, f"Expected tasks count > 0 for {query_name2}, got {tasks_count2}"
+        self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expected_value=1)
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
@@ -181,7 +179,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "reading_restart_nodes", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -194,7 +192,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 INSERT INTO {out} SELECT value FROM $in;
             END DO;'''
 
-        query_name = "test_read_topic_shared_reading_restart_nodes"
+        query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -223,7 +221,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_read_topic_restore_state", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -252,7 +250,7 @@ class TestStreamingInYdb(StreamingTestBase):
                     SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
             END DO;'''
 
-        query_name = "test_read_topic_restore_state"
+        query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -286,9 +284,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_json_errors", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
-        name = "test_json_errors"
+        name = f"test_json_errors_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -316,9 +314,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query_by_rescaling", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
-        name = "test_restart_query_by_rescaling"
+        name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -374,11 +372,11 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_pragma", local_topics, entity_name, partitions_count=10)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 
-        query_name = "test_pragma1"
+        query_name = f"test_pragma1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         pragma_balancing = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -404,7 +402,7 @@ class TestStreamingInYdb(StreamingTestBase):
     def test_types(self, kikimr, entity_name, local_topics, use_partition_balancing):
         inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
 
-        query_name = "test_types1"
+        query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
 
         def test_type(self, kikimr, type, input, expected_output, use_partition_balancing=False):
             pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
@@ -443,7 +441,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
 
-        query_name = "test_raw_format_string"
+        query_name = f"test_raw_format_string_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -465,7 +463,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = "test_raw_format_default"
+        query_name = f"test_raw_format_default_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -484,7 +482,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = "test_raw_format_json"
+        query_name = f"test_raw_format_json_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -521,7 +519,7 @@ class TestStreamingInYdb(StreamingTestBase):
         # Disable deduplication
 
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
-        name = "test_deduplication"
+        name = f"test_deduplication_{local_topics!s:.1}"
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)

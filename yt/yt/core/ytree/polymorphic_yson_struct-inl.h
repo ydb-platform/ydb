@@ -12,6 +12,25 @@ namespace NYT::NYTree {
 
 namespace NDetail {
 
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TEnum, std::same_as<TEnum>... TArgs>
+consteval bool AllDifferentValues(TArgs... args)
+{
+    TEnumIndexedArray<TEnum, bool> array;
+    ((array[args] = true), ...);
+    i64 count = 0;
+    for (auto value : array) {
+        if (value) {
+            ++count;
+        }
+    }
+
+    return count == sizeof...(TArgs);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TEnum, TEnum Value, class TBase, class TDerived>
 TIntrusivePtr<TBase> TMappingLeaf<TEnum, Value, TBase, TDerived>::CreateInstance()
 {
@@ -29,18 +48,30 @@ TIntrusivePtr<TBase>
 TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>::
 CreateInstance(TEnum value)
 {
+    if (!ValueMap[value]) {
+        THROW_ERROR_EXCEPTION("Creating polymorphic yson struct instance of unsupported type %v", value);
+    }
+
     TIntrusivePtr<TBase> ret;
 
-    Y_UNUSED(([&ret, value] {
+    // NB(apachee): Assignment count is only used as a sanity check.
+    // Case with #assignmentCount > 1 is covered by ensuring uniqueness of enum values at compile-time in a static assertion.
+    // Case with #assignmentCount = 0 case is covered by throwing exception above.
+
+    int assignmentCount = ([&ret, value] {
         if (value == Values) {
             ret = TLeaf<Values, TDerived>::CreateInstance();
-            return false;
+            return 1;
         }
-        return true;
-    } () && ...));
+        return 0;
+    } () + ...);
+
+    YT_VERIFY(assignmentCount == 1);
 
     return ret;
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NDetail
 

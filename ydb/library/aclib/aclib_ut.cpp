@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, dogToken) == false);
     }
 
-    Y_UNIT_TEST(TestInhertACL) {
+    Y_UNIT_TEST(TestInheritACL) {
         TSecurityObject objParent(James, true /* container */);
 
         objParent.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer);
@@ -308,4 +308,357 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
         UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
     }
+}
+
+Y_UNIT_TEST_SUITE(TACLMethods) {
+    static const TString User = "user@domain";
+
+    Y_UNIT_TEST(TestAddIndividualRight) {
+        TACL acl;
+
+        // Add right for the first time
+        auto result1 = acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::SelectRow);
+        UNIT_ASSERT_EQUAL(result1.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Add different right for the same user
+        auto result2 = acl.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        UNIT_ASSERT_EQUAL(result2.first, EAccessRights::UpdateRow);
+        UNIT_ASSERT_EQUAL(result2.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(UR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestAddIndividualRightDuplicate) {
+        TACL acl;
+
+        // Add right for the first time
+        auto result1 = acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::SelectRow);
+        UNIT_ASSERT_EQUAL(result1.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Add the same right second time - should be ignored
+        auto result2 = acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result2.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result2.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestAddCompositeRight) {
+        TACL acl;
+
+        // Add composite right
+        auto result1 = acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::GenericRead);
+        UNIT_ASSERT_EQUAL(result1.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+
+        // Try to add another composite right
+        auto result2 = acl.AddAccess(EAccessType::Allow, EAccessRights::GenericList, User);
+        UNIT_ASSERT_EQUAL(result2.first, EAccessRights::GenericList);
+        UNIT_ASSERT_EQUAL(result2.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain;+L:user@domain");
+    }
+
+    Y_UNIT_TEST(TestAddCompositeRightDuplicate) {
+        TACL acl;
+
+        // Add composite right
+        auto result1 = acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::GenericRead);
+        UNIT_ASSERT_EQUAL(result1.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+
+        // Try to add duplicate of composite right
+        auto result2 = acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result2.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result2.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+    }
+
+    Y_UNIT_TEST(TestAddCompositeRightPartDuplicate) {
+        TACL acl;
+
+        // Add composite right GenericWrite
+        auto result1 = acl.AddAccess(EAccessType::Allow, EAccessRights::GenericWrite, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::GenericWrite);
+        UNIT_ASSERT_EQUAL(result1.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+W:user@domain");
+
+        // Try to add a part of GenericWrite (EraseRow) - should be added as separate ACE
+        auto result2 = acl.AddAccess(EAccessType::Allow, EAccessRights::EraseRow, User);
+        UNIT_ASSERT_EQUAL(result2.first, EAccessRights::EraseRow);
+        UNIT_ASSERT_EQUAL(result2.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+W:user@domain;+(ER):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveIndividualRight) {
+        TACL acl;
+
+        // Add several rights
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::EraseRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(UR):user@domain;+(ER):user@domain");
+
+        // Remove one specific right
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::UpdateRow);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(ER):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveIndividualRightNonExistent) {
+        TACL acl;
+
+        // Add right
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Try to remove non-existent right
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightPart) {
+        TACL acl;
+
+        // Add GenericRead (SelectRow | ReadAttributes | DescribeSchema)
+        acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+
+        // Try to remove only SelectRow - should not modify GenericRead
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightDoesNotAffectIndividualRightsUnion) {
+        TACL acl;
+
+        // Add individual rights that are part of GenericRead
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::ReadAttributes, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::DescribeSchema, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(RA):user@domain;+(DS):user@domain");
+
+        // Try to remove GenericRead - should not remove individual rights
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(RA):user@domain;+(DS):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightNonExistentDoesNotAffectIndividualRight) {
+        TACL acl;
+
+        // Add SelectRow
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Try to remove GenericRead (SelectRow | ReadAttributes | DescribeSchema) - should not remove SelectRow
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightDoesNotAffectIndividualRight) {
+        TACL acl;
+
+        // Add SelectRow
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Add GenericRead
+        acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+R:user@domain");
+
+        // Try to remove GenericRead (SelectRow | ReadAttributes | DescribeSchema) - should not remove SelectRow
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::GenericRead);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveAccessEmptyACL) {
+        TACL acl;
+
+        // Try to remove from empty ACL
+        auto result = acl.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ACESize(), 0);
+    }
+
+    Y_UNIT_TEST(TestRemoveAccessPartialBits) {
+        TACL acl;
+
+        // Add composite right from several bits
+        ui32 customRight = EAccessRights::SelectRow | EAccessRights::UpdateRow | EAccessRights::EraseRow;
+        acl.AddAccess(EAccessType::Allow, customRight, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR|UR|ER):user@domain");
+
+        // Try to remove only one bit - should not work
+        auto result1 = acl.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR|UR|ER):user@domain");
+
+        // Remove exact match
+        auto result2 = acl.RemoveAccess(EAccessType::Allow, customRight, User);
+        UNIT_ASSERT_EQUAL(result2.first, customRight);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "");
+    }
+
+    Y_UNIT_TEST(TestRemoveIndividualRightViaDiff) {
+        TACL acl;
+
+        // Add several rights
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::EraseRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(UR):user@domain;+(ER):user@domain");
+
+        // Remove one specific right via ApplyDiff
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::UpdateRow);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(ER):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveIndividualRightNonExistentViaDiff) {
+        TACL acl;
+
+        // Add right
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Try to remove non-existent right via ApplyDiff
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightPartViaDiff) {
+        TACL acl;
+
+        // Add GenericRead (SelectRow | ReadAttributes | DescribeSchema)
+        acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+
+        // Try to remove only SelectRow via ApplyDiff - should not modify GenericRead
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+R:user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightDoesNotAffectIndividualRightsUnionViaDiff) {
+        TACL acl;
+
+        // Add individual rights that are part of GenericRead
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::ReadAttributes, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::DescribeSchema, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(RA):user@domain;+(DS):user@domain");
+
+        // Try to remove GenericRead via ApplyDiff - should not remove individual rights
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(RA):user@domain;+(DS):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightNonExistentDoesNotAffectIndividualRightViaDiff) {
+        TACL acl;
+
+        // Add SelectRow
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Try to remove GenericRead via ApplyDiff - should not remove SelectRow
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveCompositeRightDoesNotAffectIndividualRightViaDiff) {
+        TACL acl;
+
+        // Add SelectRow
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+
+        // Add GenericRead
+        acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+R:user@domain");
+
+        // Try to remove GenericRead via ApplyDiff - should not remove SelectRow
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::GenericRead);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain");
+    }
+
+    Y_UNIT_TEST(TestRemoveAccessPartialBitsViaDiff) {
+        TACL acl;
+
+        // Add composite right from several bits
+        ui32 customRight = EAccessRights::SelectRow | EAccessRights::UpdateRow | EAccessRights::EraseRow;
+        acl.AddAccess(EAccessType::Allow, customRight, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR|UR|ER):user@domain");
+
+        // Try to remove only one bit via ApplyDiff - should not work
+        TDiffACL diff1;
+        diff1.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        auto result1 = acl.ApplyDiff(diff1);
+        UNIT_ASSERT_EQUAL(result1.first, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR|UR|ER):user@domain");
+
+        // Remove exact match via ApplyDiff
+        TDiffACL diff2;
+        diff2.RemoveAccess(EAccessType::Allow, customRight, User);
+        auto result2 = acl.ApplyDiff(diff2);
+        UNIT_ASSERT_EQUAL(result2.first, customRight);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "");
+    }
+
+    Y_UNIT_TEST(TestRemoveMultipleRightsViaDiff) {
+        TACL acl;
+
+        // Add several rights
+        acl.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::EraseRow, User);
+        acl.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(UR):user@domain;+(ER):user@domain;+R:user@domain");
+
+        // Remove multiple rights in one diff
+        TDiffACL diff;
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, User);
+        diff.RemoveAccess(EAccessType::Allow, EAccessRights::GenericRead, User);
+        auto result = acl.ApplyDiff(diff);
+        UNIT_ASSERT_EQUAL(result.first, EAccessRights::UpdateRow | EAccessRights::GenericRead);
+        UNIT_ASSERT_EQUAL(result.second, EAccessRights::NoAccess);
+        UNIT_ASSERT_EQUAL(acl.ToString(), "+(SR):user@domain;+(ER):user@domain");
+    }
+
 }

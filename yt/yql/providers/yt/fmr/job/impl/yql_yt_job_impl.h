@@ -7,7 +7,6 @@
 #include <yt/yql/providers/yt/fmr/job_launcher/yql_yt_job_launcher.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_sorted_merge_reader.h>
 
 namespace NYql::NFmr {
@@ -20,8 +19,10 @@ struct TParseRecordSettings {
     ui64 UploadReadBlockSize = 1024 * 1024;
     ui64 DonwloadReadBlockCount = 1;
     ui64 DonwloadReadBlockSize = 1024 * 1024; // TODO - remove download
+    ui64 LocalSortBlockCount = 1;
+    ui64 LocalSortBlockSize = 1024 * 1024;
     ui64 MaxQueueSize = 100;
-};
+}; // TODO - support parsing from yson file
 
 struct TFmrJobSettings {
     TParseRecordSettings ParseRecordSettings = TParseRecordSettings();

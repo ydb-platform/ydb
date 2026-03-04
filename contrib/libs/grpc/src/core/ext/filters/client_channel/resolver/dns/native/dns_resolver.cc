@@ -18,23 +18,27 @@
 
 #include <algorithm>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 #include <vector>
 
 #include "y_absl/functional/bind_front.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/match.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/strings/strip.h"
 #include "y_absl/types/optional.h"
 
-#include <grpc/impl/channel_arg_names.h>
+#include <grpc/grpc.h>
 #include <grpc/support/log.h>
 
 #include "src/core/ext/filters/client_channel/resolver/polling_resolver.h"
 #include "src/core/lib/backoff/backoff.h"
 #include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/config/config_vars.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
@@ -43,9 +47,9 @@
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/iomgr/resolved_address.h"
-#include "src/core/lib/resolver/endpoint_addresses.h"
 #include "src/core/lib/resolver/resolver.h"
 #include "src/core/lib/resolver/resolver_factory.h"
+#include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 #define GRPC_DNS_INITIAL_CONNECT_BACKOFF_SECONDS 1
@@ -126,7 +130,7 @@ void NativeClientChannelDNSResolver::OnResolved(
   // Convert result from iomgr DNS API into Resolver::Result.
   Result result;
   if (addresses_or.ok()) {
-    EndpointAddressesList addresses;
+    ServerAddressList addresses;
     for (auto& addr : *addresses_or) {
       addresses.emplace_back(addr, ChannelArgs());
     }
@@ -176,8 +180,17 @@ class NativeClientChannelDNSResolverFactory : public ResolverFactory {
 }  // namespace
 
 void RegisterNativeDnsResolver(CoreConfiguration::Builder* builder) {
-  builder->resolver_registry()->RegisterResolverFactory(
-      std::make_unique<NativeClientChannelDNSResolverFactory>());
+  if (y_absl::EqualsIgnoreCase(ConfigVars::Get().DnsResolver(), "native")) {
+    gpr_log(GPR_DEBUG, "Using native dns resolver");
+    builder->resolver_registry()->RegisterResolverFactory(
+        std::make_unique<NativeClientChannelDNSResolverFactory>());
+  } else {
+    if (!builder->resolver_registry()->HasResolverFactory("dns")) {
+      gpr_log(GPR_DEBUG, "Using native dns resolver");
+      builder->resolver_registry()->RegisterResolverFactory(
+          std::make_unique<NativeClientChannelDNSResolverFactory>());
+    }
+  }
 }
 
 }  // namespace grpc_core

@@ -91,6 +91,14 @@ message TEvLockStatus {
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
     optional EStatus Status = 3;
+
+    // Lock creation timestamp in microseconds since the unix epoch, used to
+    // choose the yongest victim among deadlocked transactions.
+    // May be zero (unset) when this lock is not expected to cause a deadlock,
+    // this includes serializable transactions which never acquire pessimistic
+    // locks, and placeholder (MultiXact) locks which are used in place of
+    // a set of other transactions or savepoints.
+    optional uint64 LockTimestampUs = 4;
 }
 
 message TEvUnsubscribeLock {

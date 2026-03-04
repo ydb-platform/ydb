@@ -22,8 +22,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
-
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/str_cat.h"

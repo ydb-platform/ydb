@@ -93,6 +93,39 @@ def build_html_dashboard(
     pre {{ background: #f6f8fa; padding: 12px; border-radius: 8px; }}
     .time-link {{ cursor: pointer; color: #2563eb; text-decoration: underline dotted; white-space: nowrap; }}
     .time-link:hover {{ color: #e53e3e; }}
+    .monitor-box {{
+      display: none;
+      margin: -4px 0 12px 0;
+      padding: 8px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      background: #f8fafc;
+      font-size: 13px;
+      line-height: 1.35;
+    }}
+    .monitor-box a {{
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+    }}
+    .monitor-box a:hover {{ text-decoration: underline; }}
+    .monitor-url {{
+      margin-left: 8px;
+      color: #6b7280;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }}
+    .btn-primary {{
+      padding: 7px 12px;
+      border: 1px solid #1d4ed8;
+      border-radius: 7px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }}
+    .btn-primary:hover {{ background: #1d4ed8; }}
+    .btn-primary:active {{ background: #1e40af; }}
   </style>
 </head>
 <body>
@@ -117,9 +150,10 @@ def build_html_dashboard(
     <summary><b>Config</b></summary>
     <pre id="runConfig"></pre>
   </details>
-  <div id="monitoringLinkWrap" style="display:none;margin: -6px 0 12px 0;font-size:13px;">
+  <div id="monitoringLinkWrap" class="monitor-box">
     <b>Runner monitoring:</b>
-    <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+    <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
+    <span id="monitoringLinkMeta" class="monitor-url"></span>
   </div>
   <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
     <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -145,7 +179,7 @@ def build_html_dashboard(
     </div>
     <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
     <div style="display:flex;align-items:center;gap:8px;margin:6px 0 8px 0;">
-      <button id="generateCpuScriptBtn" type="button">Generate ya.make CPU update script (.py)</button>
+      <button id="generateCpuScriptBtn" class="btn-primary" type="button">Generate CPU update script</button>
       <span id="generateCpuScriptHint" style="font-size:12px;color:#586069;"></span>
     </div>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
@@ -191,11 +225,13 @@ def build_html_dashboard(
         <span>Include estimated (from ya.make) CPU/RAM</span>
       </label>
     </span>
-    <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fff;">
-      <b>Layers:</b>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()">Metrics by suite</label>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()">System CPU</label>
-      <label style="margin-left:6px;"><input type="checkbox" id="layerSystemRam" checked onchange="applyLayerToggles()">System RAM</label>
+    <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:8px;padding:6px 10px;background:#fff;">
+      <span style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <b style="margin-right:2px;">Layers:</b>
+        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()">Metrics by suite</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()">System CPU</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerSystemRam" checked onchange="applyLayerToggles()">System RAM</label>
+      </span>
     </span>
   </div>
   <details class="metrics-help">
@@ -334,7 +370,8 @@ def build_html_dashboard(
       return (x + UTC_OFFSET_SEC) * 1000.0;
     }}
     function xFromDisplay(xDisp) {{
-      const ms = Number(xDisp);
+      let ms = Number(xDisp);
+      if (!Number.isFinite(ms)) ms = Date.parse(String(xDisp));
       if (!Number.isFinite(ms)) return xDisp;
       return (ms / 1000.0) - UTC_OFFSET_SEC;
     }}
@@ -342,14 +379,29 @@ def build_html_dashboard(
       return 'time (' + _selectedTimeZoneLabel() + ')';
     }}
     function formatTimeLabel(xDisp) {{
-      const ms = Number(xDisp);
+      let ms = Number(xDisp);
+      if (!Number.isFinite(ms)) ms = Date.parse(String(xDisp));
       if (!Number.isFinite(ms)) return String(xDisp);
       return _getFormatter(true).format(new Date(ms));
     }}
+    function _toMs(v) {{
+      let n = Number(v);
+      if (!Number.isFinite(n)) n = Date.parse(String(v));
+      return Number.isFinite(n) ? n : null;
+    }}
     function axisLayout(xsDisp) {{
       const arr = Array.isArray(xsDisp) ? xsDisp.filter(v => Number.isFinite(Number(v))).map(Number) : [];
-      const minMs = arr.length ? Math.min(...arr) : 0;
-      const maxMs = arr.length ? Math.max(...arr) : 0;
+      let minMs = 0;
+      let maxMs = 0;
+      if (arr.length) {{
+        minMs = arr[0];
+        maxMs = arr[0];
+        for (let i = 1; i < arr.length; i += 1) {{
+          const v = arr[i];
+          if (v < minMs) minMs = v;
+          if (v > maxMs) maxMs = v;
+        }}
+      }}
       const tickvals = _buildTickVals(minMs, maxMs);
       return {{
         title: axisTitle(),
@@ -367,8 +419,8 @@ def build_html_dashboard(
         for (const tr of el.data) {{
           if (tr && Array.isArray(tr.x)) {{
             for (const v of tr.x) {{
-              const n = Number(v);
-              if (Number.isFinite(n)) xs.push(n);
+              const n = _toMs(v);
+              if (n != null) xs.push(n);
             }}
           }}
         }}
@@ -474,6 +526,7 @@ def build_html_dashboard(
       const runner = String(cfg.runner || '').trim();
       const wrap = document.getElementById('monitoringLinkWrap');
       const link = document.getElementById('monitoringLink');
+      const meta = document.getElementById('monitoringLinkMeta');
       if (!wrap || !link || !runner) return;
       const xSources = [
         data.xs_active,
@@ -505,7 +558,10 @@ def build_html_dashboard(
       qs.set('p[host]', runner);
       const url = 'https://monitoring.yandex.cloud/folders/b1grf3mpoatgflnlavjd/dashboards/runner-summary?' + qs.toString();
       link.href = url;
-      link.textContent = url;
+      link.textContent = 'Open dashboard';
+      if (meta) {{
+        meta.textContent = runner + '  |  ' + new Date(fromMs).toISOString() + ' .. ' + new Date(toMs).toISOString();
+      }}
       wrap.style.display = '';
     }}
     setupMonitoringLink();
@@ -1447,9 +1503,10 @@ def build_html_dashboard(
         const t = ev.points[0].x;
         const eps = minVisibleValue(unit);
         const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
+        const isMonitor = (n) => n && n.includes('(monitor)');
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && !isOutline(p.name))
+          .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
@@ -1489,9 +1546,10 @@ def build_html_dashboard(
         const t = ev.points[0].x;
         const eps = minVisibleValue(unit);
         const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
+        const isMonitor = (n) => n && n.includes('(monitor)');
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && !isOutline(p.name))
+          .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
         renderClickTable(panelId, rows, t, unit);
       }});
@@ -1529,8 +1587,8 @@ def build_html_dashboard(
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
-        Plotly.relayout('cpuLayer', {{ hovermode: 'closest' }});
-        Plotly.relayout('ramLayer', {{ hovermode: 'closest' }});
+        Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
+        Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
         const diskEl = document.getElementById('diskLayer');
         if (diskEl) {{
           diskEl.style.display = '';
@@ -1574,8 +1632,8 @@ def build_html_dashboard(
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
-      Plotly.relayout('cpuLayerSuite', {{ hovermode: 'closest' }});
-      Plotly.relayout('ramLayerSuite', {{ hovermode: 'closest' }});
+      Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
+      Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});
       const diskEl = document.getElementById('diskLayerSuite');
       if (diskEl) {{
         diskEl.style.display = '';

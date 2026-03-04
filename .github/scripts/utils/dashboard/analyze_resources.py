@@ -2,6 +2,11 @@
 """
 Analyze resource monitoring data and merge with report.json for layered dashboard.
 
+Standalone utility (not invoked from CI). Use for manual runs when you need:
+  - resources_report.html with try-boundaries (vertical lines between retries)
+  - Peak RAM comparison: new monitor vs legacy (ram_usage_legacy.txt)
+  - Chromium trace output for chrome://tracing
+
 Produces:
   - resources_report.html: interactive Plotly chart with CPU, RAM, disk over time,
     overlaid with test intervals from report.json (suite_start_timestamp, wall_time).
@@ -13,7 +18,9 @@ Usage:
     --resources-jsonl resources_monitor.jsonl \
     --report report.json \
     --output-html resources_report.html \
-    [--output-trace resources_trace.json]
+    [--output-trace resources_trace.json] \
+    [--try-boundaries boundaries.json] \
+    [--ram-usage-legacy ram_usage_legacy.txt]
 """
 
 from __future__ import annotations
@@ -31,17 +38,10 @@ except ImportError:
     print("plotly required: pip install plotly", file=sys.stderr)
     sys.exit(1)
 
-
-def load_resources_jsonl(path: Path) -> list[dict[str, Any]]:
-    records = []
-    for line in path.read_text().strip().splitlines():
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return records
+try:
+    from .resources_loader import load_resources_jsonl
+except ImportError:
+    from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
 
 
 def load_report_tests(path: Path) -> list[dict[str, Any]]:

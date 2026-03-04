@@ -193,7 +193,7 @@ TYPED_TEST(TRefCountedTrackerTest, MultithreadedRefCounted)
     })
         .AsyncVia(queue->GetInvoker())
         .Run()
-        .Get();
+        .BlockingGet();
     queue->Shutdown();
 
     EXPECT_EQ(countBase + 2u, GetAllocatedCount<TypeParam>());

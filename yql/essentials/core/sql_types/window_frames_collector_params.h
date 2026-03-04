@@ -4,15 +4,17 @@
 
 #include <yql/essentials/core/sql_types/sort_order.h>
 
+#include <utility>
+
 namespace NYql::NWindow {
 
 template <typename TRangeType>
 class TCoreWinFramesCollectorParams {
 public:
-    TCoreWinFramesCollectorParams(TCoreWinFrameCollectorBounds<TRangeType> bounds, ESortOrder sortOrder, const TString& sortColumnName)
+    TCoreWinFramesCollectorParams(TCoreWinFrameCollectorBounds<TRangeType> bounds, ESortOrder sortOrder, TString sortColumnName)
         : Bounds_(std::move(bounds))
         , SortOrder_(sortOrder)
-        , SortColumnName_(sortColumnName)
+        , SortColumnName_(std::move(sortColumnName))
     {
     }
 

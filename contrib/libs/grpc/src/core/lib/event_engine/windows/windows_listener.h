@@ -27,7 +27,6 @@
 #include <grpc/event_engine/memory_allocator.h>
 
 #include "src/core/lib/event_engine/common_closures.h"
-#include "src/core/lib/event_engine/thread_pool/thread_pool.h"
 #include "src/core/lib/event_engine/windows/iocp.h"
 #include "src/core/lib/gprpp/sync.h"
 
@@ -40,7 +39,7 @@ class WindowsEventEngineListener : public EventEngine::Listener {
       IOCP* iocp, AcceptCallback accept_cb,
       y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,
       std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory,
-      std::shared_ptr<EventEngine> engine, ThreadPool* thread_pool_,
+      std::shared_ptr<EventEngine> engine, Executor* executor_,
       const EndpointConfig& config);
   ~WindowsEventEngineListener() override;
   y_absl::StatusOr<int> Bind(const EventEngine::ResolvedAddress& addr) override;
@@ -137,7 +136,7 @@ class WindowsEventEngineListener : public EventEngine::Listener {
   IOCP* const iocp_;
   const EndpointConfig& config_;
   std::shared_ptr<EventEngine> engine_;
-  ThreadPool* thread_pool_;
+  Executor* executor_;
   const std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory_;
   AcceptCallback accept_cb_;
   y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown_;

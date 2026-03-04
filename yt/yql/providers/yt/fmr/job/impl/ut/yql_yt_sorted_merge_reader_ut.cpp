@@ -1,15 +1,20 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <yt/yql/providers/yt/fmr/test_tools/fmr_merge_reader/yql_yt_fmr_merge_reader.cpp>
+#include <yt/yql/providers/yt/fmr/test_tools/fmr_block_iterator/yql_yt_fmr_block_iterator.h>
 
 namespace NYql::NFmr {
+
+TString GetMergeResult(const TVector<IBlockIterator::TPtr>& inputs) {
+    auto reader = MakeIntrusive<TSortedMergeReader>(inputs);
+    const TString mergedBinary = reader->ReadAll();
+    return GetTextYson(mergedBinary);
+}
 
 Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
     Y_UNIT_TEST(MergeFromFileGatewayDifferentYtSourceOrder) {
         TVector<TString> keyColumns = {"k"};
         TVector<TString> neededColumns = {"k", "v"};
-        TVector<ESortOrder> sortOrders(keyColumns.size(), ESortOrder::Ascending);
         TVector<TMergeTestTable> rawTestTables = {
             {
                 .SourceType = EMergeReaderSourceType::YT,
@@ -29,8 +34,8 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
             },
         };
 
-        TVector<IBlockIterator::TPtr> inputs = MakeTestIterators(rawTestTables);
-        const TString mergedText = GetMergeResult(inputs, sortOrders);
+        TVector<IBlockIterator::TPtr> inputs = MakeTestBlockIterators(rawTestTables);
+        const TString mergedText = GetMergeResult(inputs);
 
         const TString expected =
             "{\"k\"=1;\"v\"=\"a\"};\n"
@@ -40,12 +45,10 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
 
         UNIT_ASSERT_NO_DIFF(mergedText, expected);
     }
-
     Y_UNIT_TEST(MergeStableSortByInputOrder) {
         auto tds = MakeLocalTableDataService();
         TVector<TString> keyColumns = {"k"};
         TVector<TString> neededColumns = {"k", "v"};
-        TVector<ESortOrder> sortOrders(keyColumns.size(), ESortOrder::Ascending);
         TVector<TMergeTestTable> rawTestTables = {
             {
                 .SourceType = EMergeReaderSourceType::YT,
@@ -55,7 +58,7 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
                     "{\"k\"=1;\"v\"=\"1\"};\n"
             },
             {
-                .SourceType = EMergeReaderSourceType::TDS,
+                .SourceType = EMergeReaderSourceType::TableDataService,
                 .KeyColumns = keyColumns,
                 .NeededColumns = neededColumns,
                 .RawTableBody =
@@ -70,8 +73,8 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
             }
         };
 
-        TVector<IBlockIterator::TPtr> inputs = MakeTestIterators(rawTestTables, tds);
-        const TString mergedText = GetMergeResult(inputs, sortOrders);
+        TVector<IBlockIterator::TPtr> inputs = MakeTestBlockIterators(rawTestTables, tds);
+        const TString mergedText = GetMergeResult(inputs);
 
         const TString expected =
             "{\"k\"=1;\"v\"=\"1\"};\n"
@@ -85,18 +88,17 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
         auto tds = MakeLocalTableDataService();
         TVector<TString> keyColumns = {"k"};
         TVector<TString> neededColumns = {"k", "v"};
-        TVector<ESortOrder> sortOrders(keyColumns.size(), ESortOrder::Ascending);
         TVector<TMergeTestTable> rawTestTables = {
             {
                 .SourceType = EMergeReaderSourceType::YT,
                 .KeyColumns = keyColumns,
                 .NeededColumns = neededColumns,
                 .RawTableBody =
-                    "{\"k\"=1;\"v\"=\"a\"};\n"
+                    "{\"k\"=4;\"v\"=\"a\"};\n"
                     "{\"k\"=5;\"v\"=\"e\"};\n"
             },
             {
-                .SourceType = EMergeReaderSourceType::TDS,
+                .SourceType = EMergeReaderSourceType::TableDataService,
                 .KeyColumns = keyColumns,
                 .NeededColumns = neededColumns,
                 .RawTableBody =
@@ -112,23 +114,23 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
                     "{\"k\"=7;\"v\"=\"g\"};\n"
             },
             {
-                .SourceType = EMergeReaderSourceType::TDS,
+                .SourceType = EMergeReaderSourceType::TableDataService,
                 .KeyColumns = keyColumns,
                 .NeededColumns = neededColumns,
                 .RawTableBody =
-                    "{\"k\"=4;\"v\"=\"d\"};\n"
+                    "{\"k\"=1;\"v\"=\"d\"};\n"
                     "{\"k\"=8;\"v\"=\"h\"};\n"
             }
         };
 
-        TVector<IBlockIterator::TPtr> inputs = MakeTestIterators(rawTestTables, tds);
-        const TString mergedText = GetMergeResult(inputs, sortOrders);
+        TVector<IBlockIterator::TPtr> inputs = MakeTestBlockIterators(rawTestTables, tds);
+        const TString mergedText = GetMergeResult(inputs);
 
         const TString expected =
-            "{\"k\"=1;\"v\"=\"a\"};\n"
+            "{\"k\"=1;\"v\"=\"d\"};\n"
             "{\"k\"=2;\"v\"=\"b\"};\n"
             "{\"k\"=3;\"v\"=\"c\"};\n"
-            "{\"k\"=4;\"v\"=\"d\"};\n"
+            "{\"k\"=4;\"v\"=\"a\"};\n"
             "{\"k\"=5;\"v\"=\"e\"};\n"
             "{\"k\"=6;\"v\"=\"f\"};\n"
             "{\"k\"=7;\"v\"=\"g\"};\n"
@@ -141,7 +143,6 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
         auto tds = MakeLocalTableDataService();
         TVector<TString> keyColumns = {"k"};
         TVector<TString> neededColumns = {"k", "v"};
-        TVector<ESortOrder> sortOrders(keyColumns.size(), ESortOrder::Ascending);
         TVector<TMergeTestTable> rawTestTables = {
             {
                 .SourceType = EMergeReaderSourceType::YT,
@@ -160,8 +161,8 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
                     "{\"k\"=4;\"v\"={\"name\"=\"Bob\";\"age\"=25}};\n"
             }
         };
-        TVector<IBlockIterator::TPtr> inputs = MakeTestIterators(rawTestTables, tds);
-        const TString mergedText = GetMergeResult(inputs, sortOrders);
+        TVector<IBlockIterator::TPtr> inputs = MakeTestBlockIterators(rawTestTables, tds);
+        const TString mergedText = GetMergeResult(inputs);
 
         const TString expected =
             "{\"k\"=1;\"v\"={\"name\"=\"Alice\";\"age\"=21}};\n"
@@ -175,4 +176,3 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
 }
 
 } // namespace NYql::NFmr
-

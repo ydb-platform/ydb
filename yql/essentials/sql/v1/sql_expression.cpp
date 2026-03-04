@@ -233,6 +233,12 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.UserSIDs = exprNode;
+    } else if (to_lower(id.Name) == "trace_ids") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
+            ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;
+            return false;
+        }
+        settings.TraceIds = exprNode;
     } else if (to_lower(id.Name) == "virtual_timestamps") {
         if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
             ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;
@@ -1853,6 +1859,12 @@ TNodeResult TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTraili
         case TRule_con_subexpr::kAltConSubexpr1:
             return UnaryExpr(node.GetAlt_con_subexpr1().GetRule_unary_subexpr1(), tail);
         case TRule_con_subexpr::kAltConSubexpr2: {
+            const auto prevIsSourceAllowed = IsSourceAllowed_;
+            IsSourceAllowed_ = false;
+            Y_DEFER {
+                IsSourceAllowed_ = prevIsSourceAllowed;
+            };
+
             MaybeUnnamedSmartParenOnTop_ = false;
             Ctx_.IncrementMonCounter("sql_features", "UnaryOperation");
             TString opName;
@@ -2343,7 +2355,11 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
         return SubExpr(node, tail);
     }
 
+    const bool prevIsSourceAllowed = IsSourceAllowed_;
     IsSourceAllowed_ = false;
+    Y_DEFER {
+        IsSourceAllowed_ = prevIsSourceAllowed;
+    };
 
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
@@ -2374,10 +2390,16 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
 template <typename TNode, typename TGetNode, typename TIter>
 TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && (begin == end);
-    TNodeResult partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
-    while (begin != end) {
-        IsSourceAllowed_ = false;
 
+    const bool prevIsSourceAllowed = IsSourceAllowed_;
+    IsSourceAllowed_ = (begin != end) ? false : IsSourceAllowed_;
+    Y_DEFER {
+        IsSourceAllowed_ = prevIsSourceAllowed;
+    };
+
+    TNodeResult partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
+
+    while (begin != end) {
         Ctx_.IncrementMonCounter("sql_features", "BinaryOperation");
         Token(begin->GetToken1());
         TPosition pos(Ctx_.Pos());

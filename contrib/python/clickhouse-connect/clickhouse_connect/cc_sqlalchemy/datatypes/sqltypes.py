@@ -497,3 +497,20 @@ class AggregateFunction(ChSqlaType, UserDefinedType):
                 values += (x,)
             type_def = TypeDef(values=values)
         super().__init__(type_def)
+
+
+class QBit(ChSqlaType, UserDefinedType):
+    python_type = list
+
+    def __init__(self, element_type: str = None, dimension: int = None, type_def: TypeDef = None):
+        """
+        QBit constructor for bit-transposed vector types
+        :param element_type: Element type (BFloat16, Float32, or Float64)
+        :param dimension: Number of elements in the vector
+        :param type_def: TypeDef from parse_name function (used during reflection)
+        """
+        if not type_def:
+            if not element_type or not dimension:
+                raise ArgumentError("QBit requires element_type and dimension parameters")
+            type_def = TypeDef(values=(element_type, dimension))
+        super().__init__(type_def)

@@ -9,6 +9,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -34,8 +36,8 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    explicit TJoinDescr(const TString& op)
-        : Op(op)
+    explicit TJoinDescr(TString op)
+        : Op(std::move(op))
     {
     }
 };
@@ -527,8 +529,7 @@ public:
 
         TNodePtr equiJoin(Y("EquiJoin"));
         bool ordered = false;
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (const auto& source : Sources_) {
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;

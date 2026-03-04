@@ -2031,6 +2031,20 @@
             "uri": "https://{canondata_backend}/1937429/849630dd1b2345c6579750dfa9914c8102fc6159/resource.tar.gz#test.test_select_yql-select_op_precedence_union_intersect-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-select_op_union_subquery_3-default.txt-Debug]": [
+        {
+            "checksum": "0a7b68a17d32cd4a0cbaf0dbd2b30f33",
+            "size": 2738,
+            "uri": "https://{canondata_backend}/1817427/0aa0dfa47f2b182fc076b2e77b012a9fc76801c1/resource.tar.gz#test.test_select_yql-select_op_union_subquery_3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-select_op_union_subquery_3-default.txt-Results]": [
+        {
+            "checksum": "288924f06be6505757fc21cab0fa7b44",
+            "size": 2657,
+            "uri": "https://{canondata_backend}/1817427/0aa0dfa47f2b182fc076b2e77b012a9fc76801c1/resource.tar.gz#test.test_select_yql-select_op_union_subquery_3-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar-default.txt-Debug]": [
         {
             "checksum": "5a146bb05a57cf7f00e927f75fbac5f1",

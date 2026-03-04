@@ -11,6 +11,8 @@
 
 #include <yql/essentials/utils/utf8.h>
 
+#include <ranges>
+
 namespace NYql {
 namespace NDetail {
 namespace {
@@ -1024,8 +1026,7 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
 
             // sourcePosition for given targetPosition
             TVector<size_t> sources;
-            for (size_t target = 0; target < keys.size(); ++target) {
-                TString key = keys[target];
+            for (const TString& key : keys) {
                 auto it = rawKeysPos.find(key);
                 YQL_ENSURE(it != rawKeysPos.end());
                 size_t source = it->second;
@@ -1355,7 +1356,7 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
         }
 
         TMap<size_t, TNodeAndIndexRange> builtRange;
-        for (auto it = byBegin.rbegin(); it != byBegin.rend(); ++it) {
+        for (auto& it : std::ranges::reverse_view(byBegin)) {
             size_t end = 0;
             size_t indexRangeEnd = 0;
             TVector<TExprNode::TPtr> results;
@@ -1375,7 +1376,7 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
                 indexRangeEnd = std::max(end, indexRangeEnd);
                 currents = {};
             };
-            for (auto node : it->second) {
+            for (auto node : it.second) {
                 if (end != node.IndexRange.End) {
                     flush();
                     end = node.IndexRange.End;
@@ -1386,9 +1387,9 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
                 flush();
             }
             if (results) {
-                auto& built = builtRange[it->first];
+                auto& built = builtRange[it.first];
                 built.Node = MakeRangeAnd(range->Pos(), std::move(results), ctx);
-                built.IndexRange.Begin = it->first;
+                built.IndexRange.Begin = it.first;
                 built.IndexRange.End = indexRangeEnd;
             }
         }

@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <utility>
@@ -32,7 +33,7 @@
 #include "y_absl/random/random.h"
 #include "y_absl/strings/string_view.h"
 #include "envoy/config/endpoint/v3/endpoint.upbdefs.h"
-#include "upb/reflection/def.h"
+#include "upb/def.h"
 
 #include "src/core/ext/xds/xds_client.h"
 #include "src/core/ext/xds/xds_client_stats.h"
@@ -41,7 +42,7 @@
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/resolver/endpoint_addresses.h"
+#include "src/core/lib/resolver/server_address.h"
 
 namespace grpc_core {
 
@@ -50,7 +51,7 @@ struct XdsEndpointResource : public XdsResourceType::ResourceData {
     struct Locality {
       RefCountedPtr<XdsLocalityName> name;
       uint32_t lb_weight;
-      EndpointAddressesList endpoints;
+      ServerAddressList endpoints;
 
       bool operator==(const Locality& other) const {
         return *name == *other.name && lb_weight == other.lb_weight &&

@@ -20,10 +20,8 @@
 
 #include "y_absl/flags/marshalling.h"
 #include "y_absl/strings/numbers.h"
-#include "y_absl/strings/str_join.h"
 #include "y_absl/types/optional.h"
 
-#include "src/core/lib/gpr/log_internal.h"
 #include "src/core/lib/gprpp/env.h"
 
 namespace grpc_core {
@@ -36,7 +34,6 @@ y_absl::optional<TString> LoadEnv(y_absl::string_view environment_variable) {
 
 TString LoadConfigFromEnv(y_absl::string_view environment_variable,
                               const char* default_value) {
-  GPR_ASSERT_INTERNAL(!environment_variable.empty());
   return LoadEnv(environment_variable).value_or(default_value);
 }
 
@@ -64,16 +61,6 @@ bool LoadConfigFromEnv(y_absl::string_view environment_variable,
             error.c_str());
   }
   return default_value;
-}
-
-TString LoadConfig(const y_absl::Flag<std::vector<TString>>& flag,
-                       y_absl::string_view environment_variable,
-                       const y_absl::optional<TString>& override,
-                       const char* default_value) {
-  if (override.has_value()) return *override;
-  auto from_flag = y_absl::GetFlag(flag);
-  if (!from_flag.empty()) return y_absl::StrJoin(from_flag, ",");
-  return LoadConfigFromEnv(environment_variable, default_value);
 }
 
 }  // namespace grpc_core

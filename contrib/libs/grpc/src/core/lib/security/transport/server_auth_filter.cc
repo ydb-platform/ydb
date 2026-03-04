@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
 #include "y_absl/status/status.h"
@@ -30,6 +32,7 @@
 
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
+#include <grpc/slice.h>
 #include <grpc/status.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>

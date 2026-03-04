@@ -16,6 +16,9 @@
 
 #include "src/core/lib/event_engine/posix_engine/internal_errqueue.h"
 
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
 #include <grpc/support/log.h>
 
 #include "src/core/lib/iomgr/port.h"

@@ -147,16 +147,22 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TS
 
         case EValueType::Any:
         case EValueType::Composite: {
-            if (value.Type == EValueType::Composite) {
-                // ermolovd@ says "composites" are comparable, in contrast to "any".
-                builder->AppendString("><");
+            if (Any(value.Flags & EValueFlags::Hunk)) {
+                builder->AppendChar('"');
+                AppendWithCut(builder, value.AsStringBuf());
+                builder->AppendChar('"');
+            } else {
+                if (value.Type == EValueType::Composite) {
+                    // ermolovd@ says "composites" are comparable, in contrast to "any".
+                    builder->AppendString("><");
+                }
+
+                auto compositeString = ConvertToYsonString(
+                    NYson::TYsonString(value.AsString()),
+                    NYson::EYsonFormat::Text);
+
+                AppendWithCut(builder, compositeString.AsStringBuf());
             }
-
-            auto compositeString = ConvertToYsonString(
-                NYson::TYsonString(value.AsString()),
-                NYson::EYsonFormat::Text);
-
-            AppendWithCut(builder, compositeString.AsStringBuf());
             break;
         }
     }

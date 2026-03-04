@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <utility>
 #include <google/protobuf/message.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/ast/yql_ast.h>
@@ -93,15 +94,15 @@ namespace NSQLTranslationV0 {
 
             // Is so heavily used in a legacy code
             // NOLINTNEXTLINE(google-explicit-constructor)
-            TIdPart(const TString& name)
-                : Name(name)
+            TIdPart(TString name)
+                : Name(std::move(name))
             {
             }
 
             // Is so heavily used in a legacy code
             // NOLINTNEXTLINE(google-explicit-constructor)
             TIdPart(TPtr expr)
-                : Expr(expr)
+                : Expr(std::move(expr))
             {
             }
 
@@ -235,7 +236,7 @@ namespace NSQLTranslationV0 {
 
     class TAstAtomNode: public INode {
     public:
-        TAstAtomNode(TPosition pos, const TString& content, ui32 flags);
+        TAstAtomNode(TPosition pos, TString content, ui32 flags);
 
         ~TAstAtomNode() override;
 
@@ -311,7 +312,7 @@ namespace NSQLTranslationV0 {
 
     class TCallNode: public TAstListNode {
     public:
-        TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
+        TCallNode(TPosition pos, TString opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
         TCallNode(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
             : TCallNode(pos, opName, args.size(), args.size(), args)
         {}
@@ -432,7 +433,7 @@ namespace NSQLTranslationV0 {
         TNodePtr Keys;
         TNodePtr Options;
 
-        TTableRef(const TString& refName, const TString& cluster, TNodePtr keys);
+        TTableRef(TString refName, TString cluster, TNodePtr keys);
         TTableRef(const TTableRef& tr);
 
         TString ShortName() const;
@@ -446,9 +447,9 @@ namespace NSQLTranslationV0 {
         TPosition Pos;
         TString Name;
 
-        TIdentifier(TPosition pos, const TString& name)
-            : Pos(pos)
-            , Name(name) {}
+        TIdentifier(TPosition pos, TString name)
+            : Pos(std::move(pos))
+            , Name(std::move(name)) {}
     };
 
     struct TColumnSchema {
@@ -458,7 +459,7 @@ namespace NSQLTranslationV0 {
         bool Nullable;
         bool IsTypeString;
 
-        TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString);
+        TColumnSchema(TPosition pos, TString name, TString type, bool nullable, bool isTypeString);
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {
@@ -555,8 +556,8 @@ namespace NSQLTranslationV0 {
 
     class TColumnNode final: public INode {
     public:
-        TColumnNode(TPosition pos, const TString& column, const TString& source);
-        TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
+        TColumnNode(TPosition pos, TString column, TString source);
+        TColumnNode(TPosition pos, TNodePtr column, TString source);
 
         ~TColumnNode() override;
         bool IsAsterisk() const override;
@@ -599,7 +600,7 @@ namespace NSQLTranslationV0 {
         static const char* const ProcessRows;
         static const char* const ProcessRow;
     public:
-        TArgPlaceholderNode(TPosition pos, const TString &name);
+        TArgPlaceholderNode(TPosition pos, TString name);
 
         TAstNode* Translate(TContext& ctx) const override;
 
@@ -675,7 +676,7 @@ namespace NSQLTranslationV0 {
         virtual TNodePtr GetApply(const TNodePtr& type) const = 0;
 
     protected:
-        IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
+        IAggregation(TPosition pos, TString name, TString func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
 
         TString Name_;
@@ -839,8 +840,8 @@ namespace NSQLTranslationV0 {
     class TLiteralNode: public TAstListNode {
     public:
         TLiteralNode(TPosition pos, bool isNull);
-        TLiteralNode(TPosition pos, const TString& type, const TString& value);
-        TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags);
+        TLiteralNode(TPosition pos, TString type, TString value);
+        TLiteralNode(TPosition pos, TString value, ui32 nodeFlags);
         bool IsNull() const override;
         const TString* GetLiteral(const TString& type) const override;
         void DoUpdateState() const override;

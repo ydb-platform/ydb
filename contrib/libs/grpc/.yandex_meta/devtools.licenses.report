@@ -29,29 +29,66 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     BSD-3-Clause         09441123dabc85408b766de89ab395b0
+KEEP     BSD-3-Clause         1074fcc8fed6e87c183fda7df379eff5
 BELONGS third_party/upb/ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: BSD-3-Clause
-        Score           : 100.00
+        Score           : 97.64
         Match type      : TEXT
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        third_party/upb/upb/json/decode.c [5:29]
-        third_party/upb/upb/json/decode.h [5:29]
-        third_party/upb/upb/json/encode.c [5:29]
-        third_party/upb/upb/json/encode.h [5:29]
-        third_party/upb/upb/message/array.c [5:29]
-        third_party/upb/upb/message/array.h [5:29]
-        third_party/upb/upb/message/internal/array.h [5:29]
-        third_party/upb/upb/message/internal/map.h [5:29]
-        third_party/upb/upb/message/internal/map_entry.h [5:29]
-        third_party/upb/upb/message/internal/map_sorter.h [5:29]
-        third_party/upb/upb/message/map.c [5:29]
-        third_party/upb/upb/message/map.h [5:29]
-        third_party/upb/upb/message/map_gencode_util.h [5:29]
-        third_party/upb/upb/message/map_sorter.c [5:29]
+        third_party/upb/upb/arena.c [5:25]
+        third_party/upb/upb/arena.h [5:25]
+        third_party/upb/upb/array.c [5:25]
+        third_party/upb/upb/array.h [5:25]
+        third_party/upb/upb/decode.c [5:25]
+        third_party/upb/upb/decode.h [5:25]
+        third_party/upb/upb/def.c [5:25]
+        third_party/upb/upb/def.h [5:25]
+        third_party/upb/upb/encode.c [5:25]
+        third_party/upb/upb/encode.h [5:25]
+        third_party/upb/upb/extension_registry.c [5:25]
+        third_party/upb/upb/extension_registry.h [5:25]
+        third_party/upb/upb/internal/decode.h [5:25]
+        third_party/upb/upb/internal/table.h [5:25]
+        third_party/upb/upb/internal/upb.h [5:25]
+        third_party/upb/upb/json_decode.c [5:25]
+        third_party/upb/upb/json_decode.h [5:25]
+        third_party/upb/upb/json_encode.c [5:25]
+        third_party/upb/upb/json_encode.h [5:25]
+        third_party/upb/upb/map.c [5:25]
+        third_party/upb/upb/map.h [5:25]
+        third_party/upb/upb/message_value.h [5:25]
+        third_party/upb/upb/mini_table.c [5:25]
+        third_party/upb/upb/mini_table.h [5:25]
+        third_party/upb/upb/msg.c [5:25]
+        third_party/upb/upb/msg.h [5:25]
+        third_party/upb/upb/msg_internal.h [5:25]
+        third_party/upb/upb/reflection.c [5:25]
+        third_party/upb/upb/reflection.h [5:25]
+        third_party/upb/upb/status.c [5:25]
+        third_party/upb/upb/status.h [5:25]
+        third_party/upb/upb/table.c [5:25]
+        third_party/upb/upb/text_encode.c [5:25]
+        third_party/upb/upb/text_encode.h [5:25]
+        third_party/upb/upb/upb.c [5:25]
+        third_party/upb/upb/upb.h [5:25]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.09
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/decode_fast.c [5:25]
+        third_party/upb/upb/decode_fast.h [5:25]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/internal/vsnprintf_compat.h [5:25]
 
 KEEP     BSD-3-Clause         26c9318cf95923719e6a1cbb87990e08
 BELONGS third_party/address_sorting/ya.make
@@ -68,6 +105,7 @@ KEEP     MPL-2.0              280da0ae8b63b2e861e6766d710e9baf
 BELONGS ya.make
 FILE_INCLUDE LICENSE found in files: LICENSE at line 600
 FILE_INCLUDE third_party/address_sorting/LICENSE found in files: LICENSE at line 600
+FILE_INCLUDE third_party/upb/LICENSE found in files: LICENSE at line 600
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MPL-2.0
@@ -189,157 +227,6 @@ BELONGS ya.make
         src/compiler/ruby_generator_string-inl.h [5:15]
         src/compiler/schema_interface.h [5:15]
 
-KEEP     BSD-3-Clause         40a41cb7dfcae875cf1c054dfa0f1280
-BELONGS third_party/upb/ya.make
-FILE_INCLUDE LICENSE found in files: third_party/upb/upb/base/descriptor_constants.h at line 5, third_party/upb/upb/base/internal/log2.h at line 6, third_party/upb/upb/base/status.c at line 5, third_party/upb/upb/base/status.h at line 5, third_party/upb/upb/base/status.hpp at line 5, third_party/upb/upb/base/string_view.h at line 6, third_party/upb/upb/collections/map.h at line 5, third_party/upb/upb/generated_code_support.h at line 5, third_party/upb/upb/hash/common.c at line 5, third_party/upb/upb/hash/common.h at line 5, third_party/upb/upb/hash/int_table.h at line 5, third_party/upb/upb/hash/str_table.h at line 5, third_party/upb/upb/lex/atoi.c at line 5, third_party/upb/upb/lex/atoi.h at line 5, third_party/upb/upb/lex/round_trip.c at line 5, third_party/upb/upb/lex/round_trip.h at line 5, third_party/upb/upb/lex/strtod.c at line 5, third_party/upb/upb/lex/strtod.h at line 5, third_party/upb/upb/lex/unicode.c at line 5, third_party/upb/upb/lex/unicode.h at line 5, third_party/upb/upb/mem/alloc.c at line 5, third_party/upb/upb/mem/alloc.h at line 5, third_party/upb/upb/mem/arena.c at line 5, third_party/upb/upb/mem/arena.h at line 5, third_party/upb/upb/mem/arena.hpp at line 5, third_party/upb/upb/mem/internal/arena.h at line 5, third_party/upb/upb/message/accessors.c at line 5, third_party/upb/upb/message/accessors.h at line 5, third_party/upb/upb/message/internal/accessors.h at line 5, third_party/upb/upb/message/internal/extension.h at line 5, third_party/upb/upb/message/internal/message.h at line 5, third_party/upb/upb/message/internal/types.h at line 5, third_party/upb/upb/message/message.c at line 5, third_party/upb/upb/message/message.h at line 5, third_party/upb/upb/message/tagged_ptr.h at line 5, third_party/upb/upb/message/types.h at line 5, third_party/upb/upb/message/value.h at line 5, third_party/upb/upb/mini_descriptor/build_enum.c at line 5, third_party/upb/upb/mini_descriptor/build_enum.h at line 5, third_party/upb/upb/mini_descriptor/decode.c at line 5, third_party/upb/upb/mini_descriptor/decode.h at line 5, third_party/upb/upb/mini_descriptor/internal/base92.c at line 5, third_party/upb/upb/mini_descriptor/internal/base92.h at line 5, third_party/upb/upb/mini_descriptor/internal/decoder.h at line 5, third_party/upb/upb/mini_descriptor/internal/encode.c at line 5, third_party/upb/upb/mini_descriptor/internal/encode.h at line 5, third_party/upb/upb/mini_descriptor/internal/modifiers.h at line 5, third_party/upb/upb/mini_descriptor/internal/wire_constants.h at line 5, third_party/upb/upb/mini_descriptor/link.c at line 5, third_party/upb/upb/mini_descriptor/link.h at line 5, third_party/upb/upb/mini_table/enum.h at line 5, third_party/upb/upb/mini_table/extension.h at line 5, third_party/upb/upb/mini_table/extension_registry.c at line 5, third_party/upb/upb/mini_table/extension_registry.h at line 5, third_party/upb/upb/mini_table/field.h at line 5, third_party/upb/upb/mini_table/file.h at line 5, third_party/upb/upb/mini_table/internal/enum.h at line 5, third_party/upb/upb/mini_table/internal/extension.h at line 5, third_party/upb/upb/mini_table/internal/field.h at line 5, third_party/upb/upb/mini_table/internal/file.h at line 5, third_party/upb/upb/mini_table/internal/message.c at line 5, third_party/upb/upb/mini_table/internal/message.h at line 5, third_party/upb/upb/mini_table/internal/sub.h at line 5, third_party/upb/upb/mini_table/message.c at line 5, third_party/upb/upb/mini_table/message.h at line 5, third_party/upb/upb/mini_table/sub.h at line 5, third_party/upb/upb/port/atomic.h at line 5, third_party/upb/upb/port/def.inc at line 5, third_party/upb/upb/port/undef.inc at line 5, third_party/upb/upb/port/vsnprintf_compat.h at line 5, third_party/upb/upb/reflection/common.h at line 5, third_party/upb/upb/reflection/def.h at line 5, third_party/upb/upb/reflection/def.hpp at line 5, third_party/upb/upb/reflection/def_pool.c at line 5, third_party/upb/upb/reflection/def_pool.h at line 5, third_party/upb/upb/reflection/def_type.c at line 5, third_party/upb/upb/reflection/def_type.h at line 5, third_party/upb/upb/reflection/desc_state.c at line 5, third_party/upb/upb/reflection/enum_def.c at line 5, third_party/upb/upb/reflection/enum_def.h at line 5, third_party/upb/upb/reflection/enum_reserved_range.c at line 5, third_party/upb/upb/reflection/enum_reserved_range.h at line 5, third_party/upb/upb/reflection/enum_value_def.c at line 5, third_party/upb/upb/reflection/enum_value_def.h at line 5, third_party/upb/upb/reflection/extension_range.c at line 5, third_party/upb/upb/reflection/extension_range.h at line 5, third_party/upb/upb/reflection/field_def.c at line 5, third_party/upb/upb/reflection/field_def.h at line 5, third_party/upb/upb/reflection/file_def.c at line 5, third_party/upb/upb/reflection/file_def.h at line 5, third_party/upb/upb/reflection/internal/def_builder.c at line 5, third_party/upb/upb/reflection/internal/def_builder.h at line 5, third_party/upb/upb/reflection/internal/def_pool.h at line 5, third_party/upb/upb/reflection/internal/desc_state.h at line 5, third_party/upb/upb/reflection/internal/enum_def.h at line 5, third_party/upb/upb/reflection/internal/enum_reserved_range.h at line 5, third_party/upb/upb/reflection/internal/enum_value_def.h at line 5, third_party/upb/upb/reflection/internal/extension_range.h at line 5, third_party/upb/upb/reflection/internal/field_def.h at line 5, third_party/upb/upb/reflection/internal/file_def.h at line 5, third_party/upb/upb/reflection/internal/message_def.h at line 5, third_party/upb/upb/reflection/internal/message_reserved_range.h at line 5, third_party/upb/upb/reflection/internal/method_def.h at line 5, third_party/upb/upb/reflection/internal/oneof_def.h at line 5, third_party/upb/upb/reflection/internal/service_def.h at line 5, third_party/upb/upb/reflection/internal/strdup2.c at line 5, third_party/upb/upb/reflection/internal/strdup2.h at line 5, third_party/upb/upb/reflection/message.c at line 5, third_party/upb/upb/reflection/message.h at line 5, third_party/upb/upb/reflection/message_def.c at line 5, third_party/upb/upb/reflection/message_def.h at line 5, third_party/upb/upb/reflection/message_reserved_range.c at line 5, third_party/upb/upb/reflection/message_reserved_range.h at line 5, third_party/upb/upb/reflection/method_def.c at line 5, third_party/upb/upb/reflection/method_def.h at line 5, third_party/upb/upb/reflection/oneof_def.c at line 5, third_party/upb/upb/reflection/oneof_def.h at line 5, third_party/upb/upb/reflection/service_def.c at line 5, third_party/upb/upb/reflection/service_def.h at line 5, third_party/upb/upb/text/encode.c at line 5, third_party/upb/upb/text/encode.h at line 5, third_party/upb/upb/upb.hpp at line 5, third_party/upb/upb/wire/decode.c at line 5, third_party/upb/upb/wire/decode.h at line 5, third_party/upb/upb/wire/decode_fast.c at line 5, third_party/upb/upb/wire/decode_fast.h at line 5, third_party/upb/upb/wire/encode.c at line 5, third_party/upb/upb/wire/encode.h at line 5, third_party/upb/upb/wire/eps_copy_input_stream.c at line 5, third_party/upb/upb/wire/eps_copy_input_stream.h at line 5, third_party/upb/upb/wire/internal/constants.h at line 5, third_party/upb/upb/wire/internal/decode.h at line 5, third_party/upb/upb/wire/internal/swap.h at line 5, third_party/upb/upb/wire/reader.c at line 5, third_party/upb/upb/wire/reader.h at line 5, third_party/upb/upb/wire/types.h at line 5
-FILE_INCLUDE third_party/address_sorting/LICENSE found in files: third_party/upb/upb/base/descriptor_constants.h at line 5, third_party/upb/upb/base/internal/log2.h at line 6, third_party/upb/upb/base/status.c at line 5, third_party/upb/upb/base/status.h at line 5, third_party/upb/upb/base/status.hpp at line 5, third_party/upb/upb/base/string_view.h at line 6, third_party/upb/upb/collections/map.h at line 5, third_party/upb/upb/generated_code_support.h at line 5, third_party/upb/upb/hash/common.c at line 5, third_party/upb/upb/hash/common.h at line 5, third_party/upb/upb/hash/int_table.h at line 5, third_party/upb/upb/hash/str_table.h at line 5, third_party/upb/upb/lex/atoi.c at line 5, third_party/upb/upb/lex/atoi.h at line 5, third_party/upb/upb/lex/round_trip.c at line 5, third_party/upb/upb/lex/round_trip.h at line 5, third_party/upb/upb/lex/strtod.c at line 5, third_party/upb/upb/lex/strtod.h at line 5, third_party/upb/upb/lex/unicode.c at line 5, third_party/upb/upb/lex/unicode.h at line 5, third_party/upb/upb/mem/alloc.c at line 5, third_party/upb/upb/mem/alloc.h at line 5, third_party/upb/upb/mem/arena.c at line 5, third_party/upb/upb/mem/arena.h at line 5, third_party/upb/upb/mem/arena.hpp at line 5, third_party/upb/upb/mem/internal/arena.h at line 5, third_party/upb/upb/message/accessors.c at line 5, third_party/upb/upb/message/accessors.h at line 5, third_party/upb/upb/message/internal/accessors.h at line 5, third_party/upb/upb/message/internal/extension.h at line 5, third_party/upb/upb/message/internal/message.h at line 5, third_party/upb/upb/message/internal/types.h at line 5, third_party/upb/upb/message/message.c at line 5, third_party/upb/upb/message/message.h at line 5, third_party/upb/upb/message/tagged_ptr.h at line 5, third_party/upb/upb/message/types.h at line 5, third_party/upb/upb/message/value.h at line 5, third_party/upb/upb/mini_descriptor/build_enum.c at line 5, third_party/upb/upb/mini_descriptor/build_enum.h at line 5, third_party/upb/upb/mini_descriptor/decode.c at line 5, third_party/upb/upb/mini_descriptor/decode.h at line 5, third_party/upb/upb/mini_descriptor/internal/base92.c at line 5, third_party/upb/upb/mini_descriptor/internal/base92.h at line 5, third_party/upb/upb/mini_descriptor/internal/decoder.h at line 5, third_party/upb/upb/mini_descriptor/internal/encode.c at line 5, third_party/upb/upb/mini_descriptor/internal/encode.h at line 5, third_party/upb/upb/mini_descriptor/internal/modifiers.h at line 5, third_party/upb/upb/mini_descriptor/internal/wire_constants.h at line 5, third_party/upb/upb/mini_descriptor/link.c at line 5, third_party/upb/upb/mini_descriptor/link.h at line 5, third_party/upb/upb/mini_table/enum.h at line 5, third_party/upb/upb/mini_table/extension.h at line 5, third_party/upb/upb/mini_table/extension_registry.c at line 5, third_party/upb/upb/mini_table/extension_registry.h at line 5, third_party/upb/upb/mini_table/field.h at line 5, third_party/upb/upb/mini_table/file.h at line 5, third_party/upb/upb/mini_table/internal/enum.h at line 5, third_party/upb/upb/mini_table/internal/extension.h at line 5, third_party/upb/upb/mini_table/internal/field.h at line 5, third_party/upb/upb/mini_table/internal/file.h at line 5, third_party/upb/upb/mini_table/internal/message.c at line 5, third_party/upb/upb/mini_table/internal/message.h at line 5, third_party/upb/upb/mini_table/internal/sub.h at line 5, third_party/upb/upb/mini_table/message.c at line 5, third_party/upb/upb/mini_table/message.h at line 5, third_party/upb/upb/mini_table/sub.h at line 5, third_party/upb/upb/port/atomic.h at line 5, third_party/upb/upb/port/def.inc at line 5, third_party/upb/upb/port/undef.inc at line 5, third_party/upb/upb/port/vsnprintf_compat.h at line 5, third_party/upb/upb/reflection/common.h at line 5, third_party/upb/upb/reflection/def.h at line 5, third_party/upb/upb/reflection/def.hpp at line 5, third_party/upb/upb/reflection/def_pool.c at line 5, third_party/upb/upb/reflection/def_pool.h at line 5, third_party/upb/upb/reflection/def_type.c at line 5, third_party/upb/upb/reflection/def_type.h at line 5, third_party/upb/upb/reflection/desc_state.c at line 5, third_party/upb/upb/reflection/enum_def.c at line 5, third_party/upb/upb/reflection/enum_def.h at line 5, third_party/upb/upb/reflection/enum_reserved_range.c at line 5, third_party/upb/upb/reflection/enum_reserved_range.h at line 5, third_party/upb/upb/reflection/enum_value_def.c at line 5, third_party/upb/upb/reflection/enum_value_def.h at line 5, third_party/upb/upb/reflection/extension_range.c at line 5, third_party/upb/upb/reflection/extension_range.h at line 5, third_party/upb/upb/reflection/field_def.c at line 5, third_party/upb/upb/reflection/field_def.h at line 5, third_party/upb/upb/reflection/file_def.c at line 5, third_party/upb/upb/reflection/file_def.h at line 5, third_party/upb/upb/reflection/internal/def_builder.c at line 5, third_party/upb/upb/reflection/internal/def_builder.h at line 5, third_party/upb/upb/reflection/internal/def_pool.h at line 5, third_party/upb/upb/reflection/internal/desc_state.h at line 5, third_party/upb/upb/reflection/internal/enum_def.h at line 5, third_party/upb/upb/reflection/internal/enum_reserved_range.h at line 5, third_party/upb/upb/reflection/internal/enum_value_def.h at line 5, third_party/upb/upb/reflection/internal/extension_range.h at line 5, third_party/upb/upb/reflection/internal/field_def.h at line 5, third_party/upb/upb/reflection/internal/file_def.h at line 5, third_party/upb/upb/reflection/internal/message_def.h at line 5, third_party/upb/upb/reflection/internal/message_reserved_range.h at line 5, third_party/upb/upb/reflection/internal/method_def.h at line 5, third_party/upb/upb/reflection/internal/oneof_def.h at line 5, third_party/upb/upb/reflection/internal/service_def.h at line 5, third_party/upb/upb/reflection/internal/strdup2.c at line 5, third_party/upb/upb/reflection/internal/strdup2.h at line 5, third_party/upb/upb/reflection/message.c at line 5, third_party/upb/upb/reflection/message.h at line 5, third_party/upb/upb/reflection/message_def.c at line 5, third_party/upb/upb/reflection/message_def.h at line 5, third_party/upb/upb/reflection/message_reserved_range.c at line 5, third_party/upb/upb/reflection/message_reserved_range.h at line 5, third_party/upb/upb/reflection/method_def.c at line 5, third_party/upb/upb/reflection/method_def.h at line 5, third_party/upb/upb/reflection/oneof_def.c at line 5, third_party/upb/upb/reflection/oneof_def.h at line 5, third_party/upb/upb/reflection/service_def.c at line 5, third_party/upb/upb/reflection/service_def.h at line 5, third_party/upb/upb/text/encode.c at line 5, third_party/upb/upb/text/encode.h at line 5, third_party/upb/upb/upb.hpp at line 5, third_party/upb/upb/wire/decode.c at line 5, third_party/upb/upb/wire/decode.h at line 5, third_party/upb/upb/wire/decode_fast.c at line 5, third_party/upb/upb/wire/decode_fast.h at line 5, third_party/upb/upb/wire/encode.c at line 5, third_party/upb/upb/wire/encode.h at line 5, third_party/upb/upb/wire/eps_copy_input_stream.c at line 5, third_party/upb/upb/wire/eps_copy_input_stream.h at line 5, third_party/upb/upb/wire/internal/constants.h at line 5, third_party/upb/upb/wire/internal/decode.h at line 5, third_party/upb/upb/wire/internal/swap.h at line 5, third_party/upb/upb/wire/reader.c at line 5, third_party/upb/upb/wire/reader.h at line 5, third_party/upb/upb/wire/types.h at line 5
-    License text:
-        // Use of this source code is governed by a BSD-style
-        // license that can be found in the LICENSE file or at
-        // https://developers.google.com/open-source/licenses/bsd
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 95.00
-        Match type      : NOTICE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        third_party/upb/upb/base/descriptor_constants.h [4:6]
-        third_party/upb/upb/base/internal/log2.h [5:7]
-        third_party/upb/upb/base/status.c [4:6]
-        third_party/upb/upb/base/status.h [4:6]
-        third_party/upb/upb/base/status.hpp [4:6]
-        third_party/upb/upb/base/string_view.h [5:7]
-        third_party/upb/upb/collections/map.h [4:6]
-        third_party/upb/upb/generated_code_support.h [4:6]
-        third_party/upb/upb/hash/common.c [4:6]
-        third_party/upb/upb/hash/common.h [4:6]
-        third_party/upb/upb/hash/int_table.h [4:6]
-        third_party/upb/upb/hash/str_table.h [4:6]
-        third_party/upb/upb/lex/atoi.c [4:6]
-        third_party/upb/upb/lex/atoi.h [4:6]
-        third_party/upb/upb/lex/round_trip.c [4:6]
-        third_party/upb/upb/lex/round_trip.h [4:6]
-        third_party/upb/upb/lex/strtod.c [4:6]
-        third_party/upb/upb/lex/strtod.h [4:6]
-        third_party/upb/upb/lex/unicode.c [4:6]
-        third_party/upb/upb/lex/unicode.h [4:6]
-        third_party/upb/upb/mem/alloc.c [4:6]
-        third_party/upb/upb/mem/alloc.h [4:6]
-        third_party/upb/upb/mem/arena.c [4:6]
-        third_party/upb/upb/mem/arena.h [4:6]
-        third_party/upb/upb/mem/arena.hpp [4:6]
-        third_party/upb/upb/mem/internal/arena.h [4:6]
-        third_party/upb/upb/message/accessors.c [4:6]
-        third_party/upb/upb/message/accessors.h [4:6]
-        third_party/upb/upb/message/internal/accessors.h [4:6]
-        third_party/upb/upb/message/internal/extension.h [4:6]
-        third_party/upb/upb/message/internal/message.h [4:6]
-        third_party/upb/upb/message/internal/types.h [4:6]
-        third_party/upb/upb/message/message.c [4:6]
-        third_party/upb/upb/message/message.h [4:6]
-        third_party/upb/upb/message/tagged_ptr.h [4:6]
-        third_party/upb/upb/message/types.h [4:6]
-        third_party/upb/upb/message/value.h [4:6]
-        third_party/upb/upb/mini_descriptor/build_enum.c [4:6]
-        third_party/upb/upb/mini_descriptor/build_enum.h [4:6]
-        third_party/upb/upb/mini_descriptor/decode.c [4:6]
-        third_party/upb/upb/mini_descriptor/decode.h [4:6]
-        third_party/upb/upb/mini_descriptor/internal/base92.c [4:6]
-        third_party/upb/upb/mini_descriptor/internal/base92.h [4:6]
-        third_party/upb/upb/mini_descriptor/internal/decoder.h [4:6]
-        third_party/upb/upb/mini_descriptor/internal/encode.c [4:6]
-        third_party/upb/upb/mini_descriptor/internal/encode.h [4:6]
-        third_party/upb/upb/mini_descriptor/internal/modifiers.h [4:6]
-        third_party/upb/upb/mini_descriptor/internal/wire_constants.h [4:6]
-        third_party/upb/upb/mini_descriptor/link.c [4:6]
-        third_party/upb/upb/mini_descriptor/link.h [4:6]
-        third_party/upb/upb/mini_table/enum.h [4:6]
-        third_party/upb/upb/mini_table/extension.h [4:6]
-        third_party/upb/upb/mini_table/extension_registry.c [4:6]
-        third_party/upb/upb/mini_table/extension_registry.h [4:6]
-        third_party/upb/upb/mini_table/field.h [4:6]
-        third_party/upb/upb/mini_table/file.h [4:6]
-        third_party/upb/upb/mini_table/internal/enum.h [4:6]
-        third_party/upb/upb/mini_table/internal/extension.h [4:6]
-        third_party/upb/upb/mini_table/internal/field.h [4:6]
-        third_party/upb/upb/mini_table/internal/file.h [4:6]
-        third_party/upb/upb/mini_table/internal/message.c [4:6]
-        third_party/upb/upb/mini_table/internal/message.h [4:6]
-        third_party/upb/upb/mini_table/internal/sub.h [4:6]
-        third_party/upb/upb/mini_table/message.c [4:6]
-        third_party/upb/upb/mini_table/message.h [4:6]
-        third_party/upb/upb/mini_table/sub.h [4:6]
-        third_party/upb/upb/port/atomic.h [4:6]
-        third_party/upb/upb/port/def.inc [4:6]
-        third_party/upb/upb/port/undef.inc [4:6]
-        third_party/upb/upb/port/vsnprintf_compat.h [4:6]
-        third_party/upb/upb/reflection/common.h [4:6]
-        third_party/upb/upb/reflection/def.h [4:6]
-        third_party/upb/upb/reflection/def.hpp [4:6]
-        third_party/upb/upb/reflection/def_pool.c [4:6]
-        third_party/upb/upb/reflection/def_pool.h [4:6]
-        third_party/upb/upb/reflection/def_type.c [4:6]
-        third_party/upb/upb/reflection/def_type.h [4:6]
-        third_party/upb/upb/reflection/desc_state.c [4:6]
-        third_party/upb/upb/reflection/enum_def.c [4:6]
-        third_party/upb/upb/reflection/enum_def.h [4:6]
-        third_party/upb/upb/reflection/enum_reserved_range.c [4:6]
-        third_party/upb/upb/reflection/enum_reserved_range.h [4:6]
-        third_party/upb/upb/reflection/enum_value_def.c [4:6]
-        third_party/upb/upb/reflection/enum_value_def.h [4:6]
-        third_party/upb/upb/reflection/extension_range.c [4:6]
-        third_party/upb/upb/reflection/extension_range.h [4:6]
-        third_party/upb/upb/reflection/field_def.c [4:6]
-        third_party/upb/upb/reflection/field_def.h [4:6]
-        third_party/upb/upb/reflection/file_def.c [4:6]
-        third_party/upb/upb/reflection/file_def.h [4:6]
-        third_party/upb/upb/reflection/internal/def_builder.c [4:6]
-        third_party/upb/upb/reflection/internal/def_builder.h [4:6]
-        third_party/upb/upb/reflection/internal/def_pool.h [4:6]
-        third_party/upb/upb/reflection/internal/desc_state.h [4:6]
-        third_party/upb/upb/reflection/internal/enum_def.h [4:6]
-        third_party/upb/upb/reflection/internal/enum_reserved_range.h [4:6]
-        third_party/upb/upb/reflection/internal/enum_value_def.h [4:6]
-        third_party/upb/upb/reflection/internal/extension_range.h [4:6]
-        third_party/upb/upb/reflection/internal/field_def.h [4:6]
-        third_party/upb/upb/reflection/internal/file_def.h [4:6]
-        third_party/upb/upb/reflection/internal/message_def.h [4:6]
-        third_party/upb/upb/reflection/internal/message_reserved_range.h [4:6]
-        third_party/upb/upb/reflection/internal/method_def.h [4:6]
-        third_party/upb/upb/reflection/internal/oneof_def.h [4:6]
-        third_party/upb/upb/reflection/internal/service_def.h [4:6]
-        third_party/upb/upb/reflection/internal/strdup2.c [4:6]
-        third_party/upb/upb/reflection/internal/strdup2.h [4:6]
-        third_party/upb/upb/reflection/message.c [4:6]
-        third_party/upb/upb/reflection/message.h [4:6]
-        third_party/upb/upb/reflection/message_def.c [4:6]
-        third_party/upb/upb/reflection/message_def.h [4:6]
-        third_party/upb/upb/reflection/message_reserved_range.c [4:6]
-        third_party/upb/upb/reflection/message_reserved_range.h [4:6]
-        third_party/upb/upb/reflection/method_def.c [4:6]
-        third_party/upb/upb/reflection/method_def.h [4:6]
-        third_party/upb/upb/reflection/oneof_def.c [4:6]
-        third_party/upb/upb/reflection/oneof_def.h [4:6]
-        third_party/upb/upb/reflection/service_def.c [4:6]
-        third_party/upb/upb/reflection/service_def.h [4:6]
-        third_party/upb/upb/text/encode.c [4:6]
-        third_party/upb/upb/text/encode.h [4:6]
-        third_party/upb/upb/upb.hpp [4:6]
-        third_party/upb/upb/wire/decode.c [4:6]
-        third_party/upb/upb/wire/decode.h [4:6]
-        third_party/upb/upb/wire/decode_fast.c [4:6]
-        third_party/upb/upb/wire/decode_fast.h [4:6]
-        third_party/upb/upb/wire/encode.c [4:6]
-        third_party/upb/upb/wire/encode.h [4:6]
-        third_party/upb/upb/wire/eps_copy_input_stream.c [4:6]
-        third_party/upb/upb/wire/eps_copy_input_stream.h [4:6]
-        third_party/upb/upb/wire/internal/constants.h [4:6]
-        third_party/upb/upb/wire/internal/decode.h [4:6]
-        third_party/upb/upb/wire/internal/swap.h [4:6]
-        third_party/upb/upb/wire/reader.c [4:6]
-        third_party/upb/upb/wire/reader.h [4:6]
-        third_party/upb/upb/wire/types.h [4:6]
-
 KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
 BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/proto/grpc/reflection/v1alpha/ya.make src/proto/grpc/status/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -436,10 +323,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         include/grpc/event_engine/port.h [3:13]
         include/grpc/event_engine/slice.h [3:13]
         include/grpc/event_engine/slice_buffer.h [3:13]
-        include/grpc/grpc_audit_logging.h [5:15]
-        include/grpc/grpc_crl_provider.h [5:15]
-        include/grpc/impl/channel_arg_names.h [3:13]
-        include/grpc/support/json.h [4:14]
         include/grpcpp/alarm.h [5:15]
         include/grpcpp/channel.h [5:15]
         include/grpcpp/client_context.h [5:15]
@@ -450,7 +333,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         include/grpcpp/ext/admin_services.h [5:15]
         include/grpcpp/ext/call_metric_recorder.h [5:15]
         include/grpcpp/ext/channelz_service_plugin.h [5:15]
-        include/grpcpp/ext/csm_observability.h [5:15]
         include/grpcpp/ext/gcp_observability.h [4:14]
         include/grpcpp/ext/health_check_service_server_builder_option.h [5:15]
         include/grpcpp/ext/orca_service.h [4:14]
@@ -539,7 +421,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         include/grpcpp/resource_quota.h [5:15]
         include/grpcpp/security/alts_context.h [5:15]
         include/grpcpp/security/alts_util.h [5:15]
-        include/grpcpp/security/audit_logging.h [5:15]
         include/grpcpp/security/auth_context.h [5:15]
         include/grpcpp/security/auth_metadata_processor.h [5:15]
         include/grpcpp/security/authorization_policy_provider.h [3:13]
@@ -551,7 +432,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         include/grpcpp/security/tls_certificate_provider.h [4:14]
         include/grpcpp/security/tls_certificate_verifier.h [4:14]
         include/grpcpp/security/tls_credentials_options.h [5:15]
-        include/grpcpp/security/tls_crl_provider.h [5:15]
         include/grpcpp/server.h [5:15]
         include/grpcpp/server_builder.h [5:15]
         include/grpcpp/server_context.h [5:15]
@@ -620,15 +500,15 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/dynamic_filters.h [4:14]
         src/core/ext/filters/client_channel/global_subchannel_pool.cc [5:15]
         src/core/ext/filters/client_channel/global_subchannel_pool.h [5:15]
-        src/core/ext/filters/client_channel/http_proxy_mapper.cc [5:15]
-        src/core/ext/filters/client_channel/http_proxy_mapper.h [5:15]
+        src/core/ext/filters/client_channel/health/health_check_client.cc [4:14]
+        src/core/ext/filters/client_channel/health/health_check_client.h [4:14]
+        src/core/ext/filters/client_channel/http_proxy.cc [5:15]
+        src/core/ext/filters/client_channel/http_proxy.h [5:15]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/backend_metric_data.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/child_policy_handler.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/child_policy_handler.h [4:14]
-        src/core/ext/filters/client_channel/lb_policy/endpoint_list.cc [4:14]
-        src/core/ext/filters/client_channel/lb_policy/endpoint_list.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.cc [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.h [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc [4:14]
@@ -639,16 +519,12 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.h [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.cc [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.h [5:15]
-        src/core/ext/filters/client_channel/lb_policy/health_check_client.cc [4:14]
-        src/core/ext/filters/client_channel/lb_policy/health_check_client.h [4:14]
-        src/core/ext/filters/client_channel/lb_policy/health_check_client_internal.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/oob_backend_metric.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/oob_backend_metric.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/oob_backend_metric_internal.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/outlier_detection/outlier_detection.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/outlier_detection/outlier_detection.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/pick_first/pick_first.cc [4:14]
-        src/core/ext/filters/client_channel/lb_policy/pick_first/pick_first.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/priority/priority.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.h [4:14]
@@ -660,6 +536,8 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/lb_policy/weighted_round_robin/weighted_round_robin.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/cds.cc [4:14]
+        src/core/ext/filters/client_channel/lb_policy/xds/xds_attributes.cc [4:14]
+        src/core/ext/filters/client_channel/lb_policy/xds/xds_attributes.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_channel_args.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_impl.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc [4:14]
@@ -671,7 +549,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/local_subchannel_pool.h [5:15]
         src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc [3:13]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc [4:14]
-        src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.h [3:13]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc [5:15]
@@ -679,14 +556,7 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc [5:15]
-        src/core/ext/filters/client_channel/resolver/dns/dns_resolver_plugin.cc [3:13]
-        src/core/ext/filters/client_channel/resolver/dns/dns_resolver_plugin.h [3:13]
-        src/core/ext/filters/client_channel/resolver/dns/event_engine/event_engine_client_channel_resolver.cc [3:13]
-        src/core/ext/filters/client_channel/resolver/dns/event_engine/event_engine_client_channel_resolver.h [3:13]
-        src/core/ext/filters/client_channel/resolver/dns/event_engine/service_config_helper.cc [3:13]
-        src/core/ext/filters/client_channel/resolver/dns/event_engine/service_config_helper.h [3:13]
         src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.cc [4:14]
-        src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.h [3:13]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc [4:14]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h [4:14]
         src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc [4:14]
@@ -697,8 +567,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h [4:14]
         src/core/ext/filters/client_channel/retry_filter.cc [4:14]
         src/core/ext/filters/client_channel/retry_filter.h [4:14]
-        src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc [3:13]
-        src/core/ext/filters/client_channel/retry_filter_legacy_call_data.h [3:13]
         src/core/ext/filters/client_channel/retry_service_config.cc [4:14]
         src/core/ext/filters/client_channel/retry_service_config.h [4:14]
         src/core/ext/filters/client_channel/retry_throttle.cc [5:15]
@@ -791,11 +659,13 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/transport/chttp2/transport/bin_encoder.h [5:15]
         src/core/ext/transport/chttp2/transport/chttp2_transport.cc [4:14]
         src/core/ext/transport/chttp2/transport/chttp2_transport.h [5:15]
-        src/core/ext/transport/chttp2/transport/context_list_entry.h [5:15]
+        src/core/ext/transport/chttp2/transport/context_list.cc [5:15]
+        src/core/ext/transport/chttp2/transport/context_list.h [5:15]
         src/core/ext/transport/chttp2/transport/decode_huff.cc [3:13]
         src/core/ext/transport/chttp2/transport/decode_huff.h [3:13]
         src/core/ext/transport/chttp2/transport/flow_control.cc [5:15]
         src/core/ext/transport/chttp2/transport/flow_control.h [5:15]
+        src/core/ext/transport/chttp2/transport/frame.h [5:15]
         src/core/ext/transport/chttp2/transport/frame_data.cc [5:15]
         src/core/ext/transport/chttp2/transport/frame_data.h [5:15]
         src/core/ext/transport/chttp2/transport/frame_goaway.cc [5:15]
@@ -813,8 +683,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/transport/chttp2/transport/hpack_encoder.h [5:15]
         src/core/ext/transport/chttp2/transport/hpack_encoder_table.cc [3:13]
         src/core/ext/transport/chttp2/transport/hpack_encoder_table.h [3:13]
-        src/core/ext/transport/chttp2/transport/hpack_parse_result.cc [3:13]
-        src/core/ext/transport/chttp2/transport/hpack_parse_result.h [3:13]
         src/core/ext/transport/chttp2/transport/hpack_parser.cc [5:15]
         src/core/ext/transport/chttp2/transport/hpack_parser.h [5:15]
         src/core/ext/transport/chttp2/transport/hpack_parser_table.cc [5:15]
@@ -826,27 +694,16 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/transport/chttp2/transport/huffsyms.cc [5:15]
         src/core/ext/transport/chttp2/transport/huffsyms.h [5:15]
         src/core/ext/transport/chttp2/transport/internal.h [5:15]
-        src/core/ext/transport/chttp2/transport/legacy_frame.h [5:15]
-        src/core/ext/transport/chttp2/transport/max_concurrent_streams_policy.cc [3:13]
-        src/core/ext/transport/chttp2/transport/max_concurrent_streams_policy.h [3:13]
         src/core/ext/transport/chttp2/transport/parsing.cc [5:15]
-        src/core/ext/transport/chttp2/transport/ping_abuse_policy.cc [3:13]
-        src/core/ext/transport/chttp2/transport/ping_abuse_policy.h [3:13]
-        src/core/ext/transport/chttp2/transport/ping_callbacks.cc [3:13]
-        src/core/ext/transport/chttp2/transport/ping_callbacks.h [3:13]
-        src/core/ext/transport/chttp2/transport/ping_rate_policy.cc [3:13]
-        src/core/ext/transport/chttp2/transport/ping_rate_policy.h [3:13]
         src/core/ext/transport/chttp2/transport/stream_lists.cc [5:15]
+        src/core/ext/transport/chttp2/transport/stream_map.cc [5:15]
+        src/core/ext/transport/chttp2/transport/stream_map.h [5:15]
         src/core/ext/transport/chttp2/transport/varint.cc [5:15]
         src/core/ext/transport/chttp2/transport/varint.h [5:15]
-        src/core/ext/transport/chttp2/transport/write_size_policy.cc [3:13]
-        src/core/ext/transport/chttp2/transport/write_size_policy.h [3:13]
         src/core/ext/transport/chttp2/transport/writing.cc [5:15]
         src/core/ext/transport/inproc/inproc_plugin.cc [5:15]
-        src/core/ext/transport/inproc/inproc_transport.cc [3:13]
-        src/core/ext/transport/inproc/inproc_transport.h [3:13]
-        src/core/ext/transport/inproc/legacy_inproc_transport.cc [5:15]
-        src/core/ext/transport/inproc/legacy_inproc_transport.h [3:13]
+        src/core/ext/transport/inproc/inproc_transport.cc [5:15]
+        src/core/ext/transport/inproc/inproc_transport.h [5:15]
         src/core/ext/xds/certificate_provider_store.cc [5:15]
         src/core/ext/xds/certificate_provider_store.h [5:15]
         src/core/ext/xds/file_watcher_certificate_provider_factory.cc [5:15]
@@ -854,8 +711,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/xds/upb_utils.h [4:14]
         src/core/ext/xds/xds_api.cc [4:14]
         src/core/ext/xds/xds_api.h [4:14]
-        src/core/ext/xds/xds_audit_logger_registry.cc [4:14]
-        src/core/ext/xds/xds_audit_logger_registry.h [4:14]
         src/core/ext/xds/xds_bootstrap.cc [4:14]
         src/core/ext/xds/xds_bootstrap.h [4:14]
         src/core/ext/xds/xds_bootstrap_grpc.cc [4:14]
@@ -877,7 +732,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/ext/xds/xds_cluster_specifier_plugin.h [4:14]
         src/core/ext/xds/xds_common_types.cc [4:14]
         src/core/ext/xds/xds_common_types.h [4:14]
-        src/core/ext/xds/xds_enabled_server.h [4:14]
         src/core/ext/xds/xds_endpoint.cc [4:14]
         src/core/ext/xds/xds_endpoint.h [4:14]
         src/core/ext/xds/xds_health_status.cc [4:14]
@@ -927,8 +781,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/channel/channel_stack_builder.h [3:13]
         src/core/lib/channel/channel_stack_builder_impl.cc [5:15]
         src/core/lib/channel/channel_stack_builder_impl.h [3:13]
-        src/core/lib/channel/channel_stack_trace.cc [3:13]
-        src/core/lib/channel/channel_stack_trace.h [3:13]
         src/core/lib/channel/channel_trace.cc [5:15]
         src/core/lib/channel/channel_trace.h [5:15]
         src/core/lib/channel/channelz.cc [5:15]
@@ -943,7 +795,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/channel/server_call_tracer_filter.cc [4:14]
         src/core/lib/channel/status_util.cc [5:15]
         src/core/lib/channel/status_util.h [5:15]
-        src/core/lib/channel/tcp_tracer.h [5:15]
         src/core/lib/compression/compression.cc [5:15]
         src/core/lib/compression/compression_internal.cc [5:15]
         src/core/lib/compression/compression_internal.h [5:15]
@@ -966,15 +817,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/debug/stats_data.h [3:13]
         src/core/lib/debug/trace.cc [5:15]
         src/core/lib/debug/trace.h [5:15]
-        src/core/lib/event_engine/ares_resolver.cc [3:13]
-        src/core/lib/event_engine/ares_resolver.h [3:13]
-        src/core/lib/event_engine/cf_engine/cf_engine.cc [3:13]
-        src/core/lib/event_engine/cf_engine/cf_engine.h [3:13]
-        src/core/lib/event_engine/cf_engine/cfstream_endpoint.cc [3:13]
-        src/core/lib/event_engine/cf_engine/cfstream_endpoint.h [3:13]
-        src/core/lib/event_engine/cf_engine/cftype_unique_ref.h [3:13]
-        src/core/lib/event_engine/cf_engine/dns_service_resolver.cc [3:13]
-        src/core/lib/event_engine/cf_engine/dns_service_resolver.h [3:13]
         src/core/lib/event_engine/channel_args_endpoint_config.cc [3:13]
         src/core/lib/event_engine/channel_args_endpoint_config.h [3:13]
         src/core/lib/event_engine/common_closures.h [3:13]
@@ -983,13 +825,12 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/event_engine/default_event_engine_factory.cc [3:13]
         src/core/lib/event_engine/default_event_engine_factory.h [3:13]
         src/core/lib/event_engine/event_engine.cc [3:13]
+        src/core/lib/event_engine/executor/executor.h [3:13]
         src/core/lib/event_engine/forkable.cc [3:13]
         src/core/lib/event_engine/forkable.h [3:13]
-        src/core/lib/event_engine/grpc_polled_fd.h [3:13]
         src/core/lib/event_engine/handle_containers.h [3:13]
         src/core/lib/event_engine/memory_allocator.cc [3:13]
         src/core/lib/event_engine/memory_allocator_factory.h [3:13]
-        src/core/lib/event_engine/nameser.h [3:13]
         src/core/lib/event_engine/poller.h [3:13]
         src/core/lib/event_engine/posix.h [3:13]
         src/core/lib/event_engine/posix_engine/ev_epoll1_linux.cc [3:13]
@@ -999,7 +840,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/event_engine/posix_engine/event_poller.h [3:13]
         src/core/lib/event_engine/posix_engine/event_poller_posix_default.cc [3:13]
         src/core/lib/event_engine/posix_engine/event_poller_posix_default.h [3:13]
-        src/core/lib/event_engine/posix_engine/grpc_polled_fd_posix.h [3:13]
         src/core/lib/event_engine/posix_engine/internal_errqueue.cc [3:13]
         src/core/lib/event_engine/posix_engine/internal_errqueue.h [3:13]
         src/core/lib/event_engine/posix_engine/lockfree_event.cc [3:13]
@@ -1040,22 +880,14 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/event_engine/tcp_socket_utils.h [3:13]
         src/core/lib/event_engine/thread_local.cc [3:13]
         src/core/lib/event_engine/thread_local.h [3:13]
-        src/core/lib/event_engine/thread_pool/thread_count.cc [3:13]
-        src/core/lib/event_engine/thread_pool/thread_count.h [3:13]
-        src/core/lib/event_engine/thread_pool/thread_pool.h [3:13]
-        src/core/lib/event_engine/thread_pool/thread_pool_factory.cc [3:13]
-        src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc [5:15]
-        src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.h [5:15]
-        src/core/lib/event_engine/thready_event_engine/thready_event_engine.cc [3:13]
-        src/core/lib/event_engine/thready_event_engine/thready_event_engine.h [3:13]
+        src/core/lib/event_engine/thread_pool.cc [5:15]
+        src/core/lib/event_engine/thread_pool.h [5:15]
         src/core/lib/event_engine/time_util.cc [3:13]
         src/core/lib/event_engine/time_util.h [3:13]
         src/core/lib/event_engine/trace.cc [3:13]
         src/core/lib/event_engine/trace.h [3:13]
         src/core/lib/event_engine/utils.cc [3:13]
         src/core/lib/event_engine/utils.h [3:13]
-        src/core/lib/event_engine/windows/grpc_polled_fd_windows.cc [3:13]
-        src/core/lib/event_engine/windows/grpc_polled_fd_windows.h [3:13]
         src/core/lib/event_engine/windows/iocp.cc [3:13]
         src/core/lib/event_engine/windows/iocp.h [3:13]
         src/core/lib/event_engine/windows/win_socket.cc [3:13]
@@ -1066,9 +898,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/event_engine/windows/windows_engine.h [3:13]
         src/core/lib/event_engine/windows/windows_listener.cc [3:13]
         src/core/lib/event_engine/windows/windows_listener.h [3:13]
-        src/core/lib/event_engine/work_queue/basic_work_queue.cc [3:13]
-        src/core/lib/event_engine/work_queue/basic_work_queue.h [3:13]
-        src/core/lib/event_engine/work_queue/work_queue.h [3:13]
         src/core/lib/experiments/config.cc [3:13]
         src/core/lib/experiments/config.h [3:13]
         src/core/lib/experiments/experiments.cc [3:13]
@@ -1081,7 +910,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/gpr/linux/cpu.cc [5:15]
         src/core/lib/gpr/linux/log.cc [5:15]
         src/core/lib/gpr/log.cc [5:15]
-        src/core/lib/gpr/log_internal.h [3:13]
         src/core/lib/gpr/msys/tmpfile.cc [5:15]
         src/core/lib/gpr/posix/cpu.cc [5:15]
         src/core/lib/gpr/posix/log.cc [5:15]
@@ -1115,7 +943,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/gprpp/crash.cc [3:13]
         src/core/lib/gprpp/crash.h [3:13]
         src/core/lib/gprpp/debug_location.h [5:15]
-        src/core/lib/gprpp/directory_reader.h [5:15]
         src/core/lib/gprpp/dual_ref_counted.h [4:14]
         src/core/lib/gprpp/env.h [5:15]
         src/core/lib/gprpp/examine_stack.cc [5:15]
@@ -1124,7 +951,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/gprpp/fork.h [5:15]
         src/core/lib/gprpp/host_port.cc [5:15]
         src/core/lib/gprpp/host_port.h [5:15]
-        src/core/lib/gprpp/if_list.h [3:13]
         src/core/lib/gprpp/linux/env.cc [5:15]
         src/core/lib/gprpp/load_file.cc [3:13]
         src/core/lib/gprpp/load_file.h [3:13]
@@ -1138,16 +964,12 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/gprpp/orphanable.h [5:15]
         src/core/lib/gprpp/overload.h [3:13]
         src/core/lib/gprpp/packed_table.h [3:13]
-        src/core/lib/gprpp/per_cpu.cc [3:13]
         src/core/lib/gprpp/per_cpu.h [3:13]
-        src/core/lib/gprpp/posix/directory_reader.cc [5:15]
         src/core/lib/gprpp/posix/env.cc [5:15]
         src/core/lib/gprpp/posix/stat.cc [4:14]
         src/core/lib/gprpp/posix/thd.cc [5:15]
         src/core/lib/gprpp/ref_counted.h [5:15]
         src/core/lib/gprpp/ref_counted_ptr.h [5:15]
-        src/core/lib/gprpp/ref_counted_string.cc [4:14]
-        src/core/lib/gprpp/ref_counted_string.h [4:14]
         src/core/lib/gprpp/single_set_ptr.h [3:13]
         src/core/lib/gprpp/sorted_pack.h [3:13]
         src/core/lib/gprpp/stat.h [4:14]
@@ -1166,17 +988,14 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/gprpp/time_averaged_stats.h [5:15]
         src/core/lib/gprpp/time_util.cc [4:14]
         src/core/lib/gprpp/time_util.h [4:14]
-        src/core/lib/gprpp/type_list.h [3:13]
         src/core/lib/gprpp/unique_type_name.h [4:14]
         src/core/lib/gprpp/validation_errors.cc [3:13]
         src/core/lib/gprpp/validation_errors.h [3:13]
-        src/core/lib/gprpp/windows/directory_reader.cc [5:15]
         src/core/lib/gprpp/windows/env.cc [5:15]
         src/core/lib/gprpp/windows/stat.cc [4:14]
         src/core/lib/gprpp/windows/thd.cc [5:15]
         src/core/lib/gprpp/work_serializer.cc [4:14]
         src/core/lib/gprpp/work_serializer.h [4:14]
-        src/core/lib/gprpp/xxhash_inline.h [4:14]
         src/core/lib/handshaker/proxy_mapper.h [5:15]
         src/core/lib/handshaker/proxy_mapper_registry.cc [5:15]
         src/core/lib/handshaker/proxy_mapper_registry.h [5:15]
@@ -1319,8 +1138,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/iomgr/unix_sockets_posix.cc [5:15]
         src/core/lib/iomgr/unix_sockets_posix.h [5:15]
         src/core/lib/iomgr/unix_sockets_posix_noop.cc [5:15]
-        src/core/lib/iomgr/vsock.cc [5:15]
-        src/core/lib/iomgr/vsock.h [5:15]
         src/core/lib/iomgr/wakeup_fd_eventfd.cc [5:15]
         src/core/lib/iomgr/wakeup_fd_nospecial.cc [5:15]
         src/core/lib/iomgr/wakeup_fd_pipe.cc [5:15]
@@ -1333,12 +1150,9 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/json/json_object_loader.cc [3:13]
         src/core/lib/json/json_object_loader.h [3:13]
         src/core/lib/json/json_reader.cc [4:14]
-        src/core/lib/json/json_reader.h [4:14]
         src/core/lib/json/json_util.cc [5:15]
         src/core/lib/json/json_util.h [5:15]
         src/core/lib/json/json_writer.cc [5:15]
-        src/core/lib/json/json_writer.h [4:14]
-        src/core/lib/load_balancing/delegating_helper.h [4:14]
         src/core/lib/load_balancing/lb_policy.cc [5:15]
         src/core/lib/load_balancing/lb_policy.h [4:14]
         src/core/lib/load_balancing/lb_policy_factory.h [4:14]
@@ -1352,11 +1166,12 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/promise/arena_promise.h [3:13]
         src/core/lib/promise/cancel_callback.h [3:13]
         src/core/lib/promise/context.h [3:13]
+        src/core/lib/promise/detail/basic_join.h [3:13]
         src/core/lib/promise/detail/basic_seq.h [3:13]
         src/core/lib/promise/detail/promise_factory.h [3:13]
         src/core/lib/promise/detail/promise_like.h [3:13]
-        src/core/lib/promise/detail/seq_state.h [3:13]
         src/core/lib/promise/detail/status.h [3:13]
+        src/core/lib/promise/detail/switch.h [4:14]
         src/core/lib/promise/exec_ctx_wakeup_scheduler.h [3:13]
         src/core/lib/promise/for_each.h [3:13]
         src/core/lib/promise/if.h [3:13]
@@ -1368,7 +1183,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/promise/party.h [3:13]
         src/core/lib/promise/pipe.h [3:13]
         src/core/lib/promise/poll.h [3:13]
-        src/core/lib/promise/prioritized_race.h [3:13]
         src/core/lib/promise/promise.h [3:13]
         src/core/lib/promise/race.h [3:13]
         src/core/lib/promise/seq.h [3:13]
@@ -1376,14 +1190,14 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/promise/sleep.h [3:13]
         src/core/lib/promise/trace.cc [3:13]
         src/core/lib/promise/trace.h [3:13]
+        src/core/lib/promise/try_join.h [3:13]
         src/core/lib/promise/try_seq.h [3:13]
-        src/core/lib/resolver/endpoint_addresses.cc [5:15]
-        src/core/lib/resolver/endpoint_addresses.h [5:15]
         src/core/lib/resolver/resolver.cc [5:15]
         src/core/lib/resolver/resolver.h [4:14]
         src/core/lib/resolver/resolver_factory.h [4:14]
         src/core/lib/resolver/resolver_registry.cc [4:14]
         src/core/lib/resolver/resolver_registry.h [4:14]
+        src/core/lib/resolver/server_address.cc [5:15]
         src/core/lib/resolver/server_address.h [5:15]
         src/core/lib/resource_quota/api.cc [3:13]
         src/core/lib/resource_quota/api.h [3:13]
@@ -1399,8 +1213,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/resource_quota/thread_quota.h [3:13]
         src/core/lib/resource_quota/trace.cc [3:13]
         src/core/lib/resource_quota/trace.h [3:13]
-        src/core/lib/security/authorization/audit_logging.cc [5:15]
-        src/core/lib/security/authorization/audit_logging.h [5:15]
         src/core/lib/security/authorization/authorization_engine.h [3:13]
         src/core/lib/security/authorization/authorization_policy_provider.h [3:13]
         src/core/lib/security/authorization/authorization_policy_provider_vtable.cc [3:13]
@@ -1414,8 +1226,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/security/authorization/matchers.h [3:13]
         src/core/lib/security/authorization/rbac_policy.cc [3:13]
         src/core/lib/security/authorization/rbac_policy.h [3:13]
-        src/core/lib/security/authorization/stdout_logger.cc [3:13]
-        src/core/lib/security/authorization/stdout_logger.h [3:13]
         src/core/lib/security/certificate_provider/certificate_provider_factory.h [5:15]
         src/core/lib/security/certificate_provider/certificate_provider_registry.cc [5:15]
         src/core/lib/security/certificate_provider/certificate_provider_registry.h [5:15]
@@ -1444,7 +1254,7 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/security/credentials/external/aws_external_account_credentials.h [4:14]
         src/core/lib/security/credentials/external/aws_request_signer.cc [4:14]
         src/core/lib/security/credentials/external/aws_request_signer.h [4:14]
-        src/core/lib/security/credentials/external/external_account_credentials.cc [3:13]
+        src/core/lib/security/credentials/external/external_account_credentials.cc [4:14]
         src/core/lib/security/credentials/external/external_account_credentials.h [4:14]
         src/core/lib/security/credentials/external/file_external_account_credentials.cc [4:14]
         src/core/lib/security/credentials/external/file_external_account_credentials.h [4:14]
@@ -1461,7 +1271,7 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/security/credentials/insecure/insecure_credentials.h [5:15]
         src/core/lib/security/credentials/jwt/json_token.cc [5:15]
         src/core/lib/security/credentials/jwt/json_token.h [5:15]
-        src/core/lib/security/credentials/jwt/jwt_credentials.cc [4:14]
+        src/core/lib/security/credentials/jwt/jwt_credentials.cc [5:15]
         src/core/lib/security/credentials/jwt/jwt_credentials.h [5:15]
         src/core/lib/security/credentials/jwt/jwt_verifier.cc [5:15]
         src/core/lib/security/credentials/jwt/jwt_verifier.h [5:15]
@@ -1475,15 +1285,12 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/security/credentials/ssl/ssl_credentials.h [5:15]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_distributor.cc [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_distributor.h [4:14]
-        src/core/lib/security/credentials/tls/grpc_tls_certificate_match.cc [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.cc [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.h [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.cc [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.h [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_credentials_options.cc [5:15]
         src/core/lib/security/credentials/tls/grpc_tls_credentials_options.h [5:15]
-        src/core/lib/security/credentials/tls/grpc_tls_crl_provider.cc [5:15]
-        src/core/lib/security/credentials/tls/grpc_tls_crl_provider.h [5:15]
         src/core/lib/security/credentials/tls/tls_credentials.cc [5:15]
         src/core/lib/security/credentials/tls/tls_credentials.h [5:15]
         src/core/lib/security/credentials/tls/tls_utils.cc [5:15]
@@ -1597,12 +1404,10 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/transport/http_connect_handshaker.h [5:15]
         src/core/lib/transport/metadata_batch.cc [3:13]
         src/core/lib/transport/metadata_batch.h [5:15]
-        src/core/lib/transport/metadata_compression_traits.h [3:13]
         src/core/lib/transport/parsed_metadata.cc [3:13]
         src/core/lib/transport/parsed_metadata.h [3:13]
         src/core/lib/transport/pid_controller.cc [5:15]
         src/core/lib/transport/pid_controller.h [5:15]
-        src/core/lib/transport/simple_slice_based_metadata.h [3:13]
         src/core/lib/transport/status_conversion.cc [5:15]
         src/core/lib/transport/status_conversion.h [5:15]
         src/core/lib/transport/tcp_connect_handshaker.cc [5:15]
@@ -1612,6 +1417,7 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/core/lib/transport/transport.cc [5:15]
         src/core/lib/transport/transport.h [5:15]
         src/core/lib/transport/transport_fwd.h [3:13]
+        src/core/lib/transport/transport_impl.h [5:15]
         src/core/lib/transport/transport_op_string.cc [5:15]
         src/core/lib/uri/uri_parser.cc [4:14]
         src/core/lib/uri/uri_parser.h [4:14]
@@ -1691,6 +1497,8 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/cpp/common/alarm.cc [4:14]
         src/cpp/common/auth_property_iterator.cc [5:15]
         src/cpp/common/channel_arguments.cc [5:15]
+        src/cpp/common/channel_filter.cc [5:15]
+        src/cpp/common/channel_filter.h [5:15]
         src/cpp/common/completion_queue_cc.cc [4:14]
         src/cpp/common/resource_quota_cc.cc [5:15]
         src/cpp/common/rpc_method.cc [5:15]
@@ -1730,7 +1538,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/cpp/server/server_context.cc [5:15]
         src/cpp/server/server_posix.cc [5:15]
         src/cpp/server/thread_pool_interface.h [5:15]
-        src/cpp/server/xds_server_builder.cc [5:15]
         src/cpp/server/xds_server_credentials.cc [5:15]
         src/cpp/thread_manager/thread_manager.cc [5:15]
         src/cpp/thread_manager/thread_manager.h [5:15]
@@ -1750,8 +1557,32 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/proto/grpc/reflection/v1/reflection.proto [3:13]
         src/proto/grpc/reflection/v1alpha/reflection.proto [3:13]
         src/proto/grpc/status/status.proto [3:13]
-    Belongs difference:
-        - src/proto/grpc/reflection/v1/ya.make
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 44b7fb52fd3cfdfe8a017148dd5f2443
+BELONGS ya.make
+    # not a license
+    License text:
+          // attached to the channel creds, but there should also be a "use at
+          // your own risk" option to get the channel creds without stripping
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        src/core/lib/load_balancing/lb_policy.h [277:278]
+
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
+BELONGS third_party/upb/ya.make
+    License text:
+        \## Contributor License Agreement
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        third_party/upb/CONTRIBUTING.md [15:15]
 
 SKIP     LicenseRef-scancode-generic-cla 60c79976a6f1daa58457b943cb911512
 BELONGS ya.make
@@ -1789,6 +1620,19 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [91:91]
 
+SKIP     LicenseRef-scancode-generic-cla 979d7de2e3ff119ee2c22c7efbec766d
+BELONGS third_party/upb/ya.make
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement. You (or your employer) retain the copyright to your contribution;
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        third_party/upb/CONTRIBUTING.md [17:18]
+
 KEEP     BSD-3-Clause         9f9f74951499b982d601e33ab0c03bed
 BELONGS third_party/address_sorting/ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -1815,6 +1659,29 @@ BELONGS ya.make
     Files with this license:
         LICENSE [210:234]
 
+KEEP     BSD-3-Clause         cb722d40a0d9fdc79ddb1f28581c67ad
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.64
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/def.hpp [4:24]
+        third_party/upb/upb/upb.hpp [4:24]
+
+KEEP     BSD-3-Clause         ecc97a1dce30b0ce4682e454b0ca278f
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 96.55
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/LICENSE [5:26]
+
 KEEP     BSD-3-Clause         efdacd288befe1a76f28537587b3936a
 BELONGS ya.make
     License text:
@@ -1828,3 +1695,15 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         LICENSE [202:206]
+
+KEEP     BSD-3-Clause AND BSD-3-Clause fde36bbb770be6f9bbc06c49635a8e3a
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.64
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/port_def.inc [5:25]
+        third_party/upb/upb/port_undef.inc [5:25]

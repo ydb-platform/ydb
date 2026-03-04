@@ -7,7 +7,7 @@ namespace NYql::NFmr {
 
 struct TPartitionResult {
     std::vector<TTaskTableInputRef> TaskInputs;
-    bool PartitionStatus = false;
+    TMaybe<TFmrError> Error;
 };
 
 struct TFmrPartitionerSettings {

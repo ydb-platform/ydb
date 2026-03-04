@@ -2,10 +2,12 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/yexception.h>
 
+#include <utility>
+
 namespace NYql {
 
-TUrlBuilder::TUrlBuilder(const TString& uri)
-    : MainUri_(uri)
+TUrlBuilder::TUrlBuilder(TString uri)
+    : MainUri_(std::move(uri))
 {
 }
 

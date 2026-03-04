@@ -17,7 +17,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <utility>
+#include <type_traits>
 
 #include "y_absl/types/variant.h"
 

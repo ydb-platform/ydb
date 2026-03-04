@@ -16,6 +16,7 @@
 
 #include <aws/common/hash_table.h>
 #include <aws/common/mutex.h>
+#include <aws/common/rw_lock.h>
 #include <aws/common/task_scheduler.h>
 
 #include <aws/io/channel.h>
@@ -28,15 +29,19 @@ struct aws_mqtt_client_connection_311_impl;
 
 #define MQTT_CLIENT_CALL_CALLBACK(client_ptr, callback)                                                                \
     do {                                                                                                               \
+        aws_rw_lock_rlock(&(client_ptr)->callback_lock);                                                               \
         if ((client_ptr)->callback) {                                                                                  \
             (client_ptr)->callback((&client_ptr->base), (client_ptr)->callback##_ud);                                  \
         }                                                                                                              \
+        aws_rw_lock_runlock(&(client_ptr)->callback_lock);                                                             \
     } while (false)
 #define MQTT_CLIENT_CALL_CALLBACK_ARGS(client_ptr, callback, ...)                                                      \
     do {                                                                                                               \
+        aws_rw_lock_rlock(&(client_ptr)->callback_lock);                                                               \
         if ((client_ptr)->callback) {                                                                                  \
             (client_ptr)->callback((&client_ptr->base), __VA_ARGS__, (client_ptr)->callback##_ud);                     \
         }                                                                                                              \
+        aws_rw_lock_runlock(&(client_ptr)->callback_lock);                                                             \
     } while (false)
 
 #if ASSERT_LOCK_HELD
@@ -277,6 +282,9 @@ struct aws_mqtt_client_connection_311_impl {
     void *on_termination_ud;
     aws_mqtt_on_operation_statistics_fn *on_any_operation_statistics;
     void *on_any_operation_statistics_ud;
+
+    /* Read-write lock to protect callbacks from being modified during callback execution */
+    struct aws_rw_lock callback_lock;
 
     /* listener callbacks */
     struct aws_mqtt311_callback_set_manager callback_manager;

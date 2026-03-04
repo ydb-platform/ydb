@@ -19,9 +19,13 @@
 #include <inttypes.h>
 
 #include <functional>
+#include <initializer_list>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
@@ -29,7 +33,6 @@
 
 #include <grpc/compression.h>
 #include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
 #include <grpc/impl/compression_types.h>
 #include <grpc/support/log.h>
 
@@ -46,7 +49,8 @@
 #include "src/core/lib/promise/context.h"
 #include "src/core/lib/promise/latch.h"
 #include "src/core/lib/promise/pipe.h"
-#include "src/core/lib/promise/prioritized_race.h"
+#include "src/core/lib/promise/poll.h"
+#include "src/core/lib/promise/race.h"
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/slice/slice_buffer.h"
 #include "src/core/lib/surface/call.h"
@@ -108,7 +112,7 @@ CompressionFilter::CompressionFilter(const ChannelArgs& args)
 MessageHandle CompressionFilter::CompressMessage(
     MessageHandle message, grpc_compression_algorithm algorithm) const {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_compression_trace)) {
-    gpr_log(GPR_INFO, "CompressMessage: len=%" PRIdPTR " alg=%d flags=%d",
+    gpr_log(GPR_ERROR, "CompressMessage: len=%" PRIdPTR " alg=%d flags=%d",
             message->payload()->Length(), algorithm, message->flags());
   }
   auto* call_context = GetContext<grpc_call_context_element>();
@@ -166,7 +170,7 @@ MessageHandle CompressionFilter::CompressMessage(
 y_absl::StatusOr<MessageHandle> CompressionFilter::DecompressMessage(
     MessageHandle message, DecompressArgs args) const {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_compression_trace)) {
-    gpr_log(GPR_INFO, "DecompressMessage: len=%" PRIdPTR " max=%d alg=%d",
+    gpr_log(GPR_ERROR, "DecompressMessage: len=%" PRIdPTR " max=%d alg=%d",
             message->payload()->Length(),
             args.max_recv_message_length.value_or(-1), args.algorithm);
   }
@@ -270,8 +274,8 @@ ArenaPromise<ServerMetadataHandle> ClientCompressionFilter::MakeCallPromise(
         return std::move(*r);
       });
   // Run the next filter, and race it with getting an error from decompression.
-  return PrioritizedRace(decompress_err->Wait(),
-                         next_promise_factory(std::move(call_args)));
+  return Race(decompress_err->Wait(),
+              next_promise_factory(std::move(call_args)));
 }
 
 ArenaPromise<ServerMetadataHandle> ServerCompressionFilter::MakeCallPromise(
@@ -313,8 +317,8 @@ ArenaPromise<ServerMetadataHandle> ServerCompressionFilter::MakeCallPromise(
         return CompressMessage(std::move(message), *compression_algorithm);
       });
   // Run the next filter, and race it with getting an error from decompression.
-  return PrioritizedRace(decompress_err->Wait(),
-                         next_promise_factory(std::move(call_args)));
+  return Race(decompress_err->Wait(),
+              next_promise_factory(std::move(call_args)));
 }
 
 }  // namespace grpc_core

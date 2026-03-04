@@ -29,6 +29,7 @@
 #include "y_absl/container/flat_hash_map.h"
 #include "y_absl/functional/any_invocable.h"
 #include "y_absl/hash/hash.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 
@@ -492,8 +493,6 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 
   int GetWrappedFd() { return fd_; }
 
-  bool CanTrackErrors() const { return poller_->CanTrackErrors(); }
-
   void MaybeShutdown(
       y_absl::Status why,
       y_absl::AnyInvocable<void(y_absl::StatusOr<int> release_fd)> on_release_fd);
@@ -502,9 +501,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
   void UpdateRcvLowat() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(read_mu_);
   void HandleWrite(y_absl::Status status);
   void HandleError(y_absl::Status status);
-  void HandleRead(y_absl::Status status) Y_ABSL_NO_THREAD_SAFETY_ANALYSIS;
-  bool HandleReadLocked(y_absl::Status& status)
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(read_mu_);
+  void HandleRead(y_absl::Status status);
   void MaybeMakeReadSlices() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(read_mu_);
   bool TcpDoRead(y_absl::Status& status) Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(read_mu_);
   void FinishEstimate();
@@ -638,8 +635,6 @@ class PosixEndpoint : public PosixEndpointWithFdSupport {
 
   int GetWrappedFd() override { return impl_->GetWrappedFd(); }
 
-  bool CanTrackErrors() override { return impl_->CanTrackErrors(); }
-
   void Shutdown(y_absl::AnyInvocable<void(y_absl::StatusOr<int> release_fd)>
                     on_release_fd) override {
     if (!shutdown_.exchange(true, std::memory_order_acq_rel)) {
@@ -694,11 +689,6 @@ class PosixEndpoint : public PosixEndpointWithFdSupport {
   int GetWrappedFd() override {
     grpc_core::Crash(
         "PosixEndpoint::GetWrappedFd not supported on this platform");
-  }
-
-  bool CanTrackErrors() override {
-    grpc_core::Crash(
-        "PosixEndpoint::CanTrackErrors not supported on this platform");
   }
 
   void Shutdown(y_absl::AnyInvocable<void(y_absl::StatusOr<int> release_fd)>

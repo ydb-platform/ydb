@@ -19,8 +19,8 @@ const std::pair<ui32, ui32> Versions[] = {
 } // namespace
 
 bool IsValidLangVersion(TLangVersion ver) {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        if (ver == MakeLangVersion(Versions[i].first, Versions[i].second)) {
+    for (const auto& version : Versions) {
+        if (ver == MakeLangVersion(version.first, version.second)) {
             return true;
         }
     }
@@ -86,8 +86,8 @@ TLangVersion GetMaxReleasedLangVersion() {
 
 TLangVersion GetMaxLangVersion() {
     TLangVersion max = 0;
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        auto v = MakeLangVersion(Versions[i].first, Versions[i].second);
+    for (const auto& version : Versions) {
+        auto v = MakeLangVersion(version.first, version.second);
         max = Max(max, v);
     }
 
@@ -107,8 +107,8 @@ bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion 
 }
 
 void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback) {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        callback(MakeLangVersion(Versions[i].first, Versions[i].second));
+    for (const auto& version : Versions) {
+        callback(MakeLangVersion(version.first, version.second));
     }
 }
 

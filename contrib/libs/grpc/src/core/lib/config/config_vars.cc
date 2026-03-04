@@ -20,8 +20,6 @@
 
 #include "src/core/lib/config/config_vars.h"
 
-#include <vector>
-
 #include "y_absl/flags/flag.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/str_cat.h"
@@ -38,45 +36,46 @@
 #define GRPC_ENABLE_FORK_SUPPORT_DEFAULT false
 #endif  // GRPC_ENABLE_FORK_SUPPORT
 
-Y_ABSL_FLAG(std::vector<TString>, grpc_experiments, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_experiments, y_absl::nullopt,
           "A comma separated list of currently active experiments. Experiments "
           "may be prefixed with a '-' to disable them.");
 Y_ABSL_FLAG(y_absl::optional<int32_t>, grpc_client_channel_backup_poll_interval_ms,
-          {},
+          y_absl::nullopt,
           "Declares the interval in ms between two backup polls on client "
           "channels. These polls are run in the timer thread so that gRPC can "
           "process connection failures while there is no active polling "
           "thread. They help reconnect disconnected client channels (mostly "
           "due to idleness), so that the next RPC on this channel won't fail. "
           "Set to 0 to turn off the backup polls.");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_dns_resolver, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_dns_resolver, y_absl::nullopt,
           "Declares which DNS resolver to use. The default is ares if gRPC is "
           "built with c-ares support. Otherwise, the value of this environment "
           "variable is ignored.");
-Y_ABSL_FLAG(std::vector<TString>, grpc_trace, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_trace, y_absl::nullopt,
           "A comma separated list of tracers that provide additional insight "
           "into how gRPC C core is processing requests via debug logs.");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_verbosity, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_verbosity, y_absl::nullopt,
           "Default gRPC logging verbosity");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_stacktrace_minloglevel, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_stacktrace_minloglevel,
+          y_absl::nullopt,
           "Messages logged at the same or higher level than this will print "
           "stacktrace");
-Y_ABSL_FLAG(y_absl::optional<bool>, grpc_enable_fork_support, {},
+Y_ABSL_FLAG(y_absl::optional<bool>, grpc_enable_fork_support, y_absl::nullopt,
           "Enable fork support");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_poll_strategy, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_poll_strategy, y_absl::nullopt,
           "Declares which polling engines to try when starting gRPC. This is a "
           "comma-separated list of engines, which are tried in priority order "
           "first -> last.");
-Y_ABSL_FLAG(y_absl::optional<bool>, grpc_abort_on_leaks, {},
+Y_ABSL_FLAG(y_absl::optional<bool>, grpc_abort_on_leaks, y_absl::nullopt,
           "A debugging aid to cause a call to abort() when gRPC objects are "
           "leaked past grpc_shutdown()");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_system_ssl_roots_dir, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_system_ssl_roots_dir, y_absl::nullopt,
           "Custom directory to SSL Roots");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_default_ssl_roots_file_path, {},
-          "Path to the default SSL roots file.");
-Y_ABSL_FLAG(y_absl::optional<bool>, grpc_not_use_system_ssl_roots, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_default_ssl_roots_file_path,
+          y_absl::nullopt, "Path to the default SSL roots file.");
+Y_ABSL_FLAG(y_absl::optional<bool>, grpc_not_use_system_ssl_roots, y_absl::nullopt,
           "Disable loading system root certificates.");
-Y_ABSL_FLAG(y_absl::optional<TString>, grpc_ssl_cipher_suites, {},
+Y_ABSL_FLAG(y_absl::optional<TString>, grpc_ssl_cipher_suites, y_absl::nullopt,
           "A colon separated list of cipher suites to use with OpenSSL");
 
 namespace grpc_core {
@@ -95,8 +94,11 @@ ConfigVars::ConfigVars(const Overrides& overrides)
       not_use_system_ssl_roots_(LoadConfig(
           FLAGS_grpc_not_use_system_ssl_roots, "GRPC_NOT_USE_SYSTEM_SSL_ROOTS",
           overrides.not_use_system_ssl_roots, false)),
+      experiments_(LoadConfig(FLAGS_grpc_experiments, "GRPC_EXPERIMENTS",
+                              overrides.experiments, "")),
       dns_resolver_(LoadConfig(FLAGS_grpc_dns_resolver, "GRPC_DNS_RESOLVER",
                                overrides.dns_resolver, "")),
+      trace_(LoadConfig(FLAGS_grpc_trace, "GRPC_TRACE", overrides.trace, "")),
       verbosity_(LoadConfig(FLAGS_grpc_verbosity, "GRPC_VERBOSITY",
                             overrides.verbosity,
                             GPR_DEFAULT_LOG_VERBOSITY_STRING)),
@@ -111,9 +113,6 @@ ConfigVars::ConfigVars(const Overrides& overrides)
           "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_"
           "SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:"
           "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384")),
-      experiments_(LoadConfig(FLAGS_grpc_experiments, "GRPC_EXPERIMENTS",
-                              overrides.experiments, "")),
-      trace_(LoadConfig(FLAGS_grpc_trace, "GRPC_TRACE", overrides.trace, "")),
       override_system_ssl_roots_dir_(overrides.system_ssl_roots_dir),
       override_default_ssl_roots_file_path_(
           overrides.default_ssl_roots_file_path) {}

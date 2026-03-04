@@ -22,6 +22,8 @@
 
 #include <utility>
 
+#include "y_absl/strings/string_view.h"
+
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/security/security_connector/insecure/insecure_security_connector.h"
 

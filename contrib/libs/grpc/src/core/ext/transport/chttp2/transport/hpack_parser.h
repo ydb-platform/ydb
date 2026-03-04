@@ -21,31 +21,16 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <stddef.h>
 #include <stdint.h>
 
-#include <util/generic/string.h>
-#include <util/string/cast.h>
-#include <utility>
 #include <vector>
-
-#include "y_absl/random/bit_gen_ref.h"
-#include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/string_view.h"
-#include "y_absl/types/optional.h"
-#include "y_absl/types/span.h"
-#include "y_absl/types/variant.h"
 
 #include <grpc/slice.h>
 
-#include "src/core/ext/transport/chttp2/transport/hpack_parse_result.h"
+#include "src/core/ext/transport/chttp2/transport/frame.h"
 #include "src/core/ext/transport/chttp2/transport/hpack_parser_table.h"
-#include "src/core/ext/transport/chttp2/transport/legacy_frame.h"
 #include "src/core/lib/backoff/random_early_detection.h"
-#include "src/core/lib/channel/call_tracer.h"
 #include "src/core/lib/iomgr/error.h"
-#include "src/core/lib/slice/slice.h"
-#include "src/core/lib/slice/slice_refcount.h"
 #include "src/core/lib/transport/metadata_batch.h"
 
 // IWYU pragma: no_include <type_traits>
@@ -102,164 +87,24 @@ class HPackParser {
   // Start throwing away any received headers after parsing them.
   void StopBufferingFrame() { metadata_buffer_ = nullptr; }
   // Parse one slice worth of data
-  grpc_error_handle Parse(const grpc_slice& slice, bool is_last,
-                          y_absl::BitGenRef bitsrc,
-                          CallTracerAnnotationInterface* call_tracer);
+  grpc_error_handle Parse(const grpc_slice& slice, bool is_last);
   // Reset state ready for the next BeginFrame
   void FinishFrame();
 
   // Retrieve the associated hpack table (for tests, debugging)
-  HPackTable* hpack_table() { return &state_.hpack_table; }
+  HPackTable* hpack_table() { return &table_; }
   // Is the current frame a boundary of some sort
   bool is_boundary() const { return boundary_ != Boundary::None; }
   // Is the current frame the end of a stream
   bool is_eof() const { return boundary_ == Boundary::EndOfStream; }
 
-  // How many bytes are buffered (for tests to assert on)
-  size_t buffered_bytes() const { return unparsed_bytes_.size(); }
-
  private:
   // Helper classes: see implementation
   class Parser;
   class Input;
-  class MetadataSizeEncoder;
-  class MetadataSizesAnnotation;
+  class String;
 
-  // Helper to parse a string and turn it into a slice with appropriate memory
-  // management characteristics
-  class String {
-   public:
-    // StringResult carries both a HpackParseStatus and the parsed string
-    struct StringResult;
-
-    String() : value_(y_absl::Span<const uint8_t>()) {}
-    String(const String&) = delete;
-    String& operator=(const String&) = delete;
-    String(String&& other) noexcept : value_(std::move(other.value_)) {
-      other.value_ = y_absl::Span<const uint8_t>();
-    }
-    String& operator=(String&& other) noexcept {
-      value_ = std::move(other.value_);
-      other.value_ = y_absl::Span<const uint8_t>();
-      return *this;
-    }
-
-    // Take the value and leave this empty
-    Slice Take();
-
-    // Return a reference to the value as a string view
-    y_absl::string_view string_view() const;
-
-    // Parse a non-binary string
-    static StringResult Parse(Input* input, bool is_huff, size_t length);
-
-    // Parse a binary string
-    static StringResult ParseBinary(Input* input, bool is_huff, size_t length);
-
-   private:
-    void AppendBytes(const uint8_t* data, size_t length);
-    explicit String(std::vector<uint8_t> v) : value_(std::move(v)) {}
-    explicit String(y_absl::Span<const uint8_t> v) : value_(v) {}
-    String(grpc_slice_refcount* r, const uint8_t* begin, const uint8_t* end)
-        : value_(Slice::FromRefcountAndBytes(r, begin, end)) {}
-
-    // Parse some huffman encoded bytes, using output(uint8_t b) to emit each
-    // decoded byte.
-    template <typename Out>
-    static HpackParseStatus ParseHuff(Input* input, uint32_t length,
-                                      Out output);
-
-    // Parse some uncompressed string bytes.
-    static StringResult ParseUncompressed(Input* input, uint32_t length,
-                                          uint32_t wire_size);
-
-    // Turn base64 encoded bytes into not base64 encoded bytes.
-    static StringResult Unbase64(String s);
-
-    // Main loop for Unbase64
-    static y_absl::optional<std::vector<uint8_t>> Unbase64Loop(
-        const uint8_t* cur, const uint8_t* end);
-
-    y_absl::variant<Slice, y_absl::Span<const uint8_t>, std::vector<uint8_t>>
-        value_;
-  };
-
-  // Prefix for a string
-  struct StringPrefix {
-    // Number of bytes in input for string
-    uint32_t length;
-    // Is it huffman compressed
-    bool huff;
-
-    TString ToString() const {
-      return y_absl::StrCat(length, " bytes ",
-                          huff ? "huffman compressed" : "uncompressed");
-    }
-  };
-
-  // Current parse state
-  // ┌───┐
-  // │Top│
-  // └┬─┬┘
-  //  │┌▽────────────────┐
-  //  ││ParsingKeyLength │
-  //  │└┬───────────────┬┘
-  //  │┌▽─────────────┐┌▽──────────────┐
-  //  ││ParsingKeyBody││SkippingKeyBody│
-  //  │└┬─────────────┘└───┬───────────┘
-  // ┌▽─▽────────────────┐┌▽──────────────────┐
-  // │ParsingValueLength ││SkippingValueLength│
-  // └┬─────────────────┬┘└┬──────────────────┘
-  // ┌▽───────────────┐┌▽──▽─────────────┐
-  // │ParsingValueBody││SkippingValueBody│
-  // └────────────────┘└─────────────────┘
-  enum class ParseState : uint8_t {
-    // Start of one opcode
-    kTop,
-    // Parsing a literal keys length
-    kParsingKeyLength,
-    // Parsing a literal key
-    kParsingKeyBody,
-    // Skipping a literal key
-    kSkippingKeyBody,
-    // Parsing a literal value length
-    kParsingValueLength,
-    // Parsing a literal value
-    kParsingValueBody,
-    // Reading a literal value length (so we can skip it)
-    kSkippingValueLength,
-    // Skipping a literal value
-    kSkippingValueBody,
-  };
-
-  // Shared state for Parser instances between slices.
-  struct InterSliceState {
-    HPackTable hpack_table;
-    // Error so far for this frame (set by class Input)
-    HpackParseResult frame_error;
-    // Error so far for this field (set by class Input)
-    HpackParseResult field_error;
-    // Length of frame so far.
-    uint32_t frame_length = 0;
-    // Length of the string being parsed
-    uint32_t string_length;
-    // RED for overly large metadata sets
-    RandomEarlyDetection metadata_early_detection;
-    // Should the current header be added to the hpack table?
-    bool add_to_table;
-    // Is the string being parsed huffman compressed?
-    bool is_string_huff_compressed;
-    // Is the value being parsed binary?
-    bool is_binary_header;
-    // How many more dynamic table updates are allowed
-    uint8_t dynamic_table_updates_allowed;
-    // Current parse state
-    ParseState parse_state = ParseState::kTop;
-    y_absl::variant<const HPackTable::Memento*, Slice> key;
-  };
-
-  grpc_error_handle ParseInput(Input input, bool is_last,
-                               CallTracerAnnotationInterface* call_tracer);
+  grpc_error_handle ParseInput(Input input, bool is_last);
   void ParseInputInner(Input* input);
   GPR_ATTRIBUTE_NOINLINE
   void HandleMetadataSoftSizeLimitExceeded(Input* input);
@@ -269,8 +114,6 @@ class HPackParser {
 
   // Bytes that could not be parsed last parsing round
   std::vector<uint8_t> unparsed_bytes_;
-  // How many bytes would be needed before progress could be made?
-  size_t min_progress_size_ = 0;
   // Buffer kind of boundary
   // TODO(ctiller): see if we can move this argument to Parse, and avoid
   // buffering.
@@ -279,9 +122,15 @@ class HPackParser {
   // TODO(ctiller): see if we can move this argument to Parse, and avoid
   // buffering.
   Priority priority_;
+  uint8_t dynamic_table_updates_allowed_;
+  // Length of frame so far.
+  uint32_t frame_length_;
+  RandomEarlyDetection metadata_early_detection_;
   // Information for logging
   LogInfo log_info_;
-  InterSliceState state_;
+
+  // hpack table
+  HPackTable table_;
 };
 
 }  // namespace grpc_core

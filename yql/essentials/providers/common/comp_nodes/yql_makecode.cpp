@@ -4,6 +4,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 template <NYql::TExprNode::EType Type>
@@ -48,7 +50,7 @@ public:
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 
@@ -64,8 +66,8 @@ public:
 
             case NYql::TExprNode::List: {
                 NYql::TExprNode::TListType items;
-                for (ui32 i = 0; i < Args_.size(); ++i) {
-                    auto argValue = Args_[i]->GetValue(ctx);
+                for (const auto& arg : Args_) {
+                    auto argValue = arg->GetValue(ctx);
                     auto iter = argValue.GetListIterator();
                     NUdf::TUnboxedValue codeValue;
                     while (iter.Next(codeValue)) {

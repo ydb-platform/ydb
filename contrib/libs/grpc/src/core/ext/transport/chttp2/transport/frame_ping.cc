@@ -20,12 +20,11 @@
 
 #include "src/core/ext/transport/chttp2/transport/frame_ping.h"
 
-#include <inttypes.h>
 #include <string.h>
 
 #include <algorithm>
+#include <initializer_list>
 
-#include "y_absl/container/flat_hash_map.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_format.h"
 
@@ -33,12 +32,10 @@
 #include <grpc/support/log.h>
 
 #include "src/core/ext/transport/chttp2/transport/internal.h"
-#include "src/core/ext/transport/chttp2/transport/ping_abuse_policy.h"
-#include "src/core/ext/transport/chttp2/transport/ping_callbacks.h"
-#include "src/core/lib/debug/trace.h"
+#include "src/core/ext/transport/chttp2/transport/stream_map.h"
+#include "src/core/lib/gprpp/time.h"
 
-extern grpc_core::TraceFlag grpc_keepalive_trace;
-extern grpc_core::TraceFlag grpc_http_trace;
+static bool g_disable_ping_ack = false;
 
 grpc_slice grpc_chttp2_ping_create(uint8_t ack, uint64_t opaque_8bytes) {
   grpc_slice slice = GRPC_SLICE_MALLOC(9 + 8);
@@ -96,28 +93,30 @@ grpc_error_handle grpc_chttp2_ping_parser_parse(void* parser,
   if (p->byte == 8) {
     GPR_ASSERT(is_last);
     if (p->is_ack) {
-      if (grpc_ping_trace.enabled()) {
-        gpr_log(GPR_INFO, "%s[%p]: received ping ack %" PRIx64,
-                t->is_client ? "CLIENT" : "SERVER", t, p->opaque_8bytes);
-      }
       grpc_chttp2_ack_ping(t, p->opaque_8bytes);
     } else {
       if (!t->is_client) {
-        const bool transport_idle =
-            t->keepalive_permit_without_calls == 0 && t->stream_map.empty();
-        if (grpc_keepalive_trace.enabled() || grpc_http_trace.enabled()) {
-          gpr_log(GPR_INFO, "SERVER[%p]: received ping %" PRIx64 ": %s", t,
-                  p->opaque_8bytes,
-                  t->ping_abuse_policy.GetDebugString(transport_idle).c_str());
+        grpc_core::Timestamp now = grpc_core::Timestamp::Now();
+        grpc_core::Timestamp next_allowed_ping =
+            t->ping_recv_state.last_ping_recv_time +
+            t->ping_policy.min_recv_ping_interval_without_data;
+
+        if (t->keepalive_permit_without_calls == 0 &&
+            grpc_chttp2_stream_map_size(&t->stream_map) == 0) {
+          // According to RFC1122, the interval of TCP Keep-Alive is default to
+          // no less than two hours. When there is no outstanding streams, we
+          // restrict the number of PINGS equivalent to TCP Keep-Alive.
+          next_allowed_ping = t->ping_recv_state.last_ping_recv_time +
+                              grpc_core::Duration::Hours(2);
         }
-        if (t->ping_abuse_policy.ReceivedOnePing(transport_idle)) {
-          grpc_chttp2_exceeded_ping_strikes(t);
+
+        if (next_allowed_ping > now) {
+          grpc_chttp2_add_ping_strike(t);
         }
-      } else if (grpc_ping_trace.enabled()) {
-        gpr_log(GPR_INFO, "CLIENT[%p]: received ping %" PRIx64, t,
-                p->opaque_8bytes);
+
+        t->ping_recv_state.last_ping_recv_time = now;
       }
-      if (t->ack_pings) {
+      if (!g_disable_ping_ack) {
         if (t->ping_ack_count == t->ping_ack_capacity) {
           t->ping_ack_capacity =
               std::max(t->ping_ack_capacity * 3 / 2, size_t{3});
@@ -132,4 +131,8 @@ grpc_error_handle grpc_chttp2_ping_parser_parse(void* parser,
   }
 
   return y_absl::OkStatus();
+}
+
+void grpc_set_disable_ping_ack(bool disable_ping_ack) {
+  g_disable_ping_ack = disable_ping_ack;
 }

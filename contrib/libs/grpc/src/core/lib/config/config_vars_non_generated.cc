@@ -14,6 +14,8 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stdint.h>
+
 #include <atomic>
 #include <util/generic/string.h>
 #include <util/string/cast.h>

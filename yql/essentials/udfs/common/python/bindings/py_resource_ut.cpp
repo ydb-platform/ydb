@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 using namespace NPython;
 
 extern const char SimpleDataTag[] = "SimpleData";
@@ -11,8 +13,8 @@ struct TSimpleData {
     TString Name;
     ui32 Age;
 
-    TSimpleData(const TString& name, ui32 age)
-        : Name(name)
+    TSimpleData(TString name, ui32 age)
+        : Name(std::move(name))
         , Age(age)
     {
     }

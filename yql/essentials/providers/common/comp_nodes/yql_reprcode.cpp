@@ -7,18 +7,20 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 class TReprCodeWrapper: public TMutableComputationNode<TReprCodeWrapper> {
     typedef TMutableComputationNode<TReprCodeWrapper> TBaseComputation;
 
 public:
-    TReprCodeWrapper(TComputationMutables& mutables, IComputationNode* value, const TString& yson, ui32 exprCtxMutableIndex, NYql::TPosition pos)
+    TReprCodeWrapper(TComputationMutables& mutables, IComputationNode* value, TString yson, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Value_(value)
-        , Yson_(yson)
+        , Yson_(std::move(yson))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

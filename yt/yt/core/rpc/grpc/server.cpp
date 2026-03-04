@@ -171,7 +171,7 @@ private:
     void Shutdown(bool graceful)
     {
         try {
-            DoStop(graceful).Get().ThrowOnError();
+            DoStop(graceful).BlockingGet().ThrowOnError();
         } catch (...) {
             if (auto* logFile = TryGetShutdownLogFile()) {
                 ::fprintf(logFile, "%s\tGRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",

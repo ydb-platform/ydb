@@ -5,6 +5,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 template <NYql::ETypeAnnotationKind Kind>
@@ -16,7 +18,7 @@ public:
         : TBaseComputation(mutables)
         , Handle_(handle)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

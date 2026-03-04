@@ -129,6 +129,17 @@ i64 GetDirectorySize(
     bool deduplicateByINodes = false,
     bool checkDeviceId = false);
 
+//! Recursively calculates size of all regular files inside given directories.
+//! If #deduplicateByINodes is set multiple directories are processed with shared
+//! inode deduplication.
+//! If #checkDeviceId is set all seed directories must come from the same device.
+//! Only files that reside on the seed device are considered during traversal.
+i64 GetDirectoriesSize(
+    const std::vector<std::string>& paths,
+    bool ignoreUnavailableFiles = true,
+    bool deduplicateByINodes = false,
+    bool checkDeviceId = false);
+
 //! Sets the access and modification times to now.
 void Touch(const std::string& path);
 

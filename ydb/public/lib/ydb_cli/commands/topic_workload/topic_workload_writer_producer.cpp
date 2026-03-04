@@ -158,7 +158,7 @@ void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEve
                       TStringBuilder() << "Unknown AckedMessageId " << AckedMessageId);
         }
 
-        auto inflightTime = (now - createTimestamp);
+        const auto inflightTime = (now - createTimestamp);
 
         StatsCollector_->AddWriterEvent(Params_.WriterIdx, {Params_.MessageSize, inflightTime.MilliSeconds(),
                                                           InflightMessagesCnt()});

@@ -31,7 +31,7 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
-For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **local Bloom skip indexes** is supported; see [Local Bloom skip indexes for column-oriented tables](#local-bloom-column).
+For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **global secondary** and **vector** indexes is not yet supported (see the note above). However, adding **local Bloom skip indexes** is supported; see [Local Bloom skip indexes for column-oriented tables](#local-bloom-column).
 
 ### Examples
 
@@ -62,6 +62,11 @@ ALTER TABLE `series`
 
 Local Bloom skip indexes are supported **only on column-oriented tables** (`STORE = COLUMN`). They help skip data granules that do not contain the required values, speeding up selective queries.
 
+For local Bloom skip indexes, the following implementation limitations apply:
+
+* the `ON (...)` expression must contain **exactly one** column;
+* the `COVER (...)` section and data columns for such indexes **are not supported**.
+
 **Index types:**
 
 * `bloom_filter` — Bloom filter over column values. Parameter:
@@ -72,7 +77,7 @@ Local Bloom skip indexes are supported **only on column-oriented tables** (`STOR
   * `hashes_count` — number of hash functions;
   * `filter_size_bytes` — filter size in bytes;
   * `records_count` — expected number of distinct values per granule;
-  * `case_sensitive` — optional, `true` or `false` (default).
+  * `case_sensitive` — optional, `true` or `false` (default: `true`).
 
 **Example: adding a Bloom filter index**
 

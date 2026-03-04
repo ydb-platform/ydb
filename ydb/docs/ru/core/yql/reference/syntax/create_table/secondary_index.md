@@ -21,9 +21,7 @@ CREATE TABLE `<table_name>` (
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
-
-Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) в `CREATE TABLE` можно задать **локальные Bloom skip индексы**: `INDEX ... LOCAL USING bloom_filter` или `INDEX ... LOCAL USING bloom_ngram_filter`. Параметры и типы индексов см. в [ALTER TABLE ADD INDEX — Локальные Bloom skip индексы](../alter_table/indexes.md#local-bloom-column).
+**Ограничения по типам таблиц.** Глобальные вторичные индексы (`GLOBAL`) и векторные индексы поддерживаются только для [строковых таблиц](../../../../concepts/datamodel/table.md#row-oriented-tables). Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) общая функциональность вторичных индексов (включая GLOBAL) пока в разработке; при этом в `CREATE TABLE` уже можно задавать **локальные Bloom skip индексы**: `INDEX ... LOCAL USING bloom_filter` или `INDEX ... LOCAL USING bloom_ngram_filter`. Параметры и типы индексов см. в [ALTER TABLE ADD INDEX — Локальные Bloom skip индексы](../alter_table/indexes.md#local-bloom-column).
 
 ## Пример
 

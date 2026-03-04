@@ -21,9 +21,7 @@ where:
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
-
-For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), you can define **local Bloom skip indexes** in `CREATE TABLE` using `INDEX ... LOCAL USING bloom_filter` or `INDEX ... LOCAL USING bloom_ngram_filter`. See [ALTER TABLE ADD INDEX — Local Bloom skip indexes](../alter_table/indexes.md#local-bloom-column) for parameters and index types.
+**Table type limitations.** Regular global secondary indexes (`GLOBAL`) and vector indexes are currently supported only on [row-oriented tables](../../../../concepts/datamodel/table.md#row-oriented-tables). For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), general secondary index functionality (including GLOBAL indexes) is still under development. However, you can already define **local Bloom skip indexes** in `CREATE TABLE` using `INDEX ... LOCAL USING bloom_filter` or `INDEX ... LOCAL USING bloom_ngram_filter`. See [ALTER TABLE ADD INDEX — Local Bloom skip indexes](../alter_table/indexes.md#local-bloom-column) for parameters and index types.
 
 ## Example
 

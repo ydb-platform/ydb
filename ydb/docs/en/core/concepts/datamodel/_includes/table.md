@@ -231,7 +231,7 @@ Column-oriented tables support **local Bloom skip indexes**, which are compact p
 At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
 
 * Reading from replicas.
-* Secondary indexes.
+* Global secondary indexes (only local Bloom skip indexes are supported).
 * Vector indexes.
 * Change Data Capture.
 * Custom table attributes.

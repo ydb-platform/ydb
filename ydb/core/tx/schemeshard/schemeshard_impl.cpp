@@ -2495,7 +2495,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::StoragePools>().Key(pathId.LocalPathId, pool.GetName(), pool.GetKind()).Delete();
         }
 
-        if (DomainShredManager->Remove(pathId)) {
+        if (DomainShredManager && DomainShredManager->Remove(pathId)) {
             db.Table<Schema::ShredGenerations>().Key(DomainShredManager->GetGeneration()).Update<Schema::ShredGenerations::Status>(DomainShredManager->GetStatus());
             db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
@@ -5535,7 +5535,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
 
         // shred
-        HFuncTraced(TEvSchemeShard::TEvWakeupToRunShred, DomainShredManager->WakeupToRunShred);
+        HFuncTraced(TEvSchemeShard::TEvWakeupToRunShred, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantShredRequest, Handle);
         HFuncTraced(TEvDataShard::TEvVacuumResult, Handle);
         HFuncTraced(TEvKeyValue::TEvVacuumResponse, Handle);
@@ -8452,10 +8452,19 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorCo
     Execute(CreateTxListUsers(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const TActorContext &ctx) {
+    if (!DomainShredManager) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShred in tenant schemeshard: " << TabletID());
+        return;
+    } 
+    DomainShredManager->WakeupToRunShred(ev, ctx);
+}
+
 void TSchemeShard::Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvShredInfoRequest, at schemeshard: " << TabletID());
     if (!DomainShredManager) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvShredInfoRequest in tenant schemeshard: " << TabletID());
         return;
     }
     NKikimrScheme::TEvShredInfoResponse::EStatus status = NKikimrScheme::TEvShredInfoResponse::UNSPECIFIED;
@@ -8477,7 +8486,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const T
     ctx.Send(ev->Sender, new TEvSchemeShard::TEvShredInfoResponse(DomainShredManager->GetGeneration(), status));
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr&, const TActorContext&) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr&, const TActorContext& ctx) {
+    if (!IsDomainSchemeShard) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvShredManualStartupRequest in tenant schemeshard: " << TabletID());
+        return;
+    }
     RunDomainShred();
 }
 
@@ -8509,7 +8522,11 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
     Execute(CreateTxCompleteShredBSC(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext&) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext& ctx) {
+    if (!DomainShredManager) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShredBSC in tenant schemeshard: " << TabletID());
+        return;
+    }
     DomainShredManager->WakeupSendRequestToBSC();
 }
 

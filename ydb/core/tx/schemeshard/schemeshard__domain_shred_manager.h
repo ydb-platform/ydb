@@ -84,7 +84,6 @@ public:
     void Complete();
     bool Restore(NIceDb::TNiceDb& db);
     bool Remove(const TPathId& pathId);
-    void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration);
 
     EShredStatus GetStatus() const {return Status;}
     void SetStatus(const EShredStatus& status) {Status = status;}

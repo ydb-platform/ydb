@@ -5,23 +5,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-namespace {
-
-TString PrintStatus(const EShredStatus& status) {
-    switch (status) {
-    case EShredStatus::UNSPECIFIED:
-        return "UNSPECIFIED";
-    case EShredStatus::COMPLETED:
-        return "COMPLITED";
-    case EShredStatus::IN_PROGRESS:
-        return "IN_PROGRESS";
-    case EShredStatus::IN_PROGRESS_BSC:
-        return "IN_PROGRESS_BSC";
-    }
-}
-
-} // namespace
-
 TTenantShredManager::TStarter::TStarter(TTenantShredManager* const manager)
     : Manager(manager)
 {}
@@ -115,7 +98,7 @@ void TTenantShredManager::Start() {
     const auto ctx = SchemeShard->ActorContext();
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantShredManager] Start: "
-        << "Status# " << PrintStatus(Status)
+        << "Status# " << Status
         << ", Generation# " << Generation);
 
     Queue->Start();
@@ -140,7 +123,7 @@ void TTenantShredManager::Start() {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantShredManager] Continue: "
             << "WaitingShredShards.size# " << WaitingShredShards.size()
-            << ", Status# " << PrintStatus(Status));
+            << ", Status# " << Status);
     }
 }
 
@@ -187,6 +170,7 @@ void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
     }
     if (WaitingShredShards.empty()) {
         Status = EShredStatus::COMPLETED;
+        CompletedGeneration = Generation;
     }
     db.Table<Schema::TenantShredGenerations>().Key(Generation).Update<Schema::TenantShredGenerations::Status>(Status);
 
@@ -194,7 +178,7 @@ void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
         "[TenantShredManager] StartShred: "
         << "Generation# " << Generation
         << ", WaitingShredShards.size# " << WaitingShredShards.size()
-        << ", Status# " << PrintStatus(Status));
+        << ", Status# " << Status);
 }
 
 void TTenantShredManager::StartShredForNewShards(NIceDb::TNiceDb& db, const std::vector<TShardIdx>& shredShards) {
@@ -213,6 +197,7 @@ void TTenantShredManager::StartShredForNewShards(NIceDb::TNiceDb& db, const std:
     }
     if (WaitingShredShards.empty()) {
         Status = EShredStatus::COMPLETED;
+        CompletedGeneration = Generation;
     }
     db.Table<Schema::TenantShredGenerations>().Key(Generation).Update<Schema::TenantShredGenerations::Status>(Status);
 
@@ -220,7 +205,7 @@ void TTenantShredManager::StartShredForNewShards(NIceDb::TNiceDb& db, const std:
         "[TenantShredManager] StartShredForNewShards: "
         << "Generation# " << Generation
         << ", WaitingShredShards.size# " << WaitingShredShards.size()
-        << ", Status# " << PrintStatus(Status));
+        << ", Status# " << Status);
 }
 
 void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabletId) {
@@ -348,7 +333,7 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
     auto ctx = SchemeShard->ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantShredManager] Restore: Generation# " << Generation
-        << ", Status# " << PrintStatus(Status)
+        << ", Status# " << Status
         << ", WaitingShredShardsg# " << WaitingShredShards.size()
         << ", CompletedGeneration# " << CompletedGeneration);
     return true;
@@ -436,11 +421,11 @@ struct TSchemeShard::TTxCompleteShredShard : public TSchemeShard::TRwTxBase {
             HandleBadStatus(Ev, ctx);
             return;
         }
-        const ui64 complitedGeneration = GetComplitedGeneration(Ev);
+        const ui64 completedGeneration = GetCompletedGeneration(Ev);
         auto& shredManager = Self->TenantShredManager;
-        if (complitedGeneration != shredManager->GetGeneration()) {
+        if (completedGeneration != shredManager->GetGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxCompleteShredShard: Unknown generation#" << complitedGeneration
+                "TTxCompleteShredShard: Unknown generation#" << completedGeneration
                 << ", Expected gen# " << shredManager->GetGeneration() << " at schemestard: " << Self->TabletID());
             return;
         }
@@ -475,7 +460,7 @@ private:
         Self->TenantShredManager->RetryShred(TTabletId(record.GetTabletId()));
     }
 
-    ui64 GetComplitedGeneration(TEvDataShard::TEvVacuumResult::TPtr& ev) const {
+    ui64 GetCompletedGeneration(TEvDataShard::TEvVacuumResult::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
         return record.GetVacuumGeneration();
     }
@@ -499,7 +484,7 @@ private:
         Self->TenantShredManager->RetryShred(TTabletId(record.tablet_id()));
     }
 
-    ui64 GetComplitedGeneration(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
+    ui64 GetCompletedGeneration(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
         return record.actual_generation();
     }

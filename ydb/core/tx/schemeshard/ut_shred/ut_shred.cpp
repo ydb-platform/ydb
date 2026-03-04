@@ -141,7 +141,6 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
                 return false;
             }
             TEventHandle<TEvSchemeShard::TEvTenantShredResponse>* response = reinterpret_cast<TEventHandle<TEvSchemeShard::TEvTenantShredResponse>*>(&ev);
-            Cerr << "+++qqq# " << response->Get()->Record.GetGeneration() << Endl;
             if (response->Get()->Record.GetGeneration() != 2) {
                 return false;
             }
@@ -233,7 +232,6 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
                 return false;
             }
             TEventHandle<TEvSchemeShard::TEvTenantShredResponse>* response = reinterpret_cast<TEventHandle<TEvSchemeShard::TEvTenantShredResponse>*>(&ev);
-            Cerr << "+++qqq# " << response->Get()->Record.GetGeneration() << Endl;
             if (response->Get()->Record.GetGeneration() != 1) {
                 return false;
             }

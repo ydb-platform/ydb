@@ -5,23 +5,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-namespace {
-
-TString PrintStatus(const EShredStatus& status) {
-    switch (status) {
-    case EShredStatus::UNSPECIFIED:
-        return "UNSPECIFIED";
-    case EShredStatus::COMPLETED:
-        return "COMPLITED";
-    case EShredStatus::IN_PROGRESS:
-        return "IN_PROGRESS";
-    case EShredStatus::IN_PROGRESS_BSC:
-        return "IN_PROGRESS_BSC";
-    }
-}
-
-} // namespace
-
 TDomainShredManager::TStarter::TStarter(TDomainShredManager* const manager)
     : Manager(manager)
 {}
@@ -87,7 +70,7 @@ void TDomainShredManager::Start() {
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[DomainShredManager] Start: "
         << "Generation# " << Generation
-        << ", Status# " << PrintStatus(Status)
+        << ", Status# " << Status
     );
     Queue->Start();
     if (Status == EShredStatus::UNSPECIFIED) {
@@ -149,7 +132,7 @@ void TDomainShredManager::StartShred(NIceDb::TNiceDb& db) {
         "[DomainShredManager] Run: "
         << "Generation# " << Generation
         << ", WaitingShredTenants.size# " << WaitingShredTenants.size()
-        << ", Status# " << PrintStatus(Status));
+        << ", Status# " << Status);
 }
 
 void TDomainShredManager::Continue() {
@@ -168,7 +151,7 @@ void TDomainShredManager::Continue() {
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[DomainShredManager] Continue: "
         << "Generation# " << Generation
-        << ", Status# " << PrintStatus(Status));
+        << ", Status# " << Status);
 }
 
 void TDomainShredManager::ScheduleShredWakeup() {
@@ -383,7 +366,7 @@ bool TDomainShredManager::Restore(NIceDb::TNiceDb& db) {
     auto ctx = SchemeShard->ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[DomainShredManager] Restore: Generation# " << Generation
-        << ", Status# " << PrintStatus(Status)
+        << ", Status# " << Status
         << ", WakeupInterval# " << CurrentWakeupInterval.Seconds() << " s"
         << ", WaitingShredTenants# " << WaitingShredTenants.size());
     return true;
@@ -403,13 +386,6 @@ bool TDomainShredManager::Remove(const TPathId& pathId) {
         return true;
     }
     return false;
-}
-
-void TDomainShredManager::SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) {
-    db.Table<Schema::ShredGenerations>().Key(GetGeneration()).Delete();
-    SetGeneration(currentBscGeneration + 1);
-    db.Table<Schema::ShredGenerations>().Key(GetGeneration()).Update<Schema::ShredGenerations::Status,
-                                                                           Schema::ShredGenerations::StartTime>(GetStatus(), StartTime.MicroSeconds());
 }
 
 TDomainShredManager::TQueue::TConfig TDomainShredManager::ConvertConfig(const NKikimrConfig::TDataErasureConfig& config) {
@@ -509,7 +485,7 @@ struct TSchemeShard::TTxCompleteShredTenant : public TSchemeShard::TRwTxBase {
         if (shredManager->GetStatus() == EShredStatus::IN_PROGRESS_BSC ||
             shredManager->GetStatus() == EShredStatus::COMPLETED) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxCompleteShredTenant Generation#" << completedGeneration << " marked as " << PrintStatus(shredManager->GetStatus()));
+                "TTxCompleteShredTenant Generation#" << completedGeneration << " marked as " << shredManager->GetStatus());
             return;
         }
 

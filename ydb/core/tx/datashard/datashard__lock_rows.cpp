@@ -613,11 +613,12 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 // Key is either not locked, or locked by someone else
                 // We need to establish a runtime lock for fair locking
-                // TODO: we need to jump the queue when another lock from the
-                // current transaction is waiting already, or owns the lock.
-                // Otherwise transaction may indirectly start waiting on itself,
-                // causing deadlocks.
                 if (!runtimeLock.IsValid()) {
+                    // Note: AddRuntimeLock will group multiple runtime locks
+                    // with the same key and lock together, however it will not
+                    // do that for different (related) locks. When implementing
+                    // safepoints we would need to group all locks from the same
+                    // transaction, not just having the same LockId.
                     runtimeLock = SysLocksTable().AddRuntimeLock(tableId, key);
                     Y_ENSURE(runtimeLock.IsValid());
                     if (!runtimeLock.IsOwner()) {

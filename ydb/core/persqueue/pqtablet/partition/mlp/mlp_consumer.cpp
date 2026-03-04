@@ -841,6 +841,16 @@ void TConsumerActor::MoveToDLQIfPossible() {
     if (DLQMoverActorId) {
         return;
     }
+
+    auto destinationTopic = [&]() -> TString {
+        auto databasePrefix = TStringBuilder() << Database << "/";
+        if (Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
+            return Config.GetDeadLetterQueue();
+        } else {
+            return TStringBuilder() << databasePrefix << Config.GetDeadLetterQueue();
+        }
+    };
+
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
         LOG_D("Move to DLQ: " << JoinRange(", ", messages.begin(), messages.end()));
@@ -851,7 +861,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = Config.GetDeadLetterQueue(),
+            .DestinationTopic = destinationTopic(),
             .Messages = std::move(messages)
         }));
     }

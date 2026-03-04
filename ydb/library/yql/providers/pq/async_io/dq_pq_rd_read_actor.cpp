@@ -78,7 +78,13 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+    explicit TRowDispatcherReadActorMetrics(
+        const TTxId& txId,
+        ui64 taskId,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const NPq::NProto::TDqPqTopicSource& sourceParams,
+        bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask = false)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -92,8 +98,12 @@ struct TRowDispatcherReadActorMetrics {
             for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                 SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
-            task = source->GetSubgroup("task_id", ToString(taskId));
+            Source = SubGroup->GetSubgroup("tx_id", TxId);
+            if (enableCountersPerTask) {
+                task = Source->GetSubgroup("task_id", ToString(taskId));
+            } else {
+                task = Source;
+            }
         }
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -110,6 +120,7 @@ struct TRowDispatcherReadActorMetrics {
     TString TxId;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr Source;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
@@ -765,8 +776,10 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     Counters.GetAsyncInputData++;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
-    Metrics.InFlyAsyncInputData->Set(0);
-    InFlyAsyncInputData = false;
+    if (InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Dec();
+        InFlyAsyncInputData = false;
+    }
     buffer.clear();
     watermark = Nothing();
 
@@ -1340,9 +1353,11 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 }
 
 void TDqPqRdReadActor::NotifyCA() {
-    // called on Parent
-    Metrics.InFlyAsyncInputData->Set(1);
-    InFlyAsyncInputData = true;
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
+    if (!InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Inc();
+        InFlyAsyncInputData = true;
+    }
     Counters.NotifyCA++;
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }

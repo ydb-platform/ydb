@@ -433,6 +433,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
         } else if (Context->SaslMechanism == "MTLS") {
+            // Mtls authentication
             SendMtlsAuthRequest(ctx);
         }
     }

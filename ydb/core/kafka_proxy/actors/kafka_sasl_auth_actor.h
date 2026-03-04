@@ -79,16 +79,6 @@ private:
         }
     }
 
-    // STATEFN(StateMtlsLogin) {
-    //     KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
-    //     switch (ev->GetTypeRewrite()) {
-    //         hFunc(NSasl::TEvSasl::TEvSaslScramFirstServerResponse, HandleFirstLoginResponse);
-    //         HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
-    //         HFunc(NSasl::TEvSasl::TEvSaslScramFinalServerResponse, HandleLoginResult);
-    //         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-    //         CFunc(TEvents::TEvPoison::EventType, CleanupAndDie);
-    //     }
-    // }
 
     STATEFN(StateTicketResolve) {
         KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());

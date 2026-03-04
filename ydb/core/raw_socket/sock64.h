@@ -208,6 +208,8 @@ public:
 
             const char *session_context = "YdbMtlsContext";
             SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context));
+        } else {
+            SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
         }
 
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());

@@ -498,6 +498,31 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
 
     result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+    result.EnableKernelLiveness = false;
+    if (config.GetUseKernelKeepAlive()) {
+        result.EnableKernelLiveness = true;
+
+        result.KernelUserTimeout = result.DeadPeer != TDuration::Zero()
+            ? result.DeadPeer
+            : TDuration::Seconds(10);
+        // Keep kernel liveness approximately aligned to KernelUserTimeout while keeping the setup simple.
+        // Target budget on idle links is:
+        //   KernelKeepAliveIdle + KernelKeepAliveInterval * KernelKeepAliveProbes ~= KernelUserTimeout.
+        // Interval is derived from timeout and probes are fixed for predictable behavior.
+        result.KernelKeepAliveInterval = Max(result.KernelUserTimeout / 10, TDuration::Seconds(1));
+        constexpr ui32 keepAliveProbes = 5;
+        result.KernelKeepAliveProbes = keepAliveProbes;
+
+        const ui64 userTimeoutMs = result.KernelUserTimeout.MilliSeconds();
+        const ui64 keepAliveIntervalMs = result.KernelKeepAliveInterval.MilliSeconds();
+        const ui64 keepAliveWindowMs = keepAliveIntervalMs * keepAliveProbes;
+        // Use the remaining budget as keepalive idle. If interval*probes already consumes timeout,
+        // clamp idle to 1s to keep socket options valid and avoid disabling kernel mode.
+        const ui64 keepAliveIdleMs = userTimeoutMs > keepAliveWindowMs
+            ? userTimeoutMs - keepAliveWindowMs
+            : TDuration::Seconds(1).MilliSeconds();
+        result.KernelKeepAliveIdle = Max(TDuration::MilliSeconds(keepAliveIdleMs), TDuration::Seconds(1));
+    }
 
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();

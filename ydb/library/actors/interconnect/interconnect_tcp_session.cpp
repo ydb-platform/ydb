@@ -34,6 +34,7 @@ namespace NActors {
         , CloseOnIdleWatchdog(GetCloseOnIdleTimeout(), std::bind(&TThis::OnCloseOnIdleTimerHit, this))
         , LostConnectionWatchdog(GetLostConnectionTimeout(), std::bind(&TThis::OnLostConnectionTimerHit, this))
         , Params(std::move(params))
+        , KernelLivenessMode(Params.UseKernelLiveness)
         , TotalOutputQueueSize(0)
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
@@ -308,6 +309,9 @@ namespace NActors {
             ZcProcessor.ApplySocketOption(*XdcSocket);
         }
 
+        // Apply kernel-liveness decision for this concrete transport connection.
+        KernelLivenessMode = ev->Get()->Params.UseKernelLiveness;
+
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
 
@@ -315,7 +319,8 @@ namespace NActors {
         RearmCloseOnIdle();
 
         // reset activity timestamps
-        LastInputActivityTimestamp = LastPayloadActivityTimestamp = TActivationContext::Monotonic();
+        LastInputActivityTimestamp = LastPayloadActivityTimestamp = LastPingTimestamp = TActivationContext::Monotonic();
+        ClockSkewPingTimestamp = TMonotonic::Max();
 
         LOG_INFO_IC_SESSION("ICS10", "traffic start");
 
@@ -328,8 +333,11 @@ namespace NActors {
 
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
+        // Keep most session params stable, but pass current transport-level liveness mode.
+        TSessionParams inputSessionParams = Params;
+        inputSessionParams.UseKernelLiveness = KernelLivenessMode;
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, RdmaQp, std::move(cq));
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
@@ -867,9 +875,12 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ScheduleFlush() {
-        if (FlushSchedule.empty() || ForcePacketTimestamp < FlushSchedule.top()) {
-            Schedule(ForcePacketTimestamp, new TEvFlush);
-            FlushSchedule.push(ForcePacketTimestamp);
+        const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+            ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+            : ForcePacketTimestamp;
+        if (nextFlushTimestamp != TMonotonic::Max() && (FlushSchedule.empty() || nextFlushTimestamp < FlushSchedule.top())) {
+            Schedule(nextFlushTimestamp, new TEvFlush);
+            FlushSchedule.push(nextFlushTimestamp);
             MaxFlushSchedule = Max(MaxFlushSchedule, FlushSchedule.size());
             ++FlushEventsScheduled;
         }
@@ -885,7 +896,11 @@ namespace NActors {
                 ++ConfirmPacketsForcedByTimeout;
                 ++FlushEventsProcessed;
                 MakePacket(false); // just generate confirmation packet if we have preconditions for this
-            } else if (ForcePacketTimestamp != TMonotonic::Max()) {
+            }
+            const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+                ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+                : ForcePacketTimestamp;
+            if (nextFlushTimestamp != TMonotonic::Max() && now < nextFlushTimestamp) {
                 ScheduleFlush();
             }
             GenerateTraffic();
@@ -895,9 +910,20 @@ namespace NActors {
     void TInterconnectSessionTCP::ResetFlushLogic() {
         ForcePacketTimestamp = TMonotonic::Max();
         UnconfirmedBytes = 0;
-        const TDuration ping = Proxy->Common->Settings.PingPeriod;
-        if (ping != TDuration::Zero() && !NumEventsInQueue) {
-            SetForcePacketTimestamp(ping);
+        if (UseKernelLivenessMode()) {
+            const TDuration clockSkewPingTimeout = Proxy->Common->Settings.ClockSkewPingTimeout;
+            if (clockSkewPingTimeout == TDuration::Zero()) {
+                ClockSkewPingTimestamp = TMonotonic::Max();
+            } else {
+                ClockSkewPingTimestamp = LastPingTimestamp + clockSkewPingTimeout;
+                ScheduleFlush();
+            }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(ClockSkewPingTimestamp == TMonotonic::Max());
+            const TDuration ping = Proxy->Common->Settings.PingPeriod;
+            if (ping != TDuration::Zero() && !NumEventsInQueue) {
+                SetForcePacketTimestamp(ping);
+            }
         }
     }
 
@@ -1118,12 +1144,14 @@ namespace NActors {
                 flagState = EFlag::GREEN;
 
                 do {
-                    auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
-                    if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
-                        flagState = EFlag::ORANGE;
-                        break;
-                    } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
-                        flagState = EFlag::YELLOW;
+                    if (!UseKernelLivenessMode()) {
+                        auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
+                        if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
+                            flagState = EFlag::ORANGE;
+                            break;
+                        } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
+                            flagState = EFlag::YELLOW;
+                        }
                     }
 
                     // check utilization
@@ -1218,14 +1246,20 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::IssuePingRequest() {
+        const TDuration period = UseKernelLivenessMode()
+            ? Proxy->Common->Settings.ClockSkewPingTimeout
+            : PingPeriodicity;
+        if (period == TDuration::Zero()) {
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
-        if (now >= LastPingTimestamp + PingPeriodicity) {
+        if (now >= LastPingTimestamp + period) {
             LOG_DEBUG_IC_SESSION("ICS00", "Issuing ping request");
+            LastPingTimestamp = now;
             if (Socket) {
                 MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);
                 MakePacket(false, TInstant::Now().MicroSeconds() | TTcpPacketBuf::ClockMask);
             }
-            LastPingTimestamp = now;
         }
     }
 
@@ -1368,6 +1402,10 @@ namespace NActors {
 
                             MON_VAR(Created)
                             MON_VAR(Params.UseExternalDataChannel)
+                            TABLER() {
+                                TABLED() { str << "Params.UseKernelLiveness"; }
+                                TABLED() { str << UseKernelLivenessMode(); }
+                            }
                             MON_VAR(NewConnectionSet)
                             MON_VAR(ReceiverId)
                             MON_VAR(MessagesGot)

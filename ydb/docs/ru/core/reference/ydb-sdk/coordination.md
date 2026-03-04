@@ -41,6 +41,30 @@
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    client.create_node("/path/to/mynode")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    await client.create_node("/path/to/mynode")
+    ```
+
+  {% endlist %}
+
 {% endlist %}
 
 ## Работа с сессиями {#session}
@@ -81,6 +105,34 @@
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # работа с сессией
+        pass
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # работа с сессией
+        pass
+    ```
+
+  {% endlist %}
+
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -96,6 +148,10 @@
 - C++
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
+
+- Python
+
+  В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
 
 {% endlist %}
 
@@ -140,6 +196,36 @@
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # семафор будет создан при первом acquire() с лимитом 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # семафор будет создан при первом acquire() с лимитом 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -190,6 +276,48 @@
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        with semaphore:
+            # семафор захвачен на 1 единицу (значение по умолчанию)
+            pass
+        # или вручную:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # работа с ресурсом
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        async with semaphore:
+            # семафор захвачен на 1 единицу (значение по умолчанию)
+            pass
+        # или вручную:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # работа с ресурсом
+        await semaphore.release()
+    ```
+
+  {% endlist %}
+
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -220,6 +348,34 @@
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.update(b"updated-data")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.update(b"updated-data")
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -276,6 +432,36 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = semaphore.describe()
+        # description содержит: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = await semaphore.describe()
+        # description содержит: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  {% endlist %}
+
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -300,6 +486,40 @@
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # работа с ресурсом
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # работа с ресурсом
+        await semaphore.release()
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 

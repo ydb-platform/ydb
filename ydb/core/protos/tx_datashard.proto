@@ -1899,6 +1899,11 @@ message TEvFilterKMeansResponse {
     repeated bytes LastKeyRows = 10;
 }
 
+enum EFulltextIndexType {
+    FulltextPlain = 0;
+    FulltextRelevance = 1;
+}
+
 message TEvBuildFulltextIndexRequest {
     optional uint64 Id = 1;
 
@@ -1921,6 +1926,8 @@ message TEvBuildFulltextIndexRequest {
     optional string DatabaseName = 12;
 
     optional string DocsTableName = 13;
+
+    optional EFulltextIndexType IndexType = 14;
 }
 
 message TEvBuildFulltextIndexResponse {

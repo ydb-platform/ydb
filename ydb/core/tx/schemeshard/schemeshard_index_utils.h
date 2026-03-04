@@ -213,6 +213,28 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
+            // Fulltext index only supports tables with a single PK column of type Uint64
+            if (baseTableColumns.Keys.size() != 1) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder()
+                    << "Fulltext index requires exactly one primary key column of type 'Uint64'"
+                    << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
+                return false;
+            }
+
+            {
+                const TString& pkColumnName = baseTableColumns.Keys[0];
+                Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
+                auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
+                if (pkTypeInfo.GetTypeId() != NScheme::NTypeIds::Uint64) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder()
+                        << "Fulltext index requires primary key column '" << pkColumnName
+                        << "' to be of type 'Uint64' but got " << NScheme::TypeName(pkTypeInfo);
+                    return false;
+                }
+            }
+
             // Here we only check that fulltext index columns matches table description
             // the rest will be checked in NFulltext::ValidateSettings (called separately outside of CommonCheck)
             if (!NKikimr::NFulltext::ValidateColumnsMatches(indexKeys.KeyColumns, indexDesc.GetFulltextIndexDescription().GetSettings(), error)) {

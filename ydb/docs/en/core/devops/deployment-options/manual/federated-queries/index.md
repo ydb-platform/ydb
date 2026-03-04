@@ -39,7 +39,7 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
 
 ## Step-by-Step Guide
 
-1. Follow the steps in the dynamic node {{ ydb-short-name }} deployment guide up to and including [preparing the configuration files](../initial-deployment.md#config).
+1. Follow the steps in the dynamic node {{ ydb-short-name }} deployment guide up to and including [preparing the configuration files](../initial-deployment/deployment-configuration-v1.md#config).
 2. If a connector must be deployed to access the desired source, do so [according to the instructions](./connector-deployment.md).
 3. If a connector needs to be deployed to access your desired source, add the `generic` subsection to the `query_service_config` section of the {{ ydb-short-name }} configuration file as shown below. Specify the network address of the connector in the `connector.endpoint.host` and `connector.endpoint.port` fields (default values are `localhost` and `2130`). When co-locating the connector and the {{ ydb-short-name }} dynamic node on the same server, encrypted connections between them are *not required*. If necessary, you can enable encryption by setting `connector.use_ssl` to `true` and specifying the path to the CA certificate that is used to sign the connector's TLS keys in `connector.ssl_ca_crt`:
 
@@ -67,4 +67,4 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
         enable_script_execution_operations: true
     ```
 
-5. Continue deploying {{ ydb-short-name }} database nodes. See the [instructions](../initial-deployment.md).
+5. Continue deploying {{ ydb-short-name }} database nodes. See the [instructions](../initial-deployment/index.md).

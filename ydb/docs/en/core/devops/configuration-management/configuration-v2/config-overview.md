@@ -71,7 +71,7 @@ For cluster configuration during initial deployment, it is recommended to use in
 
 - [{#T}](../../deployment-options/ansible/initial-deployment.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
-- [{#T}](../../deployment-options/manual/initial-deployment.md).
+- [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 
 ### Configuration Update {#update-config}
 

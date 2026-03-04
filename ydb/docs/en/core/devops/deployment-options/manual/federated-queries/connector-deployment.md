@@ -46,7 +46,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
     sudo cp fq-connector-go.yaml /opt/ydb/cfg
     ```
 
-4. In the {% if oss %}[recommended usage mode](index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../initial-deployment.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
+4. In the {% if oss %}[recommended usage mode](index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../initial-deployment/deployment-preparation.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
 
     ```yaml
     connector_server:
@@ -132,7 +132,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
-1. In the {% if oss %}[recommended usage mode](./index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption between {{ ydb-short-name }} and the connector, [prepare a pair of TLS keys](../initial-deployment.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the configuration file:
+1. In the {% if oss %}[recommended usage mode](./index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption between {{ ydb-short-name }} and the connector, [prepare a pair of TLS keys](../initial-deployment/deployment-preparation.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the configuration file:
 
     ```yaml
     connector_server:

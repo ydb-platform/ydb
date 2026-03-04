@@ -1405,14 +1405,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TStaticGroupProxyTestSetup setup(100);
         setup.Bootstrap();
 
-        // Verify proxy is NOT created at startup even on static node
         UNIT_ASSERT_C(!setup.HasGroupProxy(),
             "Static group proxy should NOT be created at startup even on static node");
 
-        // Simulate a forwarded request to trigger on-demand proxy creation
         setup.SimulateForwardedRequest();
 
-        // Verify proxy is created after the request
         UNIT_ASSERT_C(setup.HasGroupProxy(),
             "Static group proxy should be created on-demand after a request on static node");
     }

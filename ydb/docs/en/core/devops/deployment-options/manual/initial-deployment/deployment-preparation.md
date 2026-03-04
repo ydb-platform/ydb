@@ -4,7 +4,7 @@
 
 ### Prerequisites {#requirements}
 
-Review the [system requirements](../../../../concepts/system-requirements.md) and the [cluster topology](../../../../concepts/topology.md).
+Review the [system requirements](../../../concepts/system-requirements.md) and the [cluster topology](../../../../concepts/topology.md).
 
 Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
 
@@ -32,7 +32,7 @@ Run each static node (data node) on a separate server. Both static and dynamic n
 
 {% endnote %}
 
-For more information about hardware requirements, see [{#T}](../../../../concepts/system-requirements.md).
+For more information about hardware requirements, see [{#T}](../../../concepts/system-requirements.md).
 
 ### Preparing TLS Keys and Certificates {#tls-certificates}
 

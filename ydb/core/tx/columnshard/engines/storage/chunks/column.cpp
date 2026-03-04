@@ -1,20 +1,48 @@
 #include "column.h"
+
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
 
 namespace NKikimr::NOlap::NChunks {
 
+void TChunkPreparation::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
+    AFL_VERIFY(!bRange.IsValid());
+    TChunkMeta metaCopy = Record.GetMeta();
+    TColumnRecord rec(GetChunkAddressVerified(), bRange, std::move(metaCopy));
+    portionInfo.AppendOneChunkColumn(std::move(rec));
+}
+
 std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSplitImpl(
     const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& splitSizes) const {
-    auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified());
+    const bool isDictionary = ColumnInfo.GetLoader()->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName;
+    const std::optional<NArrow::NAccessor::TDictionaryChunkMeta> dictMeta = Record.GetMeta().HasDictionaryAccessor()
+        ? std::make_optional(*Record.GetMeta().GetDictionaryAccessor())
+        : std::nullopt;
+
+    auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, dictMeta);
+
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
+        if (isDictionary) {
+            return NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())).second;
+        }
         return ColumnInfo.GetLoader()->GetAccessorConstructor().SerializeToString(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount()));
     };
     std::vector<NArrow::NAccessor::TChunkedArraySerialized> chunks = accessor->SplitBySizes(predSaver, Data, splitSizes);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
-    for (auto&& i : chunks) {
-        newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-            i.GetSerializedData(), i.GetArray(), TChunkAddress(GetColumnId(), GetChunkIdxOptional().value_or(0)), ColumnInfo));
+    const ui16 baseChunkIdx = GetChunkIdxOptional().value_or(0);
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        if (isDictionary) {
+            auto [meta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
+                chunks[i].GetArray(), ColumnInfo.GetLoader()->BuildAccessorContext(chunks[i].GetArray()->GetRecordsCount()));
+            newChunks.emplace_back(std::make_shared<TChunkPreparation>(
+                std::move(blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo, meta));
+        } else {
+            newChunks.emplace_back(std::make_shared<TChunkPreparation>(
+                chunks[i].GetSerializedData(), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo));
+        }
     }
 
     return newChunks;

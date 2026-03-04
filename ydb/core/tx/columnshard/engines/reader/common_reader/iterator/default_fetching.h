@@ -1,6 +1,8 @@
 #pragma once
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class TDefaultFetchLogic: public IKernelFetchLogic {
@@ -21,11 +23,14 @@ private:
         std::optional<TBlobRange> BlobRange;
         std::optional<TPortionDataAccessor::TAssembleBlobInfo> Data;
         const ui32 RecordsCount;
+        std::optional<NArrow::NAccessor::TDictionaryChunkMeta> DictionaryMeta;
 
     public:
-        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range)
+        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range,
+            const std::optional<NArrow::NAccessor::TDictionaryChunkMeta>& dictionaryMeta = std::nullopt)
             : BlobRange(range)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+            , DictionaryMeta(dictionaryMeta) {
         }
 
         const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -47,6 +52,9 @@ private:
             AFL_VERIFY(!Data);
             BlobRange.reset();
             Data.emplace(data);
+            if (DictionaryMeta) {
+                Data->SetDictionaryAccessor(*DictionaryMeta);
+            }
         }
     };
 
@@ -97,7 +105,11 @@ private:
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(source->RestoreBlobRange(c->BlobRange));
-                ColumnChunks.emplace_back(c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange));
+                std::optional<NArrow::NAccessor::TDictionaryChunkMeta> dictMeta;
+                if (c->GetMeta().HasDictionaryAccessor()) {
+                    dictMeta = *c->GetMeta().GetDictionaryAccessor();
+                }
+                ColumnChunks.emplace_back(c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), dictMeta);
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),

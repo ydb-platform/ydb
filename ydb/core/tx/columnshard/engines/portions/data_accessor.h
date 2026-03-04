@@ -1,6 +1,7 @@
 #pragma once
 #include "portion_info.h"
 
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -21,6 +22,7 @@ private:
     ui32 DefaultRowsCount = 0;
     std::shared_ptr<arrow::Scalar> DefaultValue;
     TString Data;
+    std::optional<NArrow::NAccessor::TDictionaryChunkMeta> DictionaryAccessor;
 
 public:
     ui32 GetExpectedRowsCountVerified() const {
@@ -34,6 +36,13 @@ public:
         if (!Data) {
             AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
         }
+    }
+
+    void SetDictionaryAccessor(std::optional<NArrow::NAccessor::TDictionaryChunkMeta> value) {
+        DictionaryAccessor = std::move(value);
+    }
+    const std::optional<NArrow::NAccessor::TDictionaryChunkMeta>& GetDictionaryAccessor() const {
+        return DictionaryAccessor;
     }
 
     TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)

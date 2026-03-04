@@ -15,6 +15,15 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
     }
+    if (proto.HasDictionaryAccessor()) {
+        const auto& acc = proto.GetDictionaryAccessor();
+        NArrow::NAccessor::TDictionaryChunkMeta meta;
+        meta.VariantsBlobSize = acc.GetVariantsBlobSize();
+        meta.RecordsBlobSize = acc.GetRecordsBlobSize();
+        DictionaryAccessor = meta;
+    } else {
+        DictionaryAccessor.reset();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -30,6 +39,11 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
     meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
+    if (DictionaryAccessor) {
+        auto* acc = meta.MutableDictionaryAccessor();
+        acc->SetVariantsBlobSize(DictionaryAccessor->VariantsBlobSize);
+        acc->SetRecordsBlobSize(DictionaryAccessor->RecordsBlobSize);
+    }
     return meta;
 }
 

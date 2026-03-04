@@ -48,11 +48,18 @@ message TIndexPortionMeta {
 
 }
 
+message TDictionaryAccessor {
+    optional uint32 VariantsBlobSize = 1;
+    optional uint32 RecordsBlobSize = 2;
+}
+
 message TIndexColumnMeta {
     optional uint32 NumRows = 1;
     optional uint32 RawBytes = 2;
     reserved 3, 4; // deprecated
     optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
+    // For dictionary columns. When set, blob contains only Variants+Records (no leading SZ+proto).
+    optional TDictionaryAccessor DictionaryAccessor = 6;
 }
 
 message TColumnChunkInfo {

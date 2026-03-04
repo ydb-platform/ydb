@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
@@ -28,6 +29,7 @@ class TColumnRecord;
 struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
+    std::optional<NArrow::NAccessor::TDictionaryChunkMeta> DictionaryAccessor;
     TChunkMeta() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto);
     friend class TColumnRecord;
@@ -47,6 +49,16 @@ public:
     }
 
     NKikimrTxColumnShard::TIndexColumnMeta SerializeToProto() const;
+
+    const std::optional<NArrow::NAccessor::TDictionaryChunkMeta>& GetDictionaryAccessor() const {
+        return DictionaryAccessor;
+    }
+    void SetDictionaryAccessor(NArrow::NAccessor::TDictionaryChunkMeta value) {
+        DictionaryAccessor = std::move(value);
+    }
+    bool HasDictionaryAccessor() const {
+        return DictionaryAccessor.has_value();
+    }
 
     class TTestInstanceBuilder {
     public:

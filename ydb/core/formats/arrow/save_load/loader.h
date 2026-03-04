@@ -37,11 +37,14 @@ public:
 
     const std::shared_ptr<arrow::Field>& GetField() const;
 
-    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
+    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
+        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
     std::shared_ptr<IChunkedArray> ApplyVerified(
-        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
+        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
+        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
     TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(
-        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
+        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
+        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

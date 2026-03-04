@@ -14,32 +14,47 @@ namespace NKikimr::NArrow::NAccessor::NDictionary {
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
+    ui32 variantsBlobSize;
+    ui32 recordsBlobSize;
     TStringBuf sbOriginal(originalData.data(), originalData.size());
-    if (sbOriginal.size() < sizeof(ui32)) {
-        return TConclusionStatus::Fail("cannot READ protobuf blob size for dictionary accessor");
-    }
-    const ui32 protoSize = *(ui32*)(sbOriginal.data());
-    sbOriginal.Skip(sizeof(protoSize));
-    if (sbOriginal.size() < protoSize) {
-        return TConclusionStatus::Fail("cannot READ protobuf blob for dictionary accessor");
-    }
-    NKikimrArrowAccessorProto::TDictionaryAccessor proto;
-    if (!proto.ParseFromArray(sbOriginal.data(), protoSize)) {
-        return TConclusionStatus::Fail("cannot PARSE protobuf blob for dictionary accessor");
-    }
-    sbOriginal.Skip(protoSize);
 
-    if (sbOriginal.size() < proto.GetVariantsBlobSize()) {
+    if (externalInfo.HasDictionaryAccessor()) {
+        const auto& acc = *externalInfo.GetDictionaryAccessor();
+        variantsBlobSize = acc.VariantsBlobSize;
+        recordsBlobSize = acc.RecordsBlobSize;
+    } else {
+        // Legacy format: SZ(4) + proto + Variants + Records in blob (data written before meta was stored in LocalDB).
+        if (sbOriginal.size() < sizeof(ui32)) {
+            return TConclusionStatus::Fail("cannot READ protobuf blob size for dictionary accessor (legacy format)");
+        }
+        const ui32 protoSize = *(ui32*)(sbOriginal.data());
+        sbOriginal.Skip(sizeof(protoSize));
+        if (sbOriginal.size() < protoSize) {
+            return TConclusionStatus::Fail(TStringBuilder{}
+                << "dictionary blob without accessor meta: blob looks like new format (Variants+Records only) but chunk has no DictionaryAccessor in metadata; "
+                << "protoSize=" << protoSize << " remaining=" << sbOriginal.size()
+                << ". Ensure dictionary meta is stored in chunk metadata for new-format blobs.");
+        }
+        NKikimrArrowAccessorProto::TDictionaryAccessor proto;
+        if (!proto.ParseFromArray(sbOriginal.data(), protoSize)) {
+            return TConclusionStatus::Fail("cannot PARSE protobuf blob for dictionary accessor (legacy format)");
+        }
+        sbOriginal.Skip(protoSize);
+        variantsBlobSize = proto.GetVariantsBlobSize();
+        recordsBlobSize = proto.GetRecordsBlobSize();
+    }
+
+    if (sbOriginal.size() < variantsBlobSize) {
         return TConclusionStatus::Fail("cannot READ variants blob for dictionary accessor");
     }
-    const TStringBuf blobVariants(sbOriginal.data(), proto.GetVariantsBlobSize());
-    sbOriginal.Skip(proto.GetVariantsBlobSize());
+    const TStringBuf blobVariants(sbOriginal.data(), variantsBlobSize);
+    sbOriginal.Skip(variantsBlobSize);
 
-    if (sbOriginal.size() < proto.GetRecordsBlobSize()) {
+    if (sbOriginal.size() < recordsBlobSize) {
         return TConclusionStatus::Fail("cannot READ records blob for dictionary accessor");
     }
-    const TStringBuf blobRecords(sbOriginal.data(), proto.GetRecordsBlobSize());
-    sbOriginal.Skip(proto.GetRecordsBlobSize());
+    const TStringBuf blobRecords(sbOriginal.data(), recordsBlobSize);
+    sbOriginal.Skip(recordsBlobSize);
 
     auto schemaVariants =
         std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
@@ -87,7 +102,8 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+std::pair<TDictionaryChunkMeta, TString> TConstructor::SerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrVariants = arr->GetVariants();
     auto arrRecords = arr->GetRecords();
@@ -98,22 +114,18 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
     const TString blobRecords =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
 
-    NKikimrArrowAccessorProto::TDictionaryAccessor proto;
-    proto.SetVariantsBlobSize(blobVariants.size());
-    proto.SetRecordsBlobSize(blobRecords.size());
-    const TString blobProto = proto.SerializeAsString();
+    TDictionaryChunkMeta meta;
+    meta.VariantsBlobSize = blobVariants.size();
+    meta.RecordsBlobSize = blobRecords.size();
+    TString blob;
+    blob.reserve(blobVariants.size() + blobRecords.size());
+    blob.append(blobVariants);
+    blob.append(blobRecords);
+    return {meta, std::move(blob)};
+}
 
-    TString result;
-    result.reserve(sizeof(ui32) + blobProto.size() + blobVariants.size() + blobRecords.size());
-    {
-        TStringOutput sb(result);
-        const ui32 protoSize = blobProto.size();
-        sb.Write(&protoSize, sizeof(protoSize));
-        sb.Write(blobProto.data(), blobProto.size());
-        sb.Write(blobVariants.data(), blobVariants.size());
-        sb.Write(blobRecords.data(), blobRecords.size());
-    }
-    return result;
+TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+    return SerializeToBlobAndMeta(columnData, externalInfo).second;
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

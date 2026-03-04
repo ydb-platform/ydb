@@ -43,7 +43,7 @@ FROM (
       and t.build_type = 'relwithdebinfo'
         and t.is_test_chunk = 0
         AND t.is_muted = 1
-        and t.state !='Skipped'
+        and t.state != 'Skipped'
 
 ) AS tm
 LEFT JOIN (

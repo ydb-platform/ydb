@@ -12,7 +12,7 @@ $tm = (
     WHERE t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
       AND t.build_type = 'relwithdebinfo'
       AND t.is_test_chunk = 0
-      and t.state !='Skipped'
+      and t.state != 'Skipped'
 );
 
 $base = (

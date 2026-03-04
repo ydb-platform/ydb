@@ -417,19 +417,13 @@ runs:
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+          RESOURCES_JSONL=$CURRENT_PUBLIC_DIR/resources_monitor.jsonl
 
-          monitor_memory() {
-              set +x
-              rm -f ram_usage.txt
-              while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
-                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
-                  echo "$(date +%s) $used_kb" >> ram_usage.txt
-                  sleep 3
-              done
-          }
-
-          monitor_memory &
+          rm -f ram_usage.txt $RESOURCES_JSONL
+          python3 .github/scripts/monitor_resources.py \
+            --output $RESOURCES_JSONL \
+            --ram-usage-file ram_usage.txt \
+            --interval 1 &
           MONITOR_PID=$!
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
@@ -461,6 +455,20 @@ runs:
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+
+          # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
+          TESTS_METRICS_DIR=$CURRENT_PUBLIC_DIR/tests_metrics
+          mkdir -p $TESTS_METRICS_DIR
+          python3 .github/scripts/tests/utils/tests_resource_dashboard.py \
+            --report $CURRENT_REPORT \
+            --evlog $CURRENT_PUBLIC_DIR/ya_evlog.jsonl \
+            --out-html $TESTS_METRICS_DIR/dashboard.html \
+            --out-trace $TESTS_METRICS_DIR/trace.json \
+            --out-stats $TESTS_METRICS_DIR/stats.json \
+            --resources-jsonl $RESOURCES_JSONL \
+            --repo-root . 2>/dev/null || true
+          cp -f $RESOURCES_JSONL $TESTS_METRICS_DIR/resources_monitor.jsonl 2>/dev/null || true
+          echo "31 [Tests metrics](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

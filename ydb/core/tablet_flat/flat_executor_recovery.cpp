@@ -753,7 +753,7 @@ public:
     
                 if (lineChecksum != expectedChecksum) {
                     Result.Error(TStringBuilder() << "Changelog checksum mismatch:"
-                        << " expected " << expectedChecksum << ", got " << lineChecksum);
+                        << " expected " << expectedChecksum << ", got " << lineChecksum << ", line: " << line);
                     return true;
                 }
             }

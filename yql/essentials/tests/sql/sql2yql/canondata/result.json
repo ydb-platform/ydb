@@ -3079,6 +3079,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-empty_list_ops3_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-empty_remove_members]": [
+        {
+            "checksum": "5440769a516ea03034a4ef8caf58328a",
+            "size": 1068,
+            "uri": "https://{canondata_backend}/1937367/1e78d4be441c9cdd1512793a156a5098061662d2/resource.tar.gz#test_sql2yql.test_expr-empty_remove_members_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-empty_struct_tuple_types]": [
         {
             "checksum": "5e1d65cc75dc526396bb8980aaf608ea",
@@ -12634,6 +12641,11 @@
     "test_sql_format.test[expr-empty_list_ops3]": [
         {
             "uri": "file://test_sql_format.test_expr-empty_list_ops3_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-empty_remove_members]": [
+        {
+            "uri": "file://test_sql_format.test_expr-empty_remove_members_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-empty_struct_tuple_types]": [

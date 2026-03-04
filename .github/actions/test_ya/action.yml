@@ -195,6 +195,7 @@ runs:
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
+        DASHBOARD_SANITIZER=""
 
         case "$BUILD_PRESET" in
           debug)
@@ -210,6 +211,7 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            DASHBOARD_SANITIZER="address"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -219,6 +221,7 @@ runs:
             params+=(
               --build "release" --sanitize="thread"
             )
+            DASHBOARD_SANITIZER="thread"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -228,6 +231,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
+            DASHBOARD_SANITIZER="memory"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -459,6 +463,10 @@ runs:
           # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
           TESTS_METRICS_DIR=$CURRENT_PUBLIC_DIR/tests_metrics
           mkdir -p $TESTS_METRICS_DIR
+          DASHBOARD_ARGS=()
+          if [ -n "$DASHBOARD_SANITIZER" ]; then
+            DASHBOARD_ARGS+=(--sanitizer "$DASHBOARD_SANITIZER")
+          fi
           TRY_LINKS=""
           for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
           TRY_LINKS="${TRY_LINKS%,}"
@@ -477,7 +485,8 @@ runs:
             --artifacts-url "${PUBLIC_DIR_URL}" \
             --try-links "$TRY_LINKS" \
             --repo "${{ github.repository }}" \
-            --repo-root . || true
+            --repo-root . \
+            "${DASHBOARD_ARGS[@]}" || true
           cp -f $RESOURCES_JSONL $TESTS_METRICS_DIR/resources_monitor.jsonl 2>/dev/null || true
           echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
 

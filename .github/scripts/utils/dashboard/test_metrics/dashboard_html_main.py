@@ -510,9 +510,18 @@ def build_html_dashboard(
     const overlayStatusEl = document.getElementById('overlayStatus');
     if (overlayStatusEl) {{
       const ro = data.resources_overlay;
+      const cfg = data.run_config || {{}};
+      const san = String(cfg.sanitizer || '').trim().toLowerCase();
+      const buildType = san === 'address'
+        ? 'release-asan'
+        : san === 'thread'
+          ? 'release-tsan'
+          : san === 'memory'
+            ? 'release-msan'
+            : 'relwithdebinfo';
       overlayStatusEl.textContent = ro
-        ? 'Monitor: CPU/RAM total (red), Disk I/O — shown'
-        : 'Monitor: not available';
+        ? 'Monitor: CPU/RAM total (red), Disk I/O — shown · Build type: ' + buildType
+        : 'Monitor: not available · Build type: ' + buildType;
       overlayStatusEl.style.color = ro ? '#16a34a' : '#94a3b8';
     }}
     function setupMonitoringLink() {{

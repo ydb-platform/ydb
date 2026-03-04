@@ -2469,11 +2469,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
-        runner->KikimrStart();
+        runner->Start();
         runner->BusyLoop();
         // exit busy loop by a signal
         Cout << "Shutting YDB server down" << Endl;
-        runner->KikimrStop(false);
+        runner->Stop(false);
     }
 
     return 0;

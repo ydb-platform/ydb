@@ -23,6 +23,7 @@ SRCS(
     cli_cmds_node_by_host.cpp
     cli_cmds_pq_cmds.cpp
     cli_cmds_root.cpp
+    cli_cmds_run.cpp
     cli_cmds_scheme_initroot_cmd.cpp
     cli_cmds_server.cpp
     cli_cmds_standalone.h

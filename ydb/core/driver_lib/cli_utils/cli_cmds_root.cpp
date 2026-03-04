@@ -3,13 +3,32 @@
 #include "cli_cmds_standalone.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <ydb/core/driver_lib/run/factories.h>
-#include <ydb/core/driver_lib/run/main.h>
+#include <ydb/core/driver_lib/version/version.h>
+#include <library/cpp/malloc/api/malloc.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
 #include <filesystem>
+
+namespace {
+
+void PrintAllocatorInfoAndExit() {
+    Cout << "linked with malloc: " << NMalloc::MallocInfo().Name << Endl;
+    exit(0);
+}
+
+void PrintCompatibilityInfoAndExit() {
+    TString compatibilityInfo(NKikimr::CompatibilityInfo.PrintHumanReadable());
+    Cout << compatibilityInfo;
+    if (!compatibilityInfo.EndsWith("\n")) {
+        Cout << Endl;
+    }
+    exit(0);
+}
+
+} // anonymous namespace
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -19,6 +38,16 @@ using namespace NYdb::NConsoleClient;
 extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories);
 
 class TClientCommandRoot : public TClientCommandRootKikimrBase {
+    // Dummy storage for hidden global opts consumed by "run" command.
+    // The actual values are re-parsed from InitialArgV inside TCommandRun::Run().
+    TString DummyClusterName;
+    ui32 DummyLogLevel = 0;
+    ui32 DummyLogSamplingLevel = 0;
+    ui32 DummyLogSamplingRate = 0;
+    TString DummyLogFormat;
+    TVector<TString> DummyUDFsPaths;
+    TString DummyUDFsDir;
+
 public:
     TClientCommandRoot(const TString& name, std::shared_ptr<TModuleFactories> factories)
         : TClientCommandRootKikimrBase(name)
@@ -29,10 +58,11 @@ public:
         AddCommand(std::make_unique<TClientCommandCms>());
         AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
-        AddClientCommandServer(*this, std::move(factories));
+        AddClientCommandServer(*this, factories);
         AddCommand(std::make_unique<TClientCommandConfig>());
 
         // Hidden commands (shown only in -hh verbose help)
+        AddHiddenCommand(NewCommandRun(std::move(factories)));
         AddHiddenCommand(NewCommandFormatInfo());
         AddHiddenCommand(NewCommandFormatUtil());
         AddHiddenCommand(NewCommandNodeByHost());
@@ -55,6 +85,31 @@ public:
             .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         nOpts.AddLongOption(0, "compatibility-info", "Print compatibility info of this binary and exit")
             .NoArgument().Handler(&PrintCompatibilityInfoAndExit);
+        config.ExecutableOptions.insert("--allocator-info");
+        config.ExecutableOptions.insert("--compatibility-info");
+
+        // Hidden global opts for legacy "run" command.
+        // These must be accepted at root level for backward compatibility:
+        // "ydbd --cluster-name test run --node 1"
+        // The actual values are re-parsed from InitialArgV inside TCommandRun::Run().
+        nOpts.AddLongOption("cluster-name", "which cluster this node belongs to")
+            .OptionalArgument("STR").StoreResult(&DummyClusterName).Hidden();
+        nOpts.AddLongOption("log-level", "default logging level")
+            .OptionalArgument("1-7").StoreResult(&DummyLogLevel).Hidden();
+        nOpts.AddLongOption("log-sampling-level", "sample logs equal to or above this level")
+            .OptionalArgument("1-7").StoreResult(&DummyLogSamplingLevel).Hidden();
+        nOpts.AddLongOption("log-sampling-rate", "log only each Nth message with priority matching sampling level; 0 turns log sampling off")
+            .OptionalArgument("NUM").StoreResult(&DummyLogSamplingRate).Hidden();
+        nOpts.AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
+            .OptionalArgument("full|short|json").StoreResult(&DummyLogFormat).Hidden();
+        nOpts.AddLongOption("syslog", "send to syslog instead of stderr")
+            .NoArgument().Hidden();
+        nOpts.AddLongOption("tcp", "start tcp interconnect")
+            .NoArgument().Hidden();
+        nOpts.AddLongOption("udf", "Load shared library with UDF by given path")
+            .RequiredArgument("PATH").AppendTo(&DummyUDFsPaths).Hidden();
+        nOpts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
+            .RequiredArgument("PATH").StoreResult(&DummyUDFsDir).Hidden();
 
         TClientCommandRootKikimrBase::Config(config);
     }

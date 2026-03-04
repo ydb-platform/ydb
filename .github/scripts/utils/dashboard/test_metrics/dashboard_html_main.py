@@ -202,6 +202,8 @@ def build_html_dashboard(
     <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
     <div class="box">
       <ul>
+        <li><b>By suites (stacked):</b> Sum of <i>peak</i> RAM/CPU per active chunk at each time. Can exceed actual system RAM because peaks occurred at different moments.</li>
+        <li><b>Total / Ya make (monitor):</b> Real-time from <code>/proc</code> — actual system and ya process tree.</li>
         <li><b>Chunk duration (seconds):</b> <code>evlog_dur_sec = (end_us - start_us) / 1e6</code> from evlog B/E events.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
         <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / evlog_dur_sec</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>

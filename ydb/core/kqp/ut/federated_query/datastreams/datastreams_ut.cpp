@@ -4858,16 +4858,39 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "topic"_a = topic
         ));
 
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         Sleep(TDuration::Seconds(3));
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-        {
-            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+        std::random_device rng;
+        for (;;) {
+            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil, Issues FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_GE(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
-                UNIT_ASSERT(*resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            bool ok = false;
+            CheckScriptResult(result[0], 3, 1, [&](TResultSetParser& resultSet) {
+                Cerr << "Now " << TInstant::Now();
+                if (auto suspendedUntil = resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp()) {
+                    Cerr << " SuspendedUntil " << *suspendedUntil;
+                    ok = *suspendedUntil > TInstant::Now() + TDuration::MilliSeconds(500);
+                    UNIT_ASSERT(*suspendedUntil);
+                }
+                if (auto retryCount = resultSet.ColumnParser("RetryCount").GetOptionalUint64()) {
+                    Cerr << " RetryCount " << *retryCount;
+                    if (*retryCount < 1) {
+                        ok = false;
+                    }
+                } else {
+                    ok = false;
+                }
+                if (auto issues = resultSet.ColumnParser("Issues").GetOptionalUtf8()) {
+                    Cerr << " Issues " << *issues;
+                }
+                Cerr << Endl;
             });
+            if (ok) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(50 + (rng() % 100))); // 100+-50ms
         }
 
         ExecQuery(fmt::format(R"(

@@ -131,6 +131,18 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
     ProcessForcedCompactionQueues();
 }
 
+void TSchemeShard::RetryForcedCompactionForShard(const TShardIdx& shardIdx) {
+    auto compactionPtr = InProgressForcedCompactionsByShard.FindPtr(shardIdx);
+    if (!compactionPtr) {
+        return;
+    }
+    auto compaction = *compactionPtr;
+    compaction->ShardsInFlight.erase(shardIdx);
+    ForcedCompactionShardsByTable[compaction->TablePathId].Enqueue(shardIdx);
+    ForcedCompactionTablesQueue.Enqueue(compaction->TablePathId);
+    ProcessForcedCompactionQueues();
+}
+
 void TSchemeShard::ProcessForcedCompactionQueues() {
     // try enqueue shards from multiple tables fairly
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
@@ -141,7 +153,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         auto& shards = ForcedCompactionShardsByTable.at(tablePathId);
         if (!shards.Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {
             const auto& shardIdx = shards.Front();
-            EnqueueForcedCompaction(shards.Front());
+            EnqueueForcedCompaction(shardIdx);
             compaction->ShardsInFlight.insert(shardIdx);
             shards.PopFront();
         }
@@ -262,6 +274,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Timeout] Failed to resolve shard info "
             "for timeout forced compaction# " << shardIdx
             << " at schemeshard# " << TabletID());
+        CompleteForcedCompactionForShard(shardIdx, ctx);
         return;
     }
 
@@ -275,7 +288,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
         << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
     
-
+    RetryForcedCompactionForShard(shardIdx);
 }
 
 } // namespace NKikimr::NSchemeShard

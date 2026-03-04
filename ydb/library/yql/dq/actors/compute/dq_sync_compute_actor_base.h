@@ -89,7 +89,7 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-    void ExtraMonitoringInfo(TStringStream& str) override {
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters&) override {
         if (TaskRunner) {
             str << Endl << "TaskRunner" << Endl
                 << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl

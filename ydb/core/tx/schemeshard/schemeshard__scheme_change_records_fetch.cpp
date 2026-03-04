@@ -32,6 +32,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(0),
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(TInstant::Now().MicroSeconds())
             );
+            Self->HasSchemeChangeSubscribers = true;
             Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
             Result->Record.SetCurrentSequenceId(0);
         }
@@ -204,8 +205,79 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
+        ctx.Schedule(TDuration::Seconds(5),
+            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
     }
 };
+
+struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TEvSchemeShard::TEvUnregisterSubscriber::TPtr Request;
+    THolder<TEvSchemeShard::TEvUnregisterSubscriberResult> Result;
+
+    TTxUnregisterSubscriber(TSchemeShard* self, TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev)
+        : TTransactionBase(self)
+        , Request(ev)
+        , Result(MakeHolder<TEvSchemeShard::TEvUnregisterSubscriberResult>())
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        const auto& record = Request->Get()->Record;
+        TString subscriberId = record.GetSubscriberId();
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowset = db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        if (!rowset.IsValid()) {
+            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetReason("Subscriber not registered: " + subscriberId);
+            return true;
+        }
+
+        db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
+
+        // Check if any subscribers remain
+        auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
+        if (!subRowset.IsReady()) {
+            return false;
+        }
+
+        bool hasRemaining = false;
+        while (!subRowset.EndOfSet()) {
+            TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
+            if (id != subscriberId) {
+                hasRemaining = true;
+                break;
+            }
+            if (!subRowset.Next()) {
+                return false;
+            }
+        }
+
+        Self->HasSchemeChangeSubscribers = hasRemaining;
+
+        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Request->Sender, Result.Release());
+        ctx.Schedule(TDuration::Seconds(5),
+            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev) {
+    return new TTxUnregisterSubscriber(this, ev);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxUnregisterSubscriber(ev), ctx);
+}
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev) {
     return new TTxRegisterSubscriber(this, ev);

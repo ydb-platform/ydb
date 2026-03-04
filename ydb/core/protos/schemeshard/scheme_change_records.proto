@@ -65,3 +65,12 @@ message TEvForceAdvanceSubscriberResult {
     string Reason = 2;
     uint64 NewCursor = 3;
 }
+
+message TEvUnregisterSubscriber {
+    string SubscriberId = 1;
+}
+
+message TEvUnregisterSubscriberResult {
+    uint32 Status = 1;
+    string Reason = 2;
+}

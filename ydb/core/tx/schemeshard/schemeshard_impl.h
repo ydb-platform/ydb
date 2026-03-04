@@ -279,6 +279,7 @@ public:
     ui64 NextSchemeChangeSequenceId = 0;
     ui64 SchemeChangeRecordCount = 0;
     ui64 MaxSchemeChangeRecords = 100000;
+    bool HasSchemeChangeSubscribers = false;
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
@@ -878,6 +879,8 @@ public:
     void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
     // Scheme change records cleanup & backpressure
+    NTabletFlatExecutor::ITransaction* CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);

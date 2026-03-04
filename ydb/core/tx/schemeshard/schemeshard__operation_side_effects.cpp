@@ -940,6 +940,10 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
+    if (!ss->HasSchemeChangeSubscribers) {
+        return;
+    }
+
     struct TCandidate {
         TTxId TxId;
         TStepId PlanStep;

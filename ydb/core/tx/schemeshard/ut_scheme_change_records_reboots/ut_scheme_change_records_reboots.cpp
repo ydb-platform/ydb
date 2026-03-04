@@ -21,6 +21,17 @@ TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> ReadSc
     return event->Entries;
 }
 
+void RegisterSubscriber(TTestActorRuntime& runtime, const TString& subscriberId) {
+    auto sender = runtime.AllocateEdgeActor();
+    auto req = MakeHolder<TEvSchemeShard::TEvRegisterSubscriber>();
+    req->Record.SetSubscriberId(subscriberId);
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
+    TAutoPtr<IEventHandle> handle;
+    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
@@ -29,6 +40,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
             }
 
             t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId, "/MyRoot",
@@ -64,6 +76,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
                 t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId, "/MyRoot",
                     "Name: \"T1\""
                     "Columns { Name: \"key\" Type: \"Uint64\" }"
@@ -113,6 +126,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
                 t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId, "/MyRoot",
                     "Name: \"Table1\""
                     "Columns { Name: \"key\"   Type: \"Uint64\" }"
@@ -160,6 +174,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
                 t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId, "/MyRoot",
                     "Name: \"T1\""
                     "Columns { Name: \"key\" Type: \"Uint64\" }"
@@ -208,6 +223,37 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                     UNIT_ASSERT_C(entries[i].SequenceId > entries[i-1].SequenceId,
                         "SequenceIds must be strictly monotonic");
                 }
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(SchemeChangeRecordCountReconciledOnReboot) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
+            }
+
+            t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId, "/MyRoot",
+                "Name: \"T1\""
+                "Columns { Name: \"key\" Type: \"Uint64\" }"
+                "KeyColumnNames: [\"key\"]"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto entries = ReadSchemeChangeRecords(runtime);
+                bool found = false;
+                for (const auto& e : entries) {
+                    if (e.PathName == "T1") {
+                        found = true;
+                        break;
+                    }
+                }
+                UNIT_ASSERT_C(found, "Scheme change record for T1 not found after reboot");
             }
         });
     }

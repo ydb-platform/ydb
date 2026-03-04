@@ -1,5 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include "ut_scheme_change_records_helpers.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <util/string/printf.h>
@@ -7,6 +7,7 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NSchemeChangeRecordTestHelpers;
 
 namespace {
 
@@ -47,10 +48,66 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         Y_UNUSED(entries);
     }
 
+    Y_UNIT_TEST(NoRecordsCreatedWithoutSubscribers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(entries.empty(),
+            "No records should be created without subscribers, got " << entries.size());
+    }
+
+    Y_UNIT_TEST(RecordsCreatedAfterSubscriberRegistered) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Create T1 without subscriber -- no record expected
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Register subscriber
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Create T2 with subscriber -- record expected
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool foundT1 = false;
+        bool foundT2 = false;
+        for (const auto& e : entries) {
+            if (e.PathName == "T1") foundT1 = true;
+            if (e.PathName == "T2") foundT2 = true;
+        }
+        UNIT_ASSERT_C(!foundT1, "T1 record should not exist (created before subscriber)");
+        UNIT_ASSERT_C(foundT2, "T2 record should exist (created after subscriber)");
+    }
+
     Y_UNIT_TEST(CreateTableWritesLogEntry) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -79,6 +136,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -109,6 +169,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key"   Type: "Uint64" }
@@ -135,6 +198,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
@@ -169,6 +235,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         auto baseline = ReadSchemeChangeRecords(runtime);
         schemeshard->MaxSchemeChangeRecords = baseline.size() + 2;
@@ -207,6 +276,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         auto baseline = ReadSchemeChangeRecords(runtime);
         {
@@ -254,6 +326,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
             Columns { Name: "key" Type: "Uint64" }
@@ -286,6 +361,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key" Type: "Uint64" }
@@ -312,6 +390,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -340,6 +421,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T1"
@@ -384,6 +468,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
 
@@ -403,6 +490,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key" Type: "Uint64" }
@@ -419,6 +509,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
 
         TVector<THolder<IEventHandle>> heldEvents;
         ui64 firstTxId = txId + 1;

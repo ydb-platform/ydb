@@ -3,6 +3,8 @@
 namespace NKikimr::NSchemeShard {
 
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    bool BatchWasFull = false;
+
     TTxSchemeChangeRecordsCleanup(TSchemeShard* self)
         : TTransactionBase(self)
     {}
@@ -50,6 +52,7 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
                 break;
             }
             if (deletedCount >= maxDeletesPerBatch) {
+                BatchWasFull = true;
                 break;
             }
 
@@ -70,7 +73,12 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
     }
 
     void Complete(const TActorContext& ctx) override {
-        Self->ScheduleSchemeChangeRecordsCleanup(ctx);
+        if (BatchWasFull) {
+            ctx.Schedule(TDuration::Seconds(5),
+                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+        } else {
+            Self->ScheduleSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 

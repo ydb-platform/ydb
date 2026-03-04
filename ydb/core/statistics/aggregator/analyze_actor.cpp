@@ -1,5 +1,7 @@
 #include "analyze_actor.h"
 
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
@@ -143,6 +145,12 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
+    HiveId = entry.DomainInfo->ExtractHive();
+    if (!HiveId) {
+        HiveId = AppData()->DomainsInfo->GetHive();
+    }
+    // TODO: return error if can't determine hive id
+
     // TODO: escape table path
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
     IsColumnTable = !!entry.ColumnTableInfo;
@@ -229,7 +237,35 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
     }
 
     for (const auto& part : entry.KeyDescription->GetPartitions()) {
-        ShardIds.push_back(part.ShardId);
+        TabletIds.push_back(part.ShardId);
+    }
+
+    if (IsColumnTable) {
+        auto reqDistribution = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
+        reqDistribution->Record.MutableTabletIds()->Add(
+            TabletIds.begin(), TabletIds.end());
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(reqDistribution.release(), HiveId, true));
+        return;
+        // TODO: retries, unsubscribe, etc.
+    } else {
+        DispatchScanActors();
+        Become(&TThis::StateScan);
+    }
+}
+
+void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
+    const auto& msg = ev->Get()->Record;
+    for (const auto& node : msg.GetNodes()) {
+        if (!node.GetNodeId()) {
+            FinishWithFailure(
+                TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+                NYql::TIssue("Resolving tablet node ids failed."));
+            return;
+            // TODO: retries
+        }
+        auto& tablets = NodeId2Tablets[node.GetNodeId()];
+        tablets.insert(tablets.end(), node.GetTabletIds().begin(), node.GetTabletIds().end());
     }
 
     DispatchScanActors();
@@ -237,9 +273,12 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
 }
 
 void TAnalyzeActor::DispatchScanActors() {
-    Y_ENSURE(ScanActorIds.empty());
+    Y_ENSURE(ScanActorsInFlight.empty());
+    Y_ENSURE(NodeId2PendingTablets.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
+
+    NodeId2PendingTablets = NodeId2Tablets;
 
     SelectBuilder.emplace(/*final=*/!IsColumnTable);
     size_t totalSize = 0;
@@ -270,24 +309,40 @@ void TAnalyzeActor::DispatchScanActors() {
         PendingTasks.pop();
     }
 
-    auto addScanActor = [&](std::optional<ui64> shardId) {
+    auto addScanActor = [&](ui32 nodeId, std::optional<ui64> tabletId) {
+        SA_LOG_D("Launching scan actor, tabletId: " << tabletId << ", tabletNodeId: " << nodeId);
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
-            SelectBuilder->Build(TableName, shardId), SelectBuilder->ColumnCount());
-        ScanActorIds.insert(Register(actor.release()));
+            SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
+        ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+            .TabletNodeId = nodeId,
+        };
     };
 
     if (IsColumnTable) {
-        for (ui64 shardId : ShardIds) {
-            addScanActor(shardId);
+        for (auto it = NodeId2PendingTablets.begin(); it != NodeId2PendingTablets.end(); ) {
+            ui32 nodeId = it->first;
+            auto& tabletIds = it->second;
+            Y_ENSURE(!tabletIds.empty());
+
+            addScanActor(nodeId, tabletIds.back());
+            tabletIds.pop_back();
+            if (!tabletIds.empty()) {
+                ++it;
+            } else {
+                NodeId2PendingTablets.erase(it++);
+            }
         }
     } else {
-        addScanActor(std::nullopt);
+        addScanActor(0, std::nullopt);
     }
 }
 
 void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
-    Y_ENSURE(ScanActorIds.erase(ev->Sender));
+    auto actorIt = ScanActorsInFlight.find(ev->Sender);
+    Y_ENSURE(actorIt != ScanActorsInFlight.end());
+    const ui32 tabletNodeId = actorIt->second.TabletNodeId;
+    ScanActorsInFlight.erase(actorIt);
 
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
@@ -298,13 +353,38 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         return;
     }
 
+    if (tabletNodeId) {
+        // TODO: unify with code in DispatchScanActors
+
+        auto nodeIt = NodeId2PendingTablets.find(tabletNodeId);
+        if (nodeIt != NodeId2PendingTablets.end()) {
+            auto& tabletIds = nodeIt->second;
+            Y_ENSURE(!tabletIds.empty());
+
+            ui64 tabletId = tabletIds.back();
+            SA_LOG_D("Launching next scan actor, tabletId: "
+                << tabletId << ", tabletNodeId: " << tabletNodeId);
+            auto actor = std::make_unique<TScanActor>(
+                SelfId(), DatabaseName,
+                SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
+            ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+                .TabletNodeId = tabletNodeId,
+            };
+
+            tabletIds.pop_back();
+            if (tabletIds.empty()) {
+                NodeId2PendingTablets.erase(nodeIt);
+            }
+        }
+    }
+
     if (CountSeq) {
         NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
         ui64 count = val.GetUint64();
         RowCount = count + RowCount.value_or(0);
     }
 
-    if (!ScanActorIds.empty()) {
+    if (!ScanActorsInFlight.empty()) {
         for (const auto& task : InProgressTasks) {
             Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
             if (task.SimpleStatEval) {
@@ -377,7 +457,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 }
 
 void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
-    for (const auto& id : ScanActorIds){
+    for (const auto& [id, info] : ScanActorsInFlight){
         Send(id, new TEvents::TEvPoison());
     }
 

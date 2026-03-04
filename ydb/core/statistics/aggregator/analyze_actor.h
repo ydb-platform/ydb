@@ -4,6 +4,7 @@
 #include "select_builder.h"
 
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -28,6 +29,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     // StateResolve
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+    void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
 
     // StateQuery
 
@@ -59,15 +61,23 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     bool IsColumnTable = false;
     TVector<TColumnDesc> Columns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    ui64 HiveId = 0;
 
-    TVector<ui64> ShardIds;
+    TVector<ui64> TabletIds;
+    THashMap<ui32, TVector<ui64>> NodeId2Tablets;
 
     std::queue<TEvalTask> PendingTasks;
 
     std::optional<TSelectBuilder> SelectBuilder;
     std::optional<ui32> CountSeq;
     std::vector<TEvalTask> InProgressTasks;
-    THashSet<TActorId> ScanActorIds;
+
+    THashMap<ui32, TVector<ui64>> NodeId2PendingTablets;
+
+    struct TScanActorInfo {
+        ui32 TabletNodeId = 0;
+    };
+    THashMap<TActorId, TScanActorInfo> ScanActorsInFlight;
 
     std::optional<ui64> RowCount;
 
@@ -135,6 +145,7 @@ public:
     STFUNC(StateResolve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
     }

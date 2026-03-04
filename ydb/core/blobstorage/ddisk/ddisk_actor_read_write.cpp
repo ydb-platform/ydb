@@ -35,6 +35,8 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        // TODO: check that request is withing a single chunk
+
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
@@ -57,27 +59,36 @@ namespace NKikimr::NDDisk {
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size));
 
-#if defined(__linux__)
-        if (UringRouter) {
-            Counters.Interface.Write.Request();
-            if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
-                span.End();
-                Counters.Interface.Write.Reply(false);
-                SendReply(*ev, std::make_unique<TEvWriteResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "direct I/O inflight limit exceeded"));
-                return;
-            }
-            DirectWrite(ev, selector, instr, chunkRef, std::move(span));
-            return;
-        }
-#endif
-
         TRope data;
         if (instr.PayloadId) {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
 
+        Y_ABORT_UNLESS(data.size() == selector.Size);
+
+        // TODO: move to DirectUringOp when it supports PDisk fallback
         Counters.Interface.Write.Request();
+
+#if defined(__linux__)
+        if (UringRouter) {
+            auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+
+            // TODO: use pool
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDirectIoOpBase>(
+                SelfId(), InFlightCount, Counters, ev.Get());
+            op->SetSpan(std::move(span));
+            op->PrepareWrite(std::move(data), offset);
+
+            const bool submitted = DirectUringOp(op);
+            if (!submitted) {
+                op->GetSpan().End();
+                Counters.Interface.Write.Reply(false);
+                SendReply(*ev, std::make_unique<TEvWriteResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
+            }
+            return;
+        }
+#endif
 
         auto callback = [this, sender = ev->Sender, cookie = ev->Cookie,
                 session = ev->InterconnectSession, size = selector.Size](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
@@ -120,6 +131,8 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        // TODO: check that request is withing a single chunk
+
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
@@ -132,6 +145,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        // TODO: move to DirectUringOp when it supports PDisk fallback
         Counters.Interface.Read.Request();
 
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
@@ -154,14 +168,21 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
         if (UringRouter) {
-            if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
-                span.End();
+            auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+
+            // TODO: use pool
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDirectIoOpBase>(
+                SelfId(), InFlightCount, Counters, ev.Get());
+            op->SetSpan(std::move(span));
+            op->PrepareRead(selector.Size, offset);
+
+            const bool submitted = DirectUringOp(op);
+            if (!submitted) {
+                op->GetSpan().End();
                 Counters.Interface.Read.Reply(false);
                 SendReply(*ev, std::make_unique<TEvReadResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "direct I/O inflight limit exceeded"));
-                return;
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
             }
-            DirectRead(ev, selector, chunkRef, std::move(span));
             return;
         }
 #endif
@@ -215,71 +236,34 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
 
-    void TDDiskActor::DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector,
-            const TWriteInstruction& instr, TChunkRef& chunkRef, NWilson::TSpan span) {
-        Y_ABORT_UNLESS(chunkRef.ChunkIdx);
-        Y_ABORT_UNLESS(DiskFormat);
-
-        // TODO: use pool
-        auto op = std::make_unique<TDDiskIoOp>(InFlightCount, Counters);
-        op->Sender = ev->Sender;
-        op->Cookie = ev->Cookie;
-        op->InterconnectSession = ev->InterconnectSession;
-        op->DDiskId = SelfId();
-        op->Span = std::move(span);
-        op->IsRead = false;
-        op->Size = selector.Size;
-
-        TRope data;
-        if (instr.PayloadId) {
-            data = ev->Get()->GetPayload(*instr.PayloadId);
+    bool TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
+        // TODO: we increase it in TDirectIoOpBase and decrease in destructor,
+        // which is bad, because check later here
+        if (InFlightCount.load(std::memory_order_relaxed) > MaxInFlight) {
+            return false;
         }
-        op->SetData(std::move(data));
-        op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
+        // TODO: add queue besides uring?
+        bool submitted;
+        switch (op->GetOperationType()) {
+        case NPDisk::TUringOperationBase::EREAD:
+            submitted = UringRouter->Read(op.get());
+            break;
+        case NPDisk::TUringOperationBase::EWRITE:
+            submitted = UringRouter->Write(op.get());
+            break;
+        default:
+            Y_ABORT("Unknown OperationType");
+        }
+
         if (submitted) {
-            op.release();
-            // with SQ polling – no syscall
-            // TODO: without polling do we need batching?
-            UringRouter->Flush();
-        } else {
-            // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
-            op->Span.End();
-            Counters.Interface.Write.Reply(false);
-            SendReply(*ev, std::make_unique<TEvWriteResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
+            Y_UNUSED(op.release());
+            if (flush) {
+                // with SQ polling – usually no syscall
+                UringRouter->Flush();
+            }
         }
-    }
-
-    void TDDiskActor::DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector,
-            TChunkRef& chunkRef, NWilson::TSpan span) {
-        Y_ABORT_UNLESS(chunkRef.ChunkIdx);
-        Y_ABORT_UNLESS(DiskFormat);
-
-        // TODO: use pool
-        auto op = std::make_unique<TDDiskIoOp>(InFlightCount, Counters);
-        op->Sender = ev->Sender;
-        op->Cookie = ev->Cookie;
-        op->InterconnectSession = ev->InterconnectSession;
-        op->DDiskId = SelfId();
-        op->Span = std::move(span);
-        op->IsRead = true;
-        op->Size = selector.Size;
-        op->AlignedDataHolder = TRcBuf::UninitializedPageAligned(selector.Size);
-        op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
-
-        const bool submitted = UringRouter->Read(op->AlignedDataHolder.GetDataMut(), op->Size, op->DiskOffset, op.get());
-        if (submitted) {
-            op.release();
-            UringRouter->Flush();
-        } else {
-            // SQ ring full
-            op->Span.End();
-            Counters.Interface.Read.Reply(false);
-            SendReply(*ev, std::make_unique<TEvReadResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
-        }
+        return submitted;
     }
 
     TDDiskActor::TEvPrivate::TEvShortIO::TEvShortIO(std::unique_ptr<TDirectIoOpBase> op)
@@ -291,23 +275,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
         std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
 
-        ui32 remaining = op->Size - op->BufferOffset;
-        bool submitted;
-        if (op->IsRead) {
-            submitted = UringRouter->Read(
-                op->AlignedDataHolder.GetDataMut() + op->BufferOffset,
-                remaining, op->DiskOffset, op.get());
-        } else {
-            submitted = UringRouter->Write(
-                op->AlignedDataHolder.data() + op->BufferOffset,
-                remaining, op->DiskOffset, op.get());
-        }
-
-        if (submitted) {
-            op.release();
-            UringRouter->Flush();
-        } else {
-            op->Reply(TActivationContext::ActorSystem(), true);
+        bool submitted = DirectUringOp(op);
+        if (!submitted) {
+            op->Reply(TActivationContext::ActorSystem(), NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
         }
     }
 

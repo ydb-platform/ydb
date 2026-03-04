@@ -109,10 +109,12 @@ namespace NKikimr {
 
         Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info, nullptr));
         if (Info) {
+            const bool wasInitial = LifeCyclePhase == TBlobStorageGroupInfo::ELCP_INITIAL;
+
             Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
-            Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
-            Y_ABORT_UNLESS(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce());
-            Y_ABORT_UNLESS(!CypherKey || *CypherKey == *Info->GetCypherKey());
+            Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase() || wasInitial);
+            Y_ABORT_UNLESS(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce() || wasInitial);
+            Y_ABORT_UNLESS(!CypherKey || *CypherKey == *Info->GetCypherKey() || wasInitial);
             EncryptionMode = Info->GetEncryptionMode();
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();

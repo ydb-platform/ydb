@@ -13,6 +13,7 @@ $prepared = (
       AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
       AND tm.is_test_chunk = 0
       AND tm.is_muted = 1
+      and t.state !='Skipped'
 );
 
 -- Daily metric

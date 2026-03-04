@@ -282,6 +282,15 @@ def build_html_dashboard(
 
     const data = {json.dumps(payload, ensure_ascii=False)};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
+    function hideRawTimestampInHover() {{
+      document.querySelectorAll('.hoverlayer *').forEach(el => {{
+        const t = (el.textContent || '').trim();
+        if (el.children.length === 0 && /^\\d{{10,}}\\.?\\d*$/.test(t) && !el.dataset.hideTs) {{
+          el.style.cssText = 'display:none!important;visibility:hidden!important;font-size:0!important;';
+          el.dataset.hideTs = '1';
+        }}
+      }});
+    }}
     const _fmtCache = {{}};
     function _selectedTimeZone() {{
       const sel = document.getElementById('tzSelect');
@@ -361,29 +370,33 @@ def build_html_dashboard(
       }};
     }}
     function applyTimezoneToAllCharts() {{
-      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite'];
-      ids.forEach((id) => {{
+      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+      for (const id of ids) {{
         const el = document.getElementById(id);
-        if (!el || !el.data || !el.layout || !window.Plotly) return;
+        if (!el || !el.data || !el.layout || !window.Plotly) continue;
         const xs = [];
-        el.data.forEach(tr => {{
+        for (const tr of el.data) {{
           if (tr && Array.isArray(tr.x)) {{
-            tr.x.forEach(v => {{
+            for (const v of tr.x) {{
               const n = Number(v);
               if (Number.isFinite(n)) xs.push(n);
-            }});
+            }}
           }}
-        }});
-        if (!xs.length) return;
+        }}
+        if (xs.length === 0) continue;
         const xaxis = axisLayout(xs);
         Plotly.relayout(el, {{ xaxis: Object.assign({{}}, el.layout.xaxis || {{}}, xaxis) }});
-      }});
+      }}
+      for (const id of ids) {{
+        const el = document.getElementById(id);
+        if (el && el.data && window.Plotly) Plotly.Plots.resize(el);
+      }}
       applyMarkersToCharts();
       if (data.resources_overlay) {{
         setTimeout(() => {{
-          ['cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite'].forEach(id => {{
+          for (const id of ['cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite']) {{
             const el = document.getElementById(id);
-            if (!el || !el.data || !window.Plotly) return;
+            if (!el || !el.data || !window.Plotly) continue;
             const indices = [];
             const customdatas = [];
             el.data.forEach((tr, i) => {{
@@ -393,7 +406,7 @@ def build_html_dashboard(
               }}
             }});
             if (indices.length) Plotly.restyle(el, {{ customdata: customdatas }}, indices);
-          }});
+          }}
         }}, 0);
       }}
     }}
@@ -1706,6 +1719,11 @@ def build_html_dashboard(
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;
+
+    ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'].forEach(id => {{
+      const el = document.getElementById(id);
+      if (el && el.data) el.on('plotly_hover', () => {{ setTimeout(hideRawTimestampInHover, 0); }});
+    }});
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

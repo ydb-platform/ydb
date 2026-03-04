@@ -1,5 +1,8 @@
 {
     "YqlSelect": {
         "since_langver": "2025.05"
+    },
+    "YqlRangeWindows": {
+        "since_langver": "2025.05"
     }
 }

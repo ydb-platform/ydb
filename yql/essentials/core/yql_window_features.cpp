@@ -7,6 +7,7 @@
 namespace NYql {
 
 bool IsRangeWindowFrameEnabled(TTypeAnnotationContext& types) {
+    static_assert(GetMaxLangVersion() == MakeLangVersion(2025, 5), "Max lang version must be 2025.5");
     return IsWindowNewPipelineEnabled(types) && types.LangVer >= MakeLangVersion(2025, 5);
 }
 

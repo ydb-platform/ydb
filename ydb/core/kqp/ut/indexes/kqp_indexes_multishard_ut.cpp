@@ -2522,6 +2522,12 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             LIMIT 2;
         )");
 
+        {
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            Cerr << "CheckPushTopSort AST: " << explainResult.GetAst() << Endl;
+        }
+
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(
@@ -2529,6 +2535,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                 TTxControl::BeginTx().CommitTx(),
                 execSettings)
             .ExtractValueSync();
+
+        
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/MultiShardIndexedWithDataColumn", {

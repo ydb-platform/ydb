@@ -194,7 +194,5 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 
-bool IsQueryOnlyComments(const TString& queryText);
-
 } // namespace NKqp
 } // namespace NKikimr

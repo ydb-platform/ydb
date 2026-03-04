@@ -104,7 +104,23 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {
-        ctx.IncrementMonCounter("sql_errors", "AstError");
+        // Check if the query contains only whitespace and comments (no real SQL tokens).
+        // In that case, return a valid empty program instead of a parser error.
+        bool hasRealTokens = false;
+        NYql::TIssues tokenizeIssues;
+        lexer->Tokenize(query, queryName, [&hasRealTokens](NSQLTranslation::TParsedToken&& token) {
+            const auto& name = token.Name;
+            if (name != "WS" && name != "COMMENT" && name != "EOF") {
+                hasRealTokens = true;
+            }
+        }, tokenizeIssues, settings.MaxErrors);
+
+        if (!hasRealTokens) {
+            res.Issues.Clear();
+            SqlASTsToYqlsImpl(res, {}, ctx);
+        } else {
+            ctx.IncrementMonCounter("sql_errors", "AstError");
+        }
     }
     if (warningRules) {
         *warningRules = ctx.WarningPolicy.GetRules();

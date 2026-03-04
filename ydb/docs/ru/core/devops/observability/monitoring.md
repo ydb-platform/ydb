@@ -6,7 +6,7 @@
 
 {% note tip %}
 
-Перед началом работы рекомендуем ознакомиться с [описанием метрик](../../reference/observability/metrics/index.md).
+Перед началом работы ознакомьтесь с [описанием метрик](../../reference/observability/metrics/index.md).
 
 {% endnote %}
 
@@ -19,23 +19,25 @@ http://<ydb-server-address>:<ydb-port>/counters/
 где:
 
 - `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
-- `<ydb-port>` – порт UI {{ ydb-short-name }}, указанный в параметре `mon -port` при запуске узла. Значение по умолчанию: 8765.
+- `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon -port` при запуске узла. Значение по умолчанию: 8765.
 
-{% cut "Определить значение параметра `<ydb-port>`" %}
+{% cut "Как определить значение параметра `<ydb-port>`" %}
 
-Определить значение параметра `<ydb-port>` можно командой:
+Определите значение параметра `<ydb-port>` командой:
 
 ```bash
 ps aux | grep ydbd
 ```
 
-Взять значение, указанное в параметре `--mon -port`.
+![-](../../_assets/mon-port.png)
+
+Возьмите значение, указанное в параметре `--mon -port`.
 
 {% endcut %}
 
 {% cut "Пример интерфейса" %}
 
-![grafana-actors](../../_assets/monitoring-UI.png)
+![-](../../_assets/monitoring-UI.png)
 
 {% endcut %}
 
@@ -53,7 +55,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 ```
 
-Для сбора значений метрик вы можете использовать популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/) или любую другую систему с поддержкой этого формата. Значения метрик {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
+Для сбора значений метрик используйте популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/) или любую другую систему с поддержкой этого формата. Значения метрик {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
@@ -73,7 +75,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 {% note tip %}
 
-Перед началом работы рекомендуем ознакомиться со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
+Перед началом работы ознакомьтесь со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
 
 {% endnote %}
 
@@ -175,12 +177,16 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 Импортируйте необходимые [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
 
-Для импорта дашбордов используйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) из интерфейса Grafana или выполните [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. При других способах интеграции модифицируйте скрипт согласно вашим требованиям.
+Для импорта дашбордов воспользуйтесь одним из следующих способов:
+
+- Используйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) в интерфейсе Grafana.
+
+- Выполните [скрипт для загрузки дашбордов](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) и при необходимости может быть модифицирован для других способов интеграции.
 
 ### Результат
 
 {% cut "Пример дашборда в Grafana" %}
 
-![grafana-actors](../../_assets/grafana.png)
+![-](../../_assets/grafana.png)
 
 {% endcut %}

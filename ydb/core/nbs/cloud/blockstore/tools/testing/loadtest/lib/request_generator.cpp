@@ -16,8 +16,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TArtificialRequestGenerator final
-    : public IRequestGenerator
+class TArtificialRequestGenerator final: public IRequestGenerator
 {
 private:
     TLog Log;
@@ -31,8 +30,8 @@ private:
 
 public:
     TArtificialRequestGenerator(
-            ILoggingServicePtr logging,
-            NProto::TRangeTest range)
+        ILoggingServicePtr logging,
+        NProto::TRangeTest range)
         : RangeTest(std::move(range))
         , BlocksRange(TBlockRange64::MakeClosedInterval(
               RangeTest.GetStart(),
@@ -60,15 +59,14 @@ private:
 
 TString TArtificialRequestGenerator::Describe() const
 {
-    return TStringBuilder()
-        << "Range[" << RangeTest.GetStart()
-        << ',' << RangeTest.GetEnd() << ']';
+    return TStringBuilder() << "Range[" << RangeTest.GetStart() << ','
+                            << RangeTest.GetEnd() << ']';
 }
 
 bool TArtificialRequestGenerator::HasMoreRequests() const
 {
-    return !RangeTest.GetRequestsCount()
-        || RangeTest.GetRequestsCount() - SentRequestCount;
+    return !RangeTest.GetRequestsCount() ||
+           RangeTest.GetRequestsCount() - SentRequestCount;
 }
 
 bool TArtificialRequestGenerator::HasWriteRequests() const
@@ -140,7 +138,7 @@ EBlockStoreRequest TArtificialRequestGenerator::ChooseRequest() const
         Rates.begin(),
         Rates.end(),
         RandomNumber(TotalRate),
-        [] (const auto& a, const auto& b) { return a.first < b; });
+        [](const auto& a, const auto& b) { return a.first < b; });
 
     auto offset = std::distance(Rates.begin(), it);
     return Rates[offset].second;

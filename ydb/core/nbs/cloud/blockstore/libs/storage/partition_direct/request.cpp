@@ -210,7 +210,7 @@ NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
         GetActorSystem());
 
     TStringBuilder lsnsStr;
-    for (ui64 lsn : GetLsns()) {
+    for (ui64 lsn: GetLsns()) {
         if (!lsnsStr.empty()) {
             lsnsStr << ";";
         }
@@ -241,12 +241,14 @@ ui64 TSyncRequestHandler::OnSyncRequested(ui64 startIndex, ui64 lsn)
     return SyncRequests.size();
 }
 
-const TVector<TSyncRequestHandler::TSyncRequest>& TSyncRequestHandler::GetSyncRequests() const
+const TVector<TSyncRequestHandler::TSyncRequest>&
+TSyncRequestHandler::GetSyncRequests() const
 {
     return SyncRequests;
 }
 
-TVector<NKikimr::NDDisk::TBlockSelector> TSyncRequestHandler::GetBlockSelectors() const
+TVector<NKikimr::NDDisk::TBlockSelector>
+TSyncRequestHandler::GetBlockSelectors() const
 {
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     for (const auto& request: SyncRequests) {
@@ -295,7 +297,7 @@ NWilson::TSpan& TEraseRequestHandler::GetChildSpan(ui64 requestId)
         GetActorSystem());
 
     TStringBuilder lsnsStr;
-    for (ui64 lsn : GetLsns()) {
+    for (ui64 lsn: GetLsns()) {
         if (!lsnsStr.empty()) {
             lsnsStr << ";";
         }
@@ -320,7 +322,8 @@ ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
     return SyncRequestHandler->GetPersistentBufferIndex();
 }
 
-TVector<NKikimr::NDDisk::TBlockSelector> TEraseRequestHandler::GetBlockSelectors() const
+TVector<NKikimr::NDDisk::TBlockSelector>
+TEraseRequestHandler::GetBlockSelectors() const
 {
     return SyncRequestHandler->GetBlockSelectors();
 }
@@ -410,10 +413,9 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     NWilson::TTraceId traceId,
     TString name,
     ui64 tabletId,
+    ui32 vChunkIndex,
     ui8 requiredAckCount)
-    : TBaseRequestHandler(
-        actorSystem,
-        0)   // vChunkIndex. Temporary set to 0 since restore will be moved to vchunk.
+    : TBaseRequestHandler(actorSystem, vChunkIndex)
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
 {
@@ -428,8 +430,7 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
 
 NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(
     ui64 requestId,
-    TString eventName
-)
+    TString eventName)
 {
     auto childSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,

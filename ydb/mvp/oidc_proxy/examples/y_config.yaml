@@ -1,0 +1,14 @@
+generic:
+  access_service_type: "yandex_v2"
+  auth:
+    token_file: ydb/mvp/core/examples/token_file.pb.txt
+
+oidc:
+  client_id: "client-id"
+  secret_name: "secret-name"
+  session_service_endpoint: "grpcs://session-service.example.net:8655"
+  session_service_token_name: "service-account-jwt"
+  authorization_server_address: "https://auth.example.net"
+  allowed_proxy_hosts:
+    - "*.host.net"
+    - "*.host-team.ru"

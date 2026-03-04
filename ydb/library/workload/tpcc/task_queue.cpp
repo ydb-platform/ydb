@@ -1,8 +1,9 @@
 #include "task_queue.h"
 
-#include "circular_queue.h"
 #include "timer_queue.h"
 #include "log.h"
+
+#include <ydb/core/util/spsc_circular_queue.h>
 
 #include <util/system/hp_timer.h>
 #include <util/system/spinlock.h>
@@ -38,12 +39,12 @@ struct alignas(64) TPerThreadContext {
     // thread-safe because accessed by task queue thread only
 
     TBinnedTimerQueue<std::coroutine_handle<>> SleepingTasks;
-    TCircularQueue<THandleWithTs> ReadyTasksInternal;
-    TCircularQueue<THandleWithTs> InflightWaitingTasksInternal;
+    NKikimr::TSpscCircularQueue<THandleWithTs> ReadyTasksInternal;
+    NKikimr::TSpscCircularQueue<THandleWithTs> InflightWaitingTasksInternal;
 
-    // accessed by other threads to add ready coroutine
+    // accessed by multiple other threads to add ready coroutine
     TSpinLock ReadyTasksLock;
-    TCircularQueue<THandleWithTs> ReadyTasksExternal;
+    NKikimr::TSpscCircularQueue<THandleWithTs> ReadyTasksExternal;
 
     ITaskQueue::TThreadStats Stats;
 };

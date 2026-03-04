@@ -46,7 +46,7 @@ class TestTruncateTableConcurrency(TestBase):
         self.query(
             f"""
             CREATE TABLE `{table_name}` (
-                id Int64 NOT NULL,
+                id UInt64 NOT NULL,
                 numeric_value_1 Int64 NOT NULL,
                 numeric_value_2 Double,
                 vector_data String NOT NULL,

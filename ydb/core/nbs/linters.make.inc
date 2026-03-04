@@ -1,0 +1,4 @@
+IF (MODULE_LANG == CPP)
+    STYLE_CPP(CONFIG_TYPE .clang-format)
+ENDIF()
+

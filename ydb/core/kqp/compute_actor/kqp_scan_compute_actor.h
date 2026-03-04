@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_scan_common.h"
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
@@ -27,6 +28,8 @@ private:
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     bool ScanDataInFlight = false;
+    ui64 SendDataReceived = 0;
+    ui64 AcksSent = 0;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {
@@ -84,6 +87,7 @@ public:
                 hFunc(TEvScanExchange::TEvRegisterFetcher, Handle);
                 hFunc(TEvScanExchange::TEvFetcherFinished, Handle);
                 hFunc(TEvScanExchange::TEvTerminateFromFetcher, Handle)
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 default:
                     BaseStateFuncBody(ev);
             }
@@ -160,6 +164,40 @@ public:
     }
 
     void DoBootstrap();
+
+    void ExtraMonitoringInfo(TStringStream& str) override {
+        TBase::ExtraMonitoringInfo(str);
+        str << Endl << "Backpressure:" << Endl;
+        str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
+        str << "  AcksSent: " << AcksSent << Endl;
+        str << "  SendDataReceived: " << SendDataReceived << Endl;
+        if (!Fetchers.empty()) {
+            HTML(str) {
+                str << Endl << "Fetcher(s): " << Fetchers.size();
+                for (auto& fetcherId : Fetchers) {
+                    str << " ";
+                    HREF(FetcherLink(SelfId(), fetcherId)) {
+                        str << fetcherId;
+                    }
+                }
+                str << Endl;
+            }
+        }
+    }
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+        auto sf = cgi.Get("sf");
+        if (sf) {
+            for (auto& fetcherId : Fetchers) {
+                if (sf == ToString(fetcherId)) {
+                    TActivationContext::Send(ev->Forward(fetcherId));
+                    return;
+                }
+            }
+        }
+        TBase::OnMonitoringPage(ev);
+    }
 
 };
 

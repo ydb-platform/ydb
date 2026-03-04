@@ -38,4 +38,7 @@ message TStorageServiceConfig
     // Sync requests will be sended when sync queue reaches
     // this size for ddisk.
     optional uint32 SyncRequestsBatchSize = 12;
+
+    // Default stripe size for volumes.
+    optional uint64 StripeSize = 13;
 }

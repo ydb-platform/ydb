@@ -28,8 +28,10 @@ private:
     TString SchemeShardReason;
 
 public:
-    TModifySchemeActor(TRequestInfoPtr requestInfo, const TActorId& owner,
-                       NKikimrSchemeOp::TModifyScheme modifyScheme);
+    TModifySchemeActor(
+        TRequestInfoPtr requestInfo,
+        const TActorId& owner,
+        NKikimrSchemeOp::TModifyScheme modifyScheme);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -40,17 +42,20 @@ private:
         const TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev,
         const TActorContext& ctx);
 
-    void HandleTxDone(const TEvSSProxy::TEvWaitSchemeTxResponse::TPtr& ev,
-                      const TActorContext& ctx);
+    void HandleTxDone(
+        const TEvSSProxy::TEvWaitSchemeTxResponse::TPtr& ev,
+        const TActorContext& ctx);
 
-    void ReplyAndDie(const TActorContext& ctx,
-                     NProto::TError error = NProto::TError());
+    void ReplyAndDie(
+        const TActorContext& ctx,
+        NProto::TError error = NProto::TError());
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TModifySchemeActor::TModifySchemeActor(
-    TRequestInfoPtr requestInfo, const TActorId& owner,
+    TRequestInfoPtr requestInfo,
+    const TActorId& owner,
     NKikimrSchemeOp::TModifyScheme modifyScheme)
     : RequestInfo(std::move(requestInfo))
     , Owner(owner)
@@ -90,7 +95,8 @@ void TModifySchemeActor::HandleStatus(
                 "Request %s with TxId# %lu completed immediately",
                 NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(), TxId);
+                    .data(),
+                TxId);
 
             ReplyAndDie(ctx);
             break;
@@ -103,10 +109,15 @@ void TModifySchemeActor::HandleStatus(
                 "Request %s with TxId# %lu in progress, waiting for completion",
                 NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(), TxId);
+                    .data(),
+                TxId);
 
             NYdb::NBS::Send<TEvSSProxy::TEvWaitSchemeTxRequest>(
-                ctx, Owner, 0, SchemeShardTabletId, TxId);
+                ctx,
+                Owner,
+                0,
+                SchemeShardTabletId,
+                TxId);
             break;
 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError: {
@@ -116,7 +127,8 @@ void TModifySchemeActor::HandleStatus(
                 "Request %s with TxId# %lu failed with status %s",
                 NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(), TxId,
+                    .data(),
+                TxId,
                 NKikimrScheme::EStatus_Name(SchemeShardStatus).data());
 
             if ((SchemeShardStatus ==
@@ -127,11 +139,18 @@ void TModifySchemeActor::HandleStatus(
                 ui64 txId = record.GetPathCreateTxId() != 0
                                 ? record.GetPathCreateTxId()
                                 : record.GetPathDropTxId();
-                LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-                          "Waiting for a different TxId# %lu", txId);
+                LOG_DEBUG(
+                    ctx,
+                    NKikimrServices::NBS_SS_PROXY,
+                    "Waiting for a different TxId# %lu",
+                    txId);
 
                 NYdb::NBS::Send<TEvSSProxy::TEvWaitSchemeTxRequest>(
-                    ctx, Owner, 0, SchemeShardTabletId, txId);
+                    ctx,
+                    Owner,
+                    0,
+                    SchemeShardTabletId,
+                    txId);
                 break;
             }
 
@@ -198,7 +217,8 @@ void TModifySchemeActor::HandleStatus(
                 "Request %s to tx_proxy failed with code %u",
                 NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(), status);
+                    .data(),
+                status);
 
             ReplyAndDie(
                 ctx,
@@ -215,21 +235,27 @@ void TModifySchemeActor::HandleTxDone(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-              "TModifySchemeActor received TEvWaitSchemeTxResponse");
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_SS_PROXY,
+        "TModifySchemeActor received TEvWaitSchemeTxResponse");
 
     ReplyAndDie(ctx, msg->GetError());
 }
 
-void TModifySchemeActor::ReplyAndDie(const TActorContext& ctx,
-                                     NProto::TError error)
+void TModifySchemeActor::ReplyAndDie(
+    const TActorContext& ctx,
+    NProto::TError error)
 {
     if (SchemeShardStatus == NKikimrScheme::StatusPreconditionFailed) {
         error = GetErrorFromPreconditionFailed(error);
     }
 
     auto response = std::make_unique<TEvSSProxy::TEvModifySchemeResponse>(
-        error, SchemeShardTabletId, SchemeShardStatus, SchemeShardReason);
+        error,
+        SchemeShardTabletId,
+        SchemeShardStatus,
+        SchemeShardReason);
 
     NYdb::NBS::Reply(ctx, *RequestInfo, std::move(response));
     Die(ctx);
@@ -242,8 +268,10 @@ STFUNC(TModifySchemeActor::StateWork)
         HFunc(TEvSSProxy::TEvWaitSchemeTxResponse, HandleTxDone);
 
         default:
-            HandleUnexpectedEvent(ev, NKikimrServices::NBS_SS_PROXY,
-                                  __PRETTY_FUNCTION__);
+            HandleUnexpectedEvent(
+                ev,
+                NKikimrServices::NBS_SS_PROXY,
+                __PRETTY_FUNCTION__);
             break;
     }
 }
@@ -261,15 +289,20 @@ void TSSProxyActor::HandleModifyScheme(
     auto requestInfo =
         CreateRequestInfo(ev->Sender, ev->Cookie, msg->CallContext);
 
-    NYdb::NBS::Register<TModifySchemeActor>(ctx, std::move(requestInfo),
-                                            ctx.SelfID, msg->ModifyScheme);
+    NYdb::NBS::Register<TModifySchemeActor>(
+        ctx,
+        std::move(requestInfo),
+        ctx.SelfID,
+        msg->ModifyScheme);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<TEvSSProxy::TEvModifySchemeRequest>
 CreateModifySchemeRequestForAlterVolume(
-    TString path, ui64 pathId, ui64 version,
+    TString path,
+    ui64 pathId,
+    ui64 version,
     const NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     TString volumeDir;

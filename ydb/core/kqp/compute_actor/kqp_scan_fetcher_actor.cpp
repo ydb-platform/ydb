@@ -1,6 +1,8 @@
 #include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -150,6 +152,9 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (ev->Get()->Finished) {
         state->State = EShardState::PostRunning;
     }
+
+    ev->Get()->ArrowBatch = NArrow::ClaimMemoryOwnership(ev->Get()->ArrowBatch);
+
     PendingScanData.emplace_back(std::make_pair(ev, startTime));
 
     ProcessScanData();
@@ -528,6 +533,10 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
+    ++BlocksReceived;
+    if (msg.ArrowBatch) {
+        TotalBytesReceived += NArrow::GetTableDataSize(msg.ArrowBatch);
+    }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)(
         "generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(

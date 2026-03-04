@@ -385,14 +385,17 @@ protected:
     void RequestDone(i32 requests = 1);
     void CacheRequestDone();
     void CancelAllRequests();
+    void Cancelled();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
+    STATEFN(StateWork);
     void RedirectToDatabase(const TString& database);
     bool NeedToRedirect(bool checkDatabaseAuth = true);
     void HandleTimeout();

@@ -40,7 +40,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
         Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood, TGroupInfo *group,
         TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime,
-        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed)
+        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed, Table::PersistentBufferRefs::Type persistentBufferRefs)
     : VSlotId(vSlotId)
     , PDisk(pdisk)
     , GroupId(groupId)
@@ -54,6 +54,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , LastSeenReady(lastSeenReady)
     , ReplicationTime(replicationTime)
     , DDiskNumVChunksClaimed(ddiskNumVChunksClaimed)
+    , PersistentBufferRefs(persistentBufferRefs)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
     Y_ABORT_UNLESS(pdisk);
@@ -109,7 +110,8 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             const TVSlotInfo *slot = VDisksInGroup[index];
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
-            layout.AddDisk({mapper, location, pdiskId, geom}, index);
+            const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
+            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
@@ -1231,7 +1233,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();

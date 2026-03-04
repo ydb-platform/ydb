@@ -134,7 +134,8 @@ public:
         initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
-        initReply->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
+        NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
+        initReply->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
             delete ptr;
         });
         SendPDiskResponse(disk, *init, initReply.release());

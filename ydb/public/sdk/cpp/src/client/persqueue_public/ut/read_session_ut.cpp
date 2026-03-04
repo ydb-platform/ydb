@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
@@ -599,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateExternalThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }

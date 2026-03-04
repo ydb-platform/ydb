@@ -33,7 +33,9 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
-    void EstablishConnections(NWilson::TTraceId traceId) override;
+    void EstablishConnections(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,

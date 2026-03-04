@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -25,7 +26,9 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
-    virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
+    virtual void EstablishConnections(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -80,6 +83,9 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
+    static constexpr ui32 DDisksNumber = 5;
+
+    bool Initialized = false;
     ui32 SyncRequestsBatchSize;
 
     class TDirtyMap;
@@ -102,7 +108,9 @@ public:
 
     ~TDirectBlockGroup() override;
 
-    void EstablishConnections(NWilson::TTraceId traceId) override;
+    void EstablishConnections(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         ui32 vChunkIndex,
@@ -118,7 +126,8 @@ public:
 
 private:
     void DoEstablishPersistentBufferConnection(
-        size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler);
+        size_t i,
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void HandlePersistentBufferConnected(
         size_t index,
@@ -131,7 +140,8 @@ private:
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
-    void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestHandler> requestHandler);
+    void DoWriteBlocksLocal(
+        std::shared_ptr<TWriteRequestHandler> requestHandler);
 
     void HandleWritePersistentBufferResult(
         std::shared_ptr<TWriteRequestHandler> requestHandler,
@@ -140,6 +150,10 @@ private:
             result);
 
     void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
+    void RequestBlockFlush(
+        const NWilson::TTraceId& parentTrace,
+        ui64 blockIndex,
+        ui32 vChunkIndex);
 
     void ProcessSyncQueue(size_t ddiskId);
 
@@ -165,7 +179,9 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
-    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId);
+    void RestoreFromPersistentBuffer(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex);
     void DoRestoreFromPersistentBuffer(
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
     void HandleListPersistentBufferResultOnRestore(
@@ -173,7 +189,9 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
         std::shared_ptr<TOverallAckRequestHandler> requestHandler);
-    void RestoreFromPersistentBufferFinised();
+    void RestoreFromPersistentBufferFinised(
+        NWilson::TTraceId traceId,
+        ui32 vChunkIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

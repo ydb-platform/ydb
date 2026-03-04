@@ -29,8 +29,7 @@ struct TRequestTime
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCallContextBase
-    : public TThrRefBase
+struct TCallContextBase: public TThrRefBase
 {
 private:
     TAtomic Stage2Time[static_cast<int>(EProcessingStage::Last)] = {};

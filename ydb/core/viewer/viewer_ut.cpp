@@ -756,15 +756,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&tablets=true&enums=true&sort=&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -791,15 +784,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -829,12 +820,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -862,15 +849,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -903,12 +888,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/shared");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/shared&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -936,15 +917,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -977,14 +956,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("path", "/Root/serverless/users");
-        httpReq.CgiParameters.emplace("direct", "1");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&path=/Root/serverless/users&tablets=true HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -1013,15 +986,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;

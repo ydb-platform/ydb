@@ -48,7 +48,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     THashSet<TString> OffloadTenantsRequested;
     THashSet<TString> MetadataCacheRequested;
     THashMap<TNodeId, TString> NodeIdsToTenant; // for tablet info
-    ui32 Timeout = 0;
     TString User;
     TString DomainPath;
     bool Tablets = false;
@@ -72,12 +71,11 @@ class TJsonTenantInfo : public TViewerPipeClient {
     };
 
 public:
-    TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonTenantInfo(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
-        const auto& params(Event->Get()->Request.GetParams());
         if (Database.empty()) {
-            Database = params.Get("path");
+            Database = Params.Get("path");
         }
     }
 
@@ -124,20 +122,18 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
         Followers = false;
         Metrics = true;
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
-        SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
-        Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
-        MemoryStats = FromStringWithDefault<bool>(params.Get("memory"), MemoryStats);
-        Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
-        Users = FromStringWithDefault<bool>(params.Get("users"), Users);
-        User = params.Get("user");
-        OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
-        MetadataCache = FromStringWithDefault<bool>(params.Get("metadata_cache"), MetadataCache);
-        ShowAllDatabases = FromStringWithDefault<bool>(params.Get("show_all_databases"), ShowAllDatabases);
+        Tablets = FromStringWithDefault<bool>(Params.Get("tablets"), Tablets);
+        SystemTablets = FromStringWithDefault<bool>(Params.Get("system_tablets"), Tablets); // Tablets here is by design
+        Storage = FromStringWithDefault<bool>(Params.Get("storage"), Storage);
+        MemoryStats = FromStringWithDefault<bool>(Params.Get("memory"), MemoryStats);
+        Nodes = FromStringWithDefault<bool>(Params.Get("nodes"), Nodes);
+        Users = FromStringWithDefault<bool>(Params.Get("users"), Users);
+        User = Params.Get("user");
+        OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
+        MetadataCache = FromStringWithDefault<bool>(Params.Get("metadata_cache"), MetadataCache);
+        ShowAllDatabases = FromStringWithDefault<bool>(Params.Get("show_all_databases"), ShowAllDatabases);
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -164,7 +160,7 @@ public:
             PoolsResponse = MakeCachedRequestBSControllerPools();
         }
 
-        Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateCollectingInfo, Timeout, new TEvents::TEvWakeup());
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
@@ -220,6 +216,8 @@ public:
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -383,7 +381,7 @@ public:
             Subscribers.insert(nodeId);
             THolder<TEvViewer::TEvViewerRequest> sysRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
             InitSystemStateRequest(*sysRequest->Record.MutableSystemRequest());
-            sysRequest->Record.SetTimeout(Timeout / 3);
+            sysRequest->Record.SetTimeout(Timeout.MilliSeconds() / 3);
             for (auto nodeId : nodesIds) {
                 sysRequest->Record.MutableLocation()->AddNodeId(nodeId);
             }
@@ -392,7 +390,7 @@ public:
             if (Tablets) {
                 THolder<TEvViewer::TEvViewerRequest> tblRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
                 tblRequest->Record.MutableTabletRequest()->SetFormat("packed5");
-                tblRequest->Record.SetTimeout(Timeout / 3);
+                tblRequest->Record.SetTimeout(Timeout.MilliSeconds() / 3);
                 for (auto nodeId : nodesIds) {
                     tblRequest->Record.MutableLocation()->AddNodeId(nodeId);
                 }

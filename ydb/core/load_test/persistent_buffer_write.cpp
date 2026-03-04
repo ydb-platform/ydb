@@ -75,14 +75,12 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     std::vector<TWriteInfo> WriteInfos;
     ui32 TotalWeight = 0;
 
-    std::map<ui64, ui64> Lsns;
-    ui64 WriteSizeBytes = 0;
-    double FreeSpace = 0;
+    std::unordered_map<ui64, ui64> Lsns;
+    double FreeSpace = 1;
 
 
     TReallyFastRng32 Rng;
 
-    TString WriteSizeInfo = ToString(WriteSizeBytes);
     TString SequentialInfo = "unknown";
 
 
@@ -317,19 +315,19 @@ public:
                 auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                     NDDisk::TBlockSelector(1, 0, write.Size),
                     requestIdx, NDDisk::TWriteInstruction(0));
-                ev->AddPayload(BuildPayload(write.Size));
+                ev->AddPayload(TRope(write.Data));
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++Write_RequestsSent;
                 ++InFlight;
             } else {
                 auto it = Lsns.begin();
-                std::advance(it, Rng() % Lsns.size());
                 const TInstant now = TAppData::TimeProvider->Now();
                 const ui64 requestIdx = NewTRequestInfo(it->second, now, true);
 
-                auto ev = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials,
-                    NDDisk::TBlockSelector(1, 0, it->second),
-                    it->first);
+                std::vector<std::tuple<NDDisk::TBlockSelector, ui64>> erases;
+                erases.push_back({{1, 0, (ui32)it->second}, it->first});
+                auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(Credentials,
+                    erases);
                 SendRequest(ctx, std::move(ev), requestIdx);
                 Lsns.erase(it);
 
@@ -374,36 +372,35 @@ public:
         const TRequestInfo& request = it->second;
 
         if (request.IsErase) {
-            WriteSizeBytes -= request.Size;
             if (ok) {
                 ++Erase_OK;
             } else {
                 ++Erase_Error;
             }
+            *BytesWritten += SectorSize;
         } else {
             if (ok) {
                 ++Write_OK;
             } else {
                 ++Write_Error;
             }
-
-            if (now > MeasurementStartTime) {
-                Report->LatencyUs.Increment((now - request.StartTime).MicroSeconds());
-            }
-
-            *BytesWritten += request.Size;
-            TimeSeries.emplace(now, TRequestStat{
-                    static_cast<ui64>(*BytesWritten),
-                    request.Size,
-                    now - request.StartTime
-                });
-            ResponseTimes.Increment((now - request.StartTime).MicroSeconds());
-            // cut time series to 60 seconds
-            auto pos = TimeSeries.upper_bound(now - TDuration::Seconds(60));
-            TimeSeries.erase(TimeSeries.begin(), pos);
             Lsns.insert({requestIdx, request.Size});
-            WriteSizeBytes += request.Size;
+            *BytesWritten += request.Size;
         }
+
+        if (now > MeasurementStartTime) {
+            Report->LatencyUs.Increment((now - request.StartTime).MicroSeconds());
+        }
+
+        TimeSeries.emplace(now, TRequestStat{
+                static_cast<ui64>(*BytesWritten),
+                request.Size,
+                now - request.StartTime
+            });
+        ResponseTimes.Increment((now - request.StartTime).MicroSeconds());
+        // cut time series to 60 seconds
+        auto pos = TimeSeries.upper_bound(now - TDuration::Seconds(60));
+        TimeSeries.erase(TimeSeries.begin(), pos);
         --InFlight;
         RequestInfo.erase(it);
 
@@ -446,7 +443,6 @@ public:
                     PARAM("TEvWritePersistentBufferResult msgs received, not OK", Write_Error);
                     PARAM("Bytes written", static_cast<ui64>(*BytesWritten));
                     PARAM("DDiskId", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32, DDiskNodeId, DDiskPDiskId, DDiskSlotId));
-                    PARAM("Write size", WriteSizeInfo);
                     PARAM("Sequential", SequentialInfo);
 
                     for (ui32 dt : {5, 10, 15, 20, 60}) {

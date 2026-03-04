@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
+
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -18,9 +19,7 @@ private:
     ui32 VChunkIndex;
 
 public:
-    TBaseRequestHandler(
-        NActors::TActorSystem* actorSystem,
-        ui32 vChunkIndex);
+    TBaseRequestHandler(NActors::TActorSystem* actorSystem, ui32 vChunkIndex);
 
     virtual ~TBaseRequestHandler() = default;
 
@@ -131,7 +130,8 @@ public:
 
     [[nodiscard]] const TVector<TSyncRequest>& GetSyncRequests() const;
 
-    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
+    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector>
+    GetBlockSelectors() const;
     [[nodiscard]] TVector<ui64> GetLsns() const;
 
 private:
@@ -156,7 +156,8 @@ public:
 
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
-    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
+    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector>
+    GetBlockSelectors() const;
     [[nodiscard]] TVector<ui64> GetLsns() const;
 
 private:
@@ -201,6 +202,7 @@ public:
         NWilson::TTraceId traceId,
         TString name,
         ui64 tabletId,
+        ui32 vChunkIndex,
         ui8 requiredAckCount);
 
     ~TOverallAckRequestHandler() override = default;
@@ -209,11 +211,14 @@ public:
 
     [[nodiscard]] bool IsCompleted() const;
     bool IsCompleted(ui64 requestId) override;
-    void RegisterCompetedRequest() {
+
+    void RegisterCompetedRequest()
+    {
         ++AckCount;
     }
 
-    [[nodiscard]] ui8 GetRequiredAckCount() const {
+    [[nodiscard]] ui8 GetRequiredAckCount() const
+    {
         return RequiredAckCount;
     }
 

@@ -1,18 +1,18 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index e3c7909..32cdc8a 100644
+index 47942a0..066d572 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
-@@ -26,7 +26,7 @@ _LIBCPP_PUSH_MACROS
- #include <__undef_macros>
- 
+@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
  // TODO: Find out how altivec changes things and allow vectorizations there too.
--#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__)
-+#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__)
+ // TODO: Simplify this condition once we stop building with AppleClang 15 in the CI.
+ #if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_COMPILER_CLANG_BASED) && !defined(__ALTIVEC__) &&                         \
+-    !(defined(_LIBCPP_APPLE_CLANG_VER) && _LIBCPP_APPLE_CLANG_VER < 1600)
++    !(defined(_LIBCPP_APPLE_CLANG_VER) && _LIBCPP_APPLE_CLANG_VER < 1600) && !defined(__CUDACC__)
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
  #else
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
 diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
-index 5bd1f86..f0434f8 100644
+index 8935e5a..70cf1e9 100644
 --- a/include/__iterator/reverse_iterator.h
 +++ b/include/__iterator/reverse_iterator.h
 @@ -132,7 +132,7 @@ public:
@@ -40,10 +40,10 @@ index 7a8e1ad..19f6537 100644
  template <class _Iterator>
  using __is_segmented_iterator _LIBCPP_NODEBUG = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index 0c96f76..dcc54f2 100644
+index 550eb39..5d96407 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
-@@ -92,7 +92,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+@@ -86,7 +86,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
  }
  
  [[__nodiscard__]] inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI
@@ -52,7 +52,7 @@ index 0c96f76..dcc54f2 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
-@@ -111,12 +111,14 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+@@ -105,12 +105,14 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
    return false;
  }
  
@@ -68,7 +68,7 @@ index 0c96f76..dcc54f2 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
-@@ -124,9 +126,11 @@ _LIBCPP_PREFERRED_OVERLOAD
+@@ -118,9 +120,11 @@ _LIBCPP_PREFERRED_OVERLOAD
    return __builtin_isnan(__x);
  }
  
@@ -81,7 +81,7 @@ index 0c96f76..dcc54f2 100644
  // isnormal
  
 diff --git a/include/complex b/include/complex
-index df18159..cef958a 100644
+index fda7579..ac4ad2d 100644
 --- a/include/complex
 +++ b/include/complex
 @@ -1457,6 +1457,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
@@ -101,7 +101,7 @@ index df18159..cef958a 100644
  } // namespace literals
  #  endif
 diff --git a/include/tuple b/include/tuple
-index 1e07034..3218a43 100644
+index f606289..868bbc1 100644
 --- a/include/tuple
 +++ b/include/tuple
 @@ -309,7 +309,7 @@ class __tuple_leaf {

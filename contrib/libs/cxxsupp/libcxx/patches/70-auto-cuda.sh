@@ -43,5 +43,6 @@ replace_has_builtin_in_type_traits __is_volatile is_volatile.h
 replace_has_builtin_in __builtin_verbose_trap __assertion_handler
 replace_has_builtin_in __builtin_clzg __bit/countl.h
 replace_has_builtin_in __builtin_ctzg __bit/countr.h
+replace_has_builtin_in __builtin_popcountg __bit/popcount.h
 
 replace_has_extension_in_type_traits datasizeof datasizeof.h

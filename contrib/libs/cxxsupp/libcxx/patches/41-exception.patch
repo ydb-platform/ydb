@@ -1,10 +1,10 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index 6257e6f..6411a2f 100644
+index dac5b00..32f6271 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
 @@ -54,8 +54,6 @@ _LIBCPP_OVERRIDABLE_FUNC_VIS __cxa_exception* __cxa_init_primary_exception(
  
- namespace std { // purposefully not using versioning namespace
+ _LIBCPP_BEGIN_UNVERSIONED_NAMESPACE_STD
  
 -#ifndef _LIBCPP_ABI_MICROSOFT
 -

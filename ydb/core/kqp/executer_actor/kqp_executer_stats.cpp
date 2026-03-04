@@ -1589,15 +1589,16 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
     }
-    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
 
+    ui64 cpuTimeUs = 0;
     ui64 memoryUsageBytes = 0;
     ui64 tasksCount = 0;
     ui64 inputBytes = 0;
     ui64 outputBytes = 0;
 
     for (const auto& [stageId, stageStat] : StageStats) {
+        cpuTimeUs += stageStat.CpuTimeUs.Sum;
         memoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
         tasksCount += stageStat.Task2Index.size();
         for (auto b : stageStat.IngressBytes) {
@@ -1607,6 +1608,7 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
             outputBytes += b;
         }
     }
+    metrics->CpuTimeMs = cpuTimeUs / 1000;
     metrics->MemoryUsageBytes = memoryUsageBytes;
     metrics->TasksCount = tasksCount;
     metrics->InputBytes = inputBytes;

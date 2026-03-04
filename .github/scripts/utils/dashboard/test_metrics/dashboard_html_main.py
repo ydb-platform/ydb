@@ -191,6 +191,12 @@ def build_html_dashboard(
         <span>Include estimated (from ya.make) CPU/RAM</span>
       </label>
     </span>
+    <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fff;">
+      <b>CPU/RAM layers:</b>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerBySuites" checked onchange="applyLayerToggles()">By suites</label>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerTotal" checked onchange="applyLayerToggles()">Total (monitor)</label>
+      <label style="margin-left:6px;"><input type="checkbox" id="layerYaMake" checked onchange="applyLayerToggles()">Ya make (monitor)</label>
+    </span>
   </div>
   <details class="metrics-help">
     <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
@@ -1631,6 +1637,37 @@ def build_html_dashboard(
       sort: false,
       hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
     }}], {{title: 'Active time share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+
+    if (data.resources_overlay) {{
+      document.getElementById('layerTogglesWrap').style.display = '';
+    }}
+    function applyLayerToggles() {{
+      if (!data.resources_overlay) return;
+      const bySuites = document.getElementById('layerBySuites')?.checked ?? true;
+      const total = document.getElementById('layerTotal')?.checked ?? true;
+      const yaMake = document.getElementById('layerYaMake')?.checked ?? true;
+      function setVisibility(el, nStacked) {{
+        if (!el || !el.data || !window.Plotly) return;
+        const vis = el.data.map((_, i) => {{
+          if (i < nStacked) return bySuites;
+          if (i === nStacked) return total;
+          if (i === nStacked + 1) return yaMake;
+          return true;
+        }});
+        Plotly.restyle(el, {{ visible: vis }}, [...Array(el.data.length).keys()]);
+      }}
+      const nCpuSuite = Number(data.cpu_suite_trace_count) || 0;
+      const nRamSuite = Number(data.ram_suite_trace_count) || 0;
+      setVisibility(document.getElementById('cpuLayerSuite'), nCpuSuite);
+      setVisibility(document.getElementById('ramLayerSuite'), nRamSuite);
+      if (data.by_chunk) {{
+        const nCpuChunk = Number(data.cpu_chunk_trace_count) || 0;
+        const nRamChunk = Number(data.ram_chunk_trace_count) || 0;
+        setVisibility(document.getElementById('cpuLayer'), nCpuChunk);
+        setVisibility(document.getElementById('ramLayer'), nRamChunk);
+      }}
+    }}
+    window.applyLayerToggles = applyLayerToggles;
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

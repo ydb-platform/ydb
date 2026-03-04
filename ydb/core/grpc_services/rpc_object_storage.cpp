@@ -15,6 +15,8 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
@@ -62,6 +64,8 @@ private:
     TVector<TString> CommonPrefixesRows;
     TVector<TSerializedCellVec> ContentsRows;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -78,6 +82,7 @@ public:
         , WaitingResolveReply(false)
         , Finished(false)
         , CurrentShardIdx(0)
+        , Span(TWilsonGrpc::RequestActor, GrpcRequest->GetWilsonTraceId(), "ObjectStorageListingRpc")
     {
     }
 
@@ -140,7 +145,7 @@ private:
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -166,6 +171,10 @@ private:
         GrpcRequest->Reply(resp, grpcStatus);
 
         Finished = true;
+
+        if (Span) {
+            Span.EndError(message);
+        }
 
         // We cannot Die() while scheme cache request is in flight because that request has pointer to
         // KeyRange member so we must not destroy it before we get the response
@@ -372,7 +381,7 @@ private:
             TString err;
 
             bool filterParsedOk = CellsFromTuple(&filterType, columnValues, typesRef, true, false, cells, err, owner);
-            
+
             if (!filterParsedOk) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
                 return false;
@@ -446,7 +455,7 @@ private:
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release());
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResolveShards);
         WaitingResolveReply = true;
@@ -545,7 +554,7 @@ private:
         ev->Record.SetPathColumnDelimiter(Request->Getpath_column_delimiter());
         ev->Record.SetSerializedStartAfterKeySuffix(StartAfterSuffixColumns.GetBuffer());
         ev->Record.SetMaxKeys(MaxKeys - ContentsRows.size() - CommonPrefixesRows.size());
-        
+
         if (!CommonPrefixesRows.empty()) {
             // Next shard might have the same common prefix, need to skip it
             ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back());
@@ -564,7 +573,7 @@ private:
 
         if (!Filter.ColumnIds.empty()) {
             auto* filter = ev->Record.mutable_filter();
-            
+
             for (const auto& colId : Filter.ColumnIds) {
                 filter->add_columns(colId);
             }
@@ -578,7 +587,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResults);
     }
@@ -624,7 +633,7 @@ private:
         afterLastFolderPrefix.Parse(prefixColumns);
 
         auto& partitions = KeyRange->GetPartitions();
-        
+
         for (CurrentShardIdx++; CurrentShardIdx < partitions.size(); CurrentShardIdx++) {
             auto& partition = KeyRange->GetPartitions()[CurrentShardIdx];
 
@@ -693,7 +702,7 @@ private:
             shardResponse.GetMoreRows()) {
             if (!FindNextShard()) {
                 ReplySuccess(ctx, (hasMoreShards && shardResponse.GetMoreRows()) || maxKeysExhausted);
-                return;    
+                return;
             }
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
@@ -714,7 +723,7 @@ private:
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
             case NScheme::NTypeIds::Decimal:
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
-                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetPrecision(),
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
             default:
@@ -727,7 +736,7 @@ private:
         for (const auto& colMeta : columns) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet.Addcolumns();
-            
+
             *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
             *col->mutable_name() = colMeta.Name;
         }
@@ -754,7 +763,7 @@ private:
                     Ydb::Value valueProto;
                     valueProto.set_low_128(loHi.first);
                     valueProto.set_high_128(loHi.second);
-                    const NYdb::TDecimalValue decimal(valueProto, 
+                    const NYdb::TDecimalValue decimal(valueProto,
                         {static_cast<ui8>(colMeta.PType.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.PType.GetDecimalType().GetScale())});
                     vb.Decimal(decimal);
                 } else {
@@ -801,10 +810,10 @@ private:
         if (CommonPrefixesRows.size() > 0) {
             lastDirectory = CommonPrefixesRows[CommonPrefixesRows.size() - 1];
         }
-        
+
         if (isTruncated && (lastDirectory || lastFile)) {
             NKikimrTxDataShard::TObjectStorageListingContinuationToken token;
-            
+
             if (lastDirectory > lastFile) {
                 token.set_last_path(lastDirectory);
                 token.set_is_folder(true);
@@ -814,7 +823,7 @@ private:
             }
 
             TString serializedToken = token.SerializeAsString();
-            
+
             resp->set_next_continuation_token(serializedToken);
         }
 
@@ -824,8 +833,13 @@ private:
             GrpcRequest->RaiseIssue(NYql::ExceptionToIssue(ex));
             GrpcRequest->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
         }
-        
+
         Finished = true;
+
+        if (Span) {
+            Span.EndOk();
+        }
+
         Die(ctx);
     }
 };

@@ -3,10 +3,17 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
+#include <util/datetime/base.h>
+#include <util/string/cast.h>
+#include <regex>
 
 namespace NKikimr {
 namespace NFlatTests {
@@ -17,6 +24,20 @@ using NClient::TValue;
 Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
     static int GRPC_PORT = 0;
+
+    TServerSettings MakeObjectStorageServerSettings(ui16 port, bool enableParameterizedDecimal = false) {
+        TServerSettings settings(port);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableLocalDBBtreeIndex(false);
+        featureFlags.SetEnableLocalDBFlatIndex(false);
+        if (enableParameterizedDecimal) {
+            featureFlags.SetEnableParameterizedDecimal(true);
+        }
+
+        settings.SetFeatureFlags(featureFlags);
+        return settings;
+    }
 
     void S3WriteRow(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table, bool someBool = true) {
         TString insertRowQuery =  R"(
@@ -43,6 +64,69 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         annoyingClient.FlatQuery(runtime, Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), someBool ? "true" : "false", table.data()));
     }
 
+    void S3BulkUpsertRows(TTestActorRuntime* runtime, ui64 hash, const TString& name, const TVector<TString>& paths,
+                          ui64 version, ui64 ts, const TString& data, const TString& table, bool someBool = true) {
+        using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Table::BulkUpsertRequest,
+            Ydb::Table::BulkUpsertResponse>;
+
+        Ydb::Table::BulkUpsertRequest request;
+        request.set_table("/dc-1/Dir/" + table);
+        auto* rows = request.mutable_rows();
+
+        auto* rowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+
+        auto* hashType = rowType->add_members();
+        hashType->set_name("Hash");
+        hashType->mutable_type()->set_type_id(Ydb::Type::UINT64);
+
+        auto* nameType = rowType->add_members();
+        nameType->set_name("Name");
+        nameType->mutable_type()->set_type_id(Ydb::Type::UTF8);
+
+        auto* pathType = rowType->add_members();
+        pathType->set_name("Path");
+        pathType->mutable_type()->set_type_id(Ydb::Type::UTF8);
+
+        auto* versionType = rowType->add_members();
+        versionType->set_name("Version");
+        versionType->mutable_type()->set_type_id(Ydb::Type::UINT64);
+
+        auto* tsType = rowType->add_members();
+        tsType->set_name("Timestamp");
+        tsType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+
+        auto* dataType = rowType->add_members();
+        dataType->set_name("Data");
+        dataType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+
+        auto* someBoolType = rowType->add_members();
+        someBoolType->set_name("SomeBool");
+        someBoolType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::BOOL);
+
+        auto* reqRows = rows->mutable_value();
+        for (const auto& path : paths) {
+            auto* row = reqRows->add_items();
+            row->add_items()->set_uint64_value(hash);
+            row->add_items()->set_text_value(name);
+            row->add_items()->set_text_value(path);
+            row->add_items()->set_uint64_value(version);
+            row->add_items()->set_uint64_value(ts);
+            row->add_items()->set_bytes_value(data);
+            row->add_items()->set_bool_value(someBool);
+        }
+
+        auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+            std::move(request), "", "", runtime->GetActorSystem(0));
+        auto response = runtime->WaitFuture(std::move(future));
+
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.operation().status(),
+            Ydb::StatusIds::SUCCESS,
+            response.operation().DebugString());
+    }
+
     void S3DeleteRow(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, TString table) {
         TString eraseRowQuery =  R"(
                     (
@@ -60,6 +144,48 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 )";
 
         annoyingClient.FlatQuery(runtime, Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data()));
+    }
+
+    void S3BulkDeleteRows(ui16 grpcPort, ui64 hash, const TString& name,
+                             const TString& pathBegin, const TString& pathEnd,
+                             ui64 version, const TString& table) {
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NTable::TTableClient tableClient(driver);
+
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$hash").Uint64(hash).Build()
+            .AddParam("$name").Utf8(name).Build()
+            .AddParam("$pathBegin").Utf8(pathBegin).Build()
+            .AddParam("$pathEnd").Utf8(pathEnd).Build()
+            .AddParam("$version").Uint64(version).Build()
+            .Build();
+
+        const TString query = Sprintf(R"(
+            DECLARE $hash AS Uint64;
+            DECLARE $name AS Utf8;
+            DECLARE $pathBegin AS Utf8;
+            DECLARE $pathEnd AS Utf8;
+            DECLARE $version AS Uint64;
+
+            DELETE FROM `/dc-1/Dir/%s`
+            WHERE Hash = $hash
+              AND Name = $name
+              AND Path >= $pathBegin
+              AND Path < $pathEnd
+              AND Version = $version;
+        )", table.data());
+
+        auto result = session.ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+            params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     void CreateS3Table(TFlatMsgBusClient& annoyingClient) {
@@ -509,7 +635,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(Listing) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -556,7 +682,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(MaxKeysAndSharding) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -619,7 +745,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(SchemaChecks) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -689,7 +815,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(Split) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
         SetSplitMergePartCountLimit(cleverServer.GetRuntime(), -1);
@@ -727,7 +853,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(SuffixColumns) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
         TFlatMsgBusClient annoyingClient(port);
@@ -766,9 +892,9 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(ManyDeletes) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServerSettings settings(port);
+        TServerSettings settings = MakeObjectStorageServerSettings(port);
         settings.NodeCount = 1;
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(settings);
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -828,10 +954,109 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/", "/", "", 1000, {});
     }
 
+    Y_UNIT_TEST(TombstoneRestarts) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServerSettings serverSettings = MakeObjectStorageServerSettings(port);
+
+        TStringStream ss;
+        serverSettings.SetLogBackend(new TStreamWithContextLogBackend(&ss));
+
+        TServer cleverServer = TServer(serverSettings);
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        // Disable shared cache to trigger restarts
+        cleverServer.GetRuntime()->Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+
+        TFlatMsgBusClient annoyingClient(port);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
+
+        const size_t N_ROWS = 4000;
+
+        TString bigData(200, 'a');
+
+        const size_t BULK_UPSERT_BATCH_SIZE = 500;
+        for (size_t i = 0; i < N_ROWS; i += BULK_UPSERT_BATCH_SIZE) {
+            const size_t batchEnd = i + BULK_UPSERT_BATCH_SIZE < N_ROWS ? i + BULK_UPSERT_BATCH_SIZE : N_ROWS;
+
+            TVector<TString> paths;
+            paths.reserve(batchEnd - i);
+            for (size_t j = i; j < batchEnd; ++j) {
+                paths.emplace_back("/Tomb/" + ToString(j));
+            }
+
+            S3BulkUpsertRows(cleverServer.GetRuntime(), 100, "Bucket100", paths, 1, 1100, bigData, "Table");
+        }
+
+        S3BulkDeleteRows(GRPC_PORT, 100, "Bucket100", "/Tomb/", "/Tomb0", 1, "Table");
+
+        {
+            size_t insertAfter = 100;
+            TVector<TString> paths;
+            paths.reserve(insertAfter);
+            size_t last = N_ROWS + 1;
+            for (size_t i = last; i < last + insertAfter; ++i) {
+                paths.emplace_back("/Tomb/" + ToString(i));
+            }
+
+            S3BulkUpsertRows(cleverServer.GetRuntime(), 100, "Bucket100", paths, 1, 1100, bigData, "Table");
+        }
+
+        {
+            size_t insertNonMatching = 500;
+            TVector<TString> paths;
+            paths.reserve(insertNonMatching);
+            for (size_t i = 0; i < insertNonMatching; ++i) {
+                paths.emplace_back("/Tomc/" + ToString(i));
+            }
+
+            S3BulkUpsertRows(cleverServer.GetRuntime(), 100, "Bucket100", paths, 1, 1100, bigData, "Table");
+        }
+
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+
+        TVector<TString> commonPrefixes;
+        TVector<TString> contents;
+        DoS3Listing(GRPC_PORT, 100, "/Tomb/", "/", "", "", {}, 1, commonPrefixes, contents);
+        UNIT_ASSERT_VALUES_EQUAL(0, commonPrefixes.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, contents.size());
+        UNIT_ASSERT_VALUES_EQUAL("/Tomb/4001", contents[0]);
+
+        auto restartsCount = [](const TString& log) {
+            static const std::regex pattern(R"(restarted:\s*([0-9]+))");
+            size_t lineEnd = log.size();
+            while (lineEnd > 0) {
+                size_t lineBegin = log.rfind(';', lineEnd - 1);
+                if (lineBegin == TString::npos) {
+                    lineBegin = 0;
+                } else {
+                    ++lineBegin;
+                }
+
+                const TStringBuf line(log.data() + lineBegin, lineEnd - lineBegin);
+                std::cmatch match;
+                if (std::regex_search(line.data(), line.data() + line.size(), match, pattern)) {
+                    return FromString<ui32>(TStringBuf(match[1].first, static_cast<size_t>(match[1].length())));
+                }
+
+                if (lineBegin == 0) {
+                    break;
+                }
+                lineEnd = lineBegin - 1;
+            }
+            return 0u;
+        };
+
+        ui32 restarts = restartsCount(ss.Str());
+        // Without precharge it's in magnitude of 1000. With precharge it should be less than 10.
+        UNIT_ASSERT_C(restarts <= 10, TStringBuilder() << "expected <= 10 restarts, got " << restarts);
+    }
+
     Y_UNIT_TEST(CornerCases) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -890,7 +1115,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(TestFilter) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(MakeObjectStorageServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -971,7 +1196,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(TestSkipShards) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServerSettings serverSettings(port);
+        TServerSettings serverSettings = MakeObjectStorageServerSettings(port);
 
         TStringStream ss;
 
@@ -1078,10 +1303,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(Decimal) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableParameterizedDecimal(true);
-        TServerSettings serverSettings(port);
-        serverSettings.SetFeatureFlags(featureFlags);
+        TServerSettings serverSettings = MakeObjectStorageServerSettings(port, true);
         TServer cleverServer = TServer(serverSettings);
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);

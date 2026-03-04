@@ -76,45 +76,45 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
         proto->SetUserSID(ClientSID);
     }
 
-    if (fieldsMap.NeedField(VSessions::WMPoolId::ColumnId)) { // 17
-        if (WMState) {
-            proto->SetWMPoolId(WMState->GetPoolId());
+    if (fieldsMap.NeedField(VSessions::WmPoolId::ColumnId)) { // 17
+        if (WmState) {
+            proto->SetWmPoolId(WmState->GetPoolId());
         }
     }
 
-    if (fieldsMap.NeedField(VSessions::WMState::ColumnId)) { // 18
-        if (WMState) {
-            using EWMState = IWmSessionUpdater::EWMState;
-            switch(WMState->GetState()) {
-                case EWMState::NONE: {
-                    proto->SetWMState("NONE");
+    if (fieldsMap.NeedField(VSessions::WmState::ColumnId)) { // 18
+        if (WmState) {
+            using EWmState = IWmSessionUpdater::EWmState;
+            switch(WmState->GetState()) {
+                case EWmState::NONE: {
+                    proto->SetWmState("NONE");
                     break;
                 }
-                case EWMState::PENDING: {
-                    proto->SetWMState("PENDING");
+                case EWmState::PENDING: {
+                    proto->SetWmState("PENDING");
                     break;
                 }
-                case EWMState::DELAYED: {
-                    proto->SetWMState("DELAYED");
+                case EWmState::DELAYED: {
+                    proto->SetWmState("DELAYED");
                     break;
                 }
-                case EWMState::EXITED: {
-                    proto->SetWMState("EXITED");
+                case EWmState::EXITED: {
+                    proto->SetWmState("EXITED");
                     break;
                 }
             }
         }
     }
 
-    if (fieldsMap.NeedField(VSessions::WMEnterTime::ColumnId)) { // 19
-        if (WMState) {
-            proto->SetWMEnterTime(WMState->GetEnterTime().MicroSeconds());
+    if (fieldsMap.NeedField(VSessions::WmEnterTime::ColumnId)) { // 19
+        if (WmState) {
+            proto->SetWmEnterTime(WmState->GetEnterTime().MicroSeconds());
         }
     }
 
-    if (fieldsMap.NeedField(VSessions::WMExitTime::ColumnId)) { // 20
-        if (WMState) {
-            proto->SetWMExitTime(WMState->GetExitTime().MicroSeconds());
+    if (fieldsMap.NeedField(VSessions::WmExitTime::ColumnId)) { // 20
+        if (WmState) {
+            proto->SetWmExitTime(WmState->GetExitTime().MicroSeconds());
         }
     }
 }

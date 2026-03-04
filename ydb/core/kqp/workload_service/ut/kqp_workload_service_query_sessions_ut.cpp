@@ -12,10 +12,6 @@ using namespace NActors;
 // Interceptor actor that sits between Pool Handler and KQP Proxy
 class TKqpProxyInterceptor : public TActor<TKqpProxyInterceptor> {
 public:
-    // Note: TEvUpdateSessionWMState has been removed. WM state is now updated
-    // directly through shared IWmSessionUpdater interface, not via events.
-    // This interceptor now only handles cancel requests.
-
     TKqpProxyInterceptor(TActorId realKqpProxy)
         : TActor(&TKqpProxyInterceptor::StateFunc)
         , RealKqpProxy(realKqpProxy)
@@ -54,16 +50,16 @@ R GetFieldFromResultSet(const Ydb::ResultSet& rs, size_t rowIndex, TFetchFunc&& 
     return fnc(parser);
 }
 
-TString GetWMStateFromResultSet(const Ydb::ResultSet& rs, size_t rowIndex) {
+TString GetWmStateFromResultSet(const Ydb::ResultSet& rs, size_t rowIndex) {
     return GetFieldFromResultSet<TString>(rs, rowIndex, [](NYdb::TResultSetParser& parser) {
-        auto opt = parser.ColumnParser("WMState").GetOptionalUtf8();
+        auto opt = parser.ColumnParser("WmState").GetOptionalUtf8();
         return opt ? TString(*opt) : TString();
     });
 }
 
 TString GetWMPoolIdFromResultSet(const Ydb::ResultSet& rs, size_t rowIndex) {
     return GetFieldFromResultSet<TString>(rs, rowIndex, [](NYdb::TResultSetParser& parser) {
-        auto opt = parser.ColumnParser("WMPoolId").GetOptionalUtf8();
+        auto opt = parser.ColumnParser("WmPoolId").GetOptionalUtf8();
         return opt ? TString(*opt) : TString();
     });
 }
@@ -71,8 +67,8 @@ TString GetWMPoolIdFromResultSet(const Ydb::ResultSet& rs, size_t rowIndex) {
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
-    Y_UNIT_TEST(TestWMStateNone) {
-        // Test that queries not using workload manager have WMState=0 (NONE)
+    Y_UNIT_TEST(TestWmStateNone) {
+        // Test that queries not using workload manager have WmState=0 (NONE)
         auto ydb = TYdbSetupSettings()
             .EnableResourcePools(false)  // Disable WM
             .Create();
@@ -95,7 +91,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
 
         // Query .sys/query_sessions while query is running
         auto sessionsResult = ydb->ExecuteQuery(R"(
-            SELECT SessionId, WMPoolId, WMState
+            SELECT SessionId, WMPoolId, WmState
             FROM `.sys/query_sessions`
             WHERE State = 'EXECUTING'
         )");
@@ -105,9 +101,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
 
         auto rs = sessionsResult.GetResultSet(0);
         
-        // Verify WMState is NONE (0)
-        auto wmState = GetWMStateFromResultSet(rs, 0);
-        UNIT_ASSERT_VALUES_EQUAL_C(wmState, "NONE", "Expected WMState=0 (NONE) for query without WM");
+        // Verify WmState is NONE (0)
+        auto wmState = GetWmStateFromResultSet(rs, 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(wmState, "NONE", "Expected WmState=0 (NONE) for query without WM");
         
         // Verify WMPoolId is empty
         TString poolId = GetWMPoolIdFromResultSet(rs, 0);
@@ -117,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
     }
 
-    Y_UNIT_TEST(TestWMStateInterception) {
+    Y_UNIT_TEST(TestWmStateInterception) {
         // Test intercepting WM state updates between Pool Handler and KQP Proxy
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(2)
@@ -158,7 +154,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
-    Y_UNIT_TEST(TestWMStateTransitions) {
+    Y_UNIT_TEST(TestWmStateTransitions) {
         // Test that we can observe all WM state transitions
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(1)  // Force queueing
@@ -186,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         
         // Query sessions to verify states
         auto sessionsResult = ydb->ExecuteQuery(R"(
-            SELECT SessionId, WMPoolId, WMState, State
+            SELECT SessionId, WMPoolId, WmState, State
             FROM `.sys/query_sessions`
             WHERE State = 'EXECUTING' OR State = 'PENDING'
             ORDER BY StartTime

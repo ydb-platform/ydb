@@ -589,10 +589,10 @@ struct Schema : NIceDb::Schema {
         struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
         struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
         struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
-        struct WMPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct WMState            : Column<18, NScheme::NTypeIds::Utf8> {};
-        struct WMEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
-        struct WMExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -610,10 +610,10 @@ struct Schema : NIceDb::Schema {
             QueryStartAt,
             StateChangeAt,
             UserSID,
-            WMPoolId,
-            WMState,
-            WMEnterTime,
-            WMExitTime>;
+            WmPoolId,
+            WmState,
+            WmEnterTime,
+            WmExitTime>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {

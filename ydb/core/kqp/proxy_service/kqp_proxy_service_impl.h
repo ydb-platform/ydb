@@ -76,14 +76,14 @@ public:
 
 class TWmSessionUpdater final : public IWmSessionUpdater {
 public:
-    using EWMState = IWmSessionUpdater::EWMState;
+    using EWmState = IWmSessionUpdater::EWmState;
 
-    void SetRequestState(EWMState state, TInstant timestamp) override {
+    void SetRequestState(EWmState state, TInstant timestamp) override {
         const ui64 ts = timestamp.MicroSeconds();
         
-        if (state == EWMState::PENDING || state == EWMState::DELAYED) {
+        if (state == EWmState::PENDING || state == EWmState::DELAYED) {
             EnterTimeUs.store(ts, std::memory_order_relaxed);
-        } else if (state == EWMState::EXITED) {
+        } else if (state == EWmState::EXITED) {
             ExitTimeUs.store(ts, std::memory_order_relaxed);
         }
         
@@ -95,7 +95,7 @@ public:
         PoolId = std::move(poolId);
     }
     
-    EWMState GetState() const {
+    EWmState GetState() const {
         return State.load(std::memory_order_acquire);
     }
 
@@ -113,7 +113,7 @@ public:
     }
 
 private:
-    std::atomic<EWMState> State{EWMState::NONE};
+    std::atomic<EWmState> State{EWmState::NONE};
     std::atomic<ui64> EnterTimeUs{0};
     std::atomic<ui64> ExitTimeUs{0};
 
@@ -158,7 +158,7 @@ struct TKqpSessionInfo {
     TInstant SessionStartedAt;
     TInstant StateChangeAt;
     TInstant QueryStartAt;
-    std::shared_ptr<TWmSessionUpdater> WMState;
+    std::shared_ptr<TWmSessionUpdater> WmState;
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
@@ -194,7 +194,7 @@ struct TKqpSessionInfo {
         , AttachedNodeId(0)
         , PgWire(pgWire)
         , SessionStartedAt(std::move(sessionStartedAt))
-        , WMState(std::make_shared<TWmSessionUpdater>())
+        , WmState(std::make_shared<TWmSessionUpdater>())
     {
     }
 

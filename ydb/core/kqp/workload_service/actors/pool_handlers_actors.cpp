@@ -274,7 +274,7 @@ private:
         // Notify proxy that request entered WM queue (Pending state) via shared interface
         if (wmSessionUpdater) {
             wmSessionUpdater->SetPoolId(PoolId);
-            wmSessionUpdater->SetRequestState(IWmSessionUpdater::EWMState::PENDING, TInstant::Now());
+            wmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TInstant::Now());
         }
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
@@ -951,7 +951,7 @@ private:
 
                     // Notify proxy that request exited WM queue (started running) via shared interface
                     if (request->WmSessionUpdater) {
-                        request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWMState::EXITED, TInstant::Now());
+                        request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TInstant::Now());
                     }
                 } else {
                     // Request was dropped due to lease expiration
@@ -1040,7 +1040,7 @@ private:
 
             // Notify proxy that request moved to Delayed state via shared interface
             if (request->WmSessionUpdater) {
-                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWMState::DELAYED, TInstant::Now());
+                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TInstant::Now());
             }
         }
     }

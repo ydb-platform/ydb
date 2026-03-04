@@ -139,6 +139,7 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
+            sync.RequestsInFlight++;
             std::vector<TSegmentManager::TOutdatedRequest> outdated;
             const TSegmentManager::TSegment segmentRange{selector.OffsetInBytes, selector.OffsetInBytes + selector.Size};
             ui64 requestId = 0;
@@ -175,7 +176,6 @@ namespace NKikimr::NDDisk {
                 IEventHandle::FlagTrackDelivery,
                 requestId,
                 sync.Span.GetTraceId());
-            sync.RequestsInFlight++;
         }
 
         sync.VChunkIndex = *vChunkIndex;

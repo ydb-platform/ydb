@@ -12,6 +12,7 @@ private:
     using TBase = TGenericRequest<TEvCheckObjectExistsRequest, EvCheckObjectExistsRequest, Aws::S3::Model::HeadObjectRequest>;
 public:
     using TBase::TBase;
+    static constexpr TStringBuf RequestName = "HeadObject";
 };
 
 class TEvCheckObjectExistsResponse: public TGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult> {

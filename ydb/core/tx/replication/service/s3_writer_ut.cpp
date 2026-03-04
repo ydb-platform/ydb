@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(settings, &request));
 
         auto config = std::make_shared<NWrappers::NExternalStorage::TS3ExternalStorageConfig>(
-            NKikimrConfig::TAwsClientConfig(), request);
+            NKikimrConfig::TAwsClientConfig(), request, nullptr);
 
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

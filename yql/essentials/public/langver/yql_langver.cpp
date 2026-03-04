@@ -9,7 +9,7 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 4);
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 5);
 
 } // namespace
 

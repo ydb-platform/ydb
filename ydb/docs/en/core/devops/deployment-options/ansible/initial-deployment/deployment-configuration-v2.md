@@ -281,7 +281,7 @@ After completing all the preparation steps above, the actual initial cluster dep
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Shortly after it starts, you will need to confirm full wipe of the configured disks. Completion can then take tens of minutes depending on the environment and settings. This playbook performs roughly the same steps as in the [manual {{ ydb-short-name }} cluster deployment](../../manual/initial-deployment/index.md) instructions.
+Shortly after it starts, you will need to confirm full wipe of the configured disks. Completion can then take tens of minutes depending on the environment and settings. This playbook performs roughly the same steps as in the [manual {{ ydb-short-name }} cluster deployment](../../manual/initial-deployment.md) instructions.
 
 ### Check cluster state {#cluster-state}
 

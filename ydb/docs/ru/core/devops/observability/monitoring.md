@@ -1,6 +1,14 @@
 # Настройка мониторинга кластера {{ ydb-short-name }}
 
-На этой странице рассказано, как настроить мониторинг кластера {{ ydb-short-name }}.
+В этом разделе приведён обзор различных способов мониторинга состояния и производительности кластера {{ ydb-short-name }}, а также рекомендации по использованию доступных инструментов и интерфейсов для отслеживания ключевых метрик.
+
+## Доступ к метрикам через веб-интерфейс
+
+{% note tip %}
+
+Перед началом работы рекомендуем ознакомиться с [описанием метрик](../../reference/observability/metrics/index.md).
+
+{% endnote %}
 
 {{ ydb-short-name }} предоставляет множество метрик состояния системы. Мгновенные значения метрик можно посмотреть в веб-интерфейсе:
 
@@ -10,13 +18,28 @@ http://<ydb-server-address>:<ydb-port>/counters/
 
 где:
 
-- `<ydb-server-address>` – адрес сервера {{ ydb-short-name }}.
+- `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
+- `<ydb-port>` – порт UI {{ ydb-short-name }}, указанный в параметре `mon -port` при запуске узла. Значение по умолчанию: 8765.
 
-  Для локального однонодового кластера {{ ydb-short-name }}, запущенного с помощью инструкции по [Быстрому началу работы](../../quickstart.md), используйте адрес `localhost`.
+{% cut "Определить значение параметра `<ydb-port>`" %}
 
-- `<ydb-port>` – порт {{ ydb-short-name }}. Значение по умолчанию: 8765.
+Определить значение параметра `<ydb-port>` можно командой:
 
-Связанные метрики объединены в подгруппы (например `counters auth`). Чтобы посмотреть значения метрик только определенной подгруппы, перейдите по URL следующего вида:
+```bash
+ps aux | grep ydbd
+```
+
+Взять значение, указанное в параметре `--mon -port`.
+
+{% endcut %}
+
+{% cut "Пример интерфейса" %}
+
+![grafana-actors](../../_assets/monitoring-UI.png)
+
+{% endcut %}
+
+Связанные метрики объединены в подгруппы (например, `counters auth`). Чтобы посмотреть значения метрик только определенной подгруппы, перейдите по URL следующего вида:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
@@ -38,80 +61,122 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 - `<servicename>` — имя подгруппы метрик.
 
-Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Grafana](https://grafana.com/), [Zabbix](https://www.zabbix.com/ru/) или [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/):
+Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например:
 
-![grafana-actors](../../_assets/grafana-actors.png)
+- [Grafana](https://grafana.com/);
+- [Zabbix](https://www.zabbix.com/ru/);
+- [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/).
 
 ## Настройка мониторинга с помощью Prometheus и Grafana {#prometheus-grafana}
 
-Чтобы настроить мониторинг кластера {{ ydb-short-name }} с помощью [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/):
+Для настройки мониторинга кластера {{ ydb-short-name }} с использованием [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/) выполните следующие шаги.
 
-1. [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
+{% note tip %}
 
-1. Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
+Перед началом работы рекомендуем ознакомиться со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
 
-    1. В файле [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
+{% endnote %}
 
-        ```json
-        - labels:
-            container: ydb-static
-          targets:
-          - "ydb-s1.example.com:8765"
-          - "ydb-s2.example.com:8765"
-          - "ydb-s3.example.com:8765"
-        ```
+### Подготовка к установке
 
-        Для локального однонодового кластера YDB в секции `targets` укажите один адрес:
+- [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-        ```json
-        - labels:
-            container: ydb-static
-          targets:
-          - "localhost:8765"
-        ```
+- [Установите](https://grafana.com/docs/grafana/latest/setup-grafana/) Grafana.
 
-    1. В файле [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+### Подготовьте файлы конфигурации Prometheus
 
-        ```json
-        - labels:
-            container: ydb-dynamic
-          targets:
-          - "ydb-s1.example.com:31002"
-          - "ydb-s1.example.com:31012"
-          - "ydb-s1.example.com:31022"
-          - "ydb-s2.example.com:31002"
-          - "ydb-s2.example.com:31012"
-          - "ydb-s2.example.com:31022"
-          - "ydb-s3.example.com:31002"
-          - "ydb-s3.example.com:31012"
-          - "ydb-s3.example.com:31022"
-        ```
+Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
 
-        Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
+Файл [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml)
 
-        ```json
-        - labels:
-            container: ydb-dynamic
-          targets:
-          - "localhost:8765"
-        ```
+{% list tabs %}
 
-    1. В файле [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+- Обычная установка
 
-       ```json
-       scheme: https
-       tls_config:
-           ca_file: '<ydb-ca-file>'
-       ```
+  В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 
-1. Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, указав в опциях запуска файл конфигурации `prometheus_ydb.yml`.
+    ```yaml
+    - labels:
+        container: ydb-static
+      targets:
+      - "ydb-s1.example.com:8765"
+      - "ydb-s2.example.com:8765"
+      - "ydb-s3.example.com:8765"
+    ```
 
-1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+- Быстрая установка
 
-1. [Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `prometheus` в Grafana и подсоедините его к запущенному экземпляру Prometheus.
+  Для локального однонодового кластера YDB в секции `targets` укажите один адрес:
 
-1. Загрузите [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
+    ```yaml
+    - labels:
+        container: ydb-static
+      targets:
+      - "localhost:8765"
+    ```
 
-    Вы можете загрузить дашборды с помощью инструмента [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) Grafana UI или выполнить [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. Для других случаев модифицируйте скрипт.
+{% endlist %}
 
-    Ознакомьтесь со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
+Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
+
+{% list tabs %}
+
+- Обычная установка
+
+  В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+
+    ```yaml
+    - labels:
+        container: ydb-dynamic
+      targets:
+      - "ydb-s1.example.com:31002"
+      - "ydb-s1.example.com:31012"
+      - "ydb-s1.example.com:31022"
+      - "ydb-s2.example.com:31002"
+      - "ydb-s2.example.com:31012"
+      - "ydb-s2.example.com:31022"
+      - "ydb-s3.example.com:31002"
+      - "ydb-s3.example.com:31012"
+      - "ydb-s3.example.com:31022"
+    ```
+
+- Быстрая установка
+
+  Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
+
+    ```yaml
+    - labels:
+        container: ydb-dynamic
+      targets:
+      - "localhost:8765"
+    ```
+
+{% endlist %}
+
+Файл [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml)
+
+При необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+
+  ```yaml
+  scheme: https
+  tls_config:
+      ca_file: '<ydb-ca-file>'
+  ```
+
+Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, указав в опциях запуска файл конфигурации `prometheus_ydb.yml`.
+
+### Настройка интеграции Grafana с Prometheus
+
+#### Создание источника данных в Grafana
+
+[Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `Prometheus` в Grafana и подключите его к работающему экземпляру Prometheus.
+
+Импортируйте необходимые [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
+
+Для импорта дашбордов используйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) из интерфейса Grafana или выполните [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. При других способах интеграции модифицируйте скрипт согласно вашим требованиям.
+
+{% cut "Пример дашборда в Grafana" %}
+
+![grafana-actors](../../_assets/grafana.png)
+
+{% endcut %}

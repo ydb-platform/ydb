@@ -1,29 +1,33 @@
 # Дашборды Grafana для {{ ydb-short-name }}
 
-На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
+На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}.
 
-## DB status {#dbstatus}
+Как установить и настроить дашборды описано в разделе [по настройке мониторинга кластера YDB](../../../devops/observability/monitoring.md#prometheus-grafana).
 
-Общий дашборд базы данных.
+## Ydb-essentials {#ydb-essentials}
 
-Скачать шаблон дашборда **DB status**: [dbstatus.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dbstatus.json).
+Общий дашборд.
 
-## DB overview {#dboverview}
+| Имя | Описание |
+|---|---|
+| Cluster Health | Отображает результаты запросов к HealthCheck API |
+| Nodes Uptime | Отображает время работы каждого узла с момента его запуска. Помогает отслеживать перезапуски и выявлять нестабильные узлы. |
+| CPU by thread pool (dynnodes) | Показывает использование CPU по пулам потоков динамических узлов. Подробнее о пулах CPU. |
+| CPU pool utilization (dynnodes) | Отображает процент использования выделенных CPU-ресурсов динамическими узлами по пулу. Помогает выявлять нехватку CPU-ресурсов. Подробнее о пулах CPU. |
+| Elapsed Time vs CPU Time | Показывает Время выполнения (Elapsed µs) vs CPU-время (CPU µs) по каждому узлу. Если соотношение > 100% — CPU-время превышает общее время, что, скорее всего, указывает на перераспределение CPU. |
+| RSS size by node | Отображает объем оперативной памяти (Resident Set Size), используемой каждым узлом. |
+| Storage usage | Показывает общее использование и лимит по размеру всех таблиц базы данных. Помогает предотвратить нехватку пространства для хранения данных. |
+| Overloaded shard count | Показывает количество шардов с высокой загрузкой CPU (от 50% до 100%). Помогает оценить уровень перегрузки системы. |
+| Queries per second by latency buckets | Отображает количество запросов в секунду, сгруппированных по интервалам задержек. |
+| Transactions per second by latency buckets | Отображает количество транзакций в секунду, сгруппированных по интервалам задержек. |
+| Rows read, uploaded, updated, deleted | Отображает количество строк в секунду, затронутых соответствующими операциями. |
+| Session count by dynnode | Отображает количество активных сессий по каждому динамическому узлу. Помогает выявлять неравномерность распределения сессий. |
+| Query latency percentiles (ms) | Отображает перцентили времени выполнения запросов. |
+| Transaction latency percentiles (ms) | Отображает перцентили полного времени выполнения транзакций. |
+| YQL Issues per second (No Data = GOOD) | Показывает количество ошибок, возникших при выполнении YQL-запросов. |
+| GRPC response errors per second | Показывает количество ошибок ответов gRPC в секунду по типам ошибок. |
 
-Общий дашборд базы данных по категориям:
-
-- Health
-- API
-- API details
-- CPU
-- CPU pools
-- Memory
-- Storage
-- DataShard
-- DataShard details
-- Latency
-
-Скачать шаблон дашборда **DB overview**: [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json).
+Скачать шаблон дашборда **Ydb-essentials**: (Тут будет ссылка).
 
 ## Actors {#actors}
 
@@ -42,7 +46,7 @@
 
 Потребление CPU в [пулах исполнения](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig).
 
-| Name | Description |
+| Имя | Описание |
 |---|---|
 | CPU by execution pool | Потребление CPU в различных пулах исполнения на всех нодах, микросекунды в секунду (один миллион соответствует потреблению одного ядра) |
 | Actor count | Количество акторов (по типу актора) |
@@ -84,7 +88,7 @@
 
 ## TxProxy {#txproxy}
 
-Информация от транзакциях с уровня DataShard transaction proxy.
+Информация о транзакциях с уровня DataShard transaction proxy.
 
 | Имя | Описание |
 |---|---|
@@ -131,3 +135,7 @@
 | Hive node | Узел, на котором запущен Hive. |
 
 Скачать шаблон дашборда **Database Hive**: [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json).
+
+## См. также
+
+- [Справка по метрикам](index.md)

@@ -1,35 +1,28 @@
 --- a/src/core/lib/event_engine/forkable.cc	(index)
 +++ b/src/core/lib/event_engine/forkable.cc	(working tree)
-@@ -38,8 +38,14 @@ bool IsForkEnabled() {
-   static bool enabled = grpc_core::ConfigVars::Get().EnableForkSupport();
-   return enabled;
+@@ -62,8 +62,17 @@ void PostforkParent() {
+   }
  }
-+
-+bool skip_postfork_child = false;
- }  // namespace
  
++bool skip_postfork_child = false;
++
 +void SetSkipPostForkChild() {
 +  skip_postfork_child = true;
 +}
 +
- void ObjectGroupForkHandler::RegisterForkable(
-     std::shared_ptr<Forkable> forkable, GRPC_UNUSED void (*prepare)(void),
-     GRPC_UNUSED void (*parent)(void), GRPC_UNUSED void (*child)(void)) {
-@@ -90,6 +96,9 @@ void ObjectGroupForkHandler::PostforkChild() {
-     GPR_ASSERT(is_forking_);
-     GRPC_FORK_TRACE_LOG_STRING("PostforkChild");
-     y_absl::ResetDeadlockGraphMu();
-+    if (skip_postfork_child) {
-+      return;
-+    }
-     for (auto it = forkables_.begin(); it != forkables_.end();) {
-       auto shared = it->lock();
-       if (shared) {
+ void PostforkChild() {
+   y_absl::ResetDeadlockGraphMu();
++  if (skip_postfork_child) {
++    return;
++  }
+   grpc_core::MutexLock lock(g_mu.get());
+   for (auto* forkable : *g_forkables) {
+     forkable->PostforkChild();
 --- a/src/core/lib/event_engine/forkable.h	(index)
 +++ b/src/core/lib/event_engine/forkable.h	(working tree)
-@@ -37,6 +37,19 @@ extern grpc_core::TraceFlag grpc_trace_fork;
- 
- #define GRPC_FORK_TRACE_LOG_STRING(format) GRPC_FORK_TRACE_LOG("%s", format)
+@@ -28,6 +28,19 @@ namespace experimental {
+ // This should be called once upon grpc_initialization.
+ void RegisterForkHandlers();
  
 +// We've faced flickering crash in grpc during fork.
 +// Crash is observed in different places before 'execv' is called.
@@ -44,6 +37,6 @@
 +// to exclude issues with possible UB.
 +void SetSkipPostForkChild();
 +
- // An interface to be implemented by EventEngines that wish to have managed fork
- // support. The child class must guarantee that those methods are thread-safe.
- class Forkable {
+ // Global callback for pthread_atfork's *prepare argument
+ void PrepareFork();
+ // Global callback for pthread_atfork's *parent argument

@@ -14,6 +14,8 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
+#include <utility>
+
 namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
@@ -289,9 +291,9 @@ struct TExprTypeLoader {
     TExprContext& Ctx;
     TPosition Pos;
 
-    explicit TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, TPosition pos = TPosition())
         : Ctx(ctx)
-        , Pos(pos)
+        , Pos(std::move(pos))
     {
     }
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {

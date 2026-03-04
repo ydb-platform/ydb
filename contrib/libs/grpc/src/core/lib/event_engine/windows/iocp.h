@@ -22,8 +22,8 @@
 
 #include <grpc/event_engine/event_engine.h>
 
+#include "src/core/lib/event_engine/executor/executor.h"
 #include "src/core/lib/event_engine/poller.h"
-#include "src/core/lib/event_engine/thread_pool/thread_pool.h"
 #include "src/core/lib/event_engine/windows/win_socket.h"
 
 namespace grpc_event_engine {
@@ -31,7 +31,7 @@ namespace experimental {
 
 class IOCP final : public Poller {
  public:
-  explicit IOCP(ThreadPool* thread_pool) noexcept;
+  explicit IOCP(Executor* executor) noexcept;
   ~IOCP();
   // Not copyable
   IOCP(const IOCP&) = delete;
@@ -54,7 +54,7 @@ class IOCP final : public Poller {
   // Initialize default flags via checking platform support
   static DWORD WSASocketFlagsInit();
 
-  ThreadPool* thread_pool_;
+  Executor* executor_;
   HANDLE iocp_handle_;
   OVERLAPPED kick_overlap_;
   ULONG kick_token_;

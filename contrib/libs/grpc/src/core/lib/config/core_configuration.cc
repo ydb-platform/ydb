@@ -16,6 +16,7 @@
 
 #include "src/core/lib/config/core_configuration.h"
 
+#include <algorithm>
 #include <atomic>
 #include <utility>
 #include <vector>
@@ -48,8 +49,7 @@ CoreConfiguration::CoreConfiguration(Builder* builder)
       certificate_provider_registry_(
           builder->certificate_provider_registry_.Build()) {}
 
-void CoreConfiguration::RegisterBuilder(
-    y_absl::AnyInvocable<void(Builder*)> builder) {
+void CoreConfiguration::RegisterBuilder(std::function<void(Builder*)> builder) {
   GPR_ASSERT(config_.load(std::memory_order_relaxed) == nullptr &&
              "CoreConfiguration was already instantiated before builder "
              "registration was completed");

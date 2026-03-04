@@ -14,7 +14,7 @@ namespace NYql::NCommon {
 class TProviderConfigurationTransformer: public TSyncTransformerBase {
 public:
     TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher, const TTypeAnnotationContext& types,
-                                      const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
+                                      TString provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() final {

@@ -68,6 +68,7 @@ llvm_libunwind = CMakeNinjaNixProject(
     disable_includes=[
         "commpage_defs.h",
         "OS.h",
+        "ptrauth.h",
         "sys/debug.h",
         "sys/pseg.h",
         "System/pthread_machdep.h",

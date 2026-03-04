@@ -1,8 +1,9 @@
 #include "yql_yt_settings.h"
 
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
@@ -56,7 +57,7 @@ void MediaValidator(const NYT::TNode& value) {
 }
 
 TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
-    : NCommon::TSettingDispatcher(qContext)
+    : NCommon::TSettingDispatcher(YtProviderName, qContext)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {

@@ -379,6 +379,8 @@ def _convert_value_to_string(value):
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
 def _validate_name(value, kind):
     """Validate an element/attribute name for XML safety.
 
@@ -491,7 +493,10 @@ def _emit(key, value, content_handler,
         children = []
         for ik, iv in v.items():
             if ik == cdata_key:
-                cdata = _convert_value_to_string(iv)
+                if iv is None:
+                    cdata = None
+                else:
+                    cdata = _convert_value_to_string(iv)
                 continue
             if isinstance(ik, str) and ik.startswith(attr_prefix):
                 ik = _process_namespace(ik, namespaces, namespace_separator,
@@ -500,9 +505,11 @@ def _emit(key, value, content_handler,
                     for k, v in iv.items():
                         _validate_name(k, "attribute")
                         attr = 'xmlns{}'.format(f':{k}' if k else '')
-                        attrs[attr] = str(v)
+                        attrs[attr] = '' if v is None else str(v)
                     continue
-                if not isinstance(iv, str):
+                if iv is None:
+                    iv = ''
+                elif not isinstance(iv, str):
                     iv = str(iv)
                 attr_name = ik[len(attr_prefix) :]
                 _validate_name(attr_name, "attribute")

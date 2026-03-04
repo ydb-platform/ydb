@@ -4,6 +4,7 @@
 
 #include <yt/yql/providers/yt/lib/dump_helpers/yql_yt_dump_helpers.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -126,6 +127,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
                 const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);
+                const ui64 nativeYtTypeFlags = Settings_->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);
@@ -162,13 +164,18 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
 
                     TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
                     TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
-                    const auto specNode = NYT::NodeFromYsonString(specStr);
 
                     NYT::TRichYPath& richYPath = tables[i].RichPath;
 
                     const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
                     const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
+
+                    auto specNode = NYT::NodeFromYsonString(specStr);
+                    if (isTemporary || isAnonymous) {
+                        UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
+                    }
+                    specStr = NYT::NodeToCanonicalYsonString(specNode);
 
                     tables[i].TableOptions = TYtTableOptions{.IsTemporary = isTemporary, .IsAnonymous = isAnonymous, .Epoch = epoch};
 

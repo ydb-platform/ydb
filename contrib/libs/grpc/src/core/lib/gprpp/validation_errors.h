@@ -41,26 +41,25 @@ namespace grpc_core {
 //   ValidationErrors errors;
 //   {
 //     ValidationErrors::ScopedField field("foo");
-//     auto it = json.object().find("foo");
-//     if (it == json.object().end()) {
+//     auto it = json.object_value().find("foo");
+//     if (it == json.object_value().end()) {
 //       errors.AddError("field not present");
-//     } else if (it->second.type() != Json::Type::kObject) {
+//     } else if (it->second.type() != Json::Type::OBJECT) {
 //       errors.AddError("must be a JSON object");
 //     } else {
 //       const Json& foo = it->second;
 //       ValidationErrors::ScopedField field(".bar");
-//       auto it = foo.object().find("bar");
-//       if (it == json.object().end()) {
+//       auto it = foo.object_value().find("bar");
+//       if (it == json.object_value().end()) {
 //         errors.AddError("field not present");
-//       } else if (it->second.type() != Json::Type::kString) {
+//       } else if (it->second.type() != Json::Type::STRING) {
 //         errors.AddError("must be a JSON string");
 //       } else {
-//         return it->second.string();
+//         return it->second.string_value();
 //       }
 //     }
 //   }
-//   return errors.status(y_absl::StatusCode::kInvalidArgument,
-//                        "errors validating foo.bar");
+//   return errors.status("errors validating foo.bar");
 // }
 class ValidationErrors {
  public:
@@ -102,13 +101,7 @@ class ValidationErrors {
   bool FieldHasErrors() const GPR_ATTRIBUTE_NOINLINE;
 
   // Returns the resulting status of parsing.
-  // If there are no errors, this will return an Ok status instead of using the
-  // prefix argument.
-  y_absl::Status status(y_absl::StatusCode code, y_absl::string_view prefix) const;
-
-  // Returns the resulting error message
-  // If there are no errors, this will return an empty string.
-  TString message(y_absl::string_view prefix) const;
+  y_absl::Status status(y_absl::string_view prefix) const;
 
   // Returns true if there are no errors.
   bool ok() const { return field_errors_.empty(); }

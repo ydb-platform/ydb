@@ -5,6 +5,8 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -236,7 +238,7 @@ private:
 class TLogging: public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
-        : Logger_(logger)
+        : Logger_(std::move(logger))
         , Component_(component)
     {
     }

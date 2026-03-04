@@ -25,10 +25,8 @@
 #include <string.h>
 
 #include <algorithm>
+#include <initializer_list>
 #include <map>
-#include <memory>
-#include <util/generic/string.h>
-#include <util/string/cast.h>
 #include <vector>
 
 #include "y_absl/strings/match.h"
@@ -36,40 +34,14 @@
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/str_join.h"
 
-#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
 #include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gprpp/match.h"
 
 namespace grpc_core {
-
-const grpc_arg_pointer_vtable ChannelArgs::Value::int_vtable_{
-    // copy
-    [](void* p) { return p; },
-    // destroy
-    [](void*) {},
-    // cmp
-    [](void* p1, void* p2) -> int {
-      return QsortCompare(reinterpret_cast<intptr_t>(p1),
-                          reinterpret_cast<intptr_t>(p2));
-    },
-};
-
-const grpc_arg_pointer_vtable ChannelArgs::Value::string_vtable_{
-    // copy
-    [](void* p) -> void* {
-      return static_cast<RefCountedString*>(p)->Ref().release();
-    },
-    // destroy
-    [](void* p) { static_cast<RefCountedString*>(p)->Unref(); },
-    // cmp
-    [](void* p1, void* p2) -> int {
-      return QsortCompare(static_cast<RefCountedString*>(p1)->as_string_view(),
-                          static_cast<RefCountedString*>(p2)->as_string_view());
-    },
-};
 
 ChannelArgs::Pointer::Pointer(void* p, const grpc_arg_pointer_vtable* vtable)
     : p_(p), vtable_(vtable == nullptr ? EmptyVTable() : vtable) {}
@@ -126,7 +98,7 @@ bool ChannelArgs::WantMinimalStack() const {
   return GetBool(GRPC_ARG_MINIMAL_STACK).value_or(false);
 }
 
-ChannelArgs::ChannelArgs(AVL<RefCountedStringValue, Value> args)
+ChannelArgs::ChannelArgs(AVL<TString, Value> args)
     : args_(std::move(args)) {}
 
 ChannelArgs ChannelArgs::Set(grpc_arg arg) const {
@@ -154,27 +126,22 @@ ChannelArgs ChannelArgs::FromC(const grpc_channel_args* args) {
   return result;
 }
 
-grpc_arg ChannelArgs::Value::MakeCArg(const char* name) const {
-  char* c_name = const_cast<char*>(name);
-  if (rep_.c_vtable() == &int_vtable_) {
-    return grpc_channel_arg_integer_create(
-        c_name, reinterpret_cast<intptr_t>(rep_.c_pointer()));
-  }
-  if (rep_.c_vtable() == &string_vtable_) {
-    return grpc_channel_arg_string_create(
-        c_name, const_cast<char*>(
-                    static_cast<RefCountedString*>(rep_.c_pointer())->c_str()));
-  }
-  return grpc_channel_arg_pointer_create(c_name, rep_.c_pointer(),
-                                         rep_.c_vtable());
-}
-
 ChannelArgs::CPtr ChannelArgs::ToC() const {
   std::vector<grpc_arg> c_args;
-  args_.ForEach(
-      [&c_args](const RefCountedStringValue& key, const Value& value) {
-        c_args.push_back(value.MakeCArg(key.c_str()));
-      });
+  args_.ForEach([&c_args](const TString& key, const Value& value) {
+    char* name = const_cast<char*>(key.c_str());
+    c_args.push_back(Match(
+        value,
+        [name](int i) { return grpc_channel_arg_integer_create(name, i); },
+        [name](const TString& s) {
+          return grpc_channel_arg_string_create(name,
+                                                const_cast<char*>(s.c_str()));
+        },
+        [name](const Pointer& p) {
+          return grpc_channel_arg_pointer_create(name, p.c_pointer(),
+                                                 p.c_vtable());
+        }));
+  });
   return CPtr(static_cast<const grpc_channel_args*>(
       grpc_channel_args_copy_and_add(nullptr, c_args.data(), c_args.size())));
 }
@@ -187,44 +154,32 @@ ChannelArgs ChannelArgs::Set(y_absl::string_view name, int value) const {
   return Set(name, Value(value));
 }
 
-ChannelArgs ChannelArgs::Set(y_absl::string_view name, Value value) const {
-  if (const auto* p = args_.Lookup(name)) {
-    if (*p == value) return *this;  // already have this value for this key
-  }
-  return ChannelArgs(args_.Add(RefCountedStringValue(name), std::move(value)));
+ChannelArgs ChannelArgs::Set(y_absl::string_view key, Value value) const {
+  return ChannelArgs(args_.Add(TString(key), std::move(value)));
 }
 
-ChannelArgs ChannelArgs::Set(y_absl::string_view name,
+ChannelArgs ChannelArgs::Set(y_absl::string_view key,
                              y_absl::string_view value) const {
-  return Set(name, TString(value));
+  return Set(key, TString(value));
 }
 
-ChannelArgs ChannelArgs::Set(y_absl::string_view name, const char* value) const {
-  return Set(name, TString(value));
+ChannelArgs ChannelArgs::Set(y_absl::string_view key, const char* value) const {
+  return Set(key, TString(value));
 }
 
-ChannelArgs ChannelArgs::Set(y_absl::string_view name, TString value) const {
-  return Set(name, Value(std::move(value)));
+ChannelArgs ChannelArgs::Set(y_absl::string_view key, TString value) const {
+  return Set(key, Value(std::move(value)));
 }
 
-ChannelArgs ChannelArgs::Remove(y_absl::string_view name) const {
-  if (args_.Lookup(name) == nullptr) return *this;
-  return ChannelArgs(args_.Remove(name));
-}
-
-ChannelArgs ChannelArgs::RemoveAllKeysWithPrefix(
-    y_absl::string_view prefix) const {
-  auto args = args_;
-  args_.ForEach([&](const RefCountedStringValue& key, const Value&) {
-    if (y_absl::StartsWith(key.as_string_view(), prefix)) args = args.Remove(key);
-  });
-  return ChannelArgs(std::move(args));
+ChannelArgs ChannelArgs::Remove(y_absl::string_view key) const {
+  return ChannelArgs(args_.Remove(key));
 }
 
 y_absl::optional<int> ChannelArgs::GetInt(y_absl::string_view name) const {
   auto* v = Get(name);
   if (v == nullptr) return y_absl::nullopt;
-  return v->GetIfInt();
+  if (!y_absl::holds_alternative<int>(*v)) return y_absl::nullopt;
+  return y_absl::get<int>(*v);
 }
 
 y_absl::optional<Duration> ChannelArgs::GetDurationFromIntMillis(
@@ -240,9 +195,8 @@ y_absl::optional<y_absl::string_view> ChannelArgs::GetString(
     y_absl::string_view name) const {
   auto* v = Get(name);
   if (v == nullptr) return y_absl::nullopt;
-  const auto s = v->GetIfString();
-  if (s == nullptr) return y_absl::nullopt;
-  return s->as_string_view();
+  if (!y_absl::holds_alternative<TString>(*v)) return y_absl::nullopt;
+  return y_absl::get<TString>(*v);
 }
 
 y_absl::optional<TString> ChannelArgs::GetOwnedString(
@@ -255,16 +209,15 @@ y_absl::optional<TString> ChannelArgs::GetOwnedString(
 void* ChannelArgs::GetVoidPointer(y_absl::string_view name) const {
   auto* v = Get(name);
   if (v == nullptr) return nullptr;
-  const auto* pp = v->GetIfPointer();
-  if (pp == nullptr) return nullptr;
-  return pp->c_pointer();
+  if (!y_absl::holds_alternative<Pointer>(*v)) return nullptr;
+  return y_absl::get<Pointer>(*v).c_pointer();
 }
 
 y_absl::optional<bool> ChannelArgs::GetBool(y_absl::string_view name) const {
   auto* v = Get(name);
   if (v == nullptr) return y_absl::nullopt;
-  auto i = v->GetIfInt();
-  if (!i.has_value()) {
+  auto* i = y_absl::get_if<int>(v);
+  if (i == nullptr) {
     gpr_log(GPR_ERROR, "%s ignored: it must be an integer",
             TString(name).c_str());
     return y_absl::nullopt;
@@ -281,51 +234,24 @@ y_absl::optional<bool> ChannelArgs::GetBool(y_absl::string_view name) const {
   }
 }
 
-TString ChannelArgs::Value::ToString() const {
-  if (rep_.c_vtable() == &int_vtable_) {
-    return ::ToString(reinterpret_cast<intptr_t>(rep_.c_pointer()));
-  }
-  if (rep_.c_vtable() == &string_vtable_) {
-    return TString(
-        static_cast<RefCountedString*>(rep_.c_pointer())->as_string_view());
-  }
-  return y_absl::StrFormat("%p", rep_.c_pointer());
-}
-
 TString ChannelArgs::ToString() const {
   std::vector<TString> arg_strings;
-  args_.ForEach(
-      [&arg_strings](const RefCountedStringValue& key, const Value& value) {
-        arg_strings.push_back(
-            y_absl::StrCat(key.as_string_view(), "=", value.ToString()));
-      });
+  args_.ForEach([&arg_strings](const TString& key, const Value& value) {
+    TString value_str;
+    if (auto* i = y_absl::get_if<int>(&value)) {
+      value_str = ::ToString(*i);
+    } else if (auto* s = y_absl::get_if<TString>(&value)) {
+      value_str = *s;
+    } else if (auto* p = y_absl::get_if<Pointer>(&value)) {
+      value_str = y_absl::StrFormat("%p", p->c_pointer());
+    }
+    arg_strings.push_back(y_absl::StrCat(key, "=", value_str));
+  });
   return y_absl::StrCat("{", y_absl::StrJoin(arg_strings, ", "), "}");
 }
 
 ChannelArgs ChannelArgs::UnionWith(ChannelArgs other) const {
-  if (args_.Empty()) return other;
-  if (other.args_.Empty()) return *this;
-  if (args_.Height() <= other.args_.Height()) {
-    args_.ForEach(
-        [&other](const RefCountedStringValue& key, const Value& value) {
-          other.args_ = other.args_.Add(key, value);
-        });
-    return other;
-  } else {
-    auto result = *this;
-    other.args_.ForEach(
-        [&result](const RefCountedStringValue& key, const Value& value) {
-          if (result.args_.Lookup(key) == nullptr) {
-            result.args_ = result.args_.Add(key, value);
-          }
-        });
-    return result;
-  }
-}
-
-ChannelArgs ChannelArgs::FuzzingReferenceUnionWith(ChannelArgs other) const {
-  // DO NOT OPTIMIZE THIS!!
-  args_.ForEach([&other](const RefCountedStringValue& key, const Value& value) {
+  args_.ForEach([&other](const TString& key, const Value& value) {
     other.args_ = other.args_.Add(key, value);
   });
   return other;

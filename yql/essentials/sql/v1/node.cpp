@@ -17,6 +17,8 @@
 #include <util/string/escape.h>
 #include <util/string/subst.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -31,15 +33,15 @@ TString ErrorDistinctByGroupKey(const TString& column) {
     return TStringBuilder() << "Unable to use DISTINCT by grouping column: " << column << ". You should leave one of them.";
 }
 
-TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNodePtr keys)
-    : RefName(refName)
-    , Cluster(cluster)
-    , Keys(keys)
+TTopicRef::TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys)
+    : RefName(std::move(refName))
+    , Cluster(std::move(cluster))
+    , Keys(std::move(keys))
 {
 }
 
 INode::INode(TPosition pos)
-    : Pos_(pos)
+    : Pos_(std::move(pos))
 {
 }
 
@@ -681,9 +683,9 @@ TTableHints CloneContainer(const TTableHints& hints) {
     return result;
 }
 
-TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg)
+TAstAtomNode::TAstAtomNode(TPosition pos, TString content, ui32 flags, bool isOptionalArg)
     : INode(pos)
-    , Content_(content)
+    , Content_(std::move(content))
     , Flags_(flags)
     , IsOptionalArg_(isOptionalArg)
 {
@@ -865,9 +867,9 @@ TNodePtr TAstListNodeImpl::DoClone() const {
     return new TAstListNodeImpl(Pos_, CloneContainer(Nodes_));
 }
 
-TCallNode::TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+TCallNode::TCallNode(TPosition pos, TString opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TAstListNode(pos)
-    , OpName_(opName)
+    , OpName_(std::move(opName))
     , MinArgs_(minArgs)
     , MaxArgs_(maxArgs)
     , Args_(args)
@@ -1527,18 +1529,18 @@ TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
     return res;
 }
 
-TColumnNode::TColumnNode(TPosition pos, const TString& column, const TString& source, bool maybeType)
+TColumnNode::TColumnNode(TPosition pos, TString column, TString source, bool maybeType)
     : INode(pos)
-    , ColumnName_(column)
-    , Source_(source)
+    , ColumnName_(std::move(column))
+    , Source_(std::move(source))
     , MaybeType_(maybeType)
 {
 }
 
-TColumnNode::TColumnNode(TPosition pos, const TNodePtr& column, const TString& source)
+TColumnNode::TColumnNode(TPosition pos, TNodePtr column, TString source)
     : INode(pos)
-    , ColumnExpr_(column)
-    , Source_(source)
+    , ColumnExpr_(std::move(column))
+    , Source_(std::move(source))
 {
 }
 
@@ -1793,10 +1795,10 @@ void IAggregation::MarkKeyColumnAsGenerated() {
     IsGeneratedKeyColumn_ = true;
 }
 
-IAggregation::IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
+IAggregation::IAggregation(TPosition pos, TString name, TString func, EAggregateMode aggMode)
     : INode(pos)
-    , Name_(name)
-    , Func_(func)
+    , Name_(std::move(name))
+    , Func_(std::move(func))
     , AggMode_(aggMode)
 {
 }
@@ -2012,14 +2014,14 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
                                  (ctx.AnsiQuotedIdentifiers && input.StartsWith('"')) ? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTierSettings::TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName)
-    : EvictionDelay(evictionDelay)
+TTtlSettings::TTierSettings::TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName)
+    : EvictionDelay(std::move(evictionDelay))
     , StorageName(storageName)
 {
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit)
-    : ColumnName(columnName)
+TTtlSettings::TTtlSettings(TIdentifier columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit)
+    : ColumnName(std::move(columnName))
     , Tiers(tiers)
     , ColumnUnit(columnUnit)
 {
@@ -2109,12 +2111,12 @@ TLiteralNode::TLiteralNode(TPosition pos, bool isNull)
     Add(isNull ? "Null" : "Void");
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& value)
+TLiteralNode::TLiteralNode(TPosition pos, TString type, TString value)
     : TAstListNode(pos)
     , Null_(false)
     , Void_(false)
-    , Type_(type)
-    , Value_(value)
+    , Type_(std::move(type))
+    , Value_(std::move(value))
 {
     if (Type_.StartsWith("Pg")) {
         Add("PgConst", BuildQuotedAtom(Pos_, Value_), Y("PgType", Q(to_lower(Type_.substr(2)))));
@@ -2123,22 +2125,22 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& va
     }
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags)
+TLiteralNode::TLiteralNode(TPosition pos, TString value, ui32 nodeFlags)
     : TAstListNode(pos)
     , Null_(false)
     , Void_(false)
     , Type_("String")
-    , Value_(value)
+    , Value_(std::move(value))
 {
     Add(Type_, BuildQuotedAtom(pos, Value_, nodeFlags));
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags, const TString& type)
+TLiteralNode::TLiteralNode(TPosition pos, TString value, ui32 nodeFlags, TString type)
     : TAstListNode(pos)
     , Null_(false)
     , Void_(false)
-    , Type_(type)
-    , Value_(value)
+    , Type_(std::move(type))
+    , Value_(std::move(value))
 {
     if (Type_.StartsWith("Pg")) {
         Add("PgConst", BuildQuotedAtom(Pos_, Value_, nodeFlags), Y("PgType", Q(to_lower(Type_.substr(2)))));
@@ -2521,10 +2523,10 @@ TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs) {
     return new TListOfNamedNodes(pos, std::move(exprs));
 }
 
-TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString& name)
+TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, TString name)
     : INode(pos)
     ,
-    Name_(name)
+    Name_(std::move(name))
 {
 }
 
@@ -3333,10 +3335,10 @@ TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNod
 
 class TCalcOverWindow final: public INode {
 public:
-    TCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr node)
+    TCalcOverWindow(TPosition pos, TString windowName, TNodePtr node)
         : INode(pos)
-        , WindowName_(windowName)
-        , FuncNode_(node)
+        , WindowName_(std::move(windowName))
+        , FuncNode_(std::move(node))
     {
     }
 
@@ -3437,9 +3439,9 @@ TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool
 
 class TDoCall final: public INode {
 public:
-    TDoCall(TPosition pos, const TNodePtr& node)
+    TDoCall(TPosition pos, TNodePtr node)
         : INode(pos)
-        , Node_(node)
+        , Node_(std::move(node))
     {
         FakeSource_ = BuildFakeSource(pos);
     }
@@ -3605,9 +3607,9 @@ TNodePtr BuildTupleResult(TNodePtr tuple, size_t ensureTupleSize) {
 
 class TNamedExprReferenceNode: public IProxyNode {
 public:
-    TNamedExprReferenceNode(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex)
+    TNamedExprReferenceNode(TNodePtr parent, TString name, TMaybe<size_t> tupleIndex)
         : IProxyNode(parent->GetPos(), parent)
-        , Name_(name)
+        , Name_(std::move(name))
         , TupleIndex_(tupleIndex)
     {
     }

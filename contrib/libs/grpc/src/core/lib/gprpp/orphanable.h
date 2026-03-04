@@ -87,12 +87,12 @@ class InternallyRefCounted : public Orphanable {
       : refs_(initial_refcount, trace) {}
   ~InternallyRefCounted() override = default;
 
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref() {
+  RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
     IncrementRefCount();
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }
-  GRPC_MUST_USE_RESULT RefCountedPtr<Child> Ref(const DebugLocation& location,
-                                                const char* reason) {
+  RefCountedPtr<Child> Ref(const DebugLocation& location,
+                           const char* reason) GRPC_MUST_USE_RESULT {
     IncrementRefCount(location, reason);
     return RefCountedPtr<Child>(static_cast<Child*>(this));
   }

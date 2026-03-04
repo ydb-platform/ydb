@@ -8,6 +8,8 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <google/protobuf/reflection.h>
 
+#include <utility>
+
 using namespace NYql;
 using namespace NYql::NPureCalc;
 using namespace google::protobuf;
@@ -17,10 +19,10 @@ using namespace NKikimr::NMiniKQL;
 TProtobufRawInputSpec::TProtobufRawInputSpec(
     const Descriptor& descriptor,
     const TMaybe<TString>& timestampColumn,
-    const TProtoSchemaOptions& options)
+    TProtoSchemaOptions options)
     : Descriptor_(descriptor)
     , TimestampColumn_(timestampColumn)
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
 {
 }
 
@@ -56,11 +58,11 @@ const TProtoSchemaOptions& TProtobufRawInputSpec::GetSchemaOptions() const {
 TProtobufRawOutputSpec::TProtobufRawOutputSpec(
     const Descriptor& descriptor,
     MessageFactory* factory,
-    const TProtoSchemaOptions& options,
+    TProtoSchemaOptions options,
     Arena* arena)
     : Descriptor_(descriptor)
     , Factory_(factory)
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
     , Arena_(arena)
 {
     SchemaOptions_.ListIsOptional = true;
@@ -101,10 +103,10 @@ const TProtoSchemaOptions& TProtobufRawOutputSpec::GetSchemaOptions() const {
 TProtobufRawMultiOutputSpec::TProtobufRawMultiOutputSpec(
     TVector<const Descriptor*> descriptors,
     TMaybe<TVector<MessageFactory*>> factories,
-    const TProtoSchemaOptions& options,
+    TProtoSchemaOptions options,
     TMaybe<TVector<Arena*>> arenas)
     : Descriptors_(std::move(descriptors))
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
 {
     if (factories) {
         Y_ENSURE(factories->size() == Descriptors_.size(), "number of factories must match number of descriptors");

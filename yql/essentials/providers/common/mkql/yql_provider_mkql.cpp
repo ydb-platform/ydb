@@ -756,7 +756,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
         }
 
-        if (isStatePersistable && RuntimeVersion >= 49U) {
+        if (isStatePersistable) {
             return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);

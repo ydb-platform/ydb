@@ -137,7 +137,7 @@ class Distributed(TableEngine):
 
 
 class MergeTree(TableEngine):
-    eng_params = ['order_by', 'partition_key', 'primary_key', 'sample_by']
+    eng_params = ["order_by", "partition_by", "primary_key", "sample_by"]
 
     # pylint: disable=unused-argument
     def __init__(self, order_by: str = None, primary_key: str = None,

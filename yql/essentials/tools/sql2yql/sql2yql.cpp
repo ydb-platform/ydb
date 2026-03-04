@@ -90,14 +90,14 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
     const Reflection* ref = node.GetReflection();
     ref->ListFields(node, &fields);
 
-    for (auto it = fields.begin(); it != fields.end(); ++it) {
-        if ((*it)->is_repeated()) {
-            const ui32 fieldSize = ref->FieldSize(node, *it);
+    for (auto& field : fields) {
+        if (field->is_repeated()) {
+            const ui32 fieldSize = ref->FieldSize(node, field);
             for (ui32 i = 0; i < fieldSize; ++i) {
-                VisitField(out, **it, ref->GetRepeatedMessage(node, *it, i));
+                VisitField(out, *field, ref->GetRepeatedMessage(node, field, i));
             }
         } else {
-            VisitField(out, **it, ref->GetMessage(node, *it));
+            VisitField(out, *field, ref->GetMessage(node, field));
         }
     }
 }
@@ -125,12 +125,13 @@ bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsErr
 
 bool TestFormat(
     const TString& query,
+    const NYql::TAstParseResult& ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
     const bool checkDoubleFormatting)
 {
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, checkDoubleFormatting);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, checkDoubleFormatting);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -438,7 +439,9 @@ int BuildAST(int argc, char** argv) {
                 }
             }
 
-            const bool isSQLv1 = (syntaxVersion == 1 && !res.Has("pg"));
+            const bool isSQLv1 =
+                (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
+                 !res.Has("pg"));
 
             bool hasError = !TestIssues(parseRes, flags.contains("StrictWarningAsError"));
 
@@ -447,7 +450,7 @@ int BuildAST(int argc, char** argv) {
             }
 
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
-                hasError |= !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
+                hasError |= !TestFormat(query, parseRes, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && isSQLv1 && parseRes.IsOk()) {

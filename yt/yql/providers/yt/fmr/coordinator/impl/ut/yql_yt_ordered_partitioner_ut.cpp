@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // yt1 partitions
@@ -720,7 +720,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // FMR scope before YT: both tables in one task due to carry (25 + 25 = 50)
@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // FMR1 scope (flushed by YT): must be its own task

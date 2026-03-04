@@ -5,6 +5,7 @@
 #include <util/generic/string.h>
 
 #include <set>
+#include <utility>
 
 /**
  * The cost function for cost based optimizer currently consists of methods for computing
@@ -44,7 +45,7 @@ struct TJoinColumn {
     TJoinColumn() = default;
 
     TJoinColumn(TString relName, TString attributeName) :
-        RelName(relName),
+        RelName(std::move(relName)),
         AttributeName(attributeName),
         AttributeNameWithAliases(attributeName) {}
 

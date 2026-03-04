@@ -28,6 +28,13 @@ TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
 
 namespace {
 
+template <typename TResponse>
+NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
+    YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
+    response.ErrorMessages.emplace_back(error);
+    return NThreading::MakeFuture(std::move(response));
+}
+
 class TFmrCoordinator: public IFmrCoordinator {
 public:
     TFmrCoordinator(const TFmrCoordinatorSettings& settings, IYtCoordinatorService::TPtr ytCoordinatorService, IFmrGcService::TPtr gcService)
@@ -82,24 +89,36 @@ public:
 
         TString partitionId;
 
-        try {
-            if (auto distUploadParams = std::get_if<TSortedUploadOperationParams>(&request.OperationParams)) {
-                partitionId = distUploadParams->PartitionId;
-                YQL_ENSURE(OperationPartitions_.contains(partitionId), "Partition " << partitionId << " should to be prepered before starting operation");
-            } else {
-                partitionId = PartitionOperationIntoSeveralTasks(request.OperationParams, fmrOperationSpec, request.ClusterConnections);
+        if (auto distUploadParams = std::get_if<TSortedUploadOperationParams>(&request.OperationParams)) {
+            partitionId = distUploadParams->PartitionId;
+            YQL_ENSURE(OperationPartitions_.contains(partitionId), "Partition " << partitionId << " should to be prepered before starting operation");
+        } else {
+            auto partitionOpResult = PartitionOperationIntoSeveralTasks(request.OperationParams, fmrOperationSpec, request.ClusterConnections);
+            if (partitionOpResult.Error) {
+                return MakeFailedResponse(
+                    TStartOperationResponse(EOperationStatus::Failed, partitionOpResult.Error->ErrorMessage),
+                    *partitionOpResult.Error,
+                    "Failed to start operation: "
+                );
             }
-        } catch (const std::exception& e) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation with exception: " << e.what();
-            return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Failed, e.what()));
+            partitionId = partitionOpResult.PartitionId;
         }
 
         std::vector<TTaskParams> taskParams = GetOutputTaskParams(OperationPartitions_.at(partitionId), request.OperationParams);
 
         std::unordered_set<TString> taskIds;
+        auto fmrResourceTasksResult = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
+        if (fmrResourceTasksResult.Error) {
+            return MakeFailedResponse(
+                TStartOperationResponse(EOperationStatus::Failed, fmrResourceTasksResult.Error->ErrorMessage),
+                *fmrResourceTasksResult.Error,
+                "Failed to start operation: "
+            );
+        }
+        auto fmrResourceTasks = std::move(fmrResourceTasksResult.Tasks);
+
         for (auto& currentTaskParams: taskParams) {
             TString taskId = GenerateId();
-            auto fmrResourceTasks = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
             SortedTasksPreprocess(currentTaskParams);
 
             TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, request.Files, request.YtResources, fmrResourceTasks, fmrOperationSpec);
@@ -412,20 +431,24 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        try {
-            auto partitionId = PartitionOperationIntoSeveralTasks(
-                request.OperationParams,
-                fmrOperationSpec,
-                request.ClusterConnections
-            );
+        auto partitionOpResult = PartitionOperationIntoSeveralTasks(
+            request.OperationParams,
+            fmrOperationSpec,
+            request.ClusterConnections
+        );
 
-            YQL_CLOG(DEBUG, FastMapReduce) << "Successfully prepared operation with partitionId=" << partitionId
-                << ", tasksNum=" << OperationPartitions_[partitionId].TaskInputs.size();
-            return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
-        } catch (const std::exception& e) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Failed to prepare operation: " << e.what();
-            return NThreading::MakeErrorFuture<TPrepareOperationResponse>(std::current_exception());
+        if (partitionOpResult.Error) {
+            return MakeFailedResponse(
+                TPrepareOperationResponse{},
+                *partitionOpResult.Error,
+                "Failed to prepare operation: "
+            );
         }
+
+        auto partitionId = partitionOpResult.PartitionId;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Successfully prepared operation with partitionId=" << partitionId
+            << ", tasksNum=" << OperationPartitions_[partitionId].TaskInputs.size();
+        return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
     }
 
     std::vector<TString> GetOperationToProcessAfterResult(TString operationId) {
@@ -680,7 +703,25 @@ private:
         return sortingColumns;
     }
 
-    TString PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
+    TPartitionOperationResult PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
+        try {
+            return PartitionOperationIntoSeveralTasksImpl(operationParams, fmrOperationSpec, clusterConnections);
+        } catch (const std::exception& e) {
+            return TPartitionOperationResult{.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = ParseFmrReasonFromErrorMessage(e.what()),
+                .ErrorMessage = e.what()
+            }};
+        } catch (...) {
+            return TPartitionOperationResult{.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::Unknown,
+                .ErrorMessage = CurrentExceptionMessage()
+            }};
+        }
+    }
+
+    TPartitionOperationResult PartitionOperationIntoSeveralTasksImpl(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
         EPartitionType partitionType = CheckPartitionType(operationParams);
         auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
         auto partitionId = GenerateId();
@@ -719,18 +760,22 @@ private:
                 partitionResult = PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
                 break;
             } default: {
-                ythrow yexception() << "Unknown partition type";
+                return TPartitionOperationResult{.Error = TFmrError{
+                    .Component = EFmrComponent::Coordinator,
+                    .Reason = EFmrErrorReason::RestartQuery,
+                    .ErrorMessage = "Unknown partition type"
+                }};
             }
         }
-        if (!partitionResult.PartitionStatus) {
-            ythrow yexception() << "Failed to partition input tables into tasks";
-            // TODO - return FAILED_PARTITIONING status instead.
+        if (partitionResult.Error) {
+            return TPartitionOperationResult{.Error = partitionResult.Error};
         }
         OperationPartitions_[partitionId] = partitionResult;
-        return partitionId;
+        return TPartitionOperationResult{.PartitionId = partitionId};
     }
 
-    std::vector<TFmrResourceTaskInfo> PartitionFmrResourcesIntoTasks(const std::vector<TFmrResourceOperationInfo>& fmrResources, const NYT::TNode& fmrOperationSpec) {
+
+    TFmrResourceTasksResult PartitionFmrResourcesIntoTasks(const std::vector<TFmrResourceOperationInfo>& fmrResources, const NYT::TNode& fmrOperationSpec) {
         // need to split fmrResources into tasks and pass to JobPreparer, for simpliclty split each fmr table separately.
         std::vector<TFmrResourceTaskInfo> fmrResourceTasks;
 
@@ -740,7 +785,11 @@ private:
             TFmrResourceTaskInfo curFmrResourceTaskInfo;
             auto [partition, partitionSuccess] = fmrPartitioner.PartitionFmrTablesIntoTasks({fmrResource.FmrTable});
             if (!partitionSuccess) {
-                throw yexception() << "Failed to partition fmrResources into tasks";
+                return TFmrResourceTasksResult{.Error = TFmrError{
+                    .Component = EFmrComponent::Coordinator,
+                    .Reason = EFmrErrorReason::RestartQuery,
+                    .ErrorMessage = "Failed to partition fmrResources into tasks"
+                }};
             }
 
             for (auto& partitionTable: partition) {
@@ -752,7 +801,7 @@ private:
             curFmrResourceTaskInfo.Alias = fmrResource.Alias;
             fmrResourceTasks.emplace_back(curFmrResourceTaskInfo);
         }
-        return fmrResourceTasks;
+        return TFmrResourceTasksResult{.Tasks = fmrResourceTasks};
     }
 
     void GetOperationInputTables(std::vector<TYtTableRef>& ytInputTables, std::vector<TFmrTableRef>& fmrInputTables, const TOperationParams& operationParams) {

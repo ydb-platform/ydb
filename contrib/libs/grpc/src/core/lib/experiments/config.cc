@@ -20,16 +20,13 @@
 
 #include <algorithm>
 #include <atomic>
-#include <map>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
-#include <utility>
 
-#include "y_absl/functional/any_invocable.h"
+#include "y_absl/strings/ascii.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
-#include "y_absl/strings/strip.h"
 
 #include <grpc/support/log.h>
 
@@ -52,68 +49,26 @@ struct ForcedExperiment {
 };
 ForcedExperiment g_forced_experiments[kNumExperiments];
 
-std::atomic<bool> g_loaded(false);
-
-y_absl::AnyInvocable<bool(struct ExperimentMetadata)>* g_check_constraints_cb =
-    nullptr;
-
-class TestExperiments {
- public:
-  TestExperiments(const ExperimentMetadata* experiment_metadata,
-                  size_t num_experiments) {
-    enabled_ = new bool[num_experiments];
-    for (size_t i = 0; i < num_experiments; i++) {
-      if (g_check_constraints_cb != nullptr) {
-        enabled_[i] = (*g_check_constraints_cb)(experiment_metadata[i]);
-      } else {
-        enabled_[i] = experiment_metadata[i].default_value;
-      }
-    }
-    // For each comma-separated experiment in the global config:
-    for (auto experiment : y_absl::StrSplit(ConfigVars::Get().Experiments(), ',',
-                                          y_absl::SkipWhitespace())) {
-      // Enable unless prefixed with '-' (=> disable).
-      bool enable = !y_absl::ConsumePrefix(&experiment, "-");
-      // See if we can find the experiment in the list in this binary.
-      for (size_t i = 0; i < num_experiments; i++) {
-        if (experiment == experiment_metadata[i].name) {
-          enabled_[i] = enable;
-          break;
-        }
-      }
-    }
-  }
-
-  // Overloading [] operator to access elements in array style
-  bool operator[](int index) { return enabled_[index]; }
-
-  ~TestExperiments() { delete enabled_; }
-
- private:
-  bool* enabled_;
-};
-
-TestExperiments* g_test_experiments = nullptr;
+std::atomic<bool> g_loaded;
 
 GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariable() {
-  g_loaded.store(true, std::memory_order_relaxed);
+  GPR_ASSERT(g_loaded.exchange(true, std::memory_order_relaxed) == false);
   // Set defaults from metadata.
   Experiments experiments;
   for (size_t i = 0; i < kNumExperiments; i++) {
     if (!g_forced_experiments[i].forced) {
-      if (g_check_constraints_cb != nullptr) {
-        experiments.enabled[i] =
-            (*g_check_constraints_cb)(g_experiment_metadata[i]);
-      } else {
-        experiments.enabled[i] = g_experiment_metadata[i].default_value;
-      }
+      experiments.enabled[i] = g_experiment_metadata[i].default_value;
     } else {
       experiments.enabled[i] = g_forced_experiments[i].value;
     }
   }
   // For each comma-separated experiment in the global config:
-  for (auto experiment : y_absl::StrSplit(ConfigVars::Get().Experiments(), ',',
-                                        y_absl::SkipWhitespace())) {
+  for (auto experiment : y_absl::StrSplit(
+           y_absl::string_view(ConfigVars::Get().Experiments()), ',')) {
+    // Strip whitespace.
+    experiment = y_absl::StripAsciiWhitespace(experiment);
+    // Handle ",," without crashing.
+    if (experiment.empty()) continue;
     // Enable unless prefixed with '-' (=> disable).
     bool enable = true;
     if (experiment[0] == '-') {
@@ -138,71 +93,37 @@ GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariable() {
   }
   return experiments;
 }
-
-Experiments& ExperimentsSingleton() {
-  // One time initialization:
-  static NoDestruct<Experiments> experiments{
-      LoadExperimentsFromConfigVariable()};
-  return *experiments;
-}
 }  // namespace
 
-void TestOnlyReloadExperimentsFromConfigVariables() {
-  ExperimentsSingleton() = LoadExperimentsFromConfigVariable();
-  PrintExperimentsList();
-}
-
-void LoadTestOnlyExperimentsFromMetadata(
-    const ExperimentMetadata* experiment_metadata, size_t num_experiments) {
-  g_test_experiments =
-      new TestExperiments(experiment_metadata, num_experiments);
-}
-
 bool IsExperimentEnabled(size_t experiment_id) {
-  return ExperimentsSingleton().enabled[experiment_id];
-}
-
-bool IsTestExperimentEnabled(size_t experiment_id) {
-  return (*g_test_experiments)[experiment_id];
+  // One time initialization:
+  static const NoDestruct<Experiments> experiments{
+      LoadExperimentsFromConfigVariable()};
+  // Normal path: just return the value;
+  return experiments->enabled[experiment_id];
 }
 
 void PrintExperimentsList() {
   size_t max_experiment_length = 0;
-  // Populate visitation order into a std::map so that iteration results in a
-  // lexical ordering of experiment names.
-  // The lexical ordering makes it nice and easy to find the experiment you're
-  // looking for in the output spam that we generate.
-  std::map<y_absl::string_view, size_t> visitation_order;
   for (size_t i = 0; i < kNumExperiments; i++) {
     max_experiment_length =
         std::max(max_experiment_length, strlen(g_experiment_metadata[i].name));
-    visitation_order[g_experiment_metadata[i].name] = i;
   }
-  for (auto name_index : visitation_order) {
-    const size_t i = name_index.second;
-    gpr_log(
-        GPR_DEBUG, "%s",
-        y_absl::StrCat(
-            "gRPC EXPERIMENT ", g_experiment_metadata[i].name,
-            TString(max_experiment_length -
-                            strlen(g_experiment_metadata[i].name) + 1,
-                        ' '),
-            IsExperimentEnabled(i) ? "ON " : "OFF",
-            " (default:", g_experiment_metadata[i].default_value ? "ON" : "OFF",
-            (g_check_constraints_cb != nullptr
-                 ? y_absl::StrCat(
-                       " + ", g_experiment_metadata[i].additional_constaints,
-                       " => ",
-                       (*g_check_constraints_cb)(g_experiment_metadata[i])
-                           ? "ON "
-                           : "OFF")
-                 : TString()),
-            g_forced_experiments[i].forced
-                ? y_absl::StrCat(" force:",
-                               g_forced_experiments[i].value ? "ON" : "OFF")
-                : TString(),
-            ")")
-            .c_str());
+  for (size_t i = 0; i < kNumExperiments; i++) {
+    gpr_log(GPR_DEBUG, "%s",
+            y_absl::StrCat(
+                "gRPC EXPERIMENT ", g_experiment_metadata[i].name,
+                TString(max_experiment_length -
+                                strlen(g_experiment_metadata[i].name) + 1,
+                            ' '),
+                IsExperimentEnabled(i) ? "ON " : "OFF", " (default:",
+                g_experiment_metadata[i].default_value ? "ON" : "OFF",
+                g_forced_experiments[i].forced
+                    ? y_absl::StrCat(" force:",
+                                   g_forced_experiments[i].value ? "ON" : "OFF")
+                    : TString(),
+                ")")
+                .c_str());
   }
 }
 
@@ -222,13 +143,6 @@ void ForceEnableExperiment(y_absl::string_view experiment, bool enable) {
           TString(experiment).c_str(), enable ? "enable" : "disable");
 }
 
-void RegisterExperimentConstraintsValidator(
-    y_absl::AnyInvocable<bool(struct ExperimentMetadata)> check_constraints_cb) {
-  g_check_constraints_cb =
-      new y_absl::AnyInvocable<bool(struct ExperimentMetadata)>(
-          std::move(check_constraints_cb));
-}
-
 }  // namespace grpc_core
 #else
 namespace grpc_core {
@@ -237,10 +151,5 @@ void ForceEnableExperiment(y_absl::string_view experiment_name, bool) {
   Crash(y_absl::StrCat("ForceEnableExperiment(\"", experiment_name,
                      "\") called in final build"));
 }
-
-void RegisterExperimentConstraintsValidator(
-    y_absl::AnyInvocable<
-        bool(struct ExperimentMetadata)> /*check_constraints_cb*/) {}
-
 }  // namespace grpc_core
 #endif

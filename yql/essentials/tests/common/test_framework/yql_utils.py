@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import hashlib
 import io
+import json
 import os
 import os.path
 import six
@@ -20,6 +21,7 @@ from threading import Lock
 import pytest
 import yatest.common
 import cyson
+from library.python import resource
 
 import logging
 import getpass
@@ -36,6 +38,8 @@ UNDEFINED_SANITIZER_IGNORE_STRINGS = [
     "Failed to find UDF function",
     "Module not loaded for script type"
 ]
+
+FEATURES = json.loads(resource.find('yql/essentials/data/language/features.json'))
 
 
 def get_param(name, default=None):
@@ -519,10 +523,18 @@ def is_xfail(cfg, filename=''):
 
 
 def get_langver(cfg):
-    for item in cfg:
-        if item[0] == 'langver':
-            return item[1]
-    return None
+    def resolve(alias):
+        if alias in FEATURES:
+            return FEATURES[alias]["since_langver"]
+        if alias[0].isdigit():
+            return alias
+        raise ValueError('Bad alias ' + alias)
+
+    return next((
+        resolve(item[1])
+        for item in cfg
+        if item[0] == 'langver'
+    ), None)
 
 
 def get_envs(cfg):

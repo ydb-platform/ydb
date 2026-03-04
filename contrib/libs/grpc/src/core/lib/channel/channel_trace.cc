@@ -20,13 +20,12 @@
 
 #include "src/core/lib/channel/channel_trace.h"
 
-#include <memory>
+#include <algorithm>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
-#include "y_absl/strings/str_cat.h"
-
 #include <grpc/support/alloc.h>
-#include <grpc/support/json.h>
 
 #include "src/core/lib/channel/channelz.h"
 #include "src/core/lib/gpr/string.h"
@@ -142,21 +141,21 @@ const char* severity_string(ChannelTrace::Severity severity) {
 Json ChannelTrace::TraceEvent::RenderTraceEvent() const {
   char* description = grpc_slice_to_c_string(data_);
   Json::Object object = {
-      {"description", Json::FromString(description)},
-      {"severity", Json::FromString(severity_string(severity_))},
-      {"timestamp", Json::FromString(gpr_format_timespec(timestamp_))},
+      {"description", description},
+      {"severity", severity_string(severity_)},
+      {"timestamp", gpr_format_timespec(timestamp_)},
   };
   gpr_free(description);
   if (referenced_entity_ != nullptr) {
     const bool is_channel =
         (referenced_entity_->type() == BaseNode::EntityType::kTopLevelChannel ||
          referenced_entity_->type() == BaseNode::EntityType::kInternalChannel);
-    object[is_channel ? "channelRef" : "subchannelRef"] = Json::FromObject({
+    object[is_channel ? "channelRef" : "subchannelRef"] = Json::Object{
         {(is_channel ? "channelId" : "subchannelId"),
-         Json::FromString(y_absl::StrCat(referenced_entity_->uuid()))},
-    });
+         ::ToString(referenced_entity_->uuid())},
+    };
   }
-  return Json::FromObject(std::move(object));
+  return object;
 }
 
 Json ChannelTrace::RenderJson() const {
@@ -165,12 +164,10 @@ Json ChannelTrace::RenderJson() const {
     return Json();  // JSON null
   }
   Json::Object object = {
-      {"creationTimestamp",
-       Json::FromString(gpr_format_timespec(time_created_))},
+      {"creationTimestamp", gpr_format_timespec(time_created_)},
   };
   if (num_events_logged_ > 0) {
-    object["numEventsLogged"] =
-        Json::FromString(y_absl::StrCat(num_events_logged_));
+    object["numEventsLogged"] = ::ToString(num_events_logged_);
   }
   // Only add in the event list if it is non-empty.
   if (head_trace_ != nullptr) {
@@ -178,9 +175,9 @@ Json ChannelTrace::RenderJson() const {
     for (TraceEvent* it = head_trace_; it != nullptr; it = it->next()) {
       array.emplace_back(it->RenderTraceEvent());
     }
-    object["events"] = Json::FromArray(std::move(array));
+    object["events"] = std::move(array);
   }
-  return Json::FromObject(std::move(object));
+  return object;
 }
 
 }  // namespace channelz

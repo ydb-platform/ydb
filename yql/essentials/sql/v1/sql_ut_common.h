@@ -3421,6 +3421,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     USER_SIDS = TRUE,
+                    TRACE_IDS = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
                     SCHEMA_CHANGES = FALSE,
@@ -3441,6 +3442,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("user_sids"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("trace_ids"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
@@ -6769,6 +6771,18 @@ Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
+}
+
+Y_UNIT_TEST(InvalidChangefeedTraceIDs) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE TABLE tableName (
+            Key Uint32, PRIMARY KEY (Key),
+            CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", TRACE_IDS = "foo")
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:88: Error: Literal of Bool type is expected for TRACE_IDS\n");
 }
 
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
@@ -12846,6 +12860,214 @@ Y_UNIT_TEST(SelectOpIntersect) {
     TWordCountHive stat = {"YqlSelect"};
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpUnionSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT 1 AS a UNION SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSetItem"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSetItem"], 3);
+}
+
+Y_UNIT_TEST(SelectOpUnionSubqueryParenthesis) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res;
+
+    res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT ((SELECT 1 AS a) UNION SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT 1 AS a UNION (SELECT 2 AS a));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+}
+
+Y_UNIT_TEST(TopLevelHintIsNotAvailable) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 02);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT /*+ yqlselect(auto) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+Y_UNIT_TEST(TopLevelHintBadArgumentWarning) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT /*+ yqlselect(xxx) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid 'yqlselect' parameters");
+}
+
+Y_UNIT_TEST(TopLevelHintShadow) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT /*+ yqlselect(disable) yqlselect(force) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Hint yqlselect will not be used");
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(TopLevelHintStatements) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT /*+ yqlselect(disable) */ 1;
+        SELECT /*+ yqlselect(auto) */ 1;
+        SELECT /*+ yqlselect(force) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0 + 1 + 1);
+}
+
+Y_UNIT_TEST(TopLevelHintBeatsPragmaDisable) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'disable';
+        SELECT /*+ yqlselect(disable) */ 1;
+        SELECT /*+ yqlselect(auto) */ 1;
+        SELECT /*+ yqlselect(force) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0 + 1 + 1);
+}
+
+Y_UNIT_TEST(TopLevelHintBeatsPragmaAuto) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT /*+ yqlselect(disable) */ 1;
+        SELECT /*+ yqlselect(auto) */ 1;
+        SELECT /*+ yqlselect(force) */ 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0 + 1 + 1);
+
+    res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT /*+ yqlselect(force) */ DISTINCT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "was forced, but unsupported");
+}
+
+Y_UNIT_TEST(TopLevelHintStrangeOnUnionFirstDefining) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT /*+ yqlselect(force) */ 1 AS x
+        UNION
+        SELECT 2 AS x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSetItem"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSetItem"], 2);
+}
+
+Y_UNIT_TEST(TopLevelHintStrangeOnUnionSecondIgnored) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT 1 AS x
+        UNION
+        SELECT /*+ yqlselect(force) */ 2 AS x;
+    )sql", settings);
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Hint yqlselect will not be used");
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+Y_UNIT_TEST(TopLevelHintStrangeOnUnionFirstInParensDefining) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        (SELECT /*+ yqlselect(force) */ 1 AS x)
+        UNION
+        (SELECT 2 AS x);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSetItem"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSetItem"], 2);
+}
+
+Y_UNIT_TEST(TopLevelHintStrangeOnUnionSecondInParensIgnored) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        (SELECT 1 AS x)
+        UNION
+        (SELECT /*+ yqlselect(force) */ 2 AS x);
+    )sql", settings);
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Hint yqlselect will not be used");
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

@@ -129,11 +129,22 @@ NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepare
     NProto::TPrepareOperationResponse protoPrepareOperationResponse;
     protoPrepareOperationResponse.SetPartitionId(PrepareOperationResponse.PartitionId);
     protoPrepareOperationResponse.SetTasksNum(PrepareOperationResponse.TasksNum);
+    for (const auto& errorMessage : PrepareOperationResponse.ErrorMessages) {
+        auto* curError = protoPrepareOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
     return protoPrepareOperationResponse;
 }
 
 TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoPrepareOperationResponse) {
-    return TPrepareOperationResponse{.PartitionId = protoPrepareOperationResponse.GetPartitionId(), .TasksNum = protoPrepareOperationResponse.GetTasksNum()};
+    TPrepareOperationResponse prepareOperationResponse;
+    prepareOperationResponse.PartitionId = protoPrepareOperationResponse.GetPartitionId();
+    prepareOperationResponse.TasksNum = protoPrepareOperationResponse.GetTasksNum();
+    for (size_t i = 0; i < protoPrepareOperationResponse.ErrorMessagesSize(); ++i) {
+        prepareOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoPrepareOperationResponse.GetErrorMessages(i)));
+    }
+    return prepareOperationResponse;
 }
 
 TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
@@ -169,14 +180,22 @@ NProto::TStartOperationResponse StartOperationResponseToProto(const TStartOperat
     NProto::TStartOperationResponse protoStartOperationResponse;
     protoStartOperationResponse.SetOperationId(startOperationResponse.OperationId);
     protoStartOperationResponse.SetStatus(static_cast<NProto::EOperationStatus>(startOperationResponse.Status));
+    for (const auto& errorMessage : startOperationResponse.ErrorMessages) {
+        auto* curError = protoStartOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
     return protoStartOperationResponse;
 }
 
 TStartOperationResponse StartOperationResponseFromProto(const NProto::TStartOperationResponse& protoStartOperationResponse) {
-    return TStartOperationResponse{
-        .Status = static_cast<EOperationStatus>(protoStartOperationResponse.GetStatus()),
-        .OperationId = protoStartOperationResponse.GetOperationId()
-    };
+    TStartOperationResponse startOperationResponse;
+    startOperationResponse.Status = static_cast<EOperationStatus>(protoStartOperationResponse.GetStatus());
+    startOperationResponse.OperationId = protoStartOperationResponse.GetOperationId();
+    for (size_t i = 0; i < protoStartOperationResponse.ErrorMessagesSize(); ++i) {
+        startOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoStartOperationResponse.GetErrorMessages(i)));
+    }
+    return startOperationResponse;
 }
 
 NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationResponse& getOperationResponse) {

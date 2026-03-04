@@ -45,6 +45,9 @@ constexpr bool CHierarchy =
 template <class TEnum, TEnum Default, TEnum... TArgs>
 constexpr bool CIsThereDefaultInMapping = ((Default == TArgs) || ...);
 
+template <class TEnum, std::same_as<TEnum>... TArgs>
+consteval bool AllDifferentValues(TArgs... args);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <auto Value>
@@ -93,6 +96,11 @@ template <class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum...
 struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>
     : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
+    // NB(apachee): Chose to do as static_assert rather than template requirement as it provided better error message.
+    static_assert(AllDifferentValues<TEnum>(Values...), "All values in the mapping must be different");
+
+    static constexpr TEnumIndexedArray<TEnum, bool> ValueMap = {{Values, true}...};
+
     template <TEnum Value, class TConcrete>
     using TLeaf = TMappingLeaf<TEnum, Value, TBase, TConcrete>;
 

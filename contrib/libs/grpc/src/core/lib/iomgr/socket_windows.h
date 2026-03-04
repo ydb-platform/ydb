@@ -61,9 +61,6 @@ typedef struct grpc_winsocket_callback_info {
   // The results of the overlapped operation.
   DWORD bytes_transferred;
   int wsa_error;
-  // Tracks whether the final closure has already been run when the socket is
-  // shut down. This allows closures to be run immediately upon socket shutdown.
-  bool closure_already_executed_at_shutdown = false;
 } grpc_winsocket_callback_info;
 
 // This is a wrapper to a Windows socket. A socket can have one outstanding
@@ -84,7 +81,6 @@ typedef struct grpc_winsocket {
 
   gpr_mu state_mu;
   bool shutdown_called;
-  bool shutdown_registered;
 
   // You can't add the same socket twice to the same IO Completion Port.
   // This prevents that.
@@ -113,8 +109,8 @@ void grpc_socket_notify_on_write(grpc_winsocket* winsocket,
 void grpc_socket_notify_on_read(grpc_winsocket* winsocket,
                                 grpc_closure* closure);
 
-bool grpc_socket_become_ready(grpc_winsocket* socket,
-                              grpc_winsocket_callback_info* info);
+void grpc_socket_become_ready(grpc_winsocket* winsocket,
+                              grpc_winsocket_callback_info* ci);
 
 // Returns true if this system can create AF_INET6 sockets bound to ::1.
 // The value is probed once, and cached for the life of the process.
@@ -123,9 +119,6 @@ int grpc_ipv6_loopback_available(void);
 void grpc_wsa_socket_flags_init();
 
 DWORD grpc_get_default_wsa_socket_flags();
-
-// Final cleanup operations on the socket prior to deletion.
-void grpc_winsocket_finish(grpc_winsocket*);
 
 #endif
 

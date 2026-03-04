@@ -86,13 +86,14 @@ void grpc_pollset_destroy(grpc_pollset* pollset);
 // May call grpc_closure_list_run on grpc_closure_list, without holding the
 // pollset
 // lock
-grpc_error_handle grpc_pollset_work(grpc_pollset* pollset,
-                                    grpc_pollset_worker** worker,
-                                    grpc_core::Timestamp deadline);
+grpc_error_handle grpc_pollset_work(
+    grpc_pollset* pollset, grpc_pollset_worker** worker,
+    grpc_core::Timestamp deadline) GRPC_MUST_USE_RESULT;
 
 // Break one polling thread out of polling work for this pollset.
 // If specific_worker is non-NULL, then kick that worker.
 grpc_error_handle grpc_pollset_kick(grpc_pollset* pollset,
-                                    grpc_pollset_worker* specific_worker);
+                                    grpc_pollset_worker* specific_worker)
+    GRPC_MUST_USE_RESULT;
 
 #endif  // GRPC_SRC_CORE_LIB_IOMGR_POLLSET_H

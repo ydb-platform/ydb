@@ -5,6 +5,8 @@
 
 #include <library/cpp/protobuf/yql/descriptor.h>
 
+#include <utility>
+
 using namespace NKikimr::NUdf;
 using namespace NProtoBuf;
 
@@ -13,7 +15,7 @@ class TDynamicProtoValue: public TProtobufValue {
 public:
     TDynamicProtoValue(const TProtoInfo& info, TDynamicInfoRef dyn)
         : TProtobufValue(info)
-        , Dynamic_(dyn)
+        , Dynamic_(std::move(dyn))
     {
         Y_ASSERT(Dynamic_ != nullptr);
     }
@@ -30,7 +32,7 @@ class TDynamicProtoSerialize: public TProtobufSerialize {
 public:
     TDynamicProtoSerialize(const TProtoInfo& info, TDynamicInfoRef dyn)
         : TProtobufSerialize(info)
-        , Dynamic_(dyn)
+        , Dynamic_(std::move(dyn))
     {
         Y_ASSERT(Dynamic_ != nullptr);
     }

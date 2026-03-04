@@ -138,7 +138,8 @@ public:
     ) override {
         Y_UNUSED(clusterConnection);
         Y_UNUSED(options);
-        Y_ENSURE(cookieCount == 1);
+        Y_ENSURE(cookieCount == 1, "File distributed writer session supports only cookieCount=1 (single uploader). "
+            << "Got cookieCount=" << cookieCount << "; set partition max_parts=1 for SortedUpload in file gateway.");
         TMaybe<TString> filePath = ytTable.FilePath;
         YQL_ENSURE(filePath.Defined(), "File path should be set for file distributed writer session");
         return MakeIntrusive<TFileWriteDistributedSession>(*filePath);

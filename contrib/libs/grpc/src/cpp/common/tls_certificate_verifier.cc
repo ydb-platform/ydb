@@ -19,6 +19,8 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 #include <vector>
 

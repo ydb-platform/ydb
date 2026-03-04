@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <iterator>
+#include <utility>
 
 namespace NYql::NNodes {
 
@@ -408,8 +409,8 @@ public:
 
 class TArgs {
 public:
-    TArgs(const TExprBase& node, size_t startIndex)
-        : Node_(node)
+    TArgs(TExprBase node, size_t startIndex)
+        : Node_(std::move(node))
         , StartIndex_(startIndex)
     {
     }
@@ -501,7 +502,7 @@ protected:
     TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
         : Ctx_(ctx)
         , Pos_(pos)
-        , GetArgFunc_(getArgFunc)
+        , GetArgFunc_(std::move(getArgFunc))
     {
     }
 
@@ -518,7 +519,7 @@ protected:
 
     TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 

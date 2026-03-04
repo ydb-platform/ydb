@@ -302,6 +302,7 @@ SRCS(
     ytree/node.cpp
     ytree/node_detail.cpp
     ytree/permission.cpp
+    ytree/precise_time.cpp
     ytree/request_complexity_limiter.cpp
     ytree/request_complexity_limits.cpp
     ytree/serialize.cpp

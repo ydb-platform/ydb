@@ -11,6 +11,8 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TTypeAnnotationNode;
@@ -21,9 +23,9 @@ struct TFilePathWithMd5 {
     TString Path;
     TString Md5;
 
-    explicit TFilePathWithMd5(const TString& path = "", const TString& md5 = "")
-        : Path(path)
-        , Md5(md5)
+    explicit TFilePathWithMd5(TString path = "", TString md5 = "")
+        : Path(std::move(path))
+        , Md5(std::move(md5))
     {
     }
 

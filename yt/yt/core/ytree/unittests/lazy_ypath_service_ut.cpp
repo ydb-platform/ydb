@@ -5,10 +5,13 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_proxy.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,8 +20,7 @@ std::vector<std::string> YPathList(
     const TYPath& path,
     std::optional<i64> limit = {})
 {
-    return AsyncYPathList(service, path, limit)
-        .Get()
+    return WaitForFast(AsyncYPathList(service, path, limit))
         .ValueOrThrow();
 }
 
@@ -26,8 +28,7 @@ bool YPathExists(
     const IYPathServicePtr& service,
     const TYPath& path)
 {
-    return AsyncYPathExists(service, path)
-        .Get()
+    return WaitForFast(AsyncYPathExists(service, path))
         .ValueOrThrow();
 }
 
@@ -37,7 +38,7 @@ TYsonString YPathGet(
     const TAttributeFilter& attributeFilter = {})
 {
     return ConvertToYsonString(AsyncYPathGet(service, path, attributeFilter)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow(), EYsonFormat::Text);
 }
 

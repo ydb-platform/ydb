@@ -215,9 +215,9 @@ def build_html_dashboard(
         if t_end is None or try_n is None:
             continue
         idx = sum(1 for x in ts if x < t_end)
-        if 0 <= idx < len(ts):
+        if 0 <= idx < len(ts_str):
             fig.add_vline(
-                x=idx,
+                x=ts_str[idx],
                 line_dash="dash",
                 line_color="rgba(100,116,139,0.7)",
                 line_width=1,

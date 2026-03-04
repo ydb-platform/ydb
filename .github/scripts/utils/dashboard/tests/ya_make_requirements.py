@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -66,9 +67,28 @@ def _eval_condition(cond: str, sanitizer: Optional[str]) -> bool:
     expr = re.sub(r"\bNOT\b", "not", expr)
 
     try:
-        return bool(eval(expr, {"__builtins__": {}}, {}))
+        return _safe_eval_bool(expr)
     except Exception:
         return has_san if "SANITIZER_TYPE" in cond else False
+
+
+def _safe_eval_bool(expr: str) -> bool:
+    """Safely evaluate a boolean expression (True/False, and/or/not). No eval()."""
+    tree = ast.parse(expr, mode="eval")
+    return _eval_ast_bool(tree.body)
+
+
+def _eval_ast_bool(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant):
+        return bool(node.value)
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.And):
+            return all(_eval_ast_bool(v) for v in node.values)
+        if isinstance(node.op, ast.Or):
+            return any(_eval_ast_bool(v) for v in node.values)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return not _eval_ast_bool(node.operand)
+    raise ValueError(f"Unsupported AST node: {type(node)}")
 
 
 def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:

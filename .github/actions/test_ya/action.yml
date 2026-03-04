@@ -476,7 +476,7 @@ runs:
             --artifacts-url "${PUBLIC_DIR_URL}" \
             --try-links "$TRY_LINKS" \
             --repo "${{ github.repository }}" \
-            --repo-root . 2>/dev/null || true
+            --repo-root . || true
           cp -f $RESOURCES_JSONL $TESTS_METRICS_DIR/resources_monitor.jsonl 2>/dev/null || true
           echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
 

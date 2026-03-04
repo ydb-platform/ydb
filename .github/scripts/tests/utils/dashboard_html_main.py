@@ -96,7 +96,18 @@ def build_html_dashboard(
   </style>
 </head>
 <body>
-  <h2>Suite filter: {suite_filter or 'ALL SUITES'}</h2>
+  <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
+    <div id="headerRow1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;font-size:14px;line-height:1.5;">
+      <span id="headerPr" style="display:none;"></span>
+      <span id="headerBranch" style="display:none;"></span>
+      <span id="headerCommit" style="display:none;font-family:ui-monospace,monospace;font-size:13px;"></span>
+      <span style="flex:1;min-width:80px;"></span>
+      <span id="headerLinks" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:#64748b;">
+      Suite filter: {suite_filter or 'ALL SUITES'}
+    </div>
+  </div>
   <details style="margin: 8px 0 12px 0;">
     <summary><b>Run stats</b></summary>
     <pre id="stats"></pre>
@@ -360,6 +371,55 @@ def build_html_dashboard(
     }}
     document.getElementById('stats').textContent = JSON.stringify(data.stats, null, 2);
     document.getElementById('runConfig').textContent = JSON.stringify(data.run_config || {{}}, null, 2);
+    const cfg = data.run_config || {{}};
+    const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
+    const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
+    const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
+    const artifactsUrl = (cfg.artifacts_url || '').trim().replace(/\/$/, '');
+    const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
+    const hasCiData = pr || branch || commit || artifactsUrl;
+    if (pr) {{
+      const el = document.getElementById('headerPr');
+      el.textContent = 'PR #' + pr;
+      el.style.display = '';
+      el.innerHTML = '<a href="https://github.com/' + (cfg.repo || 'ydb-platform/ydb') + '/pull/' + pr + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + pr + '</a>';
+    }}
+    if (branch) {{
+      const el = document.getElementById('headerBranch');
+      el.textContent = '→ ' + branch;
+      el.style.display = '';
+      el.innerHTML = '<span style="color:#475569;">→</span> <b>' + branch + '</b>';
+    }}
+    if (commit) {{
+      const el = document.getElementById('headerCommit');
+      const short = String(commit).slice(0, 7);
+      el.innerHTML = '<a href="https://github.com/' + (cfg.repo || 'ydb-platform/ydb') + '/commit/' + commit + '" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;">' + short + '</a>';
+      el.style.display = '';
+    }}
+    const linksEl = document.getElementById('headerLinks');
+    if (artifactsUrl) {{
+      const a = document.createElement('a');
+      a.href = artifactsUrl + '/index.html';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Artifacts';
+      a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
+      linksEl.appendChild(a);
+      if (tryLinks.length) linksEl.appendChild(document.createTextNode(' · '));
+    }}
+    if (artifactsUrl && tryLinks.length) {{
+      tryLinks.forEach((path, i) => {{
+        if (i > 0) linksEl.appendChild(document.createTextNode('\u00a0'));
+        const a = document.createElement('a');
+        a.href = artifactsUrl + '/' + path;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'try ' + (i + 1);
+        a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
+        linksEl.appendChild(a);
+      }});
+    }}
+    document.getElementById('headerRow1').style.display = hasCiData ? 'flex' : 'none';
     function setupMonitoringLink() {{
       const cfg = data.run_config || {{}};
       const runner = String(cfg.runner || '').trim();

@@ -1269,6 +1269,7 @@ private:
         };
 
         TPrepareOperationRequest PrepareOperationRequest{
+            .TaskType = ETaskType::SortedUpload,
             .OperationParams = SortedUploadOperationParams,
             .ClusterConnections = std::unordered_map<TFmrTableId, TClusterConnection>{{fmrTableRef.FmrTableId, clusterConnection}},
             .FmrOperationSpec = config->FmrOperationSpec.Get(outputCluster)

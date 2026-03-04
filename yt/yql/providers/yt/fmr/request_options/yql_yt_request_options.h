@@ -483,4 +483,9 @@ TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParam
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
 
+struct TPartitionResult {
+    std::vector<TTaskTableInputRef> TaskInputs;
+    TMaybe<TFmrError> Error;
+};
+
 } // namespace NYql::NFmr

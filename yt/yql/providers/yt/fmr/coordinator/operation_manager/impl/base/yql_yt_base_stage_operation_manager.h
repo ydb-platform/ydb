@@ -1,0 +1,27 @@
+
+#pragma once
+
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/interface/yql_yt_stage_operation_manager.h>
+
+namespace NYql::NFmr {
+
+class TFmrStageOperationManagerBase: public IFmrStageOperationManager {
+public:
+    TPrepareStageResult PrepareOperationStage(
+        const TPrepareOperationStageContext& context
+    ) override;
+
+    TGenerateTasksResult GenerateTasksForCurrentStage(
+        const TGenerateTasksContext& context
+    ) override;
+
+    TAdvanceStageResult AdvanceToNextStage(const TAdvanceStageContext& context) override;
+
+protected:
+    virtual TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) = 0;
+    virtual TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) = 0;
+
+    bool Finished_ = false;
+};
+
+} // namespace NYql::NFmr

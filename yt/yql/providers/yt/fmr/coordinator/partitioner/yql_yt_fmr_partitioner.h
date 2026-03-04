@@ -5,11 +5,6 @@
 
 namespace NYql::NFmr {
 
-struct TPartitionResult {
-    std::vector<TTaskTableInputRef> TaskInputs;
-    TMaybe<TFmrError> Error;
-};
-
 struct TFmrPartitionerSettings {
     ui64 MaxDataWeightPerPart = 0;
     ui64 MaxParts = 0;

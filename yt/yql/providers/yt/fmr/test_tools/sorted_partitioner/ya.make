@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yt/yql/providers/yt/fmr/coordinator/partitioner
     yt/yql/providers/yt/fmr/job/impl
     yt/yql/providers/yt/fmr/test_tools/fmr_block_iterator
     yt/yql/providers/yt/fmr/utils

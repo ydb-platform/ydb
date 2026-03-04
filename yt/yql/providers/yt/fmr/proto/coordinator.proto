@@ -18,9 +18,10 @@ message THeartbeatResponse {
 }
 
 message TPrepareOperationRequest {
-    TOperationParams OperationParams = 1;
-    map<string, TClusterConnection> ClusterConnections = 2;
-    optional string FmrOperationSpec = 3;
+    ETaskType TaskType = 1;
+    TOperationParams OperationParams = 2;
+    map<string, TClusterConnection> ClusterConnections = 3;
+    optional string FmrOperationSpec = 4;
 }
 
 message TPrepareOperationResponse {

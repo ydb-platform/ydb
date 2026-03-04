@@ -215,9 +215,11 @@ namespace NLongTxService {
             : TEventLocal<TEvRegisterLock, EvRegisterLock>
         {
             const ui64 LockId;
+            const TInstant LockTimestamp;
 
-            explicit TEvRegisterLock(ui64 lockId)
+            explicit TEvRegisterLock(ui64 lockId, TInstant lockTimestamp)
                 : LockId(lockId)
+                , LockTimestamp(lockTimestamp)
             { }
         };
 
@@ -249,10 +251,17 @@ namespace NLongTxService {
 
             TEvLockStatus() = default;
 
-            TEvLockStatus(ui64 lockId, ui32 lockNode, EStatus status) {
+            TEvLockStatus(ui64 lockId, ui32 lockNode, EStatus status, TInstant lockTimestamp = TInstant::Zero()) {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
                 Record.SetStatus(status);
+                if (lockTimestamp) {
+                    Record.SetLockTimestampUs(lockTimestamp.MicroSeconds());
+                }
+            }
+
+            TInstant GetLockTimestamp() const {
+                return TInstant::MicroSeconds(Record.GetLockTimestampUs());
             }
         };
 

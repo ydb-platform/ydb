@@ -459,6 +459,9 @@ runs:
           # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
           TESTS_METRICS_DIR=$CURRENT_PUBLIC_DIR/tests_metrics
           mkdir -p $TESTS_METRICS_DIR
+          TRY_LINKS=""
+          for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
+          TRY_LINKS="${TRY_LINKS%,}"
           python3 .github/scripts/tests/utils/tests_resource_dashboard.py \
             --report $CURRENT_REPORT \
             --evlog $CURRENT_PUBLIC_DIR/ya_evlog.jsonl \
@@ -466,6 +469,13 @@ runs:
             --out-trace $TESTS_METRICS_DIR/trace.json \
             --out-stats $TESTS_METRICS_DIR/stats.json \
             --resources-jsonl $RESOURCES_JSONL \
+            --runner "${{ runner.name }}" \
+            --pr "${{ github.event.number }}" \
+            --branch "${BRANCH_NAME}" \
+            --commit "${ORIGINAL_HEAD}" \
+            --artifacts-url "${PUBLIC_DIR_URL}" \
+            --try-links "$TRY_LINKS" \
+            --repo "${{ github.repository }}" \
             --repo-root . 2>/dev/null || true
           cp -f $RESOURCES_JSONL $TESTS_METRICS_DIR/resources_monitor.jsonl 2>/dev/null || true
           echo "31 [Tests metrics](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS

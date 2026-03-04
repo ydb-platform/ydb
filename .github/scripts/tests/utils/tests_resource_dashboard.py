@@ -919,6 +919,13 @@ def main() -> None:
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
     p.add_argument("--sanitizer", type=str, default=None, help="Optional SANITIZER_TYPE value for ya.make IF branches")
     p.add_argument("--resources-jsonl", type=Path, default=None, help="Optional resources_monitor.jsonl to overlay CPU/RAM/disk metrics on charts")
+    p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
+    p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
+    p.add_argument("--branch", type=str, default=None, help="Target branch for dashboard header")
+    p.add_argument("--commit", type=str, default=None, help="Commit SHA for dashboard header")
+    p.add_argument("--artifacts-url", type=str, default=None, help="Base URL for artifacts (index.html, try links)")
+    p.add_argument("--try-links", type=str, default=None, help="Comma-separated try_N/tests_metrics/dashboard.html paths for links")
+    p.add_argument("--repo", type=str, default="ydb-platform/ydb", help="GitHub repo for PR/commit links")
     args = p.parse_args()
 
     # Auto-derive sibling output paths from --out-html when not specified explicitly.
@@ -999,6 +1006,13 @@ def main() -> None:
         args.out_stats.write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     if args.out_html:
         run_config = {
+            "runner": args.runner,
+            "pr": args.pr,
+            "branch": args.branch,
+            "commit": args.commit,
+            "artifacts_url": args.artifacts_url,
+            "try_links": [s.strip() for s in (args.try_links or "").split(",") if s.strip()],
+            "repo": args.repo,
             "suite_path": args.suite_path,
             "report": str(args.report),
             "evlog": str(args.evlog),

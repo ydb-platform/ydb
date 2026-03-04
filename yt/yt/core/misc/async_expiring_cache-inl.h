@@ -630,7 +630,6 @@ void TAsyncExpiringCache<TKey, TValue>::InvokeGet(
         future = entry->Future;
     }
 
-    YT_VERIFY(future.IsSet());
     const auto& oldValue = future.GetOrCrash();
 
     DoGet(key, &oldValue, EUpdateReason::PeriodicUpdate)

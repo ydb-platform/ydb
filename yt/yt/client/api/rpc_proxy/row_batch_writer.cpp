@@ -25,7 +25,7 @@ TRowBatchWriter::TRowBatchWriter(IAsyncZeroCopyOutputStreamPtr underlying)
 bool TRowBatchWriter::Write(TRange<TUnversionedRow> rows)
 {
     YT_VERIFY(!Closed_);
-    YT_VERIFY(ReadyEvent_.IsSet() && ReadyEvent_.GetOrCrash().IsOK());
+    YT_VERIFY(ReadyEvent_.GetOrCrash().IsOK());
 
     auto batch = CreateBatchFromUnversionedRows(TSharedRange<TUnversionedRow>(rows, nullptr));
 

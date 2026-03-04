@@ -171,9 +171,13 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 [Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `Prometheus` в Grafana и подключите его к работающему экземпляру Prometheus.
 
+#### Импорт дашбордов в Grafana
+
 Импортируйте необходимые [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
 
 Для импорта дашбордов используйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) из интерфейса Grafana или выполните [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. При других способах интеграции модифицируйте скрипт согласно вашим требованиям.
+
+### Результат
 
 {% cut "Пример дашборда в Grafana" %}
 

@@ -329,7 +329,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
-    TNodeInfo::TSegments NodeSegments;
+    std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
@@ -1087,6 +1087,7 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+    void RemoveNodeFromSegments(TNodeInfo* node);
     void RemoveNodeFromSegments(TNodeId nodeId);
     void UpdateNodeSegments(TNodeInfo* node);
     void RemoveSubActor(ISubActor* subActor);

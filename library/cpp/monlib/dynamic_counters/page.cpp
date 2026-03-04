@@ -1,6 +1,7 @@
 #include "page.h"
 #include "encode.h"
 
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -28,22 +29,6 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
 }
 
 namespace {
-
-TString HtmlEscape(TStringBuf str) {
-    TString result;
-    result.reserve(str.size());
-    for (char c : str) {
-        switch (c) {
-            case '&': result += "&amp;"; break;
-            case '<': result += "&lt;"; break;
-            case '>': result += "&gt;"; break;
-            case '"': result += "&quot;"; break;
-            case '\'': result += "&#39;"; break;
-            default: result += c; break;
-        }
-    }
-    return result;
-}
 
 TStringBuf GetParams(NMonitoring::IMonHttpRequest& request) {
     TStringBuf uri = request.GetUri();
@@ -208,7 +193,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         }
     });
 
-    if (labels) {
+    if (!labels.empty()) {
         if (!wasParam) {
             base << '?';
             wasParam = true;
@@ -220,7 +205,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
 
     HTML(out) {
         DIV() {
-            out << "<a href='" << HtmlEscape(base);
+            out << "<a href='" << NHtml::EscapeAttributeValue(base);
             if (!wasParam) {
                 out << '?';
             } else {
@@ -240,7 +225,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     auto escValue = value;
                     Quote(escName);
                     Quote(escValue);
-                    out << "\n<a href='" << HtmlEscape(base);
+                    out << "\n<a href='" << NHtml::EscapeAttributeValue(base);
                     if (labels.empty()) {
                         if (!wasParam) {
                             out << '?';
@@ -251,7 +236,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     } else {
                         out << ',';
                     }
-                    out << escName << '=' << escValue << "'>" << HtmlEscape(name) << " " << HtmlEscape(value) << "</a>";
+                    out << escName << '=' << escValue << "'>" << NHtml::EscapeText(name) << " " << NHtml::EscapeText(value) << "</a>";
                 }
             });
         }

@@ -53,7 +53,7 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
             for (auto [offset, _] : std::exchange(DLQMessages, {})) {
                 size_t c = 0;
-                DoCommit(offset, c);
+                DoCommit(offset, false, c);
                 ++Metrics.TotalDeletedByDeadlinePolicyMessageCount;
             }
             break;
@@ -140,7 +140,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
 }
 
 bool TStorage::Commit(ui64 messageId) {
-    return DoCommit(messageId, Metrics.TotalCommittedMessageCount);
+    return DoCommit(messageId, true, Metrics.TotalCommittedMessageCount);
 }
 
 bool TStorage::Unlock(ui64 messageId) {
@@ -484,7 +484,7 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
     }
 
     if (it != DLQMessages.end() && it->second == message.SeqNo) {
-        DoCommit(message.Offset, Metrics.TotalMovedToDLQMessageCount);
+        DoCommit(message.Offset, false, Metrics.TotalMovedToDLQMessageCount);
         return true;
     }
 
@@ -642,7 +642,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
 
 ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     auto now = TimeProvider->Now();
-    
+
     AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
@@ -698,7 +698,10 @@ void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
     Metrics.MessageLockingDuration.IncrementFor(lockingDuration.MilliSeconds());
 }
 
-bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
+bool TStorage::DoCommit(ui64 offset, bool userRequest, size_t& totalMetrics) {
+    if (userRequest) {
+        Batch.SetHasUserCommit();
+    }
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
         return false;
@@ -824,7 +827,7 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
                 return;
             }
             case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
+                DoCommit(offset, false, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
                 return;
             case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
                 break;
@@ -1020,6 +1023,10 @@ void TStorage::TBatch::SetPurged() {
     Purged = true;
 }
 
+void TStorage::TBatch::SetHasUserCommit() {
+    HasUserCommit = true;
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -1038,7 +1045,8 @@ bool TStorage::TBatch::Empty() const {
         && MovedToSlowZone.empty()
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
-        && !Purged;
+        && !Purged
+        && !HasUserCommit;
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

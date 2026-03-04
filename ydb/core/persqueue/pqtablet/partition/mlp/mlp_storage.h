@@ -128,6 +128,7 @@ public:
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
+        void SetHasUserCommit();
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -143,6 +144,9 @@ public:
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
         bool Purged = false;
+        // The commit may or may not have changed the state, but it should still trigger persistence.
+        // The internal commits caused by DLQ operations do not set this flag.
+        bool HasUserCommit = false;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
@@ -214,7 +218,7 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
-    bool DoCommit(ui64 offset, size_t& totalMetrics);
+    bool DoCommit(ui64 offset, bool userRequest, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);

@@ -182,24 +182,29 @@ public:
 
             TSslHolder<X509> serverCert = GetServerCert(kafkaServerCertPath, readFile);
             if (!serverCert) {
+                Cerr << TInstant::Now() << ": Couldn't open server certificate file path from kafka_proxy configuration." << Endl;
                 return false;
             }
             int retServerCert = SSL_CTX_use_certificate(ctx, serverCert.get());
             if (retServerCert != 1) {
+                Cerr <<  TInstant::Now() << ": Couldn't open server private key file path from kafka_proxy configuration." << Endl;
                 return false;
             }
 
             TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(kafkaServerPrivateKeyPath, readFile);
             if (!privateKey) {
+                Cerr <<  TInstant::Now() << ": Couldn't open server private key file path from kafka_proxy configuration." << Endl;
                 return false;
             }
             int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, privateKey.get());
             if (retPrivateKey != 1) {
+                Cerr <<  TInstant::Now() << ": Couldn't load server private key to SSL context." << Endl;
                 return false;
             }
 
             int retCA = SSL_CTX_load_verify_locations(ctx, kafkaCAFilePath.data(), nullptr);
             if (retCA != 1) {
+                Cerr <<  TInstant::Now() << ": Couldn't open CA file path from kafka_proxy configuration or load it to the SSL context." << Endl;
                 return false;
             }
 

@@ -153,13 +153,11 @@ struct TEvKafka {
     };
 
     struct TEvMtlsAuthRequest : public TEventLocal<TEvMtlsAuthRequest, EvRequest> {
-        TEvMtlsAuthRequest(const ui64 correlationId, const TString& clientCertificate)
-            : CorrelationId(correlationId)
-            , ClientCertificate(clientCertificate)
+        TEvMtlsAuthRequest(const TString& clientCertificate)
+            : ClientCertificate(clientCertificate)
         {
         }
 
-        ui64 CorrelationId;
         const TString ClientCertificate;
     };
 

@@ -844,7 +844,7 @@ protected:
 
                         Step = SIZE_READ;
 
-                        if (!ProcessRequest(ctx)) {
+                        if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage != MtlsAuthStages::AUTH_SUCCESSFUL || !ProcessRequest(ctx)) {
                             return false;
                         }
 
@@ -875,6 +875,7 @@ protected:
                     if (sslHandshakeResult == SslHandshakeErrors::ERROR_NONE) {
                         TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
                         if (!cert) {
+                            KAFKA_LOG_ERROR("No cert was received from client during ssl handshake for mTLS authentication.");
                             PassAway();
                             return;
                         }
@@ -888,7 +889,7 @@ protected:
                         Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
                         Context->SaslMechanism = "MTLS";
                         Context->RequireAuthentication = true;
-                        Send(AuthActorId, new TEvKafka::TEvMtlsAuthRequest(1001, clientCert));
+                        Send(AuthActorId, new TEvKafka::TEvMtlsAuthRequest(clientCert));
                         return;
                     }
 

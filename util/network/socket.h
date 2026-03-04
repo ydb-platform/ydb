@@ -283,9 +283,8 @@ public:
         return Fd_;
     }
 
-protected:
-    SOCKET Fd_;
 private:
+    SOCKET Fd_;
 
     // do not allow construction of TSocketHolder from TSocket
     TSocketHolder(const TSocket& fd);

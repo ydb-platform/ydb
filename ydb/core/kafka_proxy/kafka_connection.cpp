@@ -76,7 +76,6 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
     std::shared_ptr<Msg> Request;
-    std::deque<std::shared_ptr<Msg>> MtlsQueuedRequests;
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
 
@@ -110,7 +109,6 @@ public:
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
-        KAFKA_LOG_D("IsSslRequired=" << IsSslRequired);
     }
 
     void Bootstrap() {
@@ -254,6 +252,7 @@ protected:
         if (!ProduceActorId) {
             ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(Context));
         }
+
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
@@ -583,9 +582,6 @@ protected:
             MtlsAuthStage = AUTH_SUCCESSFUL;
             MtlsAuthenticationSuccessful = true;
             HandleConnected(PollerEventSaved, *SavedCtxForRead);
-            // ProcessRequest(ctx);
-            // KAFKA_LOG_D("Processing request again after auth");
-            // ProcessRequest(*SavedCtxForRead);
         }
     }
 
@@ -701,7 +697,6 @@ protected:
     }
 
     bool UpgradeToSecure() {
-        KAFKA_LOG_D("Updating to secure. IsSslRequired=" << IsSslRequired << ", IsSslActive=" << IsSslActive);
         if (IsSslRequired && !IsSslActive) {
             int res = Socket->TryUpgradeToSecure();
             if (res < 0) {
@@ -718,11 +713,9 @@ protected:
         KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
         for (;;) {
             while (Demand) {
-                KAFKA_LOG_D("DoRead. Demand.Length=" << Demand.Length);
                 ssize_t received = 0;
                 ssize_t res = SocketReceive(Demand.Buffer, Demand.GetLength());
                 if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                    KAFKA_LOG_D("Returning true");
                     return true;
                 } else if (-res == EINTR) {
                     continue;
@@ -731,7 +724,7 @@ protected:
                     PassAway();
                     return false;
                 } else if (res < 0) {
-                    KAFKA_LOG_I("connection closed - error in recv: " << res << " " << strerror(-res));
+                    KAFKA_LOG_I("connection closed - error in recv: " << strerror(-res));
                     PassAway();
                     return false;
                 }
@@ -798,7 +791,6 @@ protected:
                         break;
 
                     case HEADER_PROCESS:
-                        KAFKA_LOG_D("Header processing");
                         Request->ApiKey = *(TKafkaInt16*)Request->Buffer->Data();
                         Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer->Data() + sizeof(TKafkaInt16));
                         Request->CorrelationId = *(TKafkaInt32*)(Request->Buffer->Data() + sizeof(TKafkaInt16) + sizeof(TKafkaVersion));
@@ -857,19 +849,8 @@ protected:
                         }
 
                         Step = SIZE_READ;
-                        KAFKA_LOG_D("Start processing request");
 
-                        // if (!ProcessRequest(ctx)) {
-                        //     return false;
-                        // }
-
-
-                        if (AppData()->KafkaProxyConfig.GetMtlsEnable() && !MtlsAuthenticationSuccessful) {
-                            MtlsQueuedRequests.push_back(Request);
-                            SavedCtxForRead = std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
-                            RequestPoller();
-                            return false;
-                        } else if (!ProcessRequest(ctx)) {
+                        if (!ProcessRequest(ctx)) {
                             return false;
                         }
 

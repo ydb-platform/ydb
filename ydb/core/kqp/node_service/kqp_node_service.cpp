@@ -28,6 +28,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 
+#include <yql/essentials/minikql/aligned_page_pool.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -89,6 +91,7 @@ public:
         if (config.HasWriteActorSettings()) {
             SetWriteActorSettings(config.GetWriteActorSettings());
         }
+        NKikimr::UseDefaultArrowAllocator();
     }
 
     void Bootstrap() {
@@ -147,9 +150,9 @@ private:
 
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
-            
+
             default: {
-                STLOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName() 
+                STLOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName()
                     << ") during graceful shutdown",
                     (node_id, SelfId().NodeId()),
                     (sender, ev->Sender));
@@ -229,10 +232,10 @@ private:
         }
 
         bool isLocalRequest = (ev->Sender.NodeId() == SelfId().NodeId());
-        
+
         if (State_->HasRequest(txId)) {
             if (State_->IsRequestCancelled(txId, executerId)) {
-                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, 
+                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
                     ev->Cookie, "Request was cancelled");
             }
             if (isLocalRequest && State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
@@ -466,7 +469,7 @@ private:
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         // in shutting down state do not accept new tasks, but accept local requests
         // continue to process tasks that are already started before shutdown
-        auto& msg = ev->Get()->Record;        
+        auto& msg = ev->Get()->Record;
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
             STLOG_D("Accepting local StartRequest during shutdown",
                 (node_id, SelfId().NodeId()),

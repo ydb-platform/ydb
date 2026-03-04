@@ -139,7 +139,7 @@ However, it's important to consider that spilling itself requires memory. If you
 
 {% note info %}
 
-For information about configuring file descriptor limits during initial deployment, see the [File Descriptor Limits](../../../devops/deployment-options/manual/initial-deployment/deployment-preparation.md#file-descriptors) section.
+For information about configuring file descriptor limits during initial deployment, see the [File Descriptor Limits](../../devops/deployment-options/manual/initial-deployment/deployment-preparation.md#file-descriptors) section.
 
 {% endnote %}
 

@@ -250,7 +250,7 @@ void TTenantShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& c
     if (tabletId == TTabletId(SchemeShard->ParentDomainId.OwnerId)) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantShredManager] [HandleDisconnect] Retry send response to domain schemeshard "
-            << "form# " << SchemeShard->TabletID()
+            << "from# " << SchemeShard->TabletID()
             << ", generation# " << SchemeShard->TenantShredManager->GetCompletedGeneration()
         );
         std::unique_ptr<TEvSchemeShard::TEvTenantShredResponse> response = std::make_unique<TEvSchemeShard::TEvTenantShredResponse>(

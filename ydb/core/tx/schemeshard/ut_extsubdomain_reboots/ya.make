@@ -2,6 +2,7 @@ IF (NOT WITH_VALGRIND)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     FORK_SUBTESTS()
+    SPLIT_FACTOR(50)
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)

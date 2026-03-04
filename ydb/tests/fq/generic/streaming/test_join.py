@@ -4,6 +4,7 @@ import json
 import sys
 from collections import Counter
 from operator import itemgetter
+from itertools import chain, islice
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1

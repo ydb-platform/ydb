@@ -282,15 +282,6 @@ def build_html_dashboard(
 
     const data = {json.dumps(payload, ensure_ascii=False)};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
-    function hideRawTimestampInHover() {{
-      document.querySelectorAll('.hoverlayer *').forEach(el => {{
-        const t = (el.textContent || '').trim();
-        if (el.children.length === 0 && /^\\d{{10,}}\\.?\\d*$/.test(t) && !el.dataset.hideTs) {{
-          el.style.cssText = 'display:none!important;visibility:hidden!important;font-size:0!important;';
-          el.dataset.hideTs = '1';
-        }}
-      }});
-    }}
     const _fmtCache = {{}};
     function _selectedTimeZone() {{
       const sel = document.getElementById('tzSelect');
@@ -362,11 +353,9 @@ def build_html_dashboard(
       const tickvals = _buildTickVals(minMs, maxMs);
       return {{
         title: axisTitle(),
-        type: 'date',
         tickmode: 'array',
         tickvals: tickvals,
         ticktext: tickvals.map(_formatTick),
-        hoverformat: '%Y-%m-%d %H:%M:%S',
       }};
     }}
     function applyTimezoneToAllCharts() {{
@@ -384,8 +373,8 @@ def build_html_dashboard(
           }}
         }}
         if (xs.length === 0) continue;
-        const xaxis = axisLayout(xs);
-        Plotly.relayout(el, {{ xaxis: Object.assign({{}}, el.layout.xaxis || {{}}, xaxis) }});
+        const ax = axisLayout(xs);
+        Plotly.relayout(el, {{ 'xaxis.title': ax.title, 'xaxis.tickmode': ax.tickmode, 'xaxis.tickvals': ax.tickvals, 'xaxis.ticktext': ax.ticktext }});
       }}
       for (const id of ids) {{
         const el = document.getElementById(id);
@@ -1540,6 +1529,8 @@ def build_html_dashboard(
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
+        Plotly.relayout('cpuLayer', {{ hovermode: 'closest' }});
+        Plotly.relayout('ramLayer', {{ hovermode: 'closest' }});
         const diskEl = document.getElementById('diskLayer');
         if (diskEl) {{
           diskEl.style.display = '';
@@ -1583,6 +1574,8 @@ def build_html_dashboard(
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
+      Plotly.relayout('cpuLayerSuite', {{ hovermode: 'closest' }});
+      Plotly.relayout('ramLayerSuite', {{ hovermode: 'closest' }});
       const diskEl = document.getElementById('diskLayerSuite');
       if (diskEl) {{
         diskEl.style.display = '';
@@ -1719,11 +1712,6 @@ def build_html_dashboard(
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;
-
-    ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'].forEach(id => {{
-      const el = document.getElementById(id);
-      if (el && el.data) el.on('plotly_hover', () => {{ setTimeout(hideRawTimestampInHover, 0); }});
-    }});
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

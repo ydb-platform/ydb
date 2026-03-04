@@ -79,7 +79,6 @@ private:
         }
     }
 
-
     STATEFN(StateTicketResolve) {
         KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
         switch (ev->GetTypeRewrite()) {

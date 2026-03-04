@@ -257,7 +257,7 @@ public:
     int SecureAccept(SSL_CTX* ctx) {
         if (!Ssl) {
             if (!InitServerSsl(ctx)) {
-                return SSL_AD_NO_CERTIFICATE;
+                return -EIO;
             }
         }
         int res = SSL_accept(Ssl.get());

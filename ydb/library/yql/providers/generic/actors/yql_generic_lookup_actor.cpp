@@ -650,7 +650,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-        static constexpr size_t MaxSupportedFullscanRequest = 1000; // todo: consider making tweakable
+        static constexpr size_t MaxSupportedFullscanRequest = 5000; // todo: consider making tweakable
     };
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(

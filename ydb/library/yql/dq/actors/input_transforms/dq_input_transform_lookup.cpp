@@ -50,7 +50,7 @@ public:
         TOutputRowColumnOrder&& outputRowColumnOrder,
         TDqComputeActorWatermarks* watermarksTracker,
         const THashMap<TString, TString>& secureParams,
-        size_t fullscanRowLimit = 1000)
+        size_t fullscanRowLimit = 5000)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)

@@ -225,17 +225,20 @@ def parse_report_chunks(
         error_type = str(item.get("error_type", "") or "")
         is_muted = bool(item.get("is_muted") or item.get("muted"))
         timeout, muted, failedish = _classify_failure(status, error_type, is_muted)
+        is_suite_row = bool(item.get("suite"))
         bucket_key = "chunks" if bool(item.get("chunk")) else "tests"
         bucket = ensure_suite(suite)[bucket_key]
-        if timeout:
-            bucket["timeouts"] += 1
-        if muted:
-            bucket["muted"] += 1
-        if timeout and muted:
-            bucket["muted_timeouts"] += 1
-        if failedish and not timeout and not muted:
-            bucket["errors"] += 1
-        if bucket_key == "tests":
+        count_in_bucket = not (bucket_key == "tests" and is_suite_row)
+        if count_in_bucket:
+            if timeout:
+                bucket["timeouts"] += 1
+            if muted:
+                bucket["muted"] += 1
+            if timeout and muted:
+                bucket["muted_timeouts"] += 1
+            if failedish and not timeout and not muted:
+                bucket["errors"] += 1
+        if bucket_key == "tests" and not is_suite_row:
             chunk_hid = item.get("chunk_hid")
             if chunk_hid is not None:
                 if timeout:
@@ -490,7 +493,12 @@ def build_test_event_times_direct(
             if prev_u is None or end_sec > prev_u:
                 evlog_uid_end[uid] = end_sec
     for item in results:
-        if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
+        if (
+            not isinstance(item, dict)
+            or item.get("type") != "test"
+            or item.get("chunk")
+            or bool(item.get("suite"))
+        ):
             continue
         suite = normalize_suite_path(str(item.get("path", "")))
         if not suite:

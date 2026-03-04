@@ -3,3 +3,5 @@ items:
   href: deployment-preparation.md
 - name: Deploying a cluster using configuration V1
   href: deployment-configuration-v1.md
+- name: Deploying a cluster using configuration V2
+  href: deployment-configuration-v2.md

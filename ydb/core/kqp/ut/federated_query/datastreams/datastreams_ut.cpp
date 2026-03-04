@@ -19,6 +19,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <fmt/format.h>
+#include <random>
 
 #include <library/cpp/protobuf/interop/cast.h>
 

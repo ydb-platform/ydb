@@ -2011,6 +2011,12 @@ public:
         Init();
     }
 
+    explicit TMutNodeBuilder(TUnboxedValuePod value)
+        : TMutNodeBuilder()
+    {
+        Upsert(value);
+    }
+
 private:
     void Init() {
         Stack_.push_back({TUnboxedValue(TUnboxedValuePod::Embedded("")), &Root_});
@@ -2031,6 +2037,11 @@ SIMPLE_UDF_OPTIONS(TMutCreate, TMutNodeLinear(), builder.SetMinLangVer(NYql::Mak
     Y_UNUSED(args);
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(new TMutNodeBuilder());
+}
+
+SIMPLE_UDF_OPTIONS(TMutate, TMutNodeLinear(TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return TUnboxedValuePod(new TMutNodeBuilder(args[0]));
 }
 
 SIMPLE_UDF_OPTIONS(TMutFreeze, TNodeResource(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
@@ -2197,6 +2208,7 @@ SIMPLE_MODULE(TYson2Module,
               TAsDict,
               TTryAsDict,
               TMutCreate,
+              TMutate,
               TMutFreeze,
               TMutUpsert,
               TMutInsert,

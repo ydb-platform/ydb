@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         connectorMock->ExpectReadSplits()
             .DataSourceInstance(dsi)
-            .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY)
+            .Filtering(Fullscan ? NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY)
             .Split()
                 .Description("Actual split info is not important")
                 .Done()

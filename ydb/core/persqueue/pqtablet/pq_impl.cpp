@@ -5499,16 +5499,13 @@ bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev
 
 void TPersQueue::ProcessMLPQueue() {
     auto queue = std::exchange(MLPRequests, {});
-    while(!queue.empty()) {
+    while (!queue.empty()) {
         auto ev = std::move(queue.front());
         queue.pop_front();
 
-        auto result = std::visit([&, this](auto& ev) {
+        std::visit([&, this](auto& ev) {
             return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
         }, ev);
-        if (!result) {
-            return;
-        }
     }
 }
 

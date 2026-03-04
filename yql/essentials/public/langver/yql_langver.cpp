@@ -11,11 +11,6 @@ namespace {
 
 constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 4);
 
-// NOLINTNEXTLINE(modernize-avoid-c-arrays)
-const std::pair<ui32, ui32> Versions[] = {
-#include "yql_langver_list.inc"
-};
-
 } // namespace
 
 bool IsValidLangVersion(TLangVersion ver) {
@@ -82,16 +77,6 @@ TMaybe<TString> FormatLangVersion(TLangVersion ver) {
 
 TLangVersion GetMaxReleasedLangVersion() {
     return MaxReleasedLangVersion;
-}
-
-TLangVersion GetMaxLangVersion() {
-    TLangVersion max = 0;
-    for (const auto& version : Versions) {
-        auto v = MakeLangVersion(version.first, version.second);
-        max = Max(max, v);
-    }
-
-    return max;
 }
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,

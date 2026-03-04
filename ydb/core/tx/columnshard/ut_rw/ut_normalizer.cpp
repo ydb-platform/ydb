@@ -491,6 +491,45 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TInit, TVerify>(checker);
     }
 
+    Y_UNIT_TEST(CleanIndexColumnsV1Normalizer) {
+        class TInit: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                using namespace NColumnShard;
+
+                NIceDb::TNiceDb db(txc.DB);
+                UNIT_ASSERT_C(db.HaveTable<Schema::IndexColumnsV1>(), "Expected IndexColumnsV1 table to exist for clean-up test");
+                for (size_t i = 0; i < 100; ++i) {
+                    db.Table<Schema::IndexColumnsV1>().Key(1 + i, 2 + i, 3 + i, 4 + i).Update();
+                }
+            }
+        };
+
+        class TVerify: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                NIceDb::TNiceDb db(txc.DB);
+                auto rowset = db.Table<Schema::IndexColumnsV1>().Select();
+                UNIT_ASSERT(rowset.IsReady());
+                UNIT_ASSERT_C(
+                    rowset.EndOfSet(), "Expected CleanIndexColumnsV1 normalizer to remove all rows from IndexColumnsV1 table");
+            }
+        };
+
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                columnShardConfig.SetColumnChunksV1Usage(false);
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("CleanIndexColumnsV1");
+                repair->SetDescription("Cleaning old table");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TInit, TVerify>(checker);
+    }
+
     Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {
         class TChecker: public TNormalizerChecker {
         public:

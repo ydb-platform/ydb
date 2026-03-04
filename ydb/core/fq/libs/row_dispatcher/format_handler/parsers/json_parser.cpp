@@ -279,18 +279,6 @@ private:
                 resultValue = NYql::NUdf::TUnboxedValuePod();
                 return true;
             }
-<<<<<<< HEAD
-=======
-            case simdjson::builtin::ondemand::json_type::unknown: {
-                std::string_view rawString;
-                CHECK_JSON_ERROR(jsonValue.get_string(rawString)) {
-                    SetParsingError(error, jsonValue, "extract json string", status);
-                    return false;
-                }
-                status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << DataTypeName << " from json string: '" << TruncateString(rawString) << "'");
-                return false;
-            }
->>>>>>> 8fc2daad666 (YDB-3054 Fix null parsing with skip.json.errors (#33146))
         }
     }
 

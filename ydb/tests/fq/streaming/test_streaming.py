@@ -120,10 +120,8 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path1)
 
         # Check that streaming.query.tasks.count metric exists for both queries
-        tasks_count1 = self.get_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expect_counters_exist=True)
-        tasks_count2 = self.get_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expect_counters_exist=True)
-        assert tasks_count1 > 0, f"Expected tasks count > 0 for {query_name1}, got {tasks_count1}"
-        assert tasks_count2 > 0, f"Expected tasks count > 0 for {query_name2}, got {tasks_count2}"
+        self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expected_value=1)
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']

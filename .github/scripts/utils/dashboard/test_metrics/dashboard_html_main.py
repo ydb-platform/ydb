@@ -353,9 +353,11 @@ def build_html_dashboard(
       const tickvals = _buildTickVals(minMs, maxMs);
       return {{
         title: axisTitle(),
+        type: 'date',
         tickmode: 'array',
         tickvals: tickvals,
         ticktext: tickvals.map(_formatTick),
+        hoverformat: '%Y-%m-%d %H:%M:%S',
       }};
     }}
     function applyTimezoneToAllCharts() {{
@@ -1425,9 +1427,10 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const t = ev.points[0].x;
         const eps = minVisibleValue(unit);
+        const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps)
+          .filter(p => p.y > eps && !isOutline(p.name))
           .sort((a, b) => b.y - a.y);
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
@@ -1466,9 +1469,10 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const t = ev.points[0].x;
         const eps = minVisibleValue(unit);
+        const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps)
+          .filter(p => p.y > eps && !isOutline(p.name))
           .sort((a, b) => b.y - a.y);
         renderClickTable(panelId, rows, t, unit);
       }});
@@ -1498,11 +1502,11 @@ def build_html_dashboard(
         const ro = data.resources_overlay;
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
         Plotly.addTraces('cpuLayer', [
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         Plotly.addTraces('ramLayer', [
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
         ]);
         const diskEl = document.getElementById('diskLayer');
@@ -1540,11 +1544,11 @@ def build_html_dashboard(
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       Plotly.addTraces('cpuLayerSuite', [
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000 }},
       ]);
       const diskEl = document.getElementById('diskLayerSuite');

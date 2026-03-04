@@ -192,7 +192,6 @@ def build_html_dashboard(
     <select id="tzSelect" onchange="applyTimezoneToAllCharts()" style="padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;">
       <option value="Europe/Moscow">MSK</option>
       <option value="UTC">UTC</option>
-      <option value="Etc/GMT">GMT</option>
       <option value="local" selected>Local</option>
     </select>
     <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
@@ -329,7 +328,6 @@ def build_html_dashboard(
       const v = sel ? String(sel.value || 'Europe/Moscow') : 'Europe/Moscow';
       if (v === 'Europe/Moscow') return 'MSK';
       if (v === 'UTC') return 'UTC';
-      if (v === 'Etc/GMT') return 'GMT';
       return 'Local';
     }}
     function _fmtKey(tz, withDate) {{
@@ -367,7 +365,7 @@ def build_html_dashboard(
     function xToDisplay(xSec) {{
       const x = Number(xSec);
       if (!Number.isFinite(x)) return xSec;
-      return (x + UTC_OFFSET_SEC) * 1000.0;
+      return new Date((x + UTC_OFFSET_SEC) * 1000.0).toISOString();
     }}
     function xFromDisplay(xDisp) {{
       let ms = Number(xDisp);
@@ -390,24 +388,12 @@ def build_html_dashboard(
       return Number.isFinite(n) ? n : null;
     }}
     function axisLayout(xsDisp) {{
-      const arr = Array.isArray(xsDisp) ? xsDisp.filter(v => Number.isFinite(Number(v))).map(Number) : [];
-      let minMs = 0;
-      let maxMs = 0;
-      if (arr.length) {{
-        minMs = arr[0];
-        maxMs = arr[0];
-        for (let i = 1; i < arr.length; i += 1) {{
-          const v = arr[i];
-          if (v < minMs) minMs = v;
-          if (v > maxMs) maxMs = v;
-        }}
-      }}
-      const tickvals = _buildTickVals(minMs, maxMs);
       return {{
         title: axisTitle(),
-        tickmode: 'array',
-        tickvals: tickvals,
-        ticktext: tickvals.map(_formatTick),
+        type: 'date',
+        hoverformat: '%Y-%m-%d %H:%M:%S',
+        // Hide Plotly default unified X title like "1.772e12".
+        unifiedhovertitle: {{ text: '' }},
       }};
     }}
     function applyTimezoneToAllCharts() {{
@@ -426,7 +412,15 @@ def build_html_dashboard(
         }}
         if (xs.length === 0) continue;
         const ax = axisLayout(xs);
-        Plotly.relayout(el, {{ 'xaxis.title': ax.title, 'xaxis.tickmode': ax.tickmode, 'xaxis.tickvals': ax.tickvals, 'xaxis.ticktext': ax.ticktext }});
+        Plotly.relayout(el, {{
+          'xaxis.title': ax.title,
+          'xaxis.type': 'date',
+          'xaxis.tickmode': 'auto',
+          'xaxis.hoverformat': '%Y-%m-%d %H:%M:%S',
+          'xaxis.unifiedhovertitle.text': '',
+          'hoverdistance': -1,
+          'spikedistance': -1,
+        }});
       }}
       for (const id of ids) {{
         const el = document.getElementById(id);
@@ -1517,7 +1511,30 @@ def build_html_dashboard(
       }});
     }}
 
-    function renderClickTable(panelId, rows, t, unit) {{
+    function monitorValueAt(plotId, traceName, tDisp) {{
+      const plot = document.getElementById(plotId);
+      if (!plot || !plot.data || !Array.isArray(plot.data)) return null;
+      const tr = plot.data.find(x => x && x.name === traceName && Array.isArray(x.x) && Array.isArray(x.y));
+      if (!tr || tr.x.length === 0 || tr.y.length === 0) return null;
+      const target = _toMs(tDisp);
+      if (target == null) return null;
+      let bestIdx = -1;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < tr.x.length; i += 1) {{
+        const cur = _toMs(tr.x[i]);
+        if (cur == null) continue;
+        const d = Math.abs(cur - target);
+        if (d < bestDist) {{
+          bestDist = d;
+          bestIdx = i;
+        }}
+      }}
+      if (bestIdx < 0) return null;
+      const v = Number(tr.y[bestIdx]);
+      return Number.isFinite(v) ? v : null;
+    }}
+
+    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null) {{
       const panel = document.getElementById(panelId);
       if (!panel) return;
       const top = rows.slice(0, 100);
@@ -1533,8 +1550,33 @@ def build_html_dashboard(
         '</tr>'
         );
       }}).join('');
+      let totalsHtml = '';
+      if (unit === 'GB') {{
+        const totalBySuite = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
+        const totalMonitoring = Number.isFinite(Number(monitorAtClick))
+          ? Number(monitorAtClick)
+          : monitorValueAt(plotId, 'RAM total (monitor)', t);
+        totalsHtml =
+          '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
+          '<b>Total RAM by suite:</b> ' + totalBySuite.toFixed(3) + ' GB' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;<b>Total RAM monitoring:</b> ' +
+          (totalMonitoring == null ? 'n/a' : (Number(totalMonitoring).toFixed(3) + ' GB')) +
+          '</div>';
+      }} else if (unit === 'cores') {{
+        const totalBySuite = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
+        const totalMonitoring = Number.isFinite(Number(monitorAtClick))
+          ? Number(monitorAtClick)
+          : monitorValueAt(plotId, 'CPU total (monitor)', t);
+        totalsHtml =
+          '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
+          '<b>Total CPU by suite:</b> ' + totalBySuite.toFixed(3) + ' cores' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;<b>Total CPU monitoring:</b> ' +
+          (totalMonitoring == null ? 'n/a' : (Number(totalMonitoring).toFixed(3) + ' cores')) +
+          '</div>';
+      }}
       panel.innerHTML =
         '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
+        totalsHtml +
         '<table><thead><tr><th>#</th><th>suite+chunk</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
     }}
 
@@ -1547,11 +1589,13 @@ def build_html_dashboard(
         const eps = minVisibleValue(unit);
         const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
         const isMonitor = (n) => n && n.includes('(monitor)');
+        const monitorPoint = ev.points.find(p => p && p.data && typeof p.data.name === 'string' && p.data.name === (unit === 'GB' ? 'RAM total (monitor)' : 'CPU total (monitor)'));
+        const monitorAtClick = monitorPoint ? Number(monitorPoint.y) : null;
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
           .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
-        renderClickTable(panelId, rows, t, unit);
+        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick);
       }});
     }}
 
@@ -1580,12 +1624,12 @@ def build_html_dashboard(
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
         const xLabels = xDisp.map(v => formatTimeLabel(v));
         Plotly.addTraces('cpuLayer', [
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
         ]);
         Plotly.addTraces('ramLayer', [
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
         Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
         Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
@@ -1625,12 +1669,12 @@ def build_html_dashboard(
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       const xLabels = xDisp.map(v => formatTimeLabel(v));
       Plotly.addTraces('cpuLayerSuite', [
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 7 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', customdata: xLabels, line: {{ color: '#e11d48', width: 5 }}, legendrank: 1000, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
       Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
       Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});

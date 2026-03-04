@@ -126,6 +126,28 @@ def build_html_dashboard(
     }}
     .btn-primary:hover {{ background: #1d4ed8; }}
     .btn-primary:active {{ background: #1e40af; }}
+    .layer-toggle-box {{
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 10px;
+    }}
+    .layer-toggle-list {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }}
+    .layer-toggle-item {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 160px;
+      white-space: nowrap;
+    }}
+    .layer-toggle-item input {{
+      margin: 0;
+      flex: 0 0 auto;
+    }}
   </style>
 </head>
 <body>
@@ -225,11 +247,13 @@ def build_html_dashboard(
       </label>
     </span>
     <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:8px;padding:6px 10px;background:#fff;">
-      <span style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <b style="margin-right:2px;">Layers:</b>
-        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()">Metrics by suite</label>
-        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()">System CPU</label>
-        <label style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="layerSystemRam" checked onchange="applyLayerToggles()">System RAM</label>
+      <span class="layer-toggle-box">
+        <b>Layers:</b>
+        <span class="layer-toggle-list">
+          <label class="layer-toggle-item"><span>Metrics by suite</span><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()"></label>
+          <label class="layer-toggle-item"><span>System CPU</span><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()"></label>
+          <label class="layer-toggle-item"><span>System RAM</span><input type="checkbox" id="layerSystemRam" checked onchange="applyLayerToggles()"></label>
+        </span>
       </span>
     </span>
   </div>
@@ -382,6 +406,15 @@ def build_html_dashboard(
       if (!Number.isFinite(ms)) return String(xDisp);
       return _getFormatter(true).format(new Date(ms));
     }}
+    function formatAbsSecLabel(sec) {{
+      const n = Number(sec);
+      if (!Number.isFinite(n)) return '';
+      const iso = xToDisplay(n);
+      let ms = Number(iso);
+      if (!Number.isFinite(ms)) ms = Date.parse(String(iso));
+      if (!Number.isFinite(ms)) return String(iso);
+      return _getFormatter(false).format(new Date(ms));
+    }}
     function _toMs(v) {{
       let n = Number(v);
       if (!Number.isFinite(n)) n = Date.parse(String(v));
@@ -427,6 +460,9 @@ def build_html_dashboard(
         if (el && el.data && window.Plotly) Plotly.Plots.resize(el);
       }}
       applyMarkersToCharts();
+      if (window.renderSuggestionsTable) {{
+        window.renderSuggestionsTable();
+      }}
       if (data.resources_overlay) {{
         setTimeout(() => {{
           for (const id of ['cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite']) {{
@@ -981,13 +1017,13 @@ def build_html_dashboard(
             String(s.chunk_muted_timeouts || 0),
             String(s.chunk_fails_total || 0),
             String(s.max_parallel_self || 0),
-            s.max_parallel_self_at_sec != null ? Number(s.max_parallel_self_at_sec).toFixed(1) : '',
+            formatAbsSecLabel(s.max_parallel_self_at_sec),
             String(s.peak_others_during_suite || 0),
-            s.peak_others_during_suite_at_sec != null ? Number(s.peak_others_during_suite_at_sec).toFixed(1) : '',
+            formatAbsSecLabel(s.peak_others_during_suite_at_sec),
             s.peak_self_cpu_cores_during_suite != null ? Number(s.peak_self_cpu_cores_during_suite).toFixed(1) : '',
-            s.peak_self_cpu_at_sec != null ? Number(s.peak_self_cpu_at_sec).toFixed(1) : '',
+            formatAbsSecLabel(s.peak_self_cpu_at_sec),
             s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '',
-            s.peak_self_ram_at_sec != null ? Number(s.peak_self_ram_at_sec).toFixed(1) : '',
+            formatAbsSecLabel(s.peak_self_ram_at_sec),
           ];
         }});
 
@@ -1041,13 +1077,13 @@ def build_html_dashboard(
           '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
           '<th data-col="22" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(22) + '</th>' +
           '<th data-col="23" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(23) + '</th>' +
-          '<th data-col="24" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) when suite parallelism peaked">at (s)' + marker(24) + '</th>' +
+          '<th data-col="24" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(24) + '</th>' +
           '<th data-col="25" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(25) + '</th>' +
-          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak others">at (s)' + marker(26) + '</th>' +
+          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(26) + '</th>' +
           '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(27) + '</th>' +
-          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak suite CPU">at (s)' + marker(28) + '</th>' +
+          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(28) + '</th>' +
           '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(29) + '</th>' +
-          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Time (sec) of peak suite RAM">at (s)' + marker(30) + '</th>' +
+          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(30) + '</th>' +
           '</tr>';
 
         const groupEnds = new Set([4, 5, 8, 9, 10, 12, 17, 22, 24, 26, 28, 30]);
@@ -1543,7 +1579,7 @@ def build_html_dashboard(
       return Number.isFinite(v) ? v : null;
     }}
 
-    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null) {{
+    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null, totalAtClick=null) {{
       const panel = document.getElementById(panelId);
       if (!panel) return;
       const top = rows.slice(0, 100);
@@ -1582,6 +1618,14 @@ def build_html_dashboard(
           '&nbsp;&nbsp;|&nbsp;&nbsp;<b>Total CPU monitoring:</b> ' +
           (totalMonitoring == null ? 'n/a' : (Number(totalMonitoring).toFixed(3) + ' cores')) +
           '</div>';
+      }} else if (unit === 'active') {{
+        const totalBySuite = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
+        totalsHtml =
+          '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
+          '<b>Total active by suite:</b> ' + Math.round(totalBySuite) +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;<b>Total active chart:</b> ' +
+          (Number.isFinite(totalAtClick) ? String(Math.round(totalAtClick)) : 'n/a') +
+          '</div>';
       }}
       panel.innerHTML =
         '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
@@ -1604,7 +1648,8 @@ def build_html_dashboard(
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
           .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
-        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick);
+        const totalAtClick = Number(ev.points[0]?.y);
+        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick);
       }});
     }}
 
@@ -1651,13 +1696,14 @@ def build_html_dashboard(
             xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
           }}
           Plotly.newPlot('diskLayer', [
-            {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }} }},
-            {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }} }}
+            {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }},
+            {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
             title: 'Disk I/O (MB per 1s interval)',
             xaxis: xaxisOpt,
             yaxis: {{ title: 'MB' }},
             hovermode: 'x unified',
+            hoverlabel: {{ namelength: -1 }},
           }}, {{ responsive: true }});
         }}
       }}
@@ -1696,13 +1742,14 @@ def build_html_dashboard(
           xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
         }}
         Plotly.newPlot('diskLayerSuite', [
-          {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }} }},
-          {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }} }}
+          {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }},
+          {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
           title: 'Disk I/O (MB per 1s interval)',
           xaxis: xaxisOpt,
           yaxis: {{ title: 'MB' }},
           hovermode: 'x unified',
+          hoverlabel: {{ namelength: -1 }},
         }}, {{ responsive: true }});
       }}
     }}

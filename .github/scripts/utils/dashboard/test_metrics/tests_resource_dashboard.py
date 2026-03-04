@@ -59,6 +59,9 @@ RUN_SUITE_SOLE_RE = re.compile(
     r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)"
 )
 PART_SUFFIX_RE = re.compile(r"/part\d+$")
+EVLOG_AUX_OUTPUT_RE = re.compile(
+    r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)$"
+)
 
 
 def load_json_or_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -798,9 +801,13 @@ def build_trace(
     }
     report_chunk_keys = {k for k, v in chunks.items() if not bool(v.get("_fallback_alias"))}
     missing_runs_for_chunk = len(report_chunk_keys - run_keys)
+    report_idx_by_suite: dict[str, set[int]] = defaultdict(set)
+    for s, _g, i in report_chunk_keys:
+        report_idx_by_suite[s].add(int(i))
 
     suite_matched: dict[str, int] = defaultdict(int)
     suite_missing: dict[str, int] = defaultdict(int)
+    dropped_spurious_sole_runs = 0
 
     for r in runs:
         suite_raw = str(r["suite_path"])
@@ -808,6 +815,22 @@ def build_trace(
         chunk_group = normalize_chunk_group(r.get("chunk_group"))
         idx = int(r["chunk"])
         meta = chunks.get((suite, chunk_group, idx), {}) or chunks.get((suite, None, idx), {})
+        if not meta:
+            # Some evlog entries may point to suite-level aux outputs (meta/log/trace/tar),
+            # parsed as "sole chunk" (idx=0). For suites with regular report chunks [1/N],
+            # this creates a fake extra chunk (+1) and "without_metrics: 1".
+            raw_name = str(r.get("raw_name", "") or "")
+            suite_report_idxs = report_idx_by_suite.get(suite, set())
+            has_report_chunks = bool(suite_report_idxs)
+            has_idx0_in_report = 0 in suite_report_idxs
+            looks_aux_sole = (
+                idx == 0
+                and "/chunk" not in raw_name
+                and bool(EVLOG_AUX_OUTPUT_RE.search(raw_name))
+            )
+            if has_report_chunks and not has_idx0_in_report and looks_aux_sole:
+                dropped_spurious_sole_runs += 1
+                continue
         if meta:
             matched += 1
             suite_matched[suite] += 1
@@ -918,6 +941,7 @@ def build_trace(
         "matched_runs_with_metrics": matched,
         "runs_without_report_metrics": missing_metrics,
         "runs_with_synthetic_metrics": runs_with_synthetic_metrics,
+        "dropped_spurious_sole_runs": dropped_spurious_sole_runs,
         "report_chunks_without_run": missing_runs_for_chunk,
         "suites_without_report_metrics": suites_missing_list,
         "per_suite_metrics": per_suite_metrics,

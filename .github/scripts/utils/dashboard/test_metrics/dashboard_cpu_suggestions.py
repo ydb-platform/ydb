@@ -194,6 +194,7 @@ def build_cpu_suggestions(
     """
     parallel_stats = _compute_parallel_stats(runs)
     by_suite: dict[str, list[float]] = defaultdict(list)
+    by_suite_runs: dict[str, int] = defaultdict(int)
     by_suite_cpu: dict[str, float] = defaultdict(float)
     by_suite_ram_kb: dict[str, float] = defaultdict(float)
     by_suite_dur: dict[str, float] = defaultdict(float)
@@ -209,6 +210,7 @@ def build_cpu_suggestions(
         cpu = float(r.get("cpu_sec_report", 0.0) or 0.0)
         ram_kb = float(r.get("ram_kb_report", 0.0) or 0.0)
         dur_s = float(r.get("dur_us", 0) or 0) / 1_000_000.0
+        by_suite_runs[suite] += 1
         by_suite_cpu[suite] += cpu
         by_suite_ram_kb[suite] += ram_kb
         by_suite_dur[suite] += dur_s
@@ -229,7 +231,10 @@ def build_cpu_suggestions(
             by_suite_errors[suite] += 1
         if dur_s > 0:
             by_suite[suite].append(cpu / dur_s)
-    all_suites = sorted(set(by_suite_cpu.keys()) | set((report_status_by_suite or {}).keys()) | set((requirements_cache or {}).keys()))
+    # Suggestion rows should represent observed runtime behavior.
+    # Keep only suites that have at least one run in evlog-derived data.
+    # (report/requirements-only suites produce noisy rows with chunks_count=0).
+    all_suites = sorted(set(by_suite_cpu.keys()))
     out: list[dict[str, Any]] = []
     for suite in all_suites:
         cores_list = by_suite[suite]
@@ -320,7 +325,7 @@ def build_cpu_suggestions(
                     cpu_action = "ok"
         out.append({
             "suite_path": suite,
-            "chunks_count": len(cores_list),
+            "chunks_count": by_suite_runs[suite],
             "median_cores": round(median_c, 3),
             "p95_cores": round(p95_c, 3),
             "recommended_cpu": recommended_req,

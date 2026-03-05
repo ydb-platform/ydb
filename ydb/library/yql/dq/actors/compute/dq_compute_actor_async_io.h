@@ -314,6 +314,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        TDqComputeActorWatermarks* WatermarksTracker = nullptr;
         NWilson::TTraceId TraceId;
     };
 

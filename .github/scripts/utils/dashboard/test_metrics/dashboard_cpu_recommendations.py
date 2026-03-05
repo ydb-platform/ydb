@@ -35,28 +35,9 @@ def _next_cpu_tier(cpu: int) -> int:
 
 
 def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """
-    Sweep-line over all runs.  For each suite computes:
-
-    Self parallelism
-      max_parallel_self         — peak simultaneous chunks of THIS suite
-      max_parallel_self_at_sec  — time (sec from global t0) of that peak
-
-    Other suites' load during our window
-      peak_others_during_suite         — max chunks of OTHER suites while we ran
-      peak_others_during_suite_at_sec  — when that happened
-
-    Global resource peaks during our window
-      peak_total_cpu_cores_during_suite  — max total instantaneous CPU (cores) while we ran
-      peak_total_cpu_at_sec
-      peak_total_ram_gb_during_suite     — max total RAM (GB) while we ran
-      peak_total_ram_at_sec
-    """
     if not runs:
         return {}
 
-    # Build events: (time_us, delta_active, suite, delta_cpu_cores, delta_ram_kb)
-    # +1 events are processed before -1 at the same timestamp (peaks are captured).
     events: list[tuple[float, int, str, float, float]] = []
     t0: Optional[float] = None
     suite_start_us: dict[str, float] = {}
@@ -79,13 +60,12 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
             suite_start_us[suite] = start
         if suite not in suite_end_us or end > suite_end_us[suite]:
             suite_end_us[suite] = end
-        events.append((start,  1, suite, +cores, +ram_kb))
-        events.append((end,   -1, suite, -cores, -ram_kb))
+        events.append((start, 1, suite, +cores, +ram_kb))
+        events.append((end, -1, suite, -cores, -ram_kb))
 
     if not events or t0 is None:
         return {}
 
-    # Sort: same time → +1 before -1 so peaks register correctly
     events.sort(key=lambda e: (e[0], -e[1]))
 
     suite_count: dict[str, int] = defaultdict(int)
@@ -93,7 +73,6 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     total_cpu = 0.0
     total_ram_kb = 0.0
 
-    # Per-suite peak trackers
     peak_self: dict[str, int] = defaultdict(int)
     peak_self_at: dict[str, float] = {}
     suite_cpu: dict[str, float] = defaultdict(float)
@@ -117,7 +96,6 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
         total_cpu += dcpu
         total_ram_kb += dram
 
-        # Update self-peak for the suite that just changed
         if delta > 0 and suite_count[suite] > peak_self[suite]:
             peak_self[suite] = suite_count[suite]
             peak_self_at[suite] = time_us
@@ -128,8 +106,6 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
             peak_self_ram_kb[suite] = suite_ram_kb[suite]
             peak_self_ram_at[suite] = time_us
 
-        # Update resource peaks for ALL currently active suites.
-        # O(active_suites) per event — acceptable for typical CI data sizes.
         for s, cnt in suite_count.items():
             if cnt <= 0:
                 continue
@@ -147,8 +123,6 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     def _at(ts_us: Optional[float]) -> Optional[float]:
         if ts_us is None:
             return None
-        # Keep the same absolute time basis as dashboard series (x = start_us / 1e6),
-        # otherwise marker lines appear shifted left/right relative to plotted chunks.
         return round(ts_us / 1e6, 1)
 
     result: dict[str, dict[str, Any]] = {}
@@ -172,7 +146,6 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
             "peak_self_cpu_at_sec": _at(peak_self_cpu_at.get(s)),
             "peak_self_ram_gb_during_suite": round(peak_self_ram_kb[s] / (1024.0 * 1024.0), 3),
             "peak_self_ram_at_sec": _at(peak_self_ram_at.get(s)),
-            # Legacy total metrics kept for compatibility with older dashboards.
             "peak_total_cpu_cores_during_suite": round(peak_cpu[s], 3),
             "peak_total_cpu_at_sec": _at(peak_cpu_at.get(s)),
             "peak_total_ram_gb_during_suite": round(peak_ram[s] / (1024.0 * 1024.0), 3),
@@ -181,18 +154,44 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     return result
 
 
-def build_cpu_suggestions(
+def build_cpu_recommendations(
     runs: list[dict[str, Any]],
     requirements_cache: Optional[dict[str, dict[str, Any]]] = None,
     report_status_by_suite: Optional[dict[str, dict[str, dict[str, int]]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
 ) -> list[dict[str, Any]]:
-    """
-    Per-suite stats from runs (cpu_sec_report, dur_us) to suggest cpuN for the runner.
-    Returns list of dicts: suite_path, chunks_count, median_cores, p95_cores,
-    recommended_cpu (tier 1/2/4/8/16 or "all"), total_cpu_sec, total_ram_gb, total_dur_sec, has_synthetic.
-    """
-    parallel_stats = _compute_parallel_stats(runs)
+    dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
+    dedup_runs_fallback: list[dict[str, Any]] = []
+    for r in runs:
+        suite = str(r.get("suite_path", ""))
+        if not suite:
+            continue
+        report_hid = r.get("report_hid")
+        if report_hid is not None:
+            key = (suite, "hid:" + str(report_hid))
+        else:
+            chunk = r.get("chunk")
+            if chunk is None:
+                dedup_runs_fallback.append(r)
+                continue
+            try:
+                chunk_i = int(chunk)
+            except (TypeError, ValueError):
+                dedup_runs_fallback.append(r)
+                continue
+            chunk_group = str(r.get("chunk_group", "") or "")
+            key = (suite, "idx:" + chunk_group + ":" + str(chunk_i))
+        prev = dedup_runs_by_chunk.get(key)
+        if prev is None:
+            dedup_runs_by_chunk[key] = r
+            continue
+        prev_dur = float(prev.get("dur_us", 0) or 0)
+        cur_dur = float(r.get("dur_us", 0) or 0)
+        if cur_dur > prev_dur:
+            dedup_runs_by_chunk[key] = r
+    runs_for_recommendations = list(dedup_runs_by_chunk.values()) + dedup_runs_fallback
+    parallel_stats = _compute_parallel_stats(runs_for_recommendations)
+
     by_suite: dict[str, list[float]] = defaultdict(list)
     by_suite_runs: dict[str, int] = defaultdict(int)
     by_suite_cpu: dict[str, float] = defaultdict(float)
@@ -203,7 +202,7 @@ def build_cpu_suggestions(
     by_suite_timeouts: dict[str, int] = defaultdict(int)
     by_suite_muted: dict[str, int] = defaultdict(int)
     by_suite_muted_timeouts: dict[str, int] = defaultdict(int)
-    for r in runs:
+    for r in runs_for_recommendations:
         suite = str(r.get("suite_path", ""))
         if not suite:
             continue
@@ -231,9 +230,6 @@ def build_cpu_suggestions(
             by_suite_errors[suite] += 1
         if dur_s > 0:
             by_suite[suite].append(cpu / dur_s)
-    # Suggestion rows should represent observed runtime behavior.
-    # Keep only suites that have at least one run in evlog-derived data.
-    # (report/requirements-only suites produce noisy rows with chunks_count=0).
     all_suites = sorted(set(by_suite_cpu.keys()))
     out: list[dict[str, Any]] = []
     for suite in all_suites:
@@ -270,7 +266,6 @@ def build_cpu_suggestions(
         ya_size = req.get("size")
         if not ya_size:
             ya_size = "SMALL"
-        # Policy: SMALL suites must not request more than cpu:1, MEDIUM — more than cpu:4.
         size_u_cap = str(ya_size or "").upper()
         small_cap_applied = size_u_cap == "SMALL" and recommended > 1
         medium_cap_applied = size_u_cap == "MEDIUM" and recommended > 4
@@ -287,7 +282,7 @@ def build_cpu_suggestions(
             elif size_u == "MEDIUM":
                 timeout_max_value = 4
             elif size_u == "LARGE":
-                timeout_max_value = 4  # LARGE max cpu:4 (no cpu:all)
+                timeout_max_value = 4
             else:
                 timeout_max_value = 4
         recommended_req: Any = timeout_max_value if timeout_max_policy_applied else recommended
@@ -313,7 +308,6 @@ def build_cpu_suggestions(
         else:
             recommended_num = int(recommended_req)
             if ya_cpu is None:
-                # In ya.make implicit default is cpu:1, so do not suggest explicit set(cpu:1).
                 cpu_action = "ok" if recommended_num <= 1 else "set"
             else:
                 ya_cpu_i = int(ya_cpu)
@@ -353,7 +347,6 @@ def build_cpu_suggestions(
             "test_muted": test_status["muted"],
             "test_muted_timeouts": test_status["muted_timeouts"],
             "test_fails_total": test_status["fails_total"],
-            # Legacy aliases kept in output schema for stability.
             "errors": chunk_status["errors"],
             "timeouts": chunk_status["timeouts"],
             "muted": chunk_status["muted"],
@@ -378,3 +371,4 @@ def build_cpu_suggestions(
             }.items()},
         })
     return out
+

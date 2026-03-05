@@ -548,7 +548,7 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->Commit(offset);
         }
 
-        if (Storage->GetBatch().Empty()) {
+        if (Storage->IsBatchEmpty()) {
             ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, *ev);
         } else {
             PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
@@ -561,7 +561,7 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->Unlock(offset);
         }
 
-        if (Storage->GetBatch().Empty()) {
+        if (Storage->IsBatchEmpty()) {
             ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, *ev);
         } else {
             PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
@@ -574,7 +574,7 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
         }
 
-        if (Storage->GetBatch().Empty()) {
+        if (Storage->IsBatchEmpty()) {
             ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, *ev);
         } else {
             PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);

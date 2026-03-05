@@ -196,6 +196,7 @@ public:
     void MoveBaseDeadline();
 
     TBatch GetBatch();
+    bool IsBatchEmpty() const;
 
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);

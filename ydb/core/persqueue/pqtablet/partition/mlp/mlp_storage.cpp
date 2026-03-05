@@ -935,6 +935,10 @@ TStorage::TBatch TStorage::GetBatch() {
     return std::exchange(Batch, {this});
 }
 
+bool TStorage::IsBatchEmpty() const {
+    return Batch.Empty();
+}
+
 const TMetrics& TStorage::GetMetrics() const {
     return Metrics;
 }

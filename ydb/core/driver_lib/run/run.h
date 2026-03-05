@@ -137,9 +137,9 @@ private:
 public:
     static void SetSignalHandlers();
 
-    virtual void KikimrStart();
+    virtual void Start();
     virtual void BusyLoop();
-    virtual void KikimrStop(bool graceful);
+    virtual void Stop(bool graceful);
 
     static TIntrusivePtr<TKikimrRunner> CreateKikimrRunner(
             const TKikimrRunConfig& runConfig,

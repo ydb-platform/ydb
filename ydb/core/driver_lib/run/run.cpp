@@ -2197,7 +2197,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
-void TKikimrRunner::KikimrStart() {
+void TKikimrRunner::Start() {
     for (auto plugin: Plugins) {
         plugin->Start();
     }
@@ -2235,7 +2235,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_UNBLOCK);
 }
 
-void TKikimrRunner::KikimrStop(bool graceful) {
+void TKikimrRunner::Stop(bool graceful) {
     Y_UNUSED(graceful);
 
     bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
@@ -2458,6 +2458,28 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeGRpc(runConfig);
     runner->InitializePlugins(runConfig);
     return runner;
+}
+
+int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
+#ifdef _win32_
+    WSADATA dummy;
+    WSAStartup(MAKEWORD(2, 2), &dummy);
+#endif
+
+    TKikimrRunner::SetSignalHandlers();
+    Cout << "Starting YDB server" << Endl;
+    Cout << GetProgramSvnVersion() << Endl;
+
+    TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
+    if (runner) {
+        runner->Start();
+        runner->BusyLoop();
+        // exit busy loop by a signal
+        Cout << "Shutting YDB server down" << Endl;
+        runner->Stop(false);
+    }
+
+    return 0;
 }
 
 } // NKikimr

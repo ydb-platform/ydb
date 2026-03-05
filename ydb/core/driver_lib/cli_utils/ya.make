@@ -17,8 +17,16 @@ SRCS(
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
     cli_cmds_node.cpp
+    cli_cmds_actorsys_perftest.cpp
+    cli_cmds_format_info.cpp
+    cli_cmds_format_util.cpp
+    cli_cmds_node_by_host.cpp
+    cli_cmds_pq_cmds.cpp
     cli_cmds_root.cpp
+    cli_cmds_run.cpp
+    cli_cmds_scheme_initroot_cmd.cpp
     cli_cmds_server.cpp
+    cli_cmds_standalone.h
     cli_cmds_tablet.cpp
     cli_cmds_tenant.cpp
     cli_fakeinitshard.cpp
@@ -43,6 +51,7 @@ PEERDIR(
     ydb/core/client/scheme_cache_lib
     ydb/core/config/init
     ydb/core/config/validation
+    ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure

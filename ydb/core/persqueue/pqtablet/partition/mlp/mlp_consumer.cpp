@@ -588,10 +588,8 @@ void TConsumerActor::ProcessEventQueue() {
     }
     PurgeRequestsQueue.clear();
 
-    if (!ReadRequestsQueue.empty()) {
-        Storage->ProccessDeadlines();
-        LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
-    }
+    Storage->ProccessDeadlines();
+    LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
 
     auto now = TInstant::Now();
 

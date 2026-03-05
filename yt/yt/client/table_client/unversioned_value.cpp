@@ -195,17 +195,17 @@ size_t TBitwiseUnversionedValueHash::operator()(const TUnversionedValue& value) 
 
     switch (value.Type) {
         case EValueType::Int64:
-            result ^= SplitMix64(value.Data.Int64);
+            result ^= SplitMix(value.Data.Int64);
             break;
         case EValueType::Uint64:
-            result ^= SplitMix64(value.Data.Uint64);
+            result ^= SplitMix(value.Data.Uint64);
             break;
         case EValueType::Double:
             // In a bitwise hash, no double normalization is performed, WYSIWYG.
-            result ^= SplitMix64(BitCast<ui64>(value.Data.Double));
+            result ^= SplitMix(BitCast<ui64>(value.Data.Double));
             break;
         case EValueType::Boolean:
-            result ^= SplitMix64(static_cast<ui64>(value.Data.Boolean));
+            result ^= SplitMix(static_cast<ui64>(value.Data.Boolean));
             break;
         case EValueType::String:
         case EValueType::Any:

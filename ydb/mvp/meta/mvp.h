@@ -59,7 +59,6 @@ public:
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
-    void ValidateSupportLinksConfig() const;
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;

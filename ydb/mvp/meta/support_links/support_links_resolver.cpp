@@ -14,17 +14,22 @@ TSupportLinksResolver::TSupportLinksResolver(TParams params)
     : UrlParameters(params.UrlParameters.Render())
 {
     Y_ABORT_UNLESS(InstanceMVP, "InstanceMVP must be initialized");
-    const auto& linkConfigs = params.EntityType == EEntityType::Database
-        ? InstanceMVP->SupportLinksConfig.GetDatabase()
-        : InstanceMVP->SupportLinksConfig.GetCluster();
-
     OwnedSources.clear();
-    OwnedSources.reserve(linkConfigs.size());
     Sources.clear();
-    Sources.reserve(linkConfigs.size());
-    for (int i = 0; i < linkConfigs.size(); ++i) {
-        OwnedSources.push_back(MakeLinkSource(i, linkConfigs[i]));
-        Sources.push_back(OwnedSources.back().get());
+    if (!params.Sources.empty()) {
+        OwnedSources = std::move(params.Sources);
+    } else {
+        const auto& linkConfigs = params.EntityType == EEntityType::Database
+            ? InstanceMVP->SupportLinksConfig.GetDatabase()
+            : InstanceMVP->SupportLinksConfig.GetCluster();
+        OwnedSources.reserve(linkConfigs.size());
+        for (int i = 0; i < linkConfigs.size(); ++i) {
+            OwnedSources.push_back(MakeLinkSource(linkConfigs[i]));
+        }
+    }
+    Sources.reserve(OwnedSources.size());
+    for (const auto& source : OwnedSources) {
+        Sources.push_back(source.get());
     }
 
     ClusterColumns = std::move(params.ClusterColumns);

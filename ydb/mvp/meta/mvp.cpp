@@ -4,7 +4,6 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/meta/support_links/resolver_validation.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -201,8 +200,6 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
         auto meta = config["meta"];
         Y_UNUSED(meta);
     }
-
-    ValidateSupportLinksConfig();
 }
 
 void TMVP::TryGetMetaOptionsFromConfig() {
@@ -227,20 +224,6 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
     }
-}
-
-void TMVP::ValidateSupportLinksConfig() const {
-    const auto& sourceValidators = NSupportLinks::TLinkSourceConfigValidators::Default();
-    auto validateEntityLinks = [&](const auto& links, TStringBuf entityName) {
-        for (int i = 0; i < links.size(); ++i) {
-            const auto& link = links[i];
-            const TString where = TStringBuilder() << "support_links." << entityName << "[" << i << "]";
-            sourceValidators.Validate(link, where);
-        }
-    };
-
-    validateEntityLinks(SupportLinksConfig.GetCluster(), "cluster");
-    validateEntityLinks(SupportLinksConfig.GetDatabase(), "database");
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {

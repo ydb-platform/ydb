@@ -18,11 +18,13 @@ public:
     };
 
     virtual ~ILinkSource() = default;
-    virtual size_t Place() const = 0;
     virtual const TSupportLinkEntryConfig& Config() const = 0;
     virtual TResolveOutput Resolve(const TResolveInput& input) const = 0;
 };
 
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntryConfig config);
+using TLinkSourceFactory = std::shared_ptr<ILinkSource> (*)(TSupportLinkEntryConfig);
+
+void RegisterLinkSource(TString source, TLinkSourceFactory factory);
+std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config);
 
 } // namespace NMVP

@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     events.h
-    resolver_validation.h
     source.h
     source.cpp
     support_links_resolver.h

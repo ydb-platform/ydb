@@ -141,19 +141,23 @@ public:
     }
 
     void ResolveSupportLinks() {
-        SupportLinksResolver = std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
-            .EntityType = EntityType,
-            .ClusterColumns = ClusterColumns,
-            .UrlParameters = Request.Parameters.UrlParameters,
-            .Parent = SelfId(),
-            .HttpProxyId = HttpProxyId,
-        });
+        SupportLinksResolver = CreateSupportLinksResolver();
         SupportLinksResolver->Start();
         if (SupportLinksResolver->IsFinished()) {
             ReplyOkAndDie();
             return;
         }
         Become(&TMetaSupportLinksGetHandlerActor::StateResolveSources);
+    }
+
+    virtual std::unique_ptr<TSupportLinksResolver> CreateSupportLinksResolver() {
+        return std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
+            .EntityType = EntityType,
+            .ClusterColumns = ClusterColumns,
+            .UrlParameters = Request.Parameters.UrlParameters,
+            .Parent = SelfId(),
+            .HttpProxyId = HttpProxyId,
+        });
     }
 
     void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {

@@ -45,6 +45,7 @@ public:
         NHttp::TUrlParameters UrlParameters;
         NActors::TActorId Parent;
         NActors::TActorId HttpProxyId;
+        TVector<std::shared_ptr<ILinkSource>> Sources;
     };
 
     explicit TSupportLinksResolver(TParams params);

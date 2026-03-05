@@ -1,19 +1,30 @@
 #include "source.h"
 
+#include <mutex>
+
 #include <util/generic/yexception.h>
 
 namespace NMVP {
 
+namespace {
+
+THashMap<TString, TLinkSourceFactory>& LinkSourceFactories() {
+    static THashMap<TString, TLinkSourceFactory> factories;
+    return factories;
+}
+
+std::mutex& LinkSourceFactoriesMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+} // namespace
+
 class TUnsupportedLinkSource final : public ILinkSource {
 public:
-    TUnsupportedLinkSource(size_t place, TSupportLinkEntryConfig config)
-        : Place_(place)
-        , Config_(std::move(config))
+    explicit TUnsupportedLinkSource(TSupportLinkEntryConfig config)
+        : Config_(std::move(config))
     {}
-
-    size_t Place() const override {
-        return Place_;
-    }
 
     const TSupportLinkEntryConfig& Config() const override {
         return Config_;
@@ -31,15 +42,38 @@ public:
     }
 
 private:
-    size_t Place_;
     TSupportLinkEntryConfig Config_;
 };
 
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntryConfig config) {
+void RegisterLinkSource(TString source, TLinkSourceFactory factory) {
+    if (source.empty()) {
+        ythrow yexception() << "support_links source name is required";
+    }
+    if (!factory) {
+        ythrow yexception() << "support_links source factory is required for " << source;
+    }
+
+    std::lock_guard guard(LinkSourceFactoriesMutex());
+    LinkSourceFactories()[std::move(source)] = factory;
+}
+
+std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config) {
     if (config.GetSource().empty()) {
         ythrow yexception() << "source is required";
     }
-    return std::make_shared<TUnsupportedLinkSource>(place, std::move(config));
+
+    TLinkSourceFactory factory = nullptr;
+    {
+        std::lock_guard guard(LinkSourceFactoriesMutex());
+        if (const auto it = LinkSourceFactories().find(config.GetSource()); it != LinkSourceFactories().end()) {
+            factory = it->second;
+        }
+    }
+    if (factory) {
+        return factory(std::move(config));
+    }
+
+    return std::make_shared<TUnsupportedLinkSource>(std::move(config));
 }
 
 } // namespace NMVP

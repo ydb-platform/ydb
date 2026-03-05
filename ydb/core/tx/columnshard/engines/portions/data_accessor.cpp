@@ -30,8 +30,8 @@ TPortionDataAccessor::TAssembleBlobInfo MakeAssembleBlobInfoWithMeta(THashMap<TC
             return std::move(itBlobs->second);
         }
     }();
-    if (record.GetMeta().HasDictionaryAccessor()) {
-        blobInfo.SetDictionaryAccessor(*record.GetMeta().GetDictionaryAccessor());
+    if (record.GetMeta().GetAdditionalAccessorData()) {
+        blobInfo.SetAdditionalAccessorData(record.GetMeta().GetAdditionalAccessorData());
     }
     return blobInfo;
 }
@@ -801,7 +801,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembl
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
-            *ExpectedRowsCount, loader, Data, internalPathId, false, DictionaryAccessor);
+            *ExpectedRowsCount, loader, Data, internalPathId, false, GetAdditionalAccessorData());
     }
 }
 
@@ -812,7 +812,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
         return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader.GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return loader.ApplyConclusion(Data, *ExpectedRowsCount, std::nullopt, DictionaryAccessor)
+        return loader.ApplyConclusion(Data, *ExpectedRowsCount, std::nullopt, GetAdditionalAccessorData())
             .AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));
     }
 }

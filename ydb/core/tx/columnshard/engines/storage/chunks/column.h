@@ -73,9 +73,9 @@ public:
     }
 
     TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address,
-        const TSimpleColumnInfo& columnInfo, const NArrow::NAccessor::TDictionaryChunkMeta& dictionaryMeta)
+        const TSimpleColumnInfo& columnInfo, std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData)
         : TChunkPreparation(data, column, address, columnInfo) {
-        Record.MutableMeta().SetDictionaryAccessor(dictionaryMeta);
+        Record.MutableMeta().SetAdditionalAccessorData(std::move(additionalAccessorData));
     }
 };
 

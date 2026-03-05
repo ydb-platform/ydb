@@ -90,8 +90,3 @@ message TSubColumnsAccessor {
     optional uint32 OtherRecordsCount = 5;
 }
 
-// Legacy blob format only (parsing old data). New format uses NKikimrTxColumnShard.TDictionaryAccessor in LocalDB.
-message TDictionaryAccessor {
-    optional uint32 VariantsBlobSize = 1;
-    optional uint32 RecordsBlobSize = 2;
-}

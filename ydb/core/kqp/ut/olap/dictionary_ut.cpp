@@ -163,6 +163,4 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     Y_UNIT_TEST_STRING_VARIATOR(SimpleStringVariants, scriptSimpleStringVariants) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
-}
-
 }   // namespace NKikimr::NKqp

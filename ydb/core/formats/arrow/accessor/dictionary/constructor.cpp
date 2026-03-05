@@ -1,6 +1,7 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
@@ -14,35 +15,25 @@ namespace NKikimr::NArrow::NAccessor::NDictionary {
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
-    ui32 variantsBlobSize;
-    ui32 recordsBlobSize;
-    TStringBuf sbOriginal(originalData.data(), originalData.size());
-
-    if (externalInfo.HasDictionaryAccessor()) {
-        const auto& acc = *externalInfo.GetDictionaryAccessor();
-        variantsBlobSize = acc.VariantsBlobSize;
-        recordsBlobSize = acc.RecordsBlobSize;
-    } else {
-        // Legacy format: SZ(4) + proto + Variants + Records in blob (data written before meta was stored in LocalDB).
-        if (sbOriginal.size() < sizeof(ui32)) {
-            return TConclusionStatus::Fail("cannot READ protobuf blob size for dictionary accessor (legacy format)");
-        }
-        const ui32 protoSize = *(ui32*)(sbOriginal.data());
-        sbOriginal.Skip(sizeof(protoSize));
-        if (sbOriginal.size() < protoSize) {
-            return TConclusionStatus::Fail(TStringBuilder{}
-                << "dictionary blob without accessor meta: blob looks like new format (Variants+Records only) but chunk has no DictionaryAccessor in metadata; "
-                << "protoSize=" << protoSize << " remaining=" << sbOriginal.size()
-                << ". Ensure dictionary meta is stored in chunk metadata for new-format blobs.");
-        }
-        NKikimrArrowAccessorProto::TDictionaryAccessor proto;
-        if (!proto.ParseFromArray(sbOriginal.data(), protoSize)) {
-            return TConclusionStatus::Fail("cannot PARSE protobuf blob for dictionary accessor (legacy format)");
-        }
-        sbOriginal.Skip(protoSize);
-        variantsBlobSize = proto.GetVariantsBlobSize();
-        recordsBlobSize = proto.GetRecordsBlobSize();
+    ui32 variantsBlobSize = 0;
+    ui32 recordsBlobSize = 0;
+    if (externalInfo.HasAdditionalAccessorData()) {
+        struct TVisitor : IAdditionalAccessorDataVisitor {
+            ui32 Variants = 0;
+            ui32 Records = 0;
+            void VisitDictionary(ui32 v, ui32 r) override {
+                Variants = v;
+                Records = r;
+            }
+        } visitor;
+        externalInfo.GetAdditionalAccessorData()->Accept(visitor);
+        variantsBlobSize = visitor.Variants;
+        recordsBlobSize = visitor.Records;
     }
+    if (!variantsBlobSize && !recordsBlobSize) {
+        return TConclusionStatus::Fail("dictionary blob requires additional accessor data (VariantsBlobSize, RecordsBlobSize) in chunk metadata");
+    }
+    TStringBuf sbOriginal(originalData.data(), originalData.size());
 
     if (sbOriginal.size() < variantsBlobSize) {
         return TConclusionStatus::Fail("cannot READ variants blob for dictionary accessor");
@@ -102,7 +93,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-std::pair<TDictionaryChunkMeta, TString> TConstructor::SerializeToBlobAndMeta(
+std::pair<TDictionaryAccessorData, TString> TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrVariants = arr->GetVariants();
@@ -114,7 +105,7 @@ std::pair<TDictionaryChunkMeta, TString> TConstructor::SerializeToBlobAndMeta(
     const TString blobRecords =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
 
-    TDictionaryChunkMeta meta;
+    TDictionaryAccessorData meta;
     meta.VariantsBlobSize = blobVariants.size();
     meta.RecordsBlobSize = blobRecords.size();
     TString blob;

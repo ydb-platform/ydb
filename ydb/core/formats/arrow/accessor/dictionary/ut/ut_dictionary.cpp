@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto [meta, blob] = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
-            std::nullopt, meta);
+            std::nullopt, std::make_shared<TDictionaryAccessorData>(meta.VariantsBlobSize, meta.RecordsBlobSize));
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
             NDictionary::TConstructor().DeserializeFromString(blob, infoWithMeta).DetachResult());
         Cerr << PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) << Endl;

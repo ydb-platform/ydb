@@ -17,11 +17,8 @@ void TChunkPreparation::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRang
 std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSplitImpl(
     const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& splitSizes) const {
     const bool isDictionary = ColumnInfo.GetLoader()->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName;
-    const std::optional<NArrow::NAccessor::TDictionaryChunkMeta> dictMeta = Record.GetMeta().HasDictionaryAccessor()
-        ? std::make_optional(*Record.GetMeta().GetDictionaryAccessor())
-        : std::nullopt;
-
-    auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, dictMeta);
+    auto additionalData = Record.GetMeta().GetAdditionalAccessorData();
+    auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, std::move(additionalData));
 
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
         if (isDictionary) {
@@ -38,7 +35,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
             auto [meta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
                 chunks[i].GetArray(), ColumnInfo.GetLoader()->BuildAccessorContext(chunks[i].GetArray()->GetRecordsCount()));
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-                std::move(blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo, meta));
+                std::move(blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo,
+                std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(meta.VariantsBlobSize, meta.RecordsBlobSize)));
         } else {
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
                 chunks[i].GetSerializedData(), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo));

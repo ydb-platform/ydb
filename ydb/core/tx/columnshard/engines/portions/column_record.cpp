@@ -1,9 +1,11 @@
 #include "column_record.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
@@ -15,14 +17,17 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
     }
-    if (proto.HasDictionaryAccessor()) {
-        const auto& acc = proto.GetDictionaryAccessor();
-        NArrow::NAccessor::TDictionaryChunkMeta meta;
-        meta.VariantsBlobSize = acc.GetVariantsBlobSize();
-        meta.RecordsBlobSize = acc.GetRecordsBlobSize();
-        DictionaryAccessor = meta;
+    if (proto.HasAdditionalAccessorData()) {
+        const auto& add = proto.GetAdditionalAccessorData();
+        if (add.Accessor_case() == NKikimrTxColumnShard::TAdditionalAccessorData::kDictionaryAccessorData) {
+            const auto& acc = add.GetDictionaryAccessorData();
+            AdditionalAccessorData = std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(
+                acc.GetVariantsBlobSize(), acc.GetRecordsBlobSize());
+        } else {
+            AdditionalAccessorData.reset();
+        }
     } else {
-        DictionaryAccessor.reset();
+        AdditionalAccessorData.reset();
     }
     return TConclusionStatus::Success();
 }
@@ -39,10 +44,19 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
     meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
-    if (DictionaryAccessor) {
-        auto* acc = meta.MutableDictionaryAccessor();
-        acc->SetVariantsBlobSize(DictionaryAccessor->VariantsBlobSize);
-        acc->SetRecordsBlobSize(DictionaryAccessor->RecordsBlobSize);
+    if (AdditionalAccessorData) {
+        struct TVisitor : NArrow::NAccessor::IAdditionalAccessorDataVisitor {
+            NKikimrTxColumnShard::TAdditionalAccessorData* Proto = nullptr;
+            void VisitDictionary(ui32 variantsBlobSize, ui32 recordsBlobSize) override {
+                if (Proto) {
+                    auto* acc = Proto->MutableDictionaryAccessorData();
+                    acc->SetVariantsBlobSize(variantsBlobSize);
+                    acc->SetRecordsBlobSize(recordsBlobSize);
+                }
+            }
+        } visitor;
+        visitor.Proto = meta.MutableAdditionalAccessorData();
+        AdditionalAccessorData->Accept(visitor);
     }
     return meta;
 }

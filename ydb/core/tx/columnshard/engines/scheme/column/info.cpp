@@ -1,5 +1,8 @@
 #include "info.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 namespace NKikimr::NOlap {
@@ -56,21 +59,36 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     if (!checkNeedActualize()) {
         return source;
     }
+    const bool targetIsDictionary = Loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName;
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
-    for (auto&& s : source) {
+    for (size_t idx = 0; idx < source.size(); ++idx) {
+        auto s = source[idx];
         TString data;
         ui32 rawBytes = s->GetRawBytesVerified();
         const auto loadContext = Loader->BuildAccessorContext(s->GetRecordsCountVerified());
         if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
-            auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified());
+            std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> sourceAdditionalData;
+            if (const auto* chunkPrep = dynamic_cast<const NChunks::TChunkPreparation*>(s.get())) {
+                sourceAdditionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
+            }
+            auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(
+                s->GetData(), s->GetRecordsCountVerified(), std::nullopt, std::move(sourceAdditionalData));
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
-            data = DataAccessorConstructor.SerializeToString(DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult(), loadContext);
+            if (targetIsDictionary) {
+                auto [dictMeta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(newArray, loadContext);
+                result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blob), newArray, TChunkAddress(ColumnId, idx), *this,
+                    std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(dictMeta.VariantsBlobSize, dictMeta.RecordsBlobSize)));
+            } else {
+                data = DataAccessorConstructor.SerializeToString(newArray, loadContext);
+                result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
+            }
         } else {
             data = DataAccessorConstructor.SerializeToString(
                 DataAccessorConstructor.DeserializeFromString(s->GetData(), loadContext).DetachResult(), loadContext);
+            result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
         }
-        result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
     }
     return result;
 }

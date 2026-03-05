@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
@@ -38,13 +40,13 @@ public:
     const std::shared_ptr<arrow::Field>& GetField() const;
 
     TChunkConstructionData BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
-        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
+        std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr) const;
     std::shared_ptr<IChunkedArray> ApplyVerified(
         const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
-        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
+        std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr) const;
     TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(
         const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt,
-        const std::optional<TDictionaryChunkMeta>& dictionaryAccessor = std::nullopt) const;
+        std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr) const;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

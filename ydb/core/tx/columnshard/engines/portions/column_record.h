@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -29,7 +30,7 @@ class TColumnRecord;
 struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
-    std::optional<NArrow::NAccessor::TDictionaryChunkMeta> DictionaryAccessor;
+    std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> AdditionalAccessorData;
     TChunkMeta() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto);
     friend class TColumnRecord;
@@ -50,14 +51,14 @@ public:
 
     NKikimrTxColumnShard::TIndexColumnMeta SerializeToProto() const;
 
-    const std::optional<NArrow::NAccessor::TDictionaryChunkMeta>& GetDictionaryAccessor() const {
-        return DictionaryAccessor;
+    const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& GetAdditionalAccessorData() const {
+        return AdditionalAccessorData;
     }
-    void SetDictionaryAccessor(NArrow::NAccessor::TDictionaryChunkMeta value) {
-        DictionaryAccessor = std::move(value);
+    void SetAdditionalAccessorData(std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> value) {
+        AdditionalAccessorData = std::move(value);
     }
-    bool HasDictionaryAccessor() const {
-        return DictionaryAccessor.has_value();
+    bool HasAdditionalAccessorData() const {
+        return AdditionalAccessorData != nullptr;
     }
 
     class TTestInstanceBuilder {

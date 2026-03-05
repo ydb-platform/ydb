@@ -353,7 +353,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             if (loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
                 auto [dictMeta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(*arrToWrite, loadContext);
                 columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, dictMeta) };
+                    std::move(blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures,
+                    std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(dictMeta.VariantsBlobSize, dictMeta.RecordsBlobSize)) };
             } else {
                 columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
                     loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loadContext),

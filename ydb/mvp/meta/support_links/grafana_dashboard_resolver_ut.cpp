@@ -2,7 +2,7 @@
 #include <memory>
 
 #include <ydb/mvp/meta/mvp.h>
-#include <ydb/mvp/meta/link_source.h>
+#include <ydb/mvp/meta/support_links/source.h>
 
 Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
     class TMvpGuard {
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        NMVP::TGrafanaDashboardResolver source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        NMVP::TGrafanaDashboardResolver source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        NMVP::TGrafanaDashboardResolver source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";

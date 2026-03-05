@@ -1,6 +1,9 @@
 #pragma once
 
 #include "common.h"
+#include "grafana_dashboard.h"
+
+#include <ydb/mvp/meta/support_links/source.h>
 
 #include <util/generic/yexception.h>
 
@@ -17,3 +20,71 @@ inline void ValidateGrafanaDashboardResolverConfig(const TResolverValidationCont
 }
 
 } // namespace NMVP::NSupportLinks
+
+namespace NMVP {
+
+class TGrafanaDashboardResolver : public ILinkSource {
+public:
+    TGrafanaDashboardResolver(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+        : Config_(std::move(config))
+        , MetaSettings_(metaSettings)
+    {}
+
+    size_t Place() const override {
+        return 0;
+    }
+
+    const TSupportLinkEntry& Config() const override {
+        return Config_;
+    }
+
+    TResolveOutput Resolve(const TResolveInput& input) const override
+    {
+        NSupportLinks::TLinkResolveContext resolveContext{
+            .Place = input.Place,
+            .SourceName = Config_.GetSource(),
+            .LinkConfig = Config_,
+            .ClusterColumns = input.ClusterColumns,
+            .QueryParams = input.QueryParams,
+            .Parent = input.Parent,
+            .HttpProxyId = input.HttpProxyId,
+        };
+
+        TResolveOutput result{
+            .Name = Config_.GetSource(),
+            .Ready = true,
+        };
+        TString url = NSupportLinks::ResolveGrafanaDashboardUrl(MetaSettings_.GrafanaConfig, resolveContext, result.Errors);
+        if (!url.empty()) {
+            result.Links.emplace_back(NSupportLinks::TResolvedLink{
+                .Title = Config_.GetTitle(),
+                .Url = std::move(url),
+            });
+        }
+        return result;
+    }
+
+private:
+    TSupportLinkEntry Config_;
+    const TMetaSettings& MetaSettings_;
+};
+
+inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSource(
+    TSupportLinkEntry config,
+    const TMetaSettings& metaSettings)
+{
+    NSupportLinks::ValidateGrafanaDashboardResolverConfig(NSupportLinks::TResolverValidationContext{
+        .LinkConfig = config,
+        .GrafanaConfig = metaSettings.GrafanaConfig,
+    });
+    return std::make_shared<TGrafanaDashboardResolver>(std::move(config), metaSettings);
+}
+
+inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSourceUnchecked(
+    TSupportLinkEntry config,
+    const TMetaSettings& metaSettings)
+{
+    return std::make_shared<TGrafanaDashboardResolver>(std::move(config), metaSettings);
+}
+
+} // namespace NMVP

@@ -1,16 +1,6 @@
-## Project
-
-## Structure
-
-Every directory is a library or program.
-
-- `/ydb/core`: Core modules
-- `/ydb/library`: YDB libraries
-- `/ydb/docs`: YDB documentation
-- `/library`, `/util`: Common libraries; never change them
+# Project
 
 ## Build & Test
-
 
 ```bash
 # Build
@@ -24,7 +14,8 @@ Every directory is a library or program.
 ```
 
 - Tests include build
-- No `-j`, no force rebuild
+- No `-j`
+- No force rebuild
 - Use `2>&1 | tail` for test output
 
 ## C++

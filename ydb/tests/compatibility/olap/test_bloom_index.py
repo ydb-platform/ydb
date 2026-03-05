@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
@@ -149,6 +151,19 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
 
         return queries
 
+    def _request_compaction_and_wait(self, table_name, wait_seconds=15):
+        path = self._table_path(table_name)
+        stmt = f"ALTER OBJECT `{path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);"
+
+        try:
+            with ydb.SessionPool(self.driver, size=1) as pool:
+                with pool.checkout() as session:
+                    session.execute_scheme(stmt)
+        except Exception:
+            pass
+
+        time.sleep(wait_seconds)
+
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for is_select, query in queries:
@@ -164,17 +179,20 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         table_both = "olap_both"
 
         self.create_table(table_bloom)
-        self._write_data(table_bloom)
         self._add_bloom_index(table_bloom)
+        self._write_data(table_bloom)
 
         self.create_table(table_ngram)
-        self._write_data(table_ngram)
         self._add_ngram_index(table_ngram)
+        self._write_data(table_ngram)
 
         self.create_table(table_both)
-        self._write_data(table_both)
         self._add_bloom_index(table_both, column="uid")
         self._add_ngram_index(table_both, column="resource_id")
+        self._write_data(table_both)
+
+        for table in (table_bloom, table_ngram, table_both):
+            self._request_compaction_and_wait(table)
 
         for _ in self.roll():
             self._do_queries(self._get_queries(table_bloom))

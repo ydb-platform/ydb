@@ -30,10 +30,6 @@ bool HasIssueImpl(const TIssues& issues, ui32 code, TStringBuf message, std::fun
     return hasIssue;
 }
 
-bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::function<bool(const TIssue& issue)> predicate = {}) {
-    return HasIssueImpl(issues, code, message, predicate, false);
-}
-
 bool HasIssueContains(const TIssues& issues, ui32 code, TStringBuf message, std::function<bool(const TIssue& issue)> predicate = {}) {
     return HasIssueImpl(issues, code, message, predicate, true);
 }

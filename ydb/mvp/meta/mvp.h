@@ -22,7 +22,6 @@ class Node;
 namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
-void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
 
 class TMVP {
 protected:
@@ -39,6 +38,7 @@ public:
     TString MetaApiEndpoint = "";
     TString MetaDatabase = "";
     bool MetaCache = false;
+    TMetaSettings MetaSettings;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;
 
@@ -56,8 +56,6 @@ public:
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
-    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
-    void ValidateSupportLinksConfig() const;
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
@@ -67,7 +65,7 @@ public:
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TMetaSettings MetaSettings;
+    TGrafanaSupportConfig GrafanaSupportConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

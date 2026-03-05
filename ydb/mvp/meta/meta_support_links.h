@@ -2,8 +2,11 @@
 
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
-#include <ydb/mvp/meta/support_links/resolver_factory.h>
 #include <ydb/mvp/meta/support_links/events.h>
+#include <ydb/mvp/meta/support_links/source.h>
+#include <ydb/mvp/meta/support_links/support_links_resolver.h>
+
+#include <memory>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -15,25 +18,22 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <util/generic/hash.h>
+#include <util/generic/vector.h>
 
 namespace NMVP {
 
 using namespace NKikimr;
 
-class TMetaSupportLinksGetHandlerActor : THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
+class TMetaSupportLinksGetHandlerActor
+    : THandlerActorYdb
+    , public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>
+{
 public:
-    enum class EEntityType {
-        Cluster,
-        Database,
-    };
-
-    struct TSourceSlot {
-        TString Source;
-        bool Ready = false;
-        TVector<NSupportLinks::TResolvedLink> Links;
-        TVector<NSupportLinks::TSupportError> Errors;
-    };
+    using EEntityType = TSupportLinksResolver::EEntityType;
 
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
 
@@ -41,12 +41,11 @@ public:
     const TYdbLocation& Location;
     TRequest Request;
     TMaybe<NYdb::NTable::TSession> Session;
-    TMaybe<EEntityType> EntityType;
+    EEntityType EntityType = EEntityType::Cluster;
     THashMap<TString, TString> ClusterColumns;
     TVector<std::pair<TString, TString>> QueryParams;
-    TVector<TSupportLinkEntryConfig> RequestedLinks;
-    TVector<TSourceSlot> SourceSlots;
-    ui32 PendingSources = 0;
+    std::unique_ptr<TSupportLinksResolver> SupportLinksResolver;
+    TVector<NSupportLinks::TSupportError> PendingErrors;
 
     TMetaSupportLinksGetHandlerActor(
         const NActors::TActorId& httpProxyId,
@@ -62,24 +61,12 @@ public:
         Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
 
         if (!InitEntityType()) {
-            ReplyBadRequestAndDie(ctx);
+            ReplyBadRequestAndDie();
             return;
-        }
-
-        const auto& entityLinks = GetEntityLinks();
-        RequestedLinks.assign(entityLinks.begin(), entityLinks.end());
-        SourceSlots.resize(RequestedLinks.size());
-        for (size_t i = 0; i < RequestedLinks.size(); ++i) {
-            SourceSlots[i].Source = RequestedLinks[i].Source;
         }
 
         for (const auto& [name, value] : Request.Parameters.UrlParameters.Parameters) {
             QueryParams.emplace_back(TString(name), TString(value));
-        }
-
-        if (RequestedLinks.empty()) {
-            ReplyOkAndDie(ctx);
-            return;
         }
 
         RequestClusterInfo(ctx);
@@ -90,22 +77,11 @@ public:
         const TString database = Request.Parameters["database"];
 
         if (cluster.empty()) {
-            SourceSlots.resize(1);
-            SourceSlots[0].Errors.emplace_back(NSupportLinks::TSupportError{
-                .Source = TString(NSupportLinks::SOURCE_META),
-                .Message = TString(NSupportLinks::INVALID_IDENTITY_PARAMS_MESSAGE)
-            });
+            AddCommonError(NSupportLinks::INVALID_IDENTITY_PARAMS_MESSAGE);
             return false;
         }
         EntityType = database.empty() ? EEntityType::Cluster : EEntityType::Database;
         return true;
-    }
-
-    const TVector<TSupportLinkEntryConfig>& GetEntityLinks() const {
-        if (EntityType && *EntityType == EEntityType::Database) {
-            return InstanceMVP->MetaSettings.SupportLinksConfig.Database;
-        }
-        return InstanceMVP->MetaSettings.SupportLinksConfig.Cluster;
     }
 
     virtual void RequestClusterInfo(const NActors::TActorContext& ctx) {
@@ -119,15 +95,11 @@ public:
             });
     }
 
-    virtual NActors::IActor* CreateSourceHandler(NSupportLinks::TLinkResolveContext sourceContext) {
-        return NSupportLinks::BuildSourceHandler(std::move(sourceContext));
-    }
-
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
         const NYdb::NTable::TCreateSessionResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
-            ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
-            Die(ctx);
+            Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
+            PassAway();
             return;
         }
 
@@ -150,11 +122,11 @@ public:
             });
     }
 
-    void Handle(TEvPrivate::TEvDataQueryResult::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvDataQueryResult::TPtr event, const NActors::TActorContext&) {
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
-            ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
-            Die(ctx);
+            Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
+            PassAway();
             return;
         }
 
@@ -162,10 +134,7 @@ public:
         const auto& columnsMeta = resultSet.GetColumnsMeta();
         NYdb::TResultSetParser rsParser(resultSet);
         if (!rsParser.TryNextRow()) {
-            AddCommonError({
-                .Source = TString(NSupportLinks::SOURCE_META),
-                .Message = TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db"
-            });
+            AddCommonError(TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db");
         } else {
             for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
                 const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
@@ -173,77 +142,70 @@ public:
             }
         }
 
-        SpawnSourceActors(ctx);
+        ResolveSupportLinks();
     }
 
-    void SpawnSourceActors(const NActors::TActorContext& ctx) {
-        PendingSources = 0;
-        for (size_t place = 0; place < RequestedLinks.size(); ++place) {
-            NSupportLinks::TLinkResolveContext sourceContext{
-                .Place = place,
-                .LinkConfig = RequestedLinks[place],
-                .ClusterColumns = ClusterColumns,
-                .QueryParams = QueryParams,
-                .Parent = ctx.SelfID,
-                .HttpProxyId = HttpProxyId,
-            };
-            ctx.Register(CreateSourceHandler(std::move(sourceContext)));
-            ++PendingSources;
+    void ResolveSupportLinks() {
+        SupportLinksResolver = std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
+            .EntityType = EntityType,
+            .ClusterColumns = ClusterColumns,
+            .QueryParams = QueryParams,
+            .Parent = SelfId(),
+            .HttpProxyId = HttpProxyId,
+        });
+        SupportLinksResolver->Start();
+        if (SupportLinksResolver->IsFinished()) {
+            ReplyOkAndDie();
+            return;
         }
-
-        if (PendingSources == 0) {
-            ReplyOkAndDie(ctx);
-        }
+        Become(&TMetaSupportLinksGetHandlerActor::StateResolveSources);
     }
 
-    void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event, const NActors::TActorContext& ctx) {
-        const auto* msg = event->Get();
-        if (msg->Place < SourceSlots.size() && !SourceSlots[msg->Place].Ready) {
-            SourceSlots[msg->Place].Ready = true;
-            SourceSlots[msg->Place].Links = msg->Links;
-            auto& slotErrors = SourceSlots[msg->Place].Errors;
-            slotErrors.insert(slotErrors.end(), msg->Errors.begin(), msg->Errors.end());
-            if (PendingSources > 0) {
-                --PendingSources;
-            }
-        }
-
-        if (PendingSources == 0) {
-            ReplyOkAndDie(ctx);
+    void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {
+        SupportLinksResolver->OnSourceResponse(event);
+        if (SupportLinksResolver->IsFinished()) {
+            ReplyOkAndDie();
         }
     }
 
-    void HandleTimeout(const NActors::TActorContext& ctx) {
-        for (auto& slot : SourceSlots) {
-            if (!slot.Ready) {
-                slot.Errors.emplace_back(NSupportLinks::TSupportError{
-                    .Source = slot.Source,
-                    .Message = "Timeout while resolving support links source"
-                });
-                slot.Ready = true;
-            }
+    void HandleTimeout() {
+        if (SupportLinksResolver) {
+            SupportLinksResolver->HandleTimeout();
         }
-        ReplyOkAndDie(ctx);
+        ReplyOkAndDie();
     }
 
-    void AddCommonError(NSupportLinks::TSupportError error) {
-        if (SourceSlots.empty()) {
-            SourceSlots.resize(1);
-            SourceSlots[0].Source = TString(NSupportLinks::SOURCE_META);
-        }
-        SourceSlots[0].Errors.emplace_back(std::move(error));
+    void AddCommonError(TString message) {
+        PendingErrors.emplace_back(NSupportLinks::TSupportError{
+            .Source = TString(NSupportLinks::SOURCE_META),
+            .Message = std::move(message),
+        });
     }
 
-    void ReplyBadRequestAndDie(const NActors::TActorContext& ctx) {
-        auto response = CreateResponseBadRequest(Request.Request, BuildResponseBody(), "application/json; charset=utf-8");
-        ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        Die(ctx);
-    }
-
-    void ReplyOkAndDie(const NActors::TActorContext& ctx) {
+    void ReplyOkAndDie() {
         auto response = CreateResponseOK(Request.Request, BuildResponseBody(), "application/json; charset=utf-8");
-        ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        Die(ctx);
+        Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        PassAway();
+    }
+
+    void ReplyBadRequestAndDie() {
+        auto response = CreateResponseBadRequest(Request.Request, BuildResponseBody(), "application/json; charset=utf-8");
+        Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        PassAway();
+    }
+
+    static void AppendErrorJson(NJson::TJsonValue& errorsJson, const NSupportLinks::TSupportError& error) {
+        NJson::TJsonValue& item = errorsJson.AppendValue(NJson::TJsonValue());
+        item["source"] = error.Source;
+        if (error.Status) {
+            item["status"] = *error.Status;
+        }
+        if (!error.Reason.empty()) {
+            item["reason"] = error.Reason;
+        }
+        if (!error.Message.empty()) {
+            item["message"] = error.Message;
+        }
     }
 
     TString BuildResponseBody() const {
@@ -253,33 +215,27 @@ public:
 
         NJson::TJsonValue errorsJson;
         errorsJson.SetType(NJson::JSON_ARRAY);
-        bool hasErrors = false;
 
-        for (const auto& slot : SourceSlots) {
-            for (const auto& link : slot.Links) {
-                NJson::TJsonValue& item = linksJson.AppendValue(NJson::TJsonValue());
-                if (!link.Title.empty()) {
-                    item["title"] = link.Title;
+        if (SupportLinksResolver) {
+            for (const auto& sourceOutput : SupportLinksResolver->GetSourceOutput()) {
+                for (const auto& link : sourceOutput.Links) {
+                    NJson::TJsonValue& linkItem = linksJson.AppendValue(NJson::TJsonValue());
+                    if (!link.Title.empty()) {
+                        linkItem["title"] = link.Title;
+                    }
+                    linkItem["url"] = link.Url;
                 }
-                item["url"] = link.Url;
-            }
-            for (const auto& error : slot.Errors) {
-                NJson::TJsonValue& item = errorsJson.AppendValue(NJson::TJsonValue());
-                item["source"] = error.Source;
-                if (error.Status) {
-                    item["status"] = *error.Status;
+                for (const auto& error : sourceOutput.Errors) {
+                    AppendErrorJson(errorsJson, error);
                 }
-                if (!error.Reason.empty()) {
-                    item["reason"] = error.Reason;
-                }
-                if (!error.Message.empty()) {
-                    item["message"] = error.Message;
-                }
-                hasErrors = true;
             }
         }
 
-        if (hasErrors) {
+        for (const auto& error : PendingErrors) {
+            AppendErrorJson(errorsJson, error);
+        }
+
+        if (!errorsJson.GetArray().empty()) {
             root["errors"] = std::move(errorsJson);
         }
         return NJson::WriteJson(root, false);
@@ -289,10 +245,17 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvCreateSessionResult, Handle);
             HFunc(TEvPrivate::TEvDataQueryResult, Handle);
-            HFunc(NSupportLinks::TEvPrivate::TEvSourceResponse, Handle);
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
+
+    STFUNC(StateResolveSources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSupportLinks::TEvPrivate::TEvSourceResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
+        }
+    }
+
 };
 
 class TMetaSupportLinksHandlerActor : THandlerActorYdb, public NActors::TActor<TMetaSupportLinksHandlerActor> {
@@ -307,19 +270,19 @@ public:
         , Location(location)
     {}
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
         NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
         if (request->Method == "GET") {
-            ctx.Register(new TMetaSupportLinksGetHandlerActor(HttpProxyId, Location, event->Sender, request));
+            Register(new TMetaSupportLinksGetHandlerActor(HttpProxyId, Location, event->Sender, request));
             return;
         }
         auto response = event->Get()->Request->CreateResponseBadRequest();
-        ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
         }
     }
 };

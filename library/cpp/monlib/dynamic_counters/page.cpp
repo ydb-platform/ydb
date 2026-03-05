@@ -72,7 +72,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
                     set = value;
                 }
             } else if (name == "labels") {
-                StringSplitter(value).Split(',').SkipEmpty().Collect(&parts);
+                StringSplitter(value).Split(',').SkipEmpty().AddTo(&parts);
             }
             return true;
         });

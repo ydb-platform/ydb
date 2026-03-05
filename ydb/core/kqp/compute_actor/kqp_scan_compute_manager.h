@@ -25,7 +25,7 @@ public:
 class TComputeTaskData;
 
 class TShardScannerInfo {
-private:
+public:
     std::optional<TActorId> ActorId;
     const ui64 ScanId;
     const ui64 TabletId;

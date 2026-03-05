@@ -11,7 +11,7 @@ ELSE()
 ENDIF()
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:4)
+    REQUIREMENTS(ram:32 cpu:1)
 ENDIF()
 
 SRCS(

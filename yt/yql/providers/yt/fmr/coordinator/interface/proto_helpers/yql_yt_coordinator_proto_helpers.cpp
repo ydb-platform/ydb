@@ -65,7 +65,7 @@ THeartbeatResponse HeartbeatResponseFromProto(const NProto::THeartbeatResponse& 
 
 NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperationRequest& startOperationRequest) {
     NProto::TStartOperationRequest protoStartOperationRequest;
-    protoStartOperationRequest.SetTaskType(static_cast<NProto::ETaskType>(startOperationRequest.TaskType));
+    protoStartOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(startOperationRequest.OperationType));
     auto protoOperationParams = OperationParamsToProto(startOperationRequest.OperationParams);
     protoStartOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
 
@@ -98,7 +98,7 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
 
 TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoPrepareOperationRequest) {
     TPrepareOperationRequest PrepareOperationRequest;
-    PrepareOperationRequest.TaskType = static_cast<ETaskType>(protoPrepareOperationRequest.GetTaskType());
+    PrepareOperationRequest.OperationType = static_cast<EOperationType>(protoPrepareOperationRequest.GetOperationType());
     PrepareOperationRequest.OperationParams = OperationParamsFromProto(protoPrepareOperationRequest.GetOperationParams());
     std::unordered_map<TFmrTableId, TClusterConnection> PrepareOperationRequestClusterConnections;
     for (auto& [tableName, conn]: protoPrepareOperationRequest.GetClusterConnections()) {
@@ -113,7 +113,7 @@ TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepare
 
 NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& PrepareOperationRequest) {
     NProto::TPrepareOperationRequest protoPrepareOperationRequest;
-    protoPrepareOperationRequest.SetTaskType(static_cast<NProto::ETaskType>(PrepareOperationRequest.TaskType));
+    protoPrepareOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(PrepareOperationRequest.OperationType));
     auto protoOperationParams = OperationParamsToProto(PrepareOperationRequest.OperationParams);
     protoPrepareOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
 
@@ -151,7 +151,7 @@ TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepa
 
 TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
     TStartOperationRequest startOperationRequest;
-    startOperationRequest.TaskType = static_cast<ETaskType>(protoStartOperationRequest.GetTaskType());
+    startOperationRequest.OperationType = static_cast<EOperationType>(protoStartOperationRequest.GetOperationType());
     startOperationRequest.OperationParams = OperationParamsFromProto(protoStartOperationRequest.GetOperationParams());
     startOperationRequest.SessionId = protoStartOperationRequest.GetSessionId();
     if (protoStartOperationRequest.HasIdempotencyKey()) {

@@ -12,23 +12,23 @@
 
 namespace NYql::NFmr {
 
-IFmrStageOperationManager::TPtr MakeStageOperationManager(ETaskType taskType) {
-    switch (taskType) {
-        case ETaskType::Upload:
+IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operationType) {
+    switch (operationType) {
+        case EOperationType::Upload:
             return MakeUploadStageOperationManager();
-        case ETaskType::Download:
+        case EOperationType::Download:
             return MakeDownloadStageOperationManager();
-        case ETaskType::Merge:
+        case EOperationType::Merge:
             return MakeMergeStageOperationManager();
-        case ETaskType::SortedMerge:
+        case EOperationType::SortedMerge:
             return MakeSortedMergeStageOperationManager();
-        case ETaskType::Map:
+        case EOperationType::Map:
             return MakeMapStageOperationManager();
-        case ETaskType::SortedUpload:
+        case EOperationType::SortedUpload:
             return MakeSortedUploadStageOperationManager();
         default:
-            YQL_ENSURE(false, "Unknown task type for stage operation manager");
+            ythrow yexception() << "Unknown operation type for stage operation manager";
     }
 }
 
-}
+} // namespace NYql::NFmr

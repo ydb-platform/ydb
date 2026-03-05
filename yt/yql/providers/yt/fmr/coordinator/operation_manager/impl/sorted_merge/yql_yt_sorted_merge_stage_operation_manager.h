@@ -5,12 +5,6 @@
 
 namespace NYql::NFmr {
 
-class TSortedMergeStageOperationManager: public TFmrStageOperationManagerBase {
-protected:
-    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) override;
-    TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) override;
-};
-
 IFmrStageOperationManager::TPtr MakeSortedMergeStageOperationManager();
 
-}
+} // namespace NYql::NFmr

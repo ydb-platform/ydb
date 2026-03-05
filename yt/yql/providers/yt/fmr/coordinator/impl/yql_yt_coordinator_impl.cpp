@@ -84,7 +84,7 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        auto stageManager = MakeStageOperationManager(request.TaskType);
+        auto stageManager = MakeStageOperationManager(request.OperationType);
 
         Operations_[operationId] = TOperationInfo{
             .TaskIds = {},
@@ -476,7 +476,7 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        auto stageManager = MakeStageOperationManager(request.TaskType);
+        auto stageManager = MakeStageOperationManager(request.OperationType);
 
         auto prepareResult = stageManager->PrepareOperationStage(TPrepareOperationStageContext{
             .OperationParams = request.OperationParams,
@@ -852,7 +852,6 @@ private:
         }
         return tableStats;
     }
-
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 

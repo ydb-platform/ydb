@@ -7,53 +7,58 @@
 
 namespace NYql::NFmr {
 
-TPartitionResult TMergeStageOperationManager::PartitionOperationImpl(const TPrepareOperationStageContext& context) {
-    const auto& operationParams = std::get<TMergeOperationParams>(context.OperationParams);
-    const auto& fmrOperationSpec = context.FmrOperationSpec;
-    const auto& clusterConnections = context.ClusterConnections;
-    const auto& partIdsForTables = context.PartIdsForTables;
-    const auto& partIdStats = context.PartIdStats;
-    auto ytCoordinatorService = context.YtCoordinatorService;
+namespace {
 
-    auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
-    auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
-    auto fmrPartitioner = TFmrPartitioner(partIdsForTables, partIdStats, fmrPartitionerSettings);
+class TMergeStageOperationManager: public TFmrStageOperationManagerBase {
+public:
+    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
+        const auto& operationParams = std::get<TMergeOperationParams>(context.OperationParams);
+        const auto& fmrOperationSpec = context.FmrOperationSpec;
+        const auto& clusterConnections = context.ClusterConnections;
+        const auto& partIdsForTables = context.PartIdsForTables;
+        const auto& partIdStats = context.PartIdStats;
+        auto ytCoordinatorService = context.YtCoordinatorService;
 
-    std::vector<TYtTableRef> ytInputTables;
-    std::vector<TFmrTableRef> fmrInputTables;
-    for (auto& table: operationParams.Input) {
-        if (auto ytTable = std::get_if<TYtTableRef>(&table)) {
-            ytInputTables.emplace_back(*ytTable);
-        } else {
-            fmrInputTables.emplace_back(std::get<TFmrTableRef>(table));
+        auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+        auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
+        auto fmrPartitioner = TFmrPartitioner(partIdsForTables, partIdStats, fmrPartitionerSettings);
+
+        std::vector<TYtTableRef> ytInputTables;
+        std::vector<TFmrTableRef> fmrInputTables;
+        for (auto& table: operationParams.Input) {
+            if (auto ytTable = std::get_if<TYtTableRef>(&table)) {
+                ytInputTables.emplace_back(*ytTable);
+            } else {
+                fmrInputTables.emplace_back(std::get<TFmrTableRef>(table));
+            }
         }
+
+        return PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
     }
 
-    return PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
-}
+    TGenerateTasksResult GenerateTasksImpl (const TGenerateTasksContext& context) final {
+        const auto& mergeOperationParams = std::get<TMergeOperationParams>(context.OperationParams);
 
-TGenerateTasksResult TMergeStageOperationManager::GenerateTasksImpl(
-    const TGenerateTasksContext& context
-) {
-    const auto& mergeOperationParams = std::get<TMergeOperationParams>(context.OperationParams);
+        std::vector<TGeneratedTaskInfo> generatedTasks;
+        for (auto& task: context.PartitionResult.TaskInputs) {
+            TMergeTaskParams mergeTaskParams;
+            mergeTaskParams.Input = task;
+            mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
 
-    std::vector<TGeneratedTaskInfo> generatedTasks;
-    for (auto& task: context.PartitionResult.TaskInputs) {
-        TMergeTaskParams mergeTaskParams;
-        mergeTaskParams.Input = task;
-        mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
+            generatedTasks.push_back(TGeneratedTaskInfo{
+                .TaskType = ETaskType::Merge,
+                .TaskParams = std::move(mergeTaskParams)
+            });
+        }
 
-        generatedTasks.push_back(TGeneratedTaskInfo{
-            .TaskType = ETaskType::Merge,
-            .TaskParams = std::move(mergeTaskParams)
-        });
+        return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
+};
 
-    return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
-}
+} // namespace
 
 IFmrStageOperationManager::TPtr MakeMergeStageOperationManager() {
     return MakeIntrusive<TMergeStageOperationManager>();
 }
 
-}
+} // namespace NYql::NFmr

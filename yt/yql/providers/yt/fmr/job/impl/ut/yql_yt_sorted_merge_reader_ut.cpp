@@ -45,44 +45,6 @@ Y_UNIT_TEST_SUITE(TSortedMergeReaderTests) {
 
         UNIT_ASSERT_NO_DIFF(mergedText, expected);
     }
-    Y_UNIT_TEST(MergeStableSortByInputOrder) {
-        auto tds = MakeLocalTableDataService();
-        TVector<TString> keyColumns = {"k"};
-        TVector<TString> neededColumns = {"k", "v"};
-        TVector<TMergeTestTable> rawTestTables = {
-            {
-                .SourceType = EMergeReaderSourceType::YT,
-                .KeyColumns = keyColumns,
-                .NeededColumns = neededColumns,
-                .RawTableBody =
-                    "{\"k\"=1;\"v\"=\"1\"};\n"
-            },
-            {
-                .SourceType = EMergeReaderSourceType::TableDataService,
-                .KeyColumns = keyColumns,
-                .NeededColumns = neededColumns,
-                .RawTableBody =
-                    "{\"k\"=1;\"v\"=\"2\"};\n"
-            },
-            {
-                .SourceType = EMergeReaderSourceType::YT,
-                .KeyColumns = keyColumns,
-                .NeededColumns = neededColumns,
-                .RawTableBody =
-                    "{\"k\"=1;\"v\"=\"3\"};\n"
-            }
-        };
-
-        TVector<IBlockIterator::TPtr> inputs = MakeTestBlockIterators(rawTestTables, tds);
-        const TString mergedText = GetMergeResult(inputs);
-
-        const TString expected =
-            "{\"k\"=1;\"v\"=\"1\"};\n"
-            "{\"k\"=1;\"v\"=\"2\"};\n"
-            "{\"k\"=1;\"v\"=\"3\"};\n";
-
-        UNIT_ASSERT_NO_DIFF(mergedText, expected);
-    }
 
     Y_UNIT_TEST(MergeFromTdsDifferentSourceOrder) {
         auto tds = MakeLocalTableDataService();

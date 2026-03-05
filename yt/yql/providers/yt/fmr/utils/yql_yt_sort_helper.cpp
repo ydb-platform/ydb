@@ -22,7 +22,7 @@ TSortedRowOrdering TSortHelper::GetSortedRowOrdering() const {
         }
     }
 
-    std::stable_sort(rowPositions.begin(), rowPositions.end(),
+    std::sort(rowPositions.begin(), rowPositions.end(),
         [this](const TRowPosition& lhs, const TRowPosition& rhs) {
             auto& lhsBlock = Blocks_[lhs.BlockIndex];
             auto& lhsRow = lhsBlock.Rows[lhs.RowIndex];

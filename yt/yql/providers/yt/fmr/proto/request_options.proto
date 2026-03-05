@@ -20,6 +20,17 @@ enum ETaskStatus {
     TASK_COMPLETED = 4;
 }
 
+enum EOperationType {
+    OPERATION_TYPE_UNKNOWN = 0;
+    OPERATION_TYPE_DOWNLOAD = 1;
+    OPERATION_TYPE_UPLOAD = 2;
+    OPERATION_TYPE_MERGE = 3;
+    OPERATION_TYPE_MAP = 4;
+    OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
+    OPERATION_TYPE_SORTED_MERGE = 6;
+    OPERATION_TYPE_SORT = 7;
+}
+
 enum ETaskType {
     TASK_TYPE_UNKNOWN = 0;
     TASK_TYPE_DOWNLOAD = 1;
@@ -28,6 +39,7 @@ enum ETaskType {
     TASK_TYPE_MAP = 4;
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
     TASK_TYPE_SORTED_MERGE = 6;
+    TASK_TYPE_LOCAL_SORT = 7;
 }
 
 enum EFmrComponent {
@@ -232,6 +244,16 @@ message TMapTaskParams {
     bool IsOrdered = 4;
 }
 
+message TSortOperationParams {
+    repeated TOperationTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TLocalSortTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
 message TOperationParams {
     oneof TOperationParams {
         TUploadOperationParams UploadOperationParams = 1;
@@ -240,6 +262,7 @@ message TOperationParams {
         TMapOperationParams MapOperationParams = 4;
         TSortedUploadOperationParams SortedUploadOperationParams = 5;
         TSortedMergeOperationParams SortedMergeOperationParams = 6;
+        TSortOperationParams SortOperationParams = 7;
     }
 }
 
@@ -251,6 +274,7 @@ message TTaskParams {
         TMapTaskParams MapTaskParams = 4;
         TSortedUploadTaskParams SortedUploadTaskParams = 5;
         TSortedMergeTaskParams SortedMergeTaskParams = 6;
+        TLocalSortTaskParams LocalSortTaskParams = 7;
     }
 }
 

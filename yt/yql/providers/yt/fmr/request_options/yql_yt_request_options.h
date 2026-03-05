@@ -32,6 +32,17 @@ enum class ETaskStatus {
     Completed
 };
 
+enum EOperationType {
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6,
+    Sort = 7
+};
+
 enum class ETaskType {
     Unknown = 0,
     Download = 1,
@@ -407,13 +418,18 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
+struct TSortOperationParams {
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
 struct TLocalSortTaskParams {
     TTaskTableInputRef Input;
     TFmrTableOutputRef Output;
 };
 
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams>;
 
 using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams>;
 

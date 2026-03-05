@@ -20,7 +20,6 @@ private:
 
 protected:
     struct TSourceState {
-        ui32 SourceId = 0;
         std::reference_wrapper<const std::vector<ESortOrder>> SortOrders;
         IBlockIterator::TPtr BlockIterator;
         TIndexedBlock Block;

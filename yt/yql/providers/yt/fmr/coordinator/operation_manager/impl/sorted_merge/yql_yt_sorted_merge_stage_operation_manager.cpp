@@ -7,53 +7,58 @@
 
 namespace NYql::NFmr {
 
-TPartitionResult TSortedMergeStageOperationManager::PartitionOperationImpl(const TPrepareOperationStageContext& context) {
-    const auto& operationParams = std::get<TSortedMergeOperationParams>(context.OperationParams);
-    const auto& fmrOperationSpec = context.FmrOperationSpec;
-    const auto& partIdsForTables = context.PartIdsForTables;
-    const auto& partIdStats = context.PartIdStats;
+namespace {
 
-    auto sortedPartitionerSettings = GetSortedPartitionerSettings(fmrOperationSpec);
+class TSortedMergeStageOperationManager: public TFmrStageOperationManagerBase {
+public:
+    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
+        const auto& operationParams = std::get<TSortedMergeOperationParams>(context.OperationParams);
+        const auto& fmrOperationSpec = context.FmrOperationSpec;
+        const auto& partIdsForTables = context.PartIdsForTables;
+        const auto& partIdStats = context.PartIdStats;
 
-    TSortingColumns sortingColumns;
-    sortingColumns.Columns = operationParams.Output.SortColumns;
-    sortingColumns.SortOrders = operationParams.Output.SortOrder;
+        auto sortedPartitionerSettings = GetSortedPartitionerSettings(fmrOperationSpec);
 
-    auto sortedPartitioner = TSortedPartitioner(partIdsForTables, partIdStats, sortingColumns, sortedPartitionerSettings);
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = operationParams.Output.SortColumns;
+        sortingColumns.SortOrders = operationParams.Output.SortOrder;
 
-    std::vector<TOperationTableRef> inputTables = operationParams.Input;
-    return PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
-}
+        auto sortedPartitioner = TSortedPartitioner(partIdsForTables, partIdStats, sortingColumns, sortedPartitionerSettings);
 
-TGenerateTasksResult TSortedMergeStageOperationManager::GenerateTasksImpl(
-    const TGenerateTasksContext& context
-) {
-    const auto& sortedMergeOperationParams = std::get<TSortedMergeOperationParams>(context.OperationParams);
-
-    std::vector<TGeneratedTaskInfo> generatedTasks;
-    for (auto& task: context.PartitionResult.TaskInputs) {
-        TSortedMergeTaskParams sortedMergeTaskParams;
-        sortedMergeTaskParams.Input = task;
-        sortedMergeTaskParams.Output = TFmrTableOutputRef(sortedMergeOperationParams.Output);
-
-        if (sortedMergeTaskParams.Output.PartId.empty()) {
-            TString newPartId = context.GenerateId();
-            TString tableId = sortedMergeTaskParams.Output.TableId;
-            sortedMergeTaskParams.Output.PartId = newPartId;
-            context.PartIdsForTables[tableId].emplace_back(newPartId);
-        }
-
-        generatedTasks.push_back(TGeneratedTaskInfo{
-            .TaskType = ETaskType::SortedMerge,
-            .TaskParams = std::move(sortedMergeTaskParams)
-        });
+        std::vector<TOperationTableRef> inputTables = operationParams.Input;
+        return PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
     }
 
-    return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
-}
+    TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
+        const auto& sortedMergeOperationParams = std::get<TSortedMergeOperationParams>(context.OperationParams);
+
+        std::vector<TGeneratedTaskInfo> generatedTasks;
+        for (auto& task: context.PartitionResult.TaskInputs) {
+            TSortedMergeTaskParams sortedMergeTaskParams;
+            sortedMergeTaskParams.Input = task;
+            sortedMergeTaskParams.Output = TFmrTableOutputRef(sortedMergeOperationParams.Output);
+
+            if (sortedMergeTaskParams.Output.PartId.empty()) {
+                TString newPartId = context.GenerateId();
+                TString tableId = sortedMergeTaskParams.Output.TableId;
+                sortedMergeTaskParams.Output.PartId = newPartId;
+                context.PartIdsForTables[tableId].emplace_back(newPartId);
+            }
+
+            generatedTasks.push_back(TGeneratedTaskInfo{
+                .TaskType = ETaskType::SortedMerge,
+                .TaskParams = std::move(sortedMergeTaskParams)
+            });
+        }
+
+        return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
+    }
+};
+
+} // namespace
 
 IFmrStageOperationManager::TPtr MakeSortedMergeStageOperationManager() {
     return MakeIntrusive<TSortedMergeStageOperationManager>();
 }
 
-}
+} // namespace NYql::NFmr

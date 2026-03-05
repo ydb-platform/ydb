@@ -73,4 +73,4 @@ public:
     virtual TAdvanceStageResult AdvanceToNextStage(const TAdvanceStageContext& context) = 0;
 };
 
-}
+} // namespace NYql::NFmr

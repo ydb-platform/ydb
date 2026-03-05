@@ -18,7 +18,7 @@ message THeartbeatResponse {
 }
 
 message TPrepareOperationRequest {
-    ETaskType TaskType = 1;
+    EOperationType OperationType = 1;
     TOperationParams OperationParams = 2;
     map<string, TClusterConnection> ClusterConnections = 3;
     optional string FmrOperationSpec = 4;
@@ -31,7 +31,7 @@ message TPrepareOperationResponse {
 }
 
 message TStartOperationRequest {
-    ETaskType TaskType = 1;
+    EOperationType OperationType = 1;
     TOperationParams OperationParams = 2;
     string SessionId = 3;
     optional string IdempotencyKey = 4;

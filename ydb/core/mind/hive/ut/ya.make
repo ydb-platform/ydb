@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/mind/hive)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/getopt

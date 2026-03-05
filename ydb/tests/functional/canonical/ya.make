@@ -7,9 +7,11 @@ TEST_SRCS(
 )
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
+    REQUIREMENTS(cpu:4)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

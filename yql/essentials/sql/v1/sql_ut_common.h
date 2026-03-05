@@ -6077,6 +6077,20 @@ Y_UNIT_TEST(GroupingSetByExprWithoutAlias2) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:1: Error: Unnamed expressions are not supported in GROUPING SETS. Please use '<expr> AS <name>'.\n");
 }
 
+Y_UNIT_TEST(GroupingSetSmartParenthesisContext) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        SELECT * FROM plato.x GROUP BY
+            b,
+            c,
+            CASE
+                WHEN ListHas(a, ('a',)) THEN [(a, 'a', 'b', )]
+                ELSE a
+            END AS a
+        ;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(CubeByExprWithoutAlias) {
     NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE (key, subkey / key);");
     UNIT_ASSERT(!res.IsOk());

@@ -493,6 +493,7 @@ protected:
 
 protected:
     explicit TTranslation(TContext& ctx);
+    TTranslation(const TTranslation&) = default;
 
 public:
     TContext& Context();

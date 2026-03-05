@@ -19,6 +19,11 @@ public:
     {
     }
 
+    explicit TSqlSelect(const TSqlTranslation& that)
+        : TSqlTranslation(that)
+    {
+    }
+
     TSourcePtr Build(const TRule_select_stmt& node, TPosition& selectPos);
     TSourcePtr Build(const TRule_select_unparenthesized_stmt& node, TPosition& selectPos);
     TSourcePtr BuildSubSelect(const TRule_select_kind_partial& node);

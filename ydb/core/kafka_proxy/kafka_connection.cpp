@@ -721,7 +721,38 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure();
+            std::optional<TInet64SecureStreamSocket::ServerMtlsCreds> serverCreds = std::nullopt;
+            if (NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+                auto readFile = [](std::optional<TString> path) {
+                    if (path) {
+                        try {
+                            return TFileInput(*path).ReadAll();
+                        } catch (const std::exception& ex) {
+                            return TString();
+                        }
+                    }
+                    return TString();
+                };
+
+                TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
+                TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
+                TString kafkaCAFilePath = AppData()->KafkaProxyConfig.GetCA();
+
+                TString serverCert = readFile(kafkaServerCertPath);
+                if (!serverCert) {
+                    KAFKA_LOG_ERROR("Incorrect server certificate file path or empty contents.");
+                    PassAway();
+                    return false;
+                }
+                TString serverKey = readFile(kafkaServerPrivateKeyPath);
+                if (!serverKey) {
+                    KAFKA_LOG_ERROR("Incorrect server key file path or empty contents.");
+                    PassAway();
+                    return false;
+                }
+                serverCreds = TInet64SecureStreamSocket::ServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
+            }
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, serverCreds);
             if (res < 0) {
                 KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
                 PassAway();

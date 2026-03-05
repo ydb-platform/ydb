@@ -55,17 +55,19 @@ public:
         Socket->RequestPoller(pollerToken);
     }
 
-    int UpgradeToSecure() {
-        std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket));
+    int UpgradeToSecure(NKikimrServices::EServiceKikimr service,
+                        const std::optional<TInet64SecureStreamSocket::ServerMtlsCreds>& serverCreds = std::nullopt) {
+        std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket), service, serverCreds);
         int res = socket->SecureAccept(Endpoint->SecureContext.get());
         TGuard lock(Lock);
         Socket.reset(socket.release());
         return res;
     }
 
-    int TryUpgradeToSecure() {
+    int TryUpgradeToSecure(NKikimrServices::EServiceKikimr service,
+                          const std::optional<TInet64SecureStreamSocket::ServerMtlsCreds>& serverCreds = std::nullopt) {
         for (;;) {
-            int res = UpgradeToSecure();
+            int res = UpgradeToSecure(service, serverCreds);
             if (res >= 0) {
                 return 0;
             } else if (-res == EINTR) {

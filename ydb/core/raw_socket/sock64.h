@@ -143,73 +143,84 @@ protected:
 };
 
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
+public:
+    struct ServerMtlsCreds {
+        TString ServerCert;
+        TString ServerPrivateKey;
+        TString CAFilePath;
+    };
+
+    TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
+        : TInet64StreamSocket(socketSettings)
+    {}
+
+    TInet64SecureStreamSocket(TInet64StreamSocket&& socket, NKikimrServices::EServiceKikimr service,
+                const std::optional<ServerMtlsCreds>& serverCreds = std::nullopt)
+        : TInet64StreamSocket(std::move(socket))
+    {
+        Service = service;
+        if (serverCreds) {
+            ServerCreds = *serverCreds;
+            UseMtlsAuth = true;
+        }
+    }
+
+private:
     template<typename T>
     using TSslHolder = TSslLayer<TStreamSocket>::TSslHolder<T>;
 
     TSslHolder<BIO> Bio;
     TSslHolder<SSL> Ssl;
+    ServerMtlsCreds ServerCreds;
+    bool UseMtlsAuth = false;
+    NKikimrServices::EServiceKikimr Service;
 
 public:
-    TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
-        : TInet64StreamSocket(socketSettings)
-    {}
-
-    TInet64SecureStreamSocket(TInet64StreamSocket&& socket)
-        : TInet64StreamSocket(std::move(socket))
-    {}
-
     bool InitServerSsl(SSL_CTX* ctx) {
         Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
 
-        if (AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+        if (UseMtlsAuth) {
             SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
 
-            auto readFile = [](std::optional<TString> path) {
-                if (path) {
-                    try {
-                        return TFileInput(*path).ReadAll();
-                    } catch (const std::exception& ex) {
-                        return TString();
-                    }
-                }
-                return TString();
-            };
-            TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
-            TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
-            TString kafkaCAFilePath = AppData()->KafkaProxyConfig.GetCA();
-
-            TSslHolder<X509> serverCert = GetServerCert(kafkaServerCertPath, readFile);
+            TSslHolder<X509> serverCert = GetServerCert(ServerCreds.ServerCert);
             if (!serverCert) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server certificate, it might be incorrect.");
                 return false;
             }
             int retServerCert = SSL_CTX_use_certificate(ctx, serverCert.get());
             if (retServerCert != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
             }
 
-            TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(kafkaServerPrivateKeyPath, readFile);
+            TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(ServerCreds.ServerPrivateKey);
             if (!privateKey) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
             }
             int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, privateKey.get());
             if (retPrivateKey != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
                 return false;
             }
 
-            int retCA = SSL_CTX_load_verify_locations(ctx, kafkaCAFilePath.data(), nullptr);
+            int retCA = SSL_CTX_load_verify_locations(ctx, ServerCreds.CAFilePath.data(), nullptr);
             if (retCA != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
                 return false;
             }
 
             SSL_CTX_set_verify_depth(ctx, 9);
             if (SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256") != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load cipher list");
                 return false;
             }
 
             const char *session_context = "YdbMtlsContext";
             if (SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context)) != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add ssl session id to ssl context.");
                 return false;
             }
         } else {
@@ -224,8 +235,7 @@ public:
         return false;
     }
 
-    TSslHolder<X509> GetServerCert(const TString& certPath, TString (*readFileFunc)(std::optional<TString>)) {
-        TString certificate = readFileFunc(certPath);
+    TSslHolder<X509> GetServerCert(const TString& certificate) {
         TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
         if (bio) {
             TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
@@ -234,8 +244,7 @@ public:
         return TSslHolder<X509>();
     }
 
-     TSslHolder<EVP_PKEY> GetServerPrivateKey(const TString& keyPath, TString (*readFileFunc)(std::optional<TString>)) {
-        TString privateKey = readFileFunc(keyPath);
+     TSslHolder<EVP_PKEY> GetServerPrivateKey(const TString& privateKey) {
         TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
         if (bio) {
             TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));

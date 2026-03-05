@@ -19,7 +19,8 @@ class TDqProgramBuilder : public TProgramBuilder {
     TRuntimeNode DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns,
                                  const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& leftRenames,
-                                 const TArrayRef<const ui32>& rightRenames, TType* returnType);
+                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                 bool leftIsBuild = false, ui32 prefetchProbePages = 0);
 
     TRuntimeNode DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
                                   const TArrayRef<const ui32>& leftKeyColumns,

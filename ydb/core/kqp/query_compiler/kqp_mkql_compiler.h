@@ -17,18 +17,22 @@ public:
     TKqlCompileContext(const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData>& tablesData,
         const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
+        NYql::TKikimrConfiguration::TPtr config = nullptr)
         : Cluster_(cluster)
         , TablesData_(tablesData)
-        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry)) {}
+        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry))
+        , Config_(config) {}
 
     NMiniKQL::TKqpProgramBuilder& PgmBuilder() const { return *PgmBuilder_; }
     const NYql::TKikimrTableMetadata& GetTableMeta(const NYql::NNodes::TKqpTable& table) const;
+    NYql::TKikimrConfiguration::TPtr Config() const { return Config_; }
 
 private:
     TString Cluster_;
     TIntrusivePtr<NYql::TKikimrTablesData> TablesData_;
     THolder<NMiniKQL::TKqpProgramBuilder> PgmBuilder_;
+    NYql::TKikimrConfiguration::TPtr Config_;
 };
 
 TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, NYql::TTypeAnnotationContext& typesCtx);

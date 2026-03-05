@@ -142,7 +142,7 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
 }
 
 THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
-                                                    bool withSpiller) {
+                                                    bool withSpiller, bool leftIsBuild) {
 
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
@@ -311,7 +311,8 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), joinKind,
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
                                         renames.Left, renames.Right,
-                                        pb.NewStreamType(pb.NewMultiType(blockResultTypes)));
+                                        pb.NewStreamType(pb.NewMultiType(blockResultTypes)),
+                                        leftIsBuild);
         }
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(

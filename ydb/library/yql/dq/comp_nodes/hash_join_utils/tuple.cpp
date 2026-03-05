@@ -220,6 +220,10 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 #ifdef USE_X86_SIMD
+    if (NX86::HaveAVX512BW() && NX86::HaveAVX512VL() && NX86::HaveAVX512VBMI())
+        return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX512Traits>>(
+            columns);
+
     if (NX86::HaveAVX2())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
@@ -1553,6 +1557,11 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 }
 
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX512Traits>::Pack(
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -1564,6 +1573,11 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Pack(
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX512Traits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
@@ -1575,6 +1589,12 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Unpack(
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX512Traits>::BucketPack(
+    const ui8 **columns, const ui8 **isValidBitmask,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    ui32 count, ui32 bucketsLogNum) const;
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,

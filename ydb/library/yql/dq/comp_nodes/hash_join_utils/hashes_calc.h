@@ -54,6 +54,9 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
 
 #ifdef USE_X86_SIMD
 template
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi")))
+ui32 CalculateCRC32<NSimd::TSimdAVX512Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
+template
 __attribute__((target("avx2")))
 ui32 CalculateCRC32<NSimd::TSimdAVX2Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
 template

@@ -2,7 +2,23 @@
 
 #include "events.h"
 
+#include <ydb/mvp/meta/mvp.h>
+
 #include <memory>
+
+namespace NMVP::NSupportLinks {
+
+struct TLinkResolveContext {
+    size_t Place = 0;
+    TString SourceName;
+    TSupportLinkEntryConfig LinkConfig;
+    THashMap<TString, TString> ClusterColumns;
+    TVector<std::pair<TString, TString>> QueryParams;
+    NActors::TActorId Parent;
+    NActors::TActorId HttpProxyId;
+};
+
+} // namespace NMVP::NSupportLinks
 
 namespace NMVP {
 

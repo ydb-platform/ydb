@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include <ydb/mvp/meta/mvp.h>
 
 #include <util/generic/yexception.h>
 

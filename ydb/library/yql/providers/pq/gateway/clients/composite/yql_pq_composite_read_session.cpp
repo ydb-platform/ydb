@@ -639,6 +639,7 @@ public:
         RefreshReadyPartitions();
         if (!ReadyPartitions.empty()) {
             // There are already ready events
+            SRC_LOG_AS_T("WaitEvent, ready partitions #" << ReadyPartitions.size());
             return NThreading::MakeFuture();
         }
 
@@ -654,6 +655,7 @@ public:
 
         waitPendingPartitions = PendingPartitions.size();
         waitIdlePartitions = IdlePartitions.size();
+        SRC_LOG_AS_T("WaitEvent, suspended partitions #" << SuspendedPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
 
         if (!SuspendedPartitions.empty()) {
             // Wait for advance time, when some partition will be unsuspended
@@ -718,6 +720,7 @@ public:
         auto maybeEvent = ReadEventFromReadyPartitions(settings);
 
         RefreshReadyPartitions();
+        SRC_LOG_AS_T("GetEvent, suspended partitions #" << SuspendedPartitions.size() << ", ready partitions #" << ReadyPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
 
         if (!maybeEvent) {
             maybeEvent = ReadEventFromReadyPartitions(settings);
@@ -759,6 +762,8 @@ public:
     // ICompositeTopicReadSessionControl
 
     void AdvancePartitionTime(ui64 partitionId, TInstant lastEventTime) final {
+        SRC_LOG_AS_T("AdvancePartitionTime, partitionId: " << partitionId << ", lastEventTime: " << lastEventTime);
+
         const auto it = PartitionSessions.find(partitionId);
         Y_VALIDATE(it != PartitionSessions.end(), "Partition " << partitionId << " not found");
         const TPartitionKey key(it->second);
@@ -862,7 +867,7 @@ private:
             SuspendedPartitions.erase(SuspendedPartitions.begin());
         }
 
-        SRC_LOG_AS_T("Unsuspended partitions count: " << unsuspendedPartitionsCount);
+        SRC_LOG_AS_T("RefreshPartitionsState, unsuspended partitions count: " << unsuspendedPartitionsCount << ", suspended partitions #" << SuspendedPartitions.size() << ", ready partitions #" << ReadyPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
 
         // Suspend some partitions
         {

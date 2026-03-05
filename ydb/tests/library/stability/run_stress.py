@@ -362,7 +362,7 @@ class StressRunExecutor:
             if self.event_process_mode is not None:
                 event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
             cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
-
+            run_config['run_command'] = cmd
             run_timeout = (
                 run_config["duration"] + 600
             )  # Add buffer for completion

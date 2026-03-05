@@ -78,10 +78,8 @@ namespace NKikimr::NDDisk {
         std::atomic<ui32> InFlightCount{0};
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
-        struct TDirectIoOpBase;
-        struct TSingleDirectIoOp;
-        struct TPersistentBufferPartIoOp;
-        struct TDDiskIoOp;
+        class TDirectIoOpBase;
+        class TPersistentBufferPartIoOp;
 #endif
 
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
@@ -419,10 +417,9 @@ namespace NKikimr::NDDisk {
         void Handle(TEvRead::TPtr ev);
 
 #if defined(__linux__)
-        void DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector, const TWriteInstruction& instr,
-            TChunkRef& chunkRef, NWilson::TSpan span);
-        void DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector, TChunkRef& chunkRef,
-            NWilson::TSpan span);
+        // note: releases the op on success (returns true)
+        bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+
         void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
 #endif
 

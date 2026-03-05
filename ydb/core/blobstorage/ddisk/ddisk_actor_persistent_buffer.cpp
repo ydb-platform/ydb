@@ -339,34 +339,20 @@ namespace NKikimr::NDDisk {
             .Data = std::move(payload),
         };
 
+        // TODO: make uring to call flush just once
         for(auto& [chunkIdx, offset, data] : parts) {
             const ui64 cookie = NextCookie++;
             inflightRecord.OperationCookies.insert(cookie);
 #if defined(__linux__)
             if (UringRouter) {
-                if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
-                    inflightRecord.Span.End();
-                    Counters.Interface.WritePersistentBuffer.Reply(false);
-                    SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "direct I/O inflight limit exceeded"));
-                    PersistentBufferDiskOperationInflight.erase(opCookie);
-                    return;
-                }
-                auto op = std::make_unique<TPersistentBufferPartIoOp>(InFlightCount, Counters);
-                op->Cookie = opCookie;
-                op->PartCookie = cookie;
-                op->DDiskId = SelfId();
-                op->IsRead = false;
-                op->Size = (ui32)data.size();
-                op->SetData(std::move(data));
-                op->DiskOffset = DiskFormat->Offset(chunkIdx, 0, offset);
+                std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+                auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
+                partOp->SetCookie(opCookie);
+                partOp->SetPartCookie(cookie);
+                partOp->PrepareWrite(std::move(data), DiskFormat->Offset(chunkIdx, 0, offset));
 
-                const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
+                const bool submitted = DirectUringOp(op);
                 if (submitted) {
-                    op.release();
-                    // with SQ polling – no syscall
-                    // TODO: without polling do we need batching?
-                    UringRouter->Flush();
                 } else {
                     // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
                     inflightRecord.Span.End();
@@ -664,35 +650,21 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
             if (UringRouter) {
-                if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
-                    inflightRecord->second.Span.End();
-                    Counters.Interface.ErasePersistentBuffer.Reply(false);
-                    SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "direct I/O inflight limit exceeded"));
-                    PersistentBufferDiskOperationInflight.erase(batchEraseCookie);
-                    return;
-                }
-                auto op = std::make_unique<TPersistentBufferPartIoOp>(InFlightCount, Counters);
-                op->Cookie = batchEraseCookie;
-                op->PartCookie = cookie;
-                op->DDiskId = SelfId();
-                op->IsRead = false;
-                op->IsErase = true;
-                op->Size = SectorSize;
-                op->SetData(TRope(zeroingData));
-                op->DiskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, pr.Sectors[0].SectorIdx * SectorSize);
+                auto offset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, pr.Sectors[0].SectorIdx * SectorSize);
+                std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+                auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
+                partOp->SetCookie(batchEraseCookie);
+                partOp->SetPartCookie(cookie);
+                partOp->SetIsErase(true);
+                partOp->PrepareWrite(TRope(zeroingData), offset);
 
                 buffer.Records.erase(jt);
                 if (buffer.Records.empty()) {
                     PersistentBuffers.erase(it);
                 }
 
-                const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
+                const bool submitted = DirectUringOp(op);
                 if (submitted) {
-                    op.release();
-                    // with SQ polling – no syscall
-                    // TODO: without polling do we need batching?
-                    UringRouter->Flush();
                 } else {
                     // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
                     inflightRecord->second.Span.End();
@@ -809,35 +781,21 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         if (UringRouter) {
             inflightRecord->second.OperationCookies.insert(cookie);
-            if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
-                inflightRecord->second.Span.End();
-                Counters.Interface.ErasePersistentBuffer.Reply(false);
-                SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "direct I/O inflight limit exceeded"));
-                PersistentBufferDiskOperationInflight.erase(eraseCookie);
-                return;
-            }
-            auto op = std::make_unique<TPersistentBufferPartIoOp>(InFlightCount, Counters);
-            op->Cookie = eraseCookie;
-            op->PartCookie = cookie;
-            op->DDiskId = SelfId();
-            op->IsRead = false;
-            op->IsErase = true;
-            op->Size = SectorSize;
-            op->SetData(TRope(zeroingData));
-            op->DiskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, pr.Sectors[0].SectorIdx * SectorSize);
+            auto offset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, pr.Sectors[0].SectorIdx * SectorSize);
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+            auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
+            partOp->SetCookie(eraseCookie);
+            partOp->SetPartCookie(cookie);
+            partOp->SetIsErase(true);
+            partOp->PrepareWrite(TRope(zeroingData), offset);
 
             buffer.Records.erase(jt);
             if (buffer.Records.empty()) {
                 PersistentBuffers.erase(it);
             }
 
-            const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
+            const bool submitted = DirectUringOp(op);
             if (submitted) {
-                op.release();
-                // with SQ polling – no syscall
-                // TODO: without polling do we need batching?
-                UringRouter->Flush();
             } else {
                 // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
                 inflightRecord->second.Span.End();

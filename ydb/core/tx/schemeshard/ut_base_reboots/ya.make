@@ -5,6 +5,8 @@ IF (NOT WITH_VALGRIND)
 
     SPLIT_FACTOR(60)
 
+    REQUIREMENTS(cpu:2)
+
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

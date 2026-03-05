@@ -80,6 +80,8 @@ public:
     NImport::TListObjectsInS3ExportSettings MakeListObjectsSettings();
 
 private:
+    DEFINE_PARSEABLE_STRUCT(TItemS3, TItemFields, Source, Destination);
+
     template <typename TSettings>
     void FillS3Settings(TSettings& settings);
 
@@ -98,6 +100,9 @@ public:
     virtual int Run(TConfig& config) override;
 
     NImport::TImportFromFsSettings MakeImportSettings();
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemFs, TItemFields, Source, Destination);
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

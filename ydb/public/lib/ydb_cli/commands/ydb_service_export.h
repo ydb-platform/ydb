@@ -92,6 +92,8 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
+    DEFINE_PARSEABLE_STRUCT(TItemS3, TItemFields, Source, Destination);
+
     TString AwsEndpoint;
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     EStorageClass AwsStorageClass = EStorageClass::NOT_SET;
@@ -106,6 +108,9 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemFs, TItemFields, Source, Destination);
 };
 
 }

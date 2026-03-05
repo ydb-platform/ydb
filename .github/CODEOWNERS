@@ -2,9 +2,9 @@
 
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 
-/AGENTS.md @ydb-platform/ci
+/AGENTS.md @ydb-platform/ai-reviewer
 /BUILD.md @ydb-platform/ci
-/CLAUDE.md @ydb-platform/ci
+/CLAUDE.md @ydb-platform/ai-reviewer
 
 /.github/docker @ydb-platform/appteam
 

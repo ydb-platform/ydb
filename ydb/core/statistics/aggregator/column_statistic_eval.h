@@ -17,8 +17,8 @@ class TSimpleColumnStatisticEval {
     std::optional<ui32> MinSeq;
     std::optional<ui32> MaxSeq;
 
-    struct TState;
-    std::unique_ptr<TState> State;
+    struct TIntermediateState;
+    std::unique_ptr<TIntermediateState> IntermediateState;
 
 public:
     using TPtr = std::unique_ptr<TSimpleColumnStatisticEval>;

@@ -12,14 +12,14 @@
 
 namespace NKikimr::NStat {
 
-struct TSimpleColumnStatisticEval::TState {
+struct TSimpleColumnStatisticEval::TIntermediateState {
     using THLLState = NAggFuncs::THybridHyperLogLog<std::allocator>;
 
     THLLState Hll;
     std::optional<NYdb::TValue> Min;
     std::optional<NYdb::TValue> Max;
 
-    TState()
+    TIntermediateState()
         : Hll(THLLState::Create(NAggFuncs::THLLAggFunc::DEFAULT_PRECISION))
     {}
 };
@@ -41,11 +41,11 @@ size_t TSimpleColumnStatisticEval::EstimateSize() const {
 
 void TSimpleColumnStatisticEval::AddAggregations(
         const TString& columnName, TSelectBuilder& builder) {
-    if (builder.Final()) {
-        CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
-    } else {
-        State = std::make_unique<TState>();
+    if (builder.IsIntermediateAggregation()) {
+        IntermediateState = std::make_unique<TIntermediateState>();
         CountDistinctSeq = builder.AddUDAFAggregation(columnName, "HLL");
+    } else {
+        CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
     }
 
     if (IStage2ColumnStatisticEval::AreMinMaxNeeded(Type)) {
@@ -101,7 +101,7 @@ static void UpdateMinmax(std::optional<NYdb::TValue>& left, const NYdb::TValue& 
 };
 
 void TSimpleColumnStatisticEval::Merge(const TVector<NYdb::TValue>& aggColumns) {
-    Y_ENSURE(State);
+    Y_ENSURE(IntermediateState);
 
     {
         NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
@@ -110,15 +110,15 @@ void TSimpleColumnStatisticEval::Merge(const TVector<NYdb::TValue>& aggColumns) 
             return;
         }
         TMemoryInput is(hllVal.GetBytes().data(), hllVal.GetBytes().size());
-        auto hll = TState::THLLState::Load(is);
-        State->Hll.Merge(hll);
+        auto hll = TIntermediateState::THLLState::Load(is);
+        IntermediateState->Hll.Merge(hll);
     }
 
     if (MinSeq) {
-        UpdateMinmax<std::less>(State->Min, aggColumns.at(*MinSeq));
+        UpdateMinmax<std::less>(IntermediateState->Min, aggColumns.at(*MinSeq));
     }
     if (MaxSeq) {
-        UpdateMinmax<std::greater>(State->Max, aggColumns.at(*MaxSeq));
+        UpdateMinmax<std::greater>(IntermediateState->Max, aggColumns.at(*MaxSeq));
     }
 }
 
@@ -132,14 +132,14 @@ NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
         NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
     }
 
-    if (State) {
+    if (IntermediateState) {
         Merge(aggColumns);
-        result.SetCountDistinct(State->Hll.Estimate());
-        if (State->Min) {
-            result.MutableMin()->CopyFrom(State->Min->GetProto());
+        result.SetCountDistinct(IntermediateState->Hll.Estimate());
+        if (IntermediateState->Min) {
+            result.MutableMin()->CopyFrom(IntermediateState->Min->GetProto());
         }
-        if (State->Max) {
-            result.MutableMax()->CopyFrom(State->Max->GetProto());
+        if (IntermediateState->Max) {
+            result.MutableMax()->CopyFrom(IntermediateState->Max->GetProto());
         }
     } else {
         NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
@@ -162,7 +162,7 @@ class TCMSEval : public IStage2ColumnStatisticEval {
     ui64 Depth = DEFAULT_DEPTH;
 
     std::optional<ui32> Seq;
-    std::unique_ptr<TCountMinSketch> State;
+    std::unique_ptr<TCountMinSketch> IntermediateState;
 
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
@@ -198,13 +198,13 @@ public:
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
 
-        if (!builder.Final()) {
-            State = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
+        if (builder.IsIntermediateAggregation()) {
+            IntermediateState = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
         }
     }
 
     void Merge(const TVector<NYdb::TValue>& aggColumns) final {
-        Y_ENSURE(State);
+        Y_ENSURE(IntermediateState);
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
         if (val.IsNull()) {
@@ -212,13 +212,13 @@ public:
         }
         auto cms = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(
             val.GetBytes().data(), val.GetBytes().size()));
-        *State += *cms;
+        *IntermediateState += *cms;
     }
 
     TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
-        if (State) {
+        if (IntermediateState) {
             Merge(aggColumns);
-            auto bytes = State->AsStringBuf();
+            auto bytes = IntermediateState->AsStringBuf();
             return TString(bytes.data(), bytes.size());
         }
 
@@ -252,7 +252,7 @@ class TEWHEval : public IStage2ColumnStatisticEval {
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
-    std::unique_ptr<TEqWidthHistogram> State;
+    std::unique_ptr<TEqWidthHistogram> IntermediateState;
 
 private:
     TEqWidthHistogram CreateEmpty() const {
@@ -389,13 +389,13 @@ public:
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);
 
-        if (!builder.Final()) {
-            State = std::make_unique<TEqWidthHistogram>(CreateEmpty());
+        if (builder.IsIntermediateAggregation()) {
+            IntermediateState = std::make_unique<TEqWidthHistogram>(CreateEmpty());
         }
     }
 
     void Merge(const TVector<NYdb::TValue>& aggColumns) final {
-        Y_ENSURE(State);
+        Y_ENSURE(IntermediateState);
 
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
@@ -405,13 +405,13 @@ public:
 
         const auto& bytes = val.GetBytes();
         TEqWidthHistogram merged(bytes.data(), bytes.size());
-        State->Aggregate(merged);
+        IntermediateState->Aggregate(merged);
     }
 
     TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
-        if (State) {
+        if (IntermediateState) {
             Merge(aggColumns);
-            return State->Serialize();
+            return IntermediateState->Serialize();
         }
 
         NYdb::TValueParser val(aggColumns.at(Seq.value()));

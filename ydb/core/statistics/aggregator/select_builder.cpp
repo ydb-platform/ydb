@@ -41,7 +41,7 @@ ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName, size_t paramCount) {
     return it->second.Id;
 }
 
-TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> shardId) const {
+TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> tabletId) const {
     TStringBuilder res;
     for (const auto& [udaf, factory] : Udaf2Factory) {
         TStringBuilder paramsStr;
@@ -52,7 +52,7 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> shard
             paramsStr << "$p" << i;
         }
 
-        std::string_view finalizeFunc = Final_ ? "Finalize" : "Serialize";
+        std::string_view finalizeFunc = IsIntermediateAggregation_ ? "Serialize" : "Finalize";
 
         res << std::format(R"($f{0} = ({2}) -> {{ return AggregationFactory(
     "UDAF",
@@ -92,8 +92,8 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> shard
     }
 
     res << " FROM " << TEscapedId{table};
-    if (shardId) {
-        res << " WITH TabletId = '" << *shardId << "'";
+    if (tabletId) {
+        res << " WITH TabletId = '" << *tabletId << "'";
     }
     return res;
 }

@@ -186,7 +186,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     // Add tasks to calculate simple column statistics.
     for (size_t i = 0; i < Columns.size(); ++i) {
         const auto& col = Columns[i];
-        PendingTasks.push(TEvalTask{
+        PendingTasks.push(TColumnStatEvalTask{
             .ColumnIdx = i,
             .SimpleStatEval = std::make_unique<TSimpleColumnStatisticEval>(
                 col.Type, col.PgTypeMod),
@@ -249,7 +249,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
         return;
         // TODO: retries, unsubscribe, etc.
     } else {
-        DispatchScanActors();
+        StartColumnStatEvalTasks();
         Become(&TThis::StateScan);
     }
 }
@@ -268,11 +268,11 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
         tablets.insert(tablets.end(), node.GetTabletIds().begin(), node.GetTabletIds().end());
     }
 
-    DispatchScanActors();
+    StartColumnStatEvalTasks();
     Become(&TThis::StateScan);
 }
 
-void TAnalyzeActor::DispatchScanActors() {
+void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(ScanActorsInFlight.empty());
     Y_ENSURE(NodeId2PendingTablets.empty());
     Y_ENSURE(InProgressTasks.empty());
@@ -280,7 +280,7 @@ void TAnalyzeActor::DispatchScanActors() {
 
     NodeId2PendingTablets = NodeId2Tablets;
 
-    SelectBuilder.emplace(/*final=*/!IsColumnTable);
+    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsColumnTable);
     size_t totalSize = 0;
 
     if (!CountSeq && !RowCount) {
@@ -429,7 +429,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
                     continue;
                 }
-                PendingTasks.push(TEvalTask{
+                PendingTasks.push(TColumnStatEvalTask{
                     .ColumnIdx = task.ColumnIdx,
                     .Stage2StatEval = std::move(statEval),
                 });
@@ -452,7 +452,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     if (isFinalResult) {
         PassAway();
     } else {
-        DispatchScanActors();
+        StartColumnStatEvalTasks();
     }
 }
 

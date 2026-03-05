@@ -31,8 +31,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
 
-    // StateQuery
-
     struct TColumnDesc {
         ui32 Tag;
         NScheme::TTypeInfo Type;
@@ -49,14 +47,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
         TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
     };
 
-    struct TEvalTask {
-        size_t ColumnIdx = -1;
-
-        // One of the following
-        TSimpleColumnStatisticEval::TPtr SimpleStatEval;
-        IStage2ColumnStatisticEval::TPtr Stage2StatEval;
-    };
-
     TString TableName;
     bool IsColumnTable = false;
     TVector<TColumnDesc> Columns;
@@ -66,11 +56,38 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TVector<ui64> TabletIds;
     THashMap<ui32, TVector<ui64>> NodeId2Tablets;
 
-    std::queue<TEvalTask> PendingTasks;
+    // StateScan
+
+    // In the simplest case, the table is scanned 2 times:
+    // First, simple column statistics (count distinct, min/max, etc.) for each column are
+    // calculated and used to determine parameters for stage 2 statistics.
+    // Second, stage 2 statistics such as count-min sketches and histograms are calculated.
+    //
+    // In more complicated cases, we have to split scans both horizontally (scan different
+    // columns with different SELECTs) and vertically (scan different parts of the table
+    // with different selects). Horizontal splits are needed to prevent the single scan
+    // result row from becoming too big, and vertical splits are needed if the table is
+    // so big that we cant scan the whole table at once.
+    //
+    // The order of scanning is as follows: we start a batch of TColumnStatEvalTasks
+    // and dispatch individual scans for parts of the table until we scan the whole table.
+    // Then we finalize the results, send them to StatisticsAggregator to save and
+    // move on to the next batch of of TColumnStatEvalTasks.
+
+    // Represents a task to calculate a single (column, statistic type) pair.
+    struct TColumnStatEvalTask {
+        size_t ColumnIdx = -1;
+
+        // One of the following
+        TSimpleColumnStatisticEval::TPtr SimpleStatEval;
+        IStage2ColumnStatisticEval::TPtr Stage2StatEval;
+    };
+
+    std::queue<TColumnStatEvalTask> PendingTasks;
 
     std::optional<TSelectBuilder> SelectBuilder;
     std::optional<ui32> CountSeq;
-    std::vector<TEvalTask> InProgressTasks;
+    std::vector<TColumnStatEvalTask> InProgressTasks;
 
     THashMap<ui32, TVector<ui64>> NodeId2PendingTablets;
 
@@ -114,7 +131,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     class TScanActor;
 
-    void DispatchScanActors();
+    void StartColumnStatEvalTasks();
 
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvents::TEvPoison::TPtr& ev);

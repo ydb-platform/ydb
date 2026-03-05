@@ -180,7 +180,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     DbUserTokenSource = config.GetDbUserTokenAccess();
     MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
     MetaSettings.MetaDatabase = MetaDatabase;
-    if (MetaSettings.AccessServiceType != NMvp::nebius_v1) {
+    if (StartupOptions.AccessServiceType != NMvp::nebius_v1) {
         MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
     }
     if (MetaSettings.MetaApiEndpoint.empty()) {
@@ -249,8 +249,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
         MetaDatabase = defaultMetaDatabase;
     }
 
-    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
-    MetaSettings.MetaDatabase = MetaDatabase;
     MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
 
     if (StartupOptions.Mlock) {

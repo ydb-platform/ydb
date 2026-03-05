@@ -6,20 +6,6 @@
 
 #include <memory>
 
-namespace NMVP::NSupportLinks {
-
-    struct TLinkResolveContext {
-        size_t Place = 0;
-        TString SourceName;
-        TSupportLinkEntryConfig LinkConfig;
-        THashMap<TString, TString> ClusterColumns;
-        NHttp::TUrlParameters UrlParameters;
-        NActors::TActorId Parent;
-        NActors::TActorId HttpProxyId;
-};
-
-} // namespace NMVP::NSupportLinks
-
 namespace NMVP {
 
 class ILinkSource;
@@ -53,7 +39,6 @@ public:
 
     void OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event);
     void HandleTimeout();
-    void ReportResolved(size_t place, TVector<NSupportLinks::TResolvedLink> links, TVector<NSupportLinks::TSupportError> errors);
     const TVector<TResolveOutput>& GetSourceOutput() const;
     bool IsFinished() const;
 

@@ -8,15 +8,6 @@
 #include <util/generic/yexception.h>
 #include <yaml-cpp/yaml.h>
 
-namespace {
-
-template <size_t N>
-NMVP::TMVP* CreateMetaMvpNoDestroy(const char* (&argv)[N]) {
-    return new NMVP::TMVP(N, argv);
-}
-
-} // anonymous namespace
-
 Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
     Y_UNIT_TEST(MetaBlockWithoutApiEndpointThrows) {
         TTempFileHandle tmpYaml = MakeTestFile(R"(
@@ -26,7 +17,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_missing_endpoint", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMetaMvpNoDestroy(argv), yexception, "meta.meta_api_endpoint must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(MetaBlockWithoutDatabaseThrows) {
@@ -37,7 +28,7 @@ meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
 )", "mvp_meta_missing_database", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMetaMvpNoDestroy(argv), yexception, "meta.meta_database must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutApiEndpointThrows) {
@@ -48,7 +39,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_nebius_without_endpoint", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMetaMvpNoDestroy(argv), yexception, "meta.meta_api_endpoint must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutDatabaseThrows) {
@@ -59,7 +50,7 @@ meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
 )", "mvp_meta_nebius_without_database", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMetaMvpNoDestroy(argv), yexception, "meta.meta_database must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithRequiredFieldsDoesNotThrow) {
@@ -71,7 +62,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_nebius_with_required_fields", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_NO_EXCEPTION(CreateMetaMvpNoDestroy(argv));
+        UNIT_ASSERT_NO_EXCEPTION(new NMVP::TMVP(3, argv));
     }
 
     Y_UNIT_TEST(YandexWithoutMetaBlockAllowsEmptyValues) {
@@ -80,7 +71,7 @@ generic:
   access_service_type: "yandex_v2"
 )", "mvp_meta_yandex_without_meta_block", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_NO_EXCEPTION(CreateMetaMvpNoDestroy(argv));
+        UNIT_ASSERT_NO_EXCEPTION(new NMVP::TMVP(3, argv));
     }
 }
 
@@ -98,7 +89,7 @@ meta:
         url: "https://example.test"
 )", "mvp_meta_support_links_missing_source", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMetaMvpNoDestroy(argv), yexception, "source is required");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "source is required");
     }
 
     Y_UNIT_TEST(UnsupportedSourceInConfigDoesNotThrow) {

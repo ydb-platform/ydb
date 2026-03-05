@@ -28,9 +28,7 @@ namespace NMVP {
 
 using namespace NKikimr;
 
-namespace {
-constexpr TStringBuf SOURCE_META = "meta";
-}
+inline constexpr TStringBuf SOURCE_META = "meta";
 
 class TMetaSupportLinksGetHandlerActor : THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:

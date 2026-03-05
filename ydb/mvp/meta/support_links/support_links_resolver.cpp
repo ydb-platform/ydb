@@ -13,8 +13,6 @@ namespace NMVP {
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
     : UrlParameters(params.UrlParameters.Render())
 {
-    OwnedSources.clear();
-    Sources.clear();
     if (!params.Sources.empty()) {
         OwnedSources = std::move(params.Sources);
     } else {
@@ -89,23 +87,6 @@ void TSupportLinksResolver::HandleTimeout() {
             sourceOutput.Ready = true;
         }
     }
-}
-
-void TSupportLinksResolver::ReportResolved(
-    size_t place,
-    TVector<NSupportLinks::TResolvedLink> links,
-    TVector<NSupportLinks::TSupportError> errors)
-{
-    if (place >= SourceOutputs.size()) {
-        return;
-    }
-    TResolveOutput& slot = SourceOutputs[place];
-    if (slot.Ready) {
-        return;
-    }
-    slot.Links = std::move(links);
-    slot.Errors = std::move(errors);
-    slot.Ready = true;
 }
 
 bool TSupportLinksResolver::IsFinished() const {

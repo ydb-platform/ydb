@@ -3,6 +3,7 @@ import logging
 import yaml
 import tempfile
 import os
+import socket
 from hamcrest import assert_that
 import time
 import pytest
@@ -339,9 +340,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         })
 
         # add new node in hosts
+        hostname = socket.gethostname().lower()
         config_section["hosts"].append({
             "host_config_id": host_config_id,
-            "host": "localhost",
+            "host": hostname,
             "port": node_port_allocator.ic_port,
         })
         self.configurator.full_config = dumped_fetched_config
@@ -365,6 +367,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        # wait for config to propagate to all nodes
+        time.sleep(5)
+
         # start new node
         new_node.start()
 

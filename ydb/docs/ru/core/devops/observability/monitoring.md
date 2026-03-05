@@ -75,7 +75,15 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 {% note tip %}
 
-Перед началом работы ознакомьтесь со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
+Перед началом работы:
+
+- ознакомьтесь [со справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md);
+
+- определите вариант установки {{ ydb-short-name }}:
+
+  - [обычная установка](../deployment-options/index.md);
+
+  - [быстрая установка](../../quickstart.md);
 
 {% endnote %}
 

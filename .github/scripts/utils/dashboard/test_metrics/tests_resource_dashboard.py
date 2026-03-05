@@ -22,7 +22,7 @@ from typing import Any, Optional
 # Same-dir library for ya.make REQUIREMENTS (reserved cpu/ram)
 if __name__ != "__main__":
     from . import ya_make_requirements
-    from .dashboard_cpu_suggestions import build_cpu_suggestions
+    from .dashboard_cpu_recommendations import build_cpu_recommendations
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
 else:
@@ -31,7 +31,7 @@ else:
     sys.path.insert(0, str(_script_dir))
     sys.path.insert(0, str(_dashboard_dir))
     import ya_make_requirements
-    from dashboard_cpu_suggestions import build_cpu_suggestions
+    from dashboard_cpu_recommendations import build_cpu_recommendations
     from dashboard_html_main import build_html_dashboard
     from dashboard_report_table import build_report_table_html
 
@@ -1075,7 +1075,7 @@ def main() -> None:
     if args.resources_jsonl and args.resources_jsonl.exists():
         resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs)
 
-    cpu_suggestions = build_cpu_suggestions(
+    cpu_suggestions = build_cpu_recommendations(
         enriched_runs,
         requirements_cache=requirements_cache,
         report_status_by_suite=report_status_by_suite,

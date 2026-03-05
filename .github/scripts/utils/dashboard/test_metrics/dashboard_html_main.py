@@ -512,7 +512,7 @@ def build_html_dashboard(
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
-    const artifactsUrl = (cfg.artifacts_url || '').trim().replace(/\/$/, '');
+      const artifactsUrl = (cfg.artifacts_url || '').trim().replace(/\\/$/, '');
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
     const hasCiData = pr || branch || commit || artifactsUrl;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
@@ -838,7 +838,7 @@ def build_html_dashboard(
           '        if RE_ENDIF.match(line):',
           '            if stack:',
           '                stack.pop()',
-          '            current_active = (stack[-1][1] and stack[-1][2]) if stack else True',
+          '            current_active = (stack[-1][1] and ((not stack[-1][2]) if stack[-1][3] else stack[-1][2])) if stack else True',
           '            continue',
           '    return None',
           '',

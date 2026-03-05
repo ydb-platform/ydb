@@ -2253,13 +2253,23 @@ inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPar
         std::lock_guard guard(HierarchyDataLock);
         ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
     }
-    for (auto& [_, s] : PartitionStreams) {
-        for (auto partitionId : childIds) {
-            if (s->GetPartitionId() == partitionId) {
-                EventsQueue->SignalReadyEvents(s);
-                break;
+
+    std::vector<TIntrusivePtr<TPartitionStreamImpl<false>>> partitionStreams;
+
+    {
+        std::lock_guard guard(Lock);
+        for (auto& [_, s] : PartitionStreams) {
+            for (auto partitionId : childIds) {
+                if (s->GetPartitionId() == partitionId) {
+                    partitionStreams.push_back(s);
+                    break;
+                }
             }
         }
+    }
+
+    for (auto& s : partitionStreams) {
+        EventsQueue->SignalReadyEvents(s);
     }
 }
 

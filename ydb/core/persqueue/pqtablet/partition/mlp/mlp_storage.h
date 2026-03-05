@@ -195,7 +195,8 @@ public:
     size_t Compact();
     void MoveBaseDeadline();
 
-    TBatch GetBatch();
+    TBatch ExtractBatch();
+    bool IsBatchEmpty() const;
 
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);

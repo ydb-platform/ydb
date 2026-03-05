@@ -2,7 +2,7 @@
 
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
-#include <ydb/mvp/meta/support_links/common.h>
+#include <ydb/mvp/meta/support_links/types.h>
 #include <ydb/mvp/meta/support_links/source.h>
 
 #include <util/generic/yexception.h>

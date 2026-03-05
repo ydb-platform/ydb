@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "resolver_common.h"
 #include "grafana_dashboard.h"
 
 #include <ydb/mvp/meta/support_links/source.h>
@@ -77,13 +77,6 @@ inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSource(
         .LinkConfig = config,
         .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_shared<TGrafanaDashboardResolver>(std::move(config), metaSettings);
-}
-
-inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSourceUnchecked(
-    TSupportLinkEntry config,
-    const TMetaSettings& metaSettings)
-{
     return std::make_shared<TGrafanaDashboardResolver>(std::move(config), metaSettings);
 }
 

@@ -9,7 +9,7 @@
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/events.h>
 #include <ydb/mvp/meta/support_links/ut/grafana_mock.h>
-#include <ydb/mvp/meta/support_links/grafana_dashboard_search_resolver.h>
+#include <ydb/mvp/meta/support_links/grafana_dashboard_search_source.h>
 
 Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
     class TMvpGuard {

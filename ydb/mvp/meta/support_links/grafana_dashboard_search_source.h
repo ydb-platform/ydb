@@ -1,9 +1,12 @@
 #pragma once
 
-#include "common.h"
+#include "resolver_common.h"
 #include "events.h"
 #include "grafana_dashboard.h"
 
+#include <ydb/mvp/meta/support_links/source.h>
+
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -250,3 +253,49 @@ inline void ValidateGrafanaDashboardSearchResolverConfig(const TResolverValidati
 }
 
 } // namespace NMVP::NSupportLinks
+
+namespace NMVP {
+
+class TGrafanaDashboardSearchSource : public ILinkSource {
+public:
+    TGrafanaDashboardSearchSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+        : Config_(std::move(config))
+        , MetaSettings_(metaSettings)
+    {}
+
+    size_t Place() const override {
+        return 0;
+    }
+
+    const TSupportLinkEntry& Config() const override {
+        return Config_;
+    }
+
+    TResolveOutput Resolve(const TResolveInput& input) const override
+    {
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        Y_ABORT_UNLESS(actorSystem, "ActorSystem is unavailable in activation context");
+        NSupportLinks::TLinkResolveContext resolveContext{
+            .Place = input.Place,
+            .SourceName = Config_.GetSource(),
+            .LinkConfig = Config_,
+            .ClusterColumns = input.ClusterColumns,
+            .QueryParams = input.QueryParams,
+            .Parent = input.Parent,
+            .HttpProxyId = input.HttpProxyId,
+        };
+        NActors::TActorId actorId = actorSystem->Register(
+            NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(resolveContext), MetaSettings_));
+        return TResolveOutput{
+            .Name = Config_.GetSource(),
+            .Ready = false,
+            .Actors = {actorId},
+        };
+    }
+
+private:
+    TSupportLinkEntry Config_;
+    const TMetaSettings& MetaSettings_;
+};
+
+} // namespace NMVP

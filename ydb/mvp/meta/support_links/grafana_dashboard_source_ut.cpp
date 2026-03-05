@@ -3,6 +3,7 @@
 
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/source.h>
+#include <ydb/mvp/meta/support_links/grafana_dashboard_source.h>
 
 Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
     class TMvpGuard {

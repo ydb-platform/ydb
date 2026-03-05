@@ -126,13 +126,18 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     }
 
     static void FillConfig(NMVP::TMetaSettings& settings) {
-        settings.ClusterLinkSources.push_back(NMVP::MakeGrafanaLinkSource(
+        settings.GrafanaConfig.Endpoint = "https://grafana.example.net";
+        settings.GrafanaConfig.SecretName = "grafana-secret";
+
+        settings.ClusterLinkSources.push_back(NMVP::MakeLinkSource(
             settings.ClusterLinkSources.size(),
-            MakeSupportLinkEntry("grafana/dashboard", "Cluster CPU", "/d/cluster-cpu")
+            MakeSupportLinkEntry("grafana/dashboard", "Cluster CPU", "https://grafana.example.net/d/cluster-cpu"),
+            settings
         ));
-        settings.DatabaseLinkSources.push_back(NMVP::MakeGrafanaLinkSource(
+        settings.DatabaseLinkSources.push_back(NMVP::MakeLinkSource(
             settings.DatabaseLinkSources.size(),
-            MakeSupportLinkEntry("grafana/dashboard/search", "", "/api/search?limit=100&type=dash-db", "emit_error")
+            MakeSupportLinkEntry("grafana/dashboard/search", "", "/api/search?limit=100&type=dash-db", "emit_error"),
+            settings
         ));
     }
 
@@ -194,7 +199,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Cluster CPU");
         UNIT_ASSERT_VALUES_EQUAL(
             json["links"][0]["url"].GetStringRobust(),
-            "/d/cluster-cpu?var-workspace=ws&var-ds=ds&var-cluster=testing-global");
+            "https://grafana.example.net/d/cluster-cpu?var-workspace=ws&var-ds=ds&var-cluster=testing-global");
         UNIT_ASSERT(!json.Has("errors"));
     }
 
@@ -278,7 +283,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Cluster CPU");
         UNIT_ASSERT_VALUES_EQUAL(
             json["links"][0]["url"].GetStringRobust(),
-            "/d/cluster-cpu?var-cluster=missing-cluster");
+            "https://grafana.example.net/d/cluster-cpu?var-cluster=missing-cluster");
 
         UNIT_ASSERT(json.Has("errors"));
         UNIT_ASSERT(json["errors"].GetArray().size() >= 1);

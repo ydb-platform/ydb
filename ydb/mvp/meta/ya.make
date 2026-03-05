@@ -17,6 +17,7 @@ SRCS(
     meta_db_clusters.h
     meta_versions.cpp
     mvp.cpp
+    support_links/source.cpp
     support_links/support_links_resolver.cpp
 )
 

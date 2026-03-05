@@ -158,6 +158,12 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
 }
 
+void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const EStatus& expectedStatus) {
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+}
+
 void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
@@ -607,17 +613,13 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
     }
 }
 
-Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
-    TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
-    if (clientServerCert.Certificate[50] != 'a') {
-        clientServerCert.Certificate[50] = 'a';
-    } else {
-        clientServerCert.Certificate[50] = 'b';
-    }
-    {
+void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
+    const auto timeout = TDuration::Seconds(2);
+    const auto expectedStatus = EStatus::CLIENT_DEADLINE_EXCEEDED;
+
+    for (bool enforceUserToken : {true, false}) {
         TKikimrServerForTestNodeRegistration server({
-            .EnforceUserToken = true,
+            .EnforceUserToken = enforceUserToken,
             .EnableDynamicNodeAuth = true,
             .SetNodeAuthValues = true
         });
@@ -631,34 +633,22 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const auto timeout = TDuration::Seconds(2);
-        const TString expectedError = "Deadline Exceeded";
-        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
+        CheckAccessDenied(RegisterNode(config, timeout), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedStatus);
     }
-    {
-        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
-            .EnforceUserToken = false,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = serverDoesNotRequireToken.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
+}
 
-        SetLogPriority(serverDoesNotRequireToken);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const auto timeout = TDuration::Seconds(2);
-        const TString expectedError = "Deadline Exceeded";
-        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    if (clientServerCert.Certificate[50] != 'a') {
+        clientServerCert.Certificate[50] = 'a';
+    } else {
+        clientServerCert.Certificate[50] = 'b';
     }
+
+    TestCorruptedClientAuthData(caCert, clientServerCert);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
@@ -669,50 +659,8 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
     } else {
         clientServerCert.PrivateKey[20] = 'b';
     }
-    {
-        TKikimrServerForTestNodeRegistration server({
-            .EnforceUserToken = true,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
 
-        SetLogPriority(server);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const auto timeout = TDuration::Seconds(2);
-        const TString expectedError = "Deadline Exceeded";
-        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
-    }
-    {
-        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
-            .EnforceUserToken = false,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = serverDoesNotRequireToken.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        SetLogPriority(serverDoesNotRequireToken);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const auto timeout = TDuration::Seconds(2);
-        const TString expectedError = "Deadline Exceeded";
-        CheckAccessDenied(RegisterNode(config, timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedError);
-    }
+    TestCorruptedClientAuthData(caCert, clientServerCert);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {

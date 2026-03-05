@@ -3,6 +3,9 @@ UNITTEST_FOR(ydb/services/fq)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     ut_utils.cpp

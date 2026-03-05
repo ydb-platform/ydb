@@ -2918,7 +2918,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 } else {
                     // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
                     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), useSink ? 1 : 2);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
                     const auto idx = stats.query_phases().size() - 1;
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");

@@ -182,44 +182,46 @@ public:
 
             TSslHolder<X509> serverCert = GetServerCert(kafkaServerCertPath, readFile);
             if (!serverCert) {
-                Cerr << TInstant::Now() << ": Couldn't open server certificate file path from kafka_proxy configuration." << Endl;
                 return false;
             }
             int retServerCert = SSL_CTX_use_certificate(ctx, serverCert.get());
             if (retServerCert != 1) {
-                Cerr <<  TInstant::Now() << ": Couldn't open server private key file path from kafka_proxy configuration." << Endl;
                 return false;
             }
 
             TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(kafkaServerPrivateKeyPath, readFile);
             if (!privateKey) {
-                Cerr <<  TInstant::Now() << ": Couldn't open server private key file path from kafka_proxy configuration." << Endl;
                 return false;
             }
             int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, privateKey.get());
             if (retPrivateKey != 1) {
-                Cerr <<  TInstant::Now() << ": Couldn't load server private key to SSL context." << Endl;
                 return false;
             }
 
             int retCA = SSL_CTX_load_verify_locations(ctx, kafkaCAFilePath.data(), nullptr);
             if (retCA != 1) {
-                Cerr <<  TInstant::Now() << ": Couldn't open CA file path from kafka_proxy configuration or load it to the SSL context." << Endl;
                 return false;
             }
 
             SSL_CTX_set_verify_depth(ctx, 9);
-            SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256");
+            if (SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256") != 1) {
+                return false;
+            }
 
             const char *session_context = "YdbMtlsContext";
-            SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context));
+            if (SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context)) != 1) {
+                return false;
+            }
         } else {
             SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
         }
 
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
-        SSL_set_accept_state(Ssl.get());
-        return true;
+        if (Ssl) {
+            SSL_set_accept_state(Ssl.get());
+            return true;
+        }
+        return false;
     }
 
     TSslHolder<X509> GetServerCert(const TString& certPath, TString (*readFileFunc)(std::optional<TString>)) {
@@ -269,22 +271,14 @@ public:
         return ProcessResult(res);
     }
 
-    static char* ConvertX509ToPEMString(X509* cert) {
-        BIO* bio = BIO_new(BIO_s_mem());
-        char* buffer = NULL;
-        long length;
-
-        if (PEM_write_bio_X509(bio, cert)) {
-            length = BIO_get_mem_data(bio, &buffer);
-            char* result = (char*)malloc(length + 1);
-            memcpy(result, buffer, length);
-            result[length] = '\0';
-            BIO_free(bio);
-            return result;
+    static TString ConvertX509ToPEMString(X509* cert) {
+        TSslHolder<BIO> bio = TSslHolder<BIO>(BIO_new(BIO_s_mem()));
+        if (bio && PEM_write_bio_X509(bio.get(), cert)) {
+            char* buffer = NULL;
+            long length = BIO_get_mem_data(bio.get(), &buffer);
+            return TString(buffer, length);
         }
-
-        BIO_free(bio);
-        return NULL;
+        return TString();
     }
 
     static int Verify(int preverify, X509_STORE_CTX *ctx) {

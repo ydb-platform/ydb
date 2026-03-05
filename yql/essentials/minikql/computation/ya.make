@@ -29,6 +29,14 @@ PEERDIR(
     yql/essentials/minikql/arrow
 )
 
+IF (YQL_EMULATE_LAZY_ITERABLES)
+
+CFLAGS(
+    -DYQL_EMULATE_LAZY_ITERABLES
+)
+
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 END()

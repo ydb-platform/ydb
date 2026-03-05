@@ -375,9 +375,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(InsertDuplicates, UseSink) {
+    Y_UNIT_TEST(InsertDuplicates) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -397,14 +396,13 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-                return issue.GetMessage().contains(UseSink ? "Conflict with existing key." : "Duplicated keys found.");
+                return issue.GetMessage().contains("Duplicated keys found.");
             }));
         }
     }
 
-    Y_UNIT_TEST_TWIN(InsertExistingKey, UseSink) {
+    Y_UNIT_TEST(InsertExistingKey) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -995,9 +993,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TxWithReadAtTheEnd, UseSink) {
+    Y_UNIT_TEST(TxWithReadAtTheEnd) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1038,9 +1035,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
     }
 
-    Y_UNIT_TEST_TWIN(InteractiveTxWithReadAtTheEnd, UseSink) {
+    Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1095,15 +1091,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
             // check that last (commit) phase is empty
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
         }
     }
 
-    Y_UNIT_TEST_TWIN(TxWithWriteAtTheEnd, UseSink) {
+    Y_UNIT_TEST(TxWithWriteAtTheEnd) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2041,9 +2036,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ForceImmediateEffectsExecution, UseSink) {
+    Y_UNIT_TEST(ForceImmediateEffectsExecution) {
         TKikimrSettings serverSettings = TKikimrSettings().SetEnableForceImmediateEffectsExecution(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2067,14 +2061,12 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             // compute phase + effect phase
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            if (!UseSink) {
-                const auto& literalPhase = stats.query_phases(0);
-                UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
-            }
+            const auto& literalPhase = stats.query_phases(0);
+            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
 
-            const auto& effectPhase = stats.query_phases(UseSink ? 0 : 1);
+            const auto& effectPhase = stats.query_phases(0);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).updates().rows(), 1);
@@ -2090,14 +2082,12 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             // compute phase + effect phase
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            if (!UseSink) {
-                const auto& literalPhase = stats.query_phases(0);
-                UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
-            }
+            const auto& literalPhase = stats.query_phases(0);
+            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
 
-            const auto& effectPhase = stats.query_phases(UseSink ? 0 : 1);
+            const auto& effectPhase = stats.query_phases(0);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).deletes().rows(), 1);

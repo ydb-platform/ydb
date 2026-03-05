@@ -80,7 +80,6 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         const TString externalDataSourceName = "/Root/external_data_source";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});
 
         auto queryClient = kikimr->GetQueryClient();

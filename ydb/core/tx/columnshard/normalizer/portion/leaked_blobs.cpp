@@ -141,12 +141,6 @@ public:
     }
 };
 
-TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
-    : TBase(info)
-    , Channels(info.GetStorageInfo()->Channels)
-    , DsGroupSelector(info.GetStorageInfo()) {
-}
-
 class TRemoveLeakedBlobsTask: public INormalizerTask {
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIDs;
@@ -169,13 +163,19 @@ public:
     }
 };
 
+TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
+    : TBase(info)
+    , Channels(info.GetStorageInfo()->Channels)
+    , DsGroupSelector(info.GetStorageInfo()) {
+}
+
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     NIceDb::TNiceDb db(txc.DB);
     const bool ready = (int)Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) &
+                       (int)Schema::Precharge<Schema::IndexColumnsV2>(db, txc.DB.GetScheme()) &
                        (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme()) &
                        (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
     if (!ready) {

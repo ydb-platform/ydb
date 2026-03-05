@@ -104,7 +104,12 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             if (Counters) {
@@ -114,8 +119,10 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             }
             auto task = SubGroup;
             if (enableStreamingQueriesCounters) {
-                auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-                task = sink->GetSubgroup("task_id", ToString(taskId));
+                task = task->GetSubgroup("tx_id", TxId);
+                if (enableCountersPerTask) {
+                    task = task->GetSubgroup("task_id", ToString(taskId));
+                }
             }
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
             InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");

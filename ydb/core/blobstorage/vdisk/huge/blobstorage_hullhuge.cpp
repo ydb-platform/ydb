@@ -341,7 +341,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk,
                 commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, NPDisk::TEvLog::TCallback(),
-                TWriteSource::VDisk(TWriteSource::EOp::HugeKeeperAllocChunk)));
+                TWriteSource(TWriteSource::EOp::HugeKeeperAllocChunk)));
 
             // commit changes to the persistent state at once
             const ui64 prevLsn = std::exchange(Pers->LogPos.ChunkAllocationLsn, Lsn);
@@ -428,7 +428,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobFreeChunk,
                 commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, NPDisk::TEvLog::TCallback(),
-                TWriteSource::VDisk(TWriteSource::EOp::HugeKeeperFreeChunk)));
+                TWriteSource(TWriteSource::EOp::HugeKeeperFreeChunk)));
             TThis::Become(&TThis::StateFunc);
         }
 
@@ -494,7 +494,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner, HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound,
                         TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TRcBuf(Serialized), seg, nullptr,
                         NPDisk::TEvLog::TCallback(),
-                        TWriteSource::VDisk(TWriteSource::EOp::HugeKeeperEntryPoint))); //FIXME(innokentii): wrapping
+                        TWriteSource(TWriteSource::EOp::HugeKeeperEntryPoint))); //FIXME(innokentii): wrapping
             TThis::Become(&TThis::StateFunc);
         }
 

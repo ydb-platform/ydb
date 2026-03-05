@@ -11,7 +11,7 @@ namespace {
 
 using TWriteSourceOp = TWriteSource::EOp;
 
-constexpr std::array<std::pair<TWriteSourceOp, const char*>, 29> WriteSourceOpNames = {{
+constexpr std::array<std::pair<TWriteSourceOp, const char*>, 30> WriteSourceOpNames = {{
     {TWriteSourceOp::Unknown, "Unknown"},
     {TWriteSourceOp::WriteLogEntry, "WriteLogEntry"},
     {TWriteSourceOp::WriteLogReference, "WriteLogReference"},
@@ -41,14 +41,8 @@ constexpr std::array<std::pair<TWriteSourceOp, const char*>, 29> WriteSourceOpNa
     {TWriteSourceOp::LogCutterCutLog, "LogCutterCutLog"},
     {TWriteSourceOp::SyncerCommit, "SyncerCommit"},
     {TWriteSourceOp::RecoveredHugeBlob, "RecoveredHugeBlob"},
+    {TWriteSourceOp::GroupWriteLoadActor, "GroupWriteLoadActor"},
 }};
-
-constexpr bool IsKnownWriteSourceOpCode(ui32 code) {
-    const auto op = static_cast<TWriteSourceOp>(code);
-    return code == static_cast<ui32>(TWriteSourceOp::Unknown)
-        || TWriteSource::IsTabletOp(op)
-        || TWriteSource::IsVDiskOp(op);
-}
 
 constexpr bool HasNameForWriteSourceOpCode(ui32 code) {
     for (const auto& [op, _] : WriteSourceOpNames) {
@@ -61,10 +55,6 @@ constexpr bool HasNameForWriteSourceOpCode(ui32 code) {
 
 constexpr bool ValidateWriteSourceOpNames() {
     for (size_t i = 0; i < WriteSourceOpNames.size(); ++i) {
-        const ui32 code = static_cast<ui32>(WriteSourceOpNames[i].first);
-        if (!IsKnownWriteSourceOpCode(code)) {
-            return false;
-        }
         for (size_t j = i + 1; j < WriteSourceOpNames.size(); ++j) {
             if (WriteSourceOpNames[i].first == WriteSourceOpNames[j].first) {
                 return false;
@@ -72,8 +62,11 @@ constexpr bool ValidateWriteSourceOpNames() {
         }
     }
 
-    for (ui32 code = 0; code <= Max<ui16>(); ++code) {
-        if (IsKnownWriteSourceOpCode(code) && !HasNameForWriteSourceOpCode(code)) {
+    for (ui32 code = 0; code <= 65535u; ++code) {
+        const TWriteSource source = TWriteSource::FromProto(code);
+        const bool knownCode = code == static_cast<ui32>(TWriteSourceOp::Unknown)
+            || source.Op != TWriteSourceOp::Unknown;
+        if (knownCode && !HasNameForWriteSourceOpCode(code)) {
             return false;
         }
     }

@@ -603,7 +603,7 @@ namespace NTabletFlatExecutor {
                 .Deadline = TInstant::Max(),
                 .HandleClass = flag,
                 .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
-                .WriteSource = TWriteSource::Tablet(TWriteSource::EOp::FlatCompactionPut),
+                .WriteSource = TWriteSource(TWriteSource::EOp::FlatCompactionPut),
                 .ExternalRelevanceWatcher = RelevanceTracker,
             });
             auto ctx = ActorContext();

@@ -194,7 +194,7 @@ public:
             }
 
             SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic,
-                TWriteSource::Tablet(TWriteSource::EOp::WriteLogReference), std::move(innerTraceId));
+                TWriteSource(TWriteSource::EOp::WriteLogReference), std::move(innerTraceId));
         }
 
         const TLogoBlobID actualLogEntryId = TLogoBlobID(
@@ -215,7 +215,7 @@ public:
         }
 
         SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic,
-            TWriteSource::Tablet(TWriteSource::EOp::WriteLogEntry), std::move(traceId));
+            TWriteSource(TWriteSource::EOp::WriteLogEntry), std::move(traceId));
 
         RepliesToWait = References.size() + 1;
         Become(&TThis::StateWait);

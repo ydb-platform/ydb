@@ -1487,7 +1487,7 @@ void TTablet::GcLogChannel(ui32 step) {
                     false,
                     false,
                     false,
-                    TWriteSource::Tablet(TWriteSource::EOp::GcLogChannel)
+                    TWriteSource(TWriteSource::EOp::GcLogChannel)
                 )
             );
         }
@@ -1502,7 +1502,7 @@ void TTablet::GcLogChannel(ui32 step) {
                 false,
                 false,
                 false,
-                TWriteSource::Tablet(TWriteSource::EOp::GcLogChannel)
+                TWriteSource(TWriteSource::EOp::GcLogChannel)
                 )
             );
     }

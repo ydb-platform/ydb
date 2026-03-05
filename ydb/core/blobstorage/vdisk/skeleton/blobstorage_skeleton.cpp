@@ -964,7 +964,7 @@ namespace NKikimr {
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
                     serializedLogRecord, seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource::VDisk(TWriteSource::EOp::SkeletonHandoffDelLogoBlob);
+            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonHandoffDelLogoBlob);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }
@@ -984,7 +984,7 @@ namespace NKikimr {
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecAddBulkSst(seg, false, ev));
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAddBulkSst, commitRecord, data, seg,
                 reinterpret_cast<void*>(loggedRecId), nullptr);
-            logMsg->WriteSource = TWriteSource::VDisk(TWriteSource::EOp::SkeletonAddBulkSst);
+            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonAddBulkSst);
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
 
@@ -1633,7 +1633,7 @@ namespace NKikimr {
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
                     loggedRecCookie, nullptr, nullptr);
-            logMsg->WriteSource = TWriteSource::VDisk(TWriteSource::EOp::SkeletonLocalSyncData);
+            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonLocalSyncData);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
@@ -1687,7 +1687,7 @@ namespace NKikimr {
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAnubisOsirisPut, data, seg,
                     loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource::VDisk(TWriteSource::EOp::SkeletonAnubisOsirisPut);
+            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonAnubisOsirisPut);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }
@@ -1779,11 +1779,11 @@ namespace NKikimr {
             if (buf) {
                 ctx.Send(Db->HugeKeeperID, new TEvHullWriteHugeBlob(ev->Sender, ev->Cookie, id, ingress, std::move(buf),
                     true, false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource::VDisk(TWriteSource::EOp::RecoveredHugeBlob), false));
+                    TWriteSource(TWriteSource::EOp::RecoveredHugeBlob), false));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, id, ingress, TDiskPart(), true, false, ev->Sender,
                     ev->Cookie, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource::VDisk(TWriteSource::EOp::RecoveredHugeBlob)));
+                    TWriteSource(TWriteSource::EOp::RecoveredHugeBlob)));
             }
         }
 
@@ -1815,7 +1815,7 @@ namespace NKikimr {
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignaturePhantomBlobs, data, seg,
                     loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource::VDisk(TWriteSource::EOp::SkeletonPhantomBlobs);
+            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonPhantomBlobs);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }

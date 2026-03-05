@@ -380,7 +380,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             true,
             false,
             false,
-            TWriteSource::Tablet(TWriteSource::EOp::FlatCollectGarbage));
+            TWriteSource(TWriteSource::EOp::FlatCollectGarbage));
     GcCounter += ev->PerGenerationCounterStepSize();
     SendToBSProxy(ctx, bsgroup, ev.Release());
     ++GcWaitFor;

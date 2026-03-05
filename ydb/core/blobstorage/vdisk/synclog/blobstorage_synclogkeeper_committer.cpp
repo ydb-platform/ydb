@@ -43,7 +43,7 @@ namespace NKikimr {
                         SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx,
                         CommitRecord, TRcBuf(EntryPointSerializer.GetSerializedData()), seg, nullptr,
                         NPDisk::TEvLog::TCallback(),
-                        TWriteSource::VDisk(TWriteSource::EOp::SyncLogCommitterCommit));
+                        TWriteSource(TWriteSource::EOp::SyncLogCommitterCommit));
 
                 if (CommitRecord.CommitChunks || CommitRecord.DeleteChunks) {
                     LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
@@ -107,7 +107,7 @@ namespace NKikimr {
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,
                                                        chunkIdx, offset, p, SyncLogCookie,
                                                        true, NPriWrite::SyncLog, true,
-                                                       TWriteSource::VDisk(TWriteSource::EOp::SyncLogCommitterWrite)));
+                                                       TWriteSource(TWriteSource::EOp::SyncLogCommitterWrite)));
                     LOG_DEBUG(ctx, BS_SYNCLOG,
                               VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "COMMITTER: initial write: chunkIdx# %" PRIu32, chunkIdx));
@@ -141,7 +141,7 @@ namespace NKikimr {
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,
                                                        chunkIdx, offset, p, SyncLogCookie,
                                                        true, NPriWrite::SyncLog, true,
-                                                       TWriteSource::VDisk(TWriteSource::EOp::SyncLogCommitterWrite)));
+                                                       TWriteSource(TWriteSource::EOp::SyncLogCommitterWrite)));
                     LOG_DEBUG(ctx, BS_SYNCLOG,
                               VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "COMMITTER: next write: chunkIdx# %" PRIu32, chunkIdx));

@@ -149,7 +149,7 @@ namespace NKikimr {
             auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner,
                 SyncerCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncerState,
                 commitRec, data, seg, nullptr, NPDisk::TEvLog::TCallback(),
-                TWriteSource::VDisk(TWriteSource::EOp::SyncerCommit));
+                TWriteSource(TWriteSource::EOp::SyncerCommit));
             SyncerCtx->MonGroup.SyncerLoggedBytes() += dataSize;
             ++SyncerCtx->MonGroup.SyncerLoggerRecords();
             ctx.Send(SyncerCtx->LoggerId, msg.release());

@@ -220,7 +220,7 @@ namespace NKikimr {
         cr.IsStartingPoint = true;
         Send(ScrubCtx->LoggerId, new NPDisk::TEvLog(ScrubCtx->PDiskCtx->Dsk->Owner, ScrubCtx->PDiskCtx->Dsk->OwnerRound,
             TLogSignature::SignatureScrub, cr, data, seg, nullptr, NPDisk::TEvLog::TCallback(),
-            TWriteSource::VDisk(TWriteSource::EOp::ScrubCommit)));
+            TWriteSource(TWriteSource::EOp::ScrubCommit)));
     }
 
     void TScrubCoroImpl::Handle(NPDisk::TEvLogResult::TPtr ev) {

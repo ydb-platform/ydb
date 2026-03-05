@@ -35,6 +35,7 @@ struct TWriteSource {
         LogCutterCutLog = 119,
         SyncerCommit = 120,
         RecoveredHugeBlob = 121,
+        GroupWriteLoadActor = 122,
     };
 
     EOp Op = EOp::Unknown;
@@ -49,38 +50,58 @@ struct TWriteSource {
         return {};
     }
 
-    static constexpr bool IsTabletOp(EOp op) {
-        return EOp::WriteLogEntry <= op && op <= EOp::FlatCollectGarbage;
-    }
-
-    static constexpr bool IsVDiskOp(EOp op) {
-        return EOp::SkeletonHandoffDelLogoBlob <= op && op <= EOp::RecoveredHugeBlob;
-    }
-
-    static constexpr TWriteSource Tablet(EOp op) {
-        return IsTabletOp(op) ? TWriteSource(op) : Unknown();
-    }
-
-    static constexpr TWriteSource VDisk(EOp op) {
-        return IsVDiskOp(op) ? TWriteSource(op) : Unknown();
+    static constexpr bool IsKnownOp(EOp op) {
+        switch (op) {
+            case EOp::Unknown:
+            case EOp::WriteLogEntry:
+            case EOp::WriteLogReference:
+            case EOp::BlockBlobStorage:
+            case EOp::GcLogChannel:
+            case EOp::DeleteHardBarrier:
+            case EOp::FlatCompactionPut:
+            case EOp::FlatCollectGarbage:
+            case EOp::SkeletonHandoffDelLogoBlob:
+            case EOp::SkeletonAddBulkSst:
+            case EOp::SkeletonLocalSyncData:
+            case EOp::SkeletonAnubisOsirisPut:
+            case EOp::SkeletonPhantomBlobs:
+            case EOp::SyncLogCommitterWrite:
+            case EOp::SyncLogCommitterCommit:
+            case EOp::HugeKeeperWriteBlob:
+            case EOp::HugeKeeperAllocChunk:
+            case EOp::HugeKeeperFreeChunk:
+            case EOp::HugeKeeperEntryPoint:
+            case EOp::HullDbCommit:
+            case EOp::HullCompactWorkerWrite:
+            case EOp::HullWriteSst:
+            case EOp::ChunkKeeperCommit:
+            case EOp::MetadataCommit:
+            case EOp::ScrubWrite:
+            case EOp::ScrubCommit:
+            case EOp::LogCutterCutLog:
+            case EOp::SyncerCommit:
+            case EOp::RecoveredHugeBlob:
+            case EOp::GroupWriteLoadActor:
+                return true;
+        }
+        return false;
     }
 
     static constexpr TWriteSource FromProto(ui32 op) {
-        if (op > static_cast<ui32>(EOp::RecoveredHugeBlob)) {
+        if (op > static_cast<ui32>(EOp::GroupWriteLoadActor)) {
             return Unknown();
         }
 
         const EOp value = static_cast<EOp>(op);
-        return IsTabletOp(value) || IsVDiskOp(value)
+        return IsKnownOp(value)
             ? TWriteSource(value)
             : Unknown();
     }
 
     constexpr ui32 ToProtoOp() const {
-        if (IsTabletOp(Op) || IsVDiskOp(Op)) {
-            return static_cast<ui32>(Op);
-        }
-        return 0;
+        return IsKnownOp(Op)
+            ? static_cast<ui32>(Op)
+            : 0;
     }
 
     friend constexpr bool operator==(const TWriteSource&, const TWriteSource&) = default;

@@ -243,10 +243,6 @@ int TCommandExportToYt::Run(TConfig& config) {
 TCommandExportBase::TCommandExportBase(const TString& name, const TString& description)
     : TYdbOperationCommand(name, {}, description)
 {
-    TItem::DefineFields({
-        {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Destination path", true}},
-    });
 }
 
 void TCommandExportBase::Config(TConfig& config) {
@@ -402,12 +398,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         return EXIT_FAILURE;
     }
 
-    const bool encryption = EncryptionAlgorithm && EncryptionKey;
-    if (encryption && !CommonDestinationPrefix) {
-        Cerr << "--destination-prefix parameter is required for exports with encryption" << Endl;
-        return EXIT_FAILURE;
-    }
-
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
     }
@@ -426,9 +416,12 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         settings.SourcePath(CommonSourcePath);
     }
 
+    const bool encryption = EncryptionAlgorithm && EncryptionKey;
     if (encryption) {
         settings.SymmetricEncryption(EncryptionAlgorithm, EncryptionKey);
     }
+
+    settings.IncludeIndexData(IncludeIndexData);
 
     // YDB supported recursive directories handling along with --destination-prefix option.
     // So if we use it, then we can suppose that YDB already supports expanding of items.
@@ -471,6 +464,10 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 TCommandExportToS3::TCommandExportToS3()
     : TCommandExportBase("s3", "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
 {
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
+        {"Destination", {{"destination", "dst", "d"}, "S3 object key prefix", true}},
+    });
 }
 
 void TCommandExportToS3::Config(TConfig& config) {
@@ -539,10 +536,6 @@ void TCommandExportToS3::Config(TConfig& config) {
             << colors.BoldColor() << "false" << colors.OldColor()
             << " - Path-Style URL")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
-
-    AddDeprecatedJsonOption(config);
-    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
-    config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToS3::Parse(TConfig& config) {
@@ -573,10 +566,15 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
-    settings.IncludeIndexData(IncludeIndexData);
 
     if (CommonDestinationPrefix) {
         settings.DestinationPrefix(CommonDestinationPrefix);
+    }
+
+    const bool encryption = EncryptionAlgorithm && EncryptionKey;
+    if (encryption && !CommonDestinationPrefix) {
+        Cerr << "--destination-prefix parameter is required for exports with encryption" << Endl;
+        return EXIT_FAILURE;
     }
 
     return TCommandExportBase::Run<TExportToS3Settings, TExportToS3Response>(config, settings);
@@ -585,6 +583,10 @@ int TCommandExportToS3::Run(TConfig& config) {
 TCommandExportToFs::TCommandExportToFs()
     : TCommandExportBase("fs", "Create export in file system.")
 {
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Path in file system (relative to base_path)", true}},
+    });
 }
 
 void TCommandExportToFs::Config(TConfig& config) {
@@ -606,7 +608,7 @@ void TCommandExportToFs::ExtractParams(TConfig& config) {
 int TCommandExportToFs::Run(TConfig& config) {
     using namespace NExport;
 
-    TExportToFsSettings settings;
+    TExportToFsSettings settings = FillSettings(TExportToFsSettings());
 
     if (CommonDestinationPrefix) {
         settings.BasePath(CommonDestinationPrefix);

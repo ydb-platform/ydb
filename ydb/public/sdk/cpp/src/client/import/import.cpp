@@ -362,7 +362,6 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
         settingsProto.mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_.value());
     }
 
-    
     settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
 
     for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {

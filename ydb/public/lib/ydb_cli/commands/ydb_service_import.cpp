@@ -40,9 +40,6 @@ TCommandImport::TCommandImport()
 TCommandImportBase::TCommandImportBase(const TString& name, const TString& description)
     : TYdbOperationCommand(name, {}, description)
 {
-    TItem::DefineFields({
-        {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
-    });
 }
 
 void TCommandImportBase::Config(TConfig& config) {
@@ -119,9 +116,6 @@ void TCommandImportBase::Config(TConfig& config) {
         .FileName("encryption key file").RequiredArgument("PATH")
         .StoreFilePath(&EncryptionKeyFile)
         .StoreResult(&EncryptionKey);
-
-    config.Opts->AddLongOption('l', "list", "List objects in an existing export")
-        .RequiredArgument("BOOL").StoreTrue(&ListObjectsInExistingExport).DefaultValue("false");
 
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
@@ -280,17 +274,12 @@ void TCommandImportBase::FillItemsFromItemParam(TSettings& settings) const {
 
 template <typename TSettings>
 void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
-    if constexpr (std::is_same_v<TSettings, NImport::TImportFromS3Settings>) {
-        for (const TString& path : IncludePaths) {
-            NImport::TImportFromS3Settings::TItem item;
-            item.Src = {};
-            item.Dst = {};
-            item.SrcPath = path;
-            settings.AppendItem(item);
-        }
-    } else {
-        if (!IncludePaths.empty()) {
-            throw TMisuseException() << "--include parameter is not supported for this import type";
+    constexpr bool isS3 = std::is_same_v<TSettings, NImport::TImportFromS3Settings>;
+    for (const TString& path : IncludePaths) {
+        if constexpr (isS3) {
+            settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
+        } else {
+            settings.AppendItem({.Src = path, .Dst = {}});
         }
     }
 }
@@ -301,6 +290,7 @@ TCommandImportFromS3::TCommandImportFromS3()
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
 }
 
@@ -346,6 +336,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
             << colors.BoldColor() << "false" << colors.OldColor()
             << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+
+    config.Opts->AddLongOption('l', "list", "List objects in an existing export")
+        .RequiredArgument("BOOL").StoreTrue(&ListObjectsInExistingExport).DefaultValue("false");
 }
 
 void TCommandImportFromS3::Parse(TConfig& config) {
@@ -470,6 +463,10 @@ int TCommandImportFromS3::Run(TConfig& config) {
 TCommandImportFromFs::TCommandImportFromFs()
     : TCommandImportBase("fs", "Create import from file system.")
 {
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to base_path)", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
+    });
 }
 
 void TCommandImportFromFs::Config(TConfig& config) {

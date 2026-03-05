@@ -674,49 +674,6 @@ message ColumnCompression {
     optional int32 compression_level = 2;
 }
 
-message ColumnEncoding {
-    enum EncodingType {
-        ENCODING_TYPE_UNSPECIFIED = 0;
-        ENCODING_TYPE_PLAIN = 1;
-        ENCODING_TYPE_DICT = 2;
-        ENCODING_TYPE_SUBCOLUMNS = 3;
-    }
-
-    message Plain {
-    }
-
-    message Dictionary {
-    }
-
-    message Subcolumns {
-        message Settings {
-            optional uint32 max_dynamic_paths = 1;
-            optional uint32 max_depth = 2;
-        }
-
-        message ExplicitSubcolumn {
-            string path = 1;
-            optional Type type = 2;
-            optional EncodingType encoding_type = 3;
-            oneof encoding_settings {
-                Plain plain = 4;
-                Dictionary dictionary = 5;
-            }
-        }
-
-        optional Settings settings = 1;
-        repeated ExplicitSubcolumn explicit_subcolumn = 2;
-    }
-
-    optional EncodingType encoding_type = 1;
-
-    oneof encoding_settings {
-        Plain plain = 2;
-        Dictionary dictionary = 3;
-        Subcolumns subcolumns = 4;
-    }
-}
-
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -733,8 +690,6 @@ message ColumnMeta {
         google.protobuf.NullValue empty_default = 7;
     }
     optional ColumnCompression compression = 8;
-
-    optional ColumnEncoding encoding = 9;
 }
 
 message EvictionToExternalStorageSettings {

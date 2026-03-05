@@ -18,7 +18,6 @@ void TResolutionContext::Initialize(TParams params) {
     QueryParams = std::move(params.QueryParams);
     Parent = std::move(params.Parent);
     HttpProxyId = std::move(params.HttpProxyId);
-    ActorsToRegister.clear();
     SourceOutputs.clear();
     SourceOutputs.reserve(Sources.size());
     for (const ILinkSource* source : Sources) {
@@ -29,7 +28,6 @@ void TResolutionContext::Initialize(TParams params) {
 }
 
 void TResolutionContext::Start() {
-    ActorsToRegister.clear();
     for (size_t i = 0; i < Sources.size(); ++i) {
         const ILinkSource* source = Sources[i];
         if (!source) {
@@ -41,15 +39,10 @@ void TResolutionContext::Start() {
             .QueryParams = QueryParams,
             .Parent = Parent,
             .HttpProxyId = HttpProxyId,
-            .ActorsToRegister = &ActorsToRegister,
         });
 
         SourceOutputs[i].Name = source->Config().GetSource();
     }
-}
-
-TVector<NActors::IActor*> TResolutionContext::DetachActorsToRegister() {
-    return std::exchange(ActorsToRegister, {});
 }
 
 void TResolutionContext::OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event) {

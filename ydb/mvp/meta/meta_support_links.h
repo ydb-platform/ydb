@@ -182,9 +182,6 @@ public:
             return;
         }
         Become(&TMetaSupportLinksGetHandlerActor::StateResolveSources);
-        for (NActors::IActor* actor : ResolutionContext->DetachActorsToRegister()) {
-            Register(actor);
-        }
     }
 
     void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {

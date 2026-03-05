@@ -30,7 +30,6 @@ public:
 
     static std::unique_ptr<TResolutionContext> Build(TParams params);
     void Start();
-    TVector<NActors::IActor*> DetachActorsToRegister();
 
     void OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event);
     void HandleTimeout();
@@ -49,7 +48,6 @@ private:
     TVector<std::pair<TString, TString>> QueryParams;
     NActors::TActorId Parent;
     NActors::TActorId HttpProxyId;
-    TVector<NActors::IActor*> ActorsToRegister;
 };
 
 } // namespace NMVP

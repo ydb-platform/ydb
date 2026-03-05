@@ -9,7 +9,7 @@ ELSE()
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
     IF (SANITIZER_TYPE)
-        REQUIREMENTS(cpu:2)
+        REQUIREMENTS(cpu:4)
     ENDIF()
 ENDIF()
 

@@ -272,10 +272,6 @@ namespace Tests {
             DataStreamsAuthFactory = factory;
             return *this;
         }
-        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
-            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
-            return *this;
-        }
         TServerSettings& SetEnableOlapSink(bool withOlapSink) {
             AppConfig->MutableTableServiceConfig()->SetEnableOlapSink(withOlapSink);
             return *this;

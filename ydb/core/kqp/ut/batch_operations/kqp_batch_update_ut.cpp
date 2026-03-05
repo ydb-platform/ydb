@@ -12,7 +12,6 @@ TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLim
 {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
-    app.MutableTableServiceConfig()->SetEnableOltpSink(true);
     app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
     app.MutableTableServiceConfig()->SetEnableBatchUpdates(enableBatchUpdates);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);

@@ -84,6 +84,144 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+  {% endcut %}
+
+  {% cut "Пакетная вставка `CSV`" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    csv := `skip row
+
+  id,val
+  42,"text42"
+  43,"text43"
+  44,hello
+  `
+
+    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
+      []byte(csv),
+      table.WithCsvHeader(),
+      table.WithCsvSkipRows(2),
+      table.WithCsvNullValue([]byte("hello")), // строка "hello" будет восприниматься как NULL
+    ))
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Пакетная вставка `Apache Arrow`" %}
+
+  В следующем примере для подготовки данных используется пакет [arrow](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow).
+
+  ```go
+  package main
+
+  import (
+    "bytes"
+    "context"
+    "fmt"
+
+    "github.com/apache/arrow-go/v18/arrow"
+    "github.com/apache/arrow-go/v18/arrow/array"
+    "github.com/apache/arrow-go/v18/arrow/ipc"
+    "github.com/apache/arrow-go/v18/arrow/memory"
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx := context.Background()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx) // cleanup resources
+
+    mem := memory.NewGoAllocator()
+
+    schema := arrow.NewSchema([]arrow.Field{
+      {Name: "id", Type: arrow.PrimitiveTypes.Int64},
+      {Name: "val", Type: arrow.BinaryTypes.String},
+    }, nil)
+
+    b := array.NewRecordBuilder(mem, schema)
+    defer b.Release()
+
+    b.Field(0).(*array.Int64Builder).AppendValues(
+      []int64{123, 234}, nil)
+
+    b.Field(1).(*array.StringBuilder).AppendValues(
+      []string{"data1", "data2"}, nil)
+
+    rec := b.NewRecordBatch()
+    defer rec.Release()
+
+    schemaPayload := ipc.GetSchemaPayload(rec.Schema(), mem)
+    defer schemaPayload.Release()
+
+    dataPayload, err := ipc.GetRecordBatchPayload(rec)
+    if err != nil {
+      panic(err)
+    }
+    defer dataPayload.Release()
+
+    var schemaBuf bytes.Buffer
+    _, err = schemaPayload.WritePayload(&schemaBuf)
+    if err != nil {
+      panic(err)
+    }
+
+    var dataBuf bytes.Buffer
+    _, err = dataPayload.WritePayload(&dataBuf)
+    if err != nil {
+      panic(err)
+    }
+
+    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataArrow(
+      dataBuf.Bytes(),
+      table.WithArrowSchema(schemaBuf.Bytes()), // schema is required
+    ))
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+
+  ```
+
+  {% endcut %}
+
+>>>>>>> eaa6624d4cb (Python snippets in Recipes and Reference (#33698))
 - Go (database/sql)
 
   Реализация `database/sql` драйвера для {{ ydb-short-name }} не поддерживает нетранзакционную пакетную вставку данных.
@@ -171,5 +309,90 @@
         }
     }
   ```
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import posixpath
+    import ydb
+
+    def bulk_upsert(driver: ydb.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        driver.table_client.bulk_upsert(posixpath.join(path, "tablename"), rows, column_types)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import posixpath
+    import ydb
+    import asyncio
+
+    async def bulk_upsert(driver: ydb.aio.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        await driver.table_client.bulk_upsert(
+            posixpath.join(path, "tablename"), rows, column_types
+        )
+
+    async def main():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            await bulk_upsert(driver, "/local")
+
+    asyncio.run(main())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb
+
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+    with engine.connect() as connection:
+        dbapi_conn = connection.connection
+
+        column_types = (
+              ydb.BulkUpsertColumns()
+              .add_column("id", ydb.PrimitiveType.Uint64)
+              .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+          )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+
+        dbapi_conn.bulk_upsert("tablename", rows, column_types)
+    ```
+
+  {% endlist %}
 
 {% endlist %}

@@ -142,10 +142,10 @@ public:
             }
         }
 
-        ResolveSources();
+        ResolveSupportLinks();
     }
 
-    void ResolveSources() {
+    void ResolveSupportLinks() {
         SupportLinksResolver = std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
             .EntityType = EntityType,
             .ClusterColumns = ClusterColumns,

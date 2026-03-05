@@ -6,12 +6,15 @@
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata {
+namespace {
 
 TString GetStoragePrefix() {
     TString path = NMetadata::NProvider::TServiceOperator::GetPath();
     Y_ENSURE(path, "Service operator path must not be empty");
     return CanonizePath("/" + AppData()->TenantName + "/" + path);
 }
+
+} // anonymous namespace
 
 TString IClassBehaviour::GetStorageTableDirectory() const {
     return TFsPath(GetStorageTablePath()).Fix().Parent().GetPath();

@@ -27,6 +27,7 @@ struct TDqBlockJoinContext {
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
     bool LeftIsBuild = false;
+    ui32 PrefetchProbePages = 0;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
     // program's TTypeEnvironment.  This avoids creating TOptionalType objects
     // at runtime (inside DoCalculate) whose lifetime depends on the
@@ -251,7 +252,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    meta->LeftIsBuild)
+                    meta->LeftIsBuild, meta->PrefetchProbePages)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
         {}
@@ -318,7 +319,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7 || callable.GetInputsCount() == 8, "Expected 7 or 8 args");
+    MKQL_ENSURE(callable.GetInputsCount() >= 7 && callable.GetInputsCount() <= 9, "Expected 7, 8, or 9 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -403,9 +404,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         meta.Renames.push_back({.Index = rename.Index, .Side = thisSide});
     }
 
-    if (callable.GetInputsCount() == 8) {
+    if (callable.GetInputsCount() >= 8) {
         const auto leftIsBuildNode = callable.GetInput(7);
         meta.LeftIsBuild = AS_VALUE(TDataLiteral, leftIsBuildNode)->AsValue().Get<ui32>() != 0;
+    }
+    if (callable.GetInputsCount() >= 9) {
+        meta.PrefetchProbePages = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui32>();
     }
     if (joinKind == EJoinKind::Left && meta.LeftIsBuild) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);

@@ -132,7 +132,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TArrayRef<const ui32>& rightKeyColumns,
                                                 const TArrayRef<const ui32>& leftRenames,
                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                                bool leftIsBuild) {
+                                                bool leftIsBuild, ui32 prefetchProbePages) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
@@ -150,6 +150,9 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
     callableBuilder.Add(NewDataLiteral(static_cast<ui32>(leftIsBuild ? 1 : 0)));
+    if (prefetchProbePages > 0) {
+        callableBuilder.Add(NewDataLiteral(prefetchProbePages));
+    }
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

@@ -4,7 +4,6 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/signals.h>
-#include <ydb/mvp/meta/meta_settings.h>
 #include <ydb/mvp/meta/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -22,6 +21,27 @@ class Node;
 namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
+void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
+
+struct TGrafanaSupportConfig {
+    TString Endpoint;
+    TString SecretName;
+    TString WorkspaceColumn = "workspace";
+    TString DatasourceColumn = "grafana_ds";
+};
+
+struct TSupportLinkEntryConfig {
+    TString Source;
+    TString Title;
+    TString Url;
+    TString Tag;
+    TString Folder;
+};
+
+struct TSupportLinksConfig {
+    TVector<TSupportLinkEntryConfig> Cluster;
+    TVector<TSupportLinkEntryConfig> Database;
+};
 
 class TMVP {
 protected:
@@ -38,7 +58,6 @@ public:
     TString MetaApiEndpoint = "";
     TString MetaDatabase = "";
     bool MetaCache = false;
-    TMetaSettings MetaSettings;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;
 
@@ -56,6 +75,8 @@ public:
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
+    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
+    void ValidateSupportLinksConfig() const;
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
@@ -66,6 +87,7 @@ public:
     NActors::TActorId HandlerId;
 
     TGrafanaSupportConfig GrafanaSupportConfig;
+    TSupportLinksConfig SupportLinksConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

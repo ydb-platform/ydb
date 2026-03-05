@@ -5,6 +5,7 @@ import os
 import stat
 import time
 from library.python import resource
+import threading
 
 
 from ydb.tests.stress.common.common import WorkloadBase
@@ -65,19 +66,19 @@ class YdbTopicWorkload(WorkloadBase):
         print(f"End at {time.time()}")
 
     def __one_tablet_but_a_distributed_transaction(self):
-        self.run_topic_write_with_tx(20, 10, 10, "100M")
+        return self.run_topic_write_with_tx(20, 10, 10, "100M", int(self.consumers), int(self.consumers))
 
     def __two_tablets_distributed_transaction(self):
-        self.run_topic_write_with_tx(20, 5, 10, "100M")
+        return self.run_topic_write_with_tx(20, 5, 10, "100M", int(self.consumers), int(self.consumers))
 
     def __a_wide_transaction_with_multiple_partitions_in_one_tablet(self):
-        self.run_topic_write_with_tx(20, 100, 10, "100M")
+        return self.run_topic_write_with_tx(20, 100, 10, "100M", int(self.consumers), int(self.consumers))
 
     def __wide_transaction_one_tablet_contains_one_partition(self):
-        self.run_topic_write_with_tx(20, 100, 1, "100M")
+        return self.run_topic_write_with_tx(20, 100, 1, "100M", int(self.consumers), int(self.consumers))
 
     def __immediate_transaction(self):
-        self.run_topic_write_with_tx(20, 1, 1, "10M")
+        return self.run_topic_write_with_tx(20, 1, 1, "10M", int(self.consumers), int(self.consumers))
 
     def __loop(self):
         # init
@@ -113,10 +114,66 @@ class YdbTopicWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['clean'])
         )
 
-    def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, byte_rate):
+    def run_topic_write_with_tx(self,
+                                number_of_producers,
+                                number_of_partitions_in_the_topic,
+                                number_of_partitions_per_tablet,
+                                byte_rate,
+                                number_of_consumers,
+                                number_of_consumer_threads):
+        brInit = threading.Barrier(2)
+        brDone = threading.Barrier(2)
+
         topic_name = f'workload_topic_pr{number_of_producers}_p{number_of_partitions_in_the_topic}_pq{number_of_partitions_per_tablet}'
 
-        self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet)
+        def topic_read():
+            self.__run_topic_read(number_of_consumers,
+                                  number_of_consumer_threads,
+                                  topic_name,
+                                  brInit,
+                                  brDone)
+
+        def topic_write():
+            self.__run_topic_write_with_tx(number_of_producers,
+                                           number_of_partitions_in_the_topic,
+                                           number_of_partitions_per_tablet,
+                                           byte_rate,
+                                           topic_name,
+                                           number_of_consumers,
+                                           brInit,
+                                           brDone)
+
+        return [topic_write, topic_read]
+
+    def __run_topic_read(self,
+                         number_of_consumers,
+                         number_of_consumer_threads,
+                         topic_name,
+                         brInit, brDone):
+        brInit.wait()
+
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'workload', 'topic', 'run', 'read',
+            '-s', self.duration,
+            '--consumers', str(number_of_consumers),
+            '--threads', str(number_of_consumer_threads),
+            '--topic', topic_name
+        ])
+
+        brDone.wait()
+
+    def __run_topic_write_with_tx(self,
+                                  number_of_producers,
+                                  number_of_partitions_in_the_topic,
+                                  number_of_partitions_per_tablet,
+                                  byte_rate,
+                                  topic_name,
+                                  number_of_consumers,
+                                  brInit, brDone):
+        self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, number_of_consumers)
+
+        brInit.wait()
 
         self.cmd_run([
             *self._get_cli_common_args(),
@@ -129,9 +186,11 @@ class YdbTopicWorkload(WorkloadBase):
             '--topic', topic_name
         ])
 
+        brDone.wait()
+
         self.delete_topic(topic_name)
 
-    def create_topic(self, topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet):
+    def create_topic(self, topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, number_of_consumers):
         self.cmd_run([
             *self._get_cli_common_args(),
             'topic', 'create',
@@ -144,6 +203,18 @@ class YdbTopicWorkload(WorkloadBase):
             topic_name,
         ])
 
+        self.add_consumers(topic_name, number_of_consumers)
+
+    def add_consumers(self, topic_name, number_of_consumers):
+        for n in range(0, number_of_consumers):
+            self.cmd_run([
+                *self._get_cli_common_args(),
+                'topic', 'consumer', 'add',
+                f'--availability-period={int(self.duration) * 9 // 10}s',
+                '--consumer', f'workload-consumer-{n}',
+                topic_name,
+            ])
+
     def delete_topic(self, topic_name):
         self.cmd_run([
             *self._get_cli_common_args(),
@@ -152,11 +223,10 @@ class YdbTopicWorkload(WorkloadBase):
         ])
 
     def get_workload_thread_funcs(self):
-        return [
-            self.__loop,
-            self.__one_tablet_but_a_distributed_transaction,
-            self.__two_tablets_distributed_transaction,
-            self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
-            self.__wide_transaction_one_tablet_contains_one_partition,
-            self.__immediate_transaction,
-        ]
+        funcs = [self.__loop]
+        funcs += self.__one_tablet_but_a_distributed_transaction()
+        funcs += self.__two_tablets_distributed_transaction()
+        funcs += self.__a_wide_transaction_with_multiple_partitions_in_one_tablet()
+        funcs += self.__wide_transaction_one_tablet_contains_one_partition()
+        funcs += self.__immediate_transaction()
+        return funcs

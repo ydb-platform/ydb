@@ -544,43 +544,40 @@ void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
 
     for (auto& ev : CommitRequestsQueue) {
-        bool success = false;
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            success = Storage->Commit(offset) || success;
+            Storage->Commit(offset);
         }
 
-        if (success || !Storage->GetBatch().Empty()) {
-            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
-        } else {
+        if (Storage->GetBatch().Empty()) {
             ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
         }
     }
     CommitRequestsQueue.clear();
 
     for (auto& ev : UnlockRequestsQueue) {
-        bool success = false;
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            success = Storage->Unlock(offset) || success;
+            Storage->Unlock(offset);
         }
 
-        if (success || !Storage->GetBatch().Empty()) {
-            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
-        } else {
+        if (Storage->GetBatch().Empty()) {
             ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
         }
     }
     UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
-        bool success = false;
         for (const auto &message : ev->Get()->Record.GetMessage()) {
-            success = Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds())) || success;
+            Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
         }
 
-        if (success || !Storage->GetBatch().Empty()) {
-            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
-        } else {
+        if (Storage->GetBatch().Empty()) {
             ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
         }
     }
     ChangeMessageDeadlineRequestsQueue.clear();

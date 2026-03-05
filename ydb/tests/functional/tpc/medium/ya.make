@@ -14,6 +14,8 @@ TEST_SRCS(
     test_workload_manager.py
 )
 
+SPLIT_FACTOR(20)
+
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)

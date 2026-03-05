@@ -264,8 +264,11 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
             return;
             // TODO: retries
         }
-        auto& tablets = NodeId2Tablets[node.GetNodeId()];
-        tablets.insert(tablets.end(), node.GetTabletIds().begin(), node.GetTabletIds().end());
+
+        if (!node.GetTabletIds().empty()) {
+            auto& tablets = NodeId2Tablets[node.GetNodeId()];
+            tablets.insert(tablets.end(), node.GetTabletIds().begin(), node.GetTabletIds().end());
+        }
     }
 
     StartColumnStatEvalTasks();
@@ -274,11 +277,19 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
 
 void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(ScanActorsInFlight.empty());
-    Y_ENSURE(NodeId2PendingTablets.empty());
+    Y_ENSURE(NodeId2State.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
 
-    NodeId2PendingTablets = NodeId2Tablets;
+    if (IsColumnTable) {
+        for (const auto& [id, tabletIds] : NodeId2Tablets) {
+            NodeId2State[id] = TNodeState {
+                .Id = id,
+                .TabletsInFlight = 0,
+                .PendingTablets = tabletIds,
+            };
+        }
+    }
 
     SelectBuilder.emplace(/*isIntermediateAggregation=*/IsColumnTable);
     size_t totalSize = 0;
@@ -309,8 +320,11 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
         PendingTasks.pop();
     }
 
-    auto addScanActor = [&](ui32 nodeId, std::optional<ui64> tabletId) {
-        SA_LOG_D("Launching scan actor, tabletId: " << tabletId << ", tabletNodeId: " << nodeId);
+    DispatchSomeScanActors();
+}
+
+void TAnalyzeActor::DispatchSomeScanActors() {
+    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId) {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
             SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
@@ -319,22 +333,49 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
         };
     };
 
-    if (IsColumnTable) {
-        for (auto it = NodeId2PendingTablets.begin(); it != NodeId2PendingTablets.end(); ) {
-            ui32 nodeId = it->first;
-            auto& tabletIds = it->second;
-            Y_ENSURE(!tabletIds.empty());
+    if (!IsColumnTable) {
+        Y_ENSURE(ScanActorsInFlight.empty());
+        SA_LOG_D("Dispatching scan actor for the whole table");
+        dispatchActor(0, std::nullopt);
+        return;
+    }
 
-            addScanActor(nodeId, tabletIds.back());
-            tabletIds.pop_back();
-            if (!tabletIds.empty()) {
-                ++it;
-            } else {
-                NodeId2PendingTablets.erase(it++);
-            }
+    // Run a simple scheduling algorithm, dispatching scans fairly among nodes hosting tablets,
+    // and for nodes with the same number of in-flight scans, favoring nodes with the
+    // longer tablet ids queue.
+
+    auto isSchedulable = [](const TNodeState& node) {
+        return !node.PendingTablets.empty()
+            && node.TabletsInFlight < MaxPerNodeScanActorsInFlight;
+    };
+
+    auto nodeCmp = [](TNodeState* left, TNodeState* right) {
+        return std::tuple(-left->TabletsInFlight, left->PendingTablets.size())
+            < std::tuple(-right->TabletsInFlight, right->PendingTablets.size());
+    };
+
+    std::priority_queue<TNodeState*, std::vector<TNodeState*>, decltype(nodeCmp)> schedulableQueue;
+    for (auto& [id, node] : NodeId2State) {
+        if (isSchedulable(node)) {
+            schedulableQueue.emplace(&node);
         }
-    } else {
-        addScanActor(0, std::nullopt);
+    }
+
+    while (!schedulableQueue.empty()
+            && ScanActorsInFlight.size() < MaxTotalScanActorsInFlight) {
+        auto* node = schedulableQueue.top();
+        schedulableQueue.pop();
+        Y_ENSURE(!node->PendingTablets.empty());
+        ui64 tabletId = node->PendingTablets.back();
+
+        SA_LOG_D("Dispatching scan actor, tabletId: " << tabletId << ", nodeId: " << node->Id);
+        dispatchActor(node->Id, tabletId);
+        node->PendingTablets.pop_back();
+        ++node->TabletsInFlight;
+
+        if (isSchedulable(*node)) {
+            schedulableQueue.push(node);
+        }
     }
 }
 
@@ -354,28 +395,14 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     }
 
     if (tabletNodeId) {
-        // TODO: unify with code in DispatchScanActors
-
-        auto nodeIt = NodeId2PendingTablets.find(tabletNodeId);
-        if (nodeIt != NodeId2PendingTablets.end()) {
-            auto& tabletIds = nodeIt->second;
-            Y_ENSURE(!tabletIds.empty());
-
-            ui64 tabletId = tabletIds.back();
-            SA_LOG_D("Launching next scan actor, tabletId: "
-                << tabletId << ", tabletNodeId: " << tabletNodeId);
-            auto actor = std::make_unique<TScanActor>(
-                SelfId(), DatabaseName,
-                SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
-            ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
-                .TabletNodeId = tabletNodeId,
-            };
-
-            tabletIds.pop_back();
-            if (tabletIds.empty()) {
-                NodeId2PendingTablets.erase(nodeIt);
-            }
+        auto nodeIt = NodeId2State.find(tabletNodeId);
+        Y_ENSURE(nodeIt != NodeId2State.end());
+        --nodeIt->second.TabletsInFlight;
+        if (!nodeIt->second.TabletsInFlight && nodeIt->second.PendingTablets.empty()) {
+            NodeId2State.erase(nodeIt);
         }
+
+        DispatchSomeScanActors();
     }
 
     if (CountSeq) {
@@ -385,6 +412,8 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     }
 
     if (!ScanActorsInFlight.empty()) {
+        // More scan results coming for the current column tasks batch, merge the current one
+        // and wait for more.
         for (const auto& task : InProgressTasks) {
             Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
             if (task.SimpleStatEval) {
@@ -396,7 +425,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         return;
     }
 
-    // Finalize results for the current column batch.
+    // This is the last scan result for the current column tasks batch, finalize the result.
 
     std::vector<TStatisticsItem> resultItems;
 

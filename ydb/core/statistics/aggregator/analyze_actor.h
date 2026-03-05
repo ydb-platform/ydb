@@ -89,7 +89,15 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     std::optional<ui32> CountSeq;
     std::vector<TColumnStatEvalTask> InProgressTasks;
 
-    THashMap<ui32, TVector<ui64>> NodeId2PendingTablets;
+    static constexpr ui64 MaxTotalScanActorsInFlight = 100;
+    static constexpr i64 MaxPerNodeScanActorsInFlight = 1;
+
+    struct TNodeState {
+        ui32 Id = 0;
+        i64 TabletsInFlight = 0;
+        TVector<ui64> PendingTablets;
+    };
+    THashMap<ui32, TNodeState> NodeId2State;
 
     struct TScanActorInfo {
         ui32 TabletNodeId = 0;
@@ -132,6 +140,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     class TScanActor;
 
     void StartColumnStatEvalTasks();
+    void DispatchSomeScanActors();
 
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvents::TEvPoison::TPtr& ev);

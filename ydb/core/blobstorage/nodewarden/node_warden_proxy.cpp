@@ -127,13 +127,6 @@ void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
 }
 
-void TNodeWarden::StartStaticProxies() {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.HasServiceSet());
-    for (const auto& group : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
-        StartLocalProxy(group.GetGroupID());
-    }
-}
-
 void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
@@ -149,15 +142,31 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
     } else if (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) {
-        const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
-        auto& queue = it->second;
-        TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
-        if (queue.empty()) {
-            TimeoutToQueue.emplace(expiration, &*it);
+        // for static groups, try to find the group configuration in Cfg and apply it
+        bool found = false;
+        if (Cfg->BlobStorageConfig.HasServiceSet()) {
+            for (const auto& groupProto : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
+                if (groupProto.GetGroupID() == id) {
+                    ApplyGroupInfo(id, groupProto.GetGroupGeneration(), &groupProto, true, false);
+                    found = true;
+                    break;
+                }
+            }
         }
-        queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
-        return;
-    } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
+        if (!found) {
+            // group not found in static config, put request in pending queue
+            const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
+            auto& queue = it->second;
+            TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
+            if (queue.empty()) {
+                TimeoutToQueue.emplace(expiration, &*it);
+            }
+            queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
+            return;
+        }
+    }
+
+    if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
             StartVirtualGroupAgent(id);
         } else {

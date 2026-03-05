@@ -200,12 +200,11 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    GrafanaSupportConfig = {};
-    SupportLinksConfig = {};
+    MetaSettings = {};
 
     auto parseGrafana = [this](const YAML::Node& node) {
-        GrafanaSupportConfig.Endpoint = node["endpoint"].as<std::string>("");
-        GrafanaSupportConfig.SecretName = node["secret_name"].as<std::string>("");
+        MetaSettings.GrafanaSupportConfig.Endpoint = node["endpoint"].as<std::string>("");
+        MetaSettings.GrafanaSupportConfig.SecretName = node["secret_name"].as<std::string>("");
     };
 
     auto parseSupportLinks = [this](const YAML::Node& node) {
@@ -222,10 +221,10 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
         };
 
         if (node["cluster"]) {
-            parseEntity(node["cluster"], SupportLinksConfig.Cluster);
+            parseEntity(node["cluster"], MetaSettings.SupportLinksConfig.Cluster);
         }
         if (node["database"]) {
-            parseEntity(node["database"], SupportLinksConfig.Database);
+            parseEntity(node["database"], MetaSettings.SupportLinksConfig.Database);
         }
     };
 
@@ -272,12 +271,12 @@ void TMVP::ValidateSupportLinksConfig() const {
         for (size_t i = 0; i < links.size(); ++i) {
             const auto& link = links[i];
             const TString where = TStringBuilder() << "support_links." << entityName << "[" << i << "]";
-            sourceValidators.Validate(link, GrafanaSupportConfig, where);
+            sourceValidators.Validate(link, MetaSettings.GrafanaSupportConfig, where);
         }
     };
 
-    validateEntityLinks(SupportLinksConfig.Cluster, "cluster");
-    validateEntityLinks(SupportLinksConfig.Database, "database");
+    validateEntityLinks(MetaSettings.SupportLinksConfig.Cluster, "cluster");
+    validateEntityLinks(MetaSettings.SupportLinksConfig.Database, "database");
 }
 
 

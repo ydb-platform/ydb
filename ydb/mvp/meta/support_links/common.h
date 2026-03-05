@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/meta/meta_settings.h>
+
+#include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>

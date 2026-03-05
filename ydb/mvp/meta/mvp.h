@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/signals.h>
+#include <ydb/mvp/meta/meta_settings.h>
 #include <ydb/mvp/meta/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -22,26 +23,6 @@ namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
-
-struct TGrafanaSupportConfig {
-    TString Endpoint;
-    TString SecretName;
-    TString WorkspaceColumn = "workspace";
-    TString DatasourceColumn = "grafana_ds";
-};
-
-struct TSupportLinkEntryConfig {
-    TString Source;
-    TString Title;
-    TString Url;
-    TString Tag;
-    TString Folder;
-};
-
-struct TSupportLinksConfig {
-    TVector<TSupportLinkEntryConfig> Cluster;
-    TVector<TSupportLinkEntryConfig> Database;
-};
 
 class TMVP {
 protected:
@@ -86,8 +67,7 @@ public:
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TGrafanaSupportConfig GrafanaSupportConfig;
-    TSupportLinksConfig SupportLinksConfig;
+    TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;
 };

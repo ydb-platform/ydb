@@ -19,13 +19,10 @@ TSupportLinksResolver::TSupportLinksResolver(TParams params)
     if (!params.Sources.empty()) {
         OwnedSources = std::move(params.Sources);
     } else {
-        const auto& linkConfigs = params.EntityType == EEntityType::Database
-            ? InstanceMVP->SupportLinksConfig.GetDatabase()
-            : InstanceMVP->SupportLinksConfig.GetCluster();
-        OwnedSources.reserve(linkConfigs.size());
-        for (int i = 0; i < linkConfigs.size(); ++i) {
-            OwnedSources.push_back(MakeLinkSource(linkConfigs[i]));
-        }
+        const auto& linkSources = params.EntityType == EEntityType::Database
+            ? InstanceMVP->MetaSettings.DatabaseLinkSources
+            : InstanceMVP->MetaSettings.ClusterLinkSources;
+        OwnedSources = linkSources;
     }
     Sources.reserve(OwnedSources.size());
     for (const auto& source : OwnedSources) {

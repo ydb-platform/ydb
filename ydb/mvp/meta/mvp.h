@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/signals.h>
-#include <ydb/mvp/meta/protos/config.pb.h>
+#include <ydb/mvp/meta/meta_settings.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
@@ -22,9 +22,6 @@ namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
-
-using TSupportLinkEntryConfig = NMvp::NMeta::TMetaConfig_TSupportLinkEntry;
-using TSupportLinksConfig = NMvp::NMeta::TMetaConfig_TSupportLinksConfig;
 
 class TMVP {
 protected:
@@ -68,7 +65,7 @@ public:
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TSupportLinksConfig SupportLinksConfig;
+    TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;
 };

@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/support_links/source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -181,20 +182,44 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
+    MetaSettings.ClusterLinkSources.clear();
+    MetaSettings.DatabaseLinkSources.clear();
+
     MetaApiEndpoint = config.GetMetaApiEndpoint();
     MetaDatabase = config.GetMetaDatabase();
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
-    if (config.HasSupportLinks()) {
-        SupportLinksConfig = config.GetSupportLinks();
+    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
+    MetaSettings.MetaDatabase = MetaDatabase;
+    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+
+    if (config.HasGrafana()) {
+        MetaSettings.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
+        MetaSettings.GrafanaSecretName = config.GetGrafana().GetSecretName();
     } else {
-        SupportLinksConfig.Clear();
+        MetaSettings.GrafanaEndpoint.clear();
+        MetaSettings.GrafanaSecretName.clear();
+    }
+
+    if (config.HasSupportLinks()) {
+        const auto& supportLinks = config.GetSupportLinks();
+        MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
+        for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
+            MetaSettings.ClusterLinkSources.push_back(MakeLinkSource(supportLinks.GetCluster(i)));
+        }
+        MetaSettings.DatabaseLinkSources.reserve(supportLinks.GetDatabase().size());
+        for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
+            MetaSettings.DatabaseLinkSources.push_back(MakeLinkSource(supportLinks.GetDatabase(i)));
+        }
     }
 }
 
 void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    SupportLinksConfig.Clear();
+    MetaSettings.GrafanaEndpoint.clear();
+    MetaSettings.GrafanaSecretName.clear();
+    MetaSettings.ClusterLinkSources.clear();
+    MetaSettings.DatabaseLinkSources.clear();
 
     if (config["meta"]) {
         auto meta = config["meta"];
@@ -243,6 +268,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     if (MetaDatabase.empty()) {
         MetaDatabase = defaultMetaDatabase;
     }
+
+    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
+    MetaSettings.MetaDatabase = MetaDatabase;
+    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
 
     if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);

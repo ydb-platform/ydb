@@ -934,8 +934,8 @@ private:
 
         if (!key->WaitEvent().IsReady()) {
             // There are no ready events in this partition, so move it to pending / idle
-            DistributePartitionSession(key);
             NextReadyPartition = ReadyPartitions.erase(NextReadyPartition);
+            DistributePartitionSession(key);
         } else {
             // Move to next partition
             NextReadyPartition++;

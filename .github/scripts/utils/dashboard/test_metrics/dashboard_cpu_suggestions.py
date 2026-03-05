@@ -287,9 +287,9 @@ def build_cpu_suggestions(
             elif size_u == "MEDIUM":
                 timeout_max_value = 4
             elif size_u == "LARGE":
-                timeout_max_value = "all"
+                timeout_max_value = 4  # LARGE max cpu:4 (no cpu:all)
             else:
-                timeout_max_value = "all"
+                timeout_max_value = 4
         recommended_req: Any = timeout_max_value if timeout_max_policy_applied else recommended
         explain_parts = [
             f"p95_cores={p95_c:.3f}",

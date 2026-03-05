@@ -703,6 +703,32 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
     return runs
 
 
+def _infer_sanitizer_from_report(report_obj: dict[str, Any], report_path: Optional[Path] = None) -> Optional[str]:
+    """Best-effort sanitizer detection (address/thread/memory) from report metadata."""
+    # report.progress keys often include platform/build tags like:
+    # default-linux-x86_64-release-asan, ...-tsan, ...-msan
+    progress = report_obj.get("progress") if isinstance(report_obj, dict) else None
+    if isinstance(progress, dict):
+        keys = " ".join(str(k).lower() for k in progress.keys())
+        if "asan" in keys:
+            return "address"
+        if "tsan" in keys:
+            return "thread"
+        if "msan" in keys:
+            return "memory"
+
+    # Fallback: infer from report filename.
+    if report_path is not None:
+        name = report_path.name.lower()
+        if "asan" in name:
+            return "address"
+        if "tsan" in name:
+            return "thread"
+        if "msan" in name:
+            return "memory"
+    return None
+
+
 def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
@@ -965,9 +991,14 @@ def main() -> None:
     p.add_argument("--max-points", type=int, default=1000, help="Max points per series in HTML dashboard (downsampling)")
     p.add_argument("--html-by-chunk", action="store_true", help="Include suite+chunk charts in HTML (default: only by suite)")
     p.add_argument("--full-table", action="store_true", help="Generate additional detailed *_table.html (disabled by default)")
-    p.add_argument("--maximize-reqs-for-timeout-tests", action="store_true", help="For suites with test timeouts use size max: SMALL=1, MEDIUM=4, LARGE=all")
+    p.add_argument("--maximize-reqs-for-timeout-tests", action="store_true", help="For suites with test timeouts use size max: SMALL=1, MEDIUM=4, LARGE=4")
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
-    p.add_argument("--sanitizer", type=str, default=None, help="Optional SANITIZER_TYPE value for ya.make IF branches")
+    p.add_argument(
+        "--sanitizer",
+        type=str,
+        default=None,
+        help="SANITIZER_TYPE for ya.make IF branches. If omitted, auto-detected from report metadata when possible.",
+    )
     p.add_argument("--resources-jsonl", type=Path, default=None, help="Optional resources_monitor.jsonl to overlay CPU/RAM/disk metrics on charts")
     p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
     p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
@@ -1014,6 +1045,9 @@ def main() -> None:
     if out_cpu_sugg_r and out_trace_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --out-trace and --out-cpu-suggestions must be different files")
 
+    report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
+    effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
+
     chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite = parse_report_chunks(
         args.report, args.suite_path
     )
@@ -1031,7 +1065,9 @@ def main() -> None:
             {normalize_suite_path(str(r["suite_path"])) for r in runs}
             | {normalize_suite_path(str(s)) for s in report_status_by_suite.keys()}
         )
-        requirements_cache = ya_make_requirements.build_requirements_cache(repo_root, suite_paths, sanitizer=args.sanitizer)
+        requirements_cache = ya_make_requirements.build_requirements_cache(
+            repo_root, suite_paths, sanitizer=effective_sanitizer
+        )
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
 
@@ -1075,7 +1111,7 @@ def main() -> None:
             "full_table": args.full_table,
             "maximize_reqs_for_timeout_tests": args.maximize_reqs_for_timeout_tests,
             "repo_root_for_synthetic": str(repo_root) if repo_root else None,
-            "sanitizer": args.sanitizer,
+            "sanitizer": effective_sanitizer,
         }
         build_html_dashboard(
             args.suite_path,

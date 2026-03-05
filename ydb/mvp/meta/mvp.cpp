@@ -49,18 +49,6 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     }
 }
 
-void NMVP::ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius) {
-    Y_UNUSED(isNebius);
-    if (hasMetaConfigBlock) {
-        if (metaApiEndpoint.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
-        }
-        if (metaDatabase.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
-        }
-    }
-}
-
 void TMVP::OnTerminate(int) {
     AtomicSet(Quit, true);
 }
@@ -192,7 +180,15 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     DbUserTokenSource = config.GetDbUserTokenAccess();
     MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
     MetaSettings.MetaDatabase = MetaDatabase;
-    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    if (MetaSettings.AccessServiceType != NMvp::nebius_v1) {
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    }
+    if (MetaSettings.MetaApiEndpoint.empty()) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
+    }
+    if (MetaSettings.MetaDatabase.empty()) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
+    }
 
     if (config.HasGrafana()) {
         MetaSettings.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
@@ -215,18 +211,6 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     }
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    MetaSettings.GrafanaEndpoint.clear();
-    MetaSettings.GrafanaSecretName.clear();
-    MetaSettings.ClusterLinkSources.clear();
-    MetaSettings.DatabaseLinkSources.clear();
-
-    if (config["meta"]) {
-        auto meta = config["meta"];
-        Y_UNUSED(meta);
-    }
-}
-
 void TMVP::TryGetMetaOptionsFromConfig() {
     if (StartupOptions.GetYamlConfigPath().empty()) {
         return;
@@ -238,16 +222,16 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         if (appConfig.HasMeta()) {
             TryGetMetaOptionsFromConfig(appConfig.GetMeta());
         }
-        TryGetMetaOptionsFromConfig(config);
-        ValidateMetaBaseConfig(
-            MetaApiEndpoint,
-            MetaDatabase,
-            static_cast<bool>(config["meta"]),
-            false
-        );
+        if (config["meta"]) {
+            if (MetaApiEndpoint.empty()) {
+                ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
+            }
+            if (MetaDatabase.empty()) {
+                ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
+            }
+        }
     } catch (const YAML::Exception& e) {
-        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-        std::exit(EXIT_FAILURE);
+        ythrow yexception() << "Error parsing YAML configuration file: " << e.what();
     }
 }
 
@@ -256,10 +240,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
     TryGetMetaOptionsFromConfig();
-
-    if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
-        ValidateMetaBaseConfig(MetaApiEndpoint, MetaDatabase, false, true);
-    }
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

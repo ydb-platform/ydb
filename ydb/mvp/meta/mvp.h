@@ -14,14 +14,9 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/vector.h>
 
-namespace YAML {
-class Node;
-}
-
 namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
-void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
 
 class TMVP {
 protected:
@@ -55,7 +50,6 @@ public:
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
-    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
@@ -64,7 +58,6 @@ public:
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
-
     TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;

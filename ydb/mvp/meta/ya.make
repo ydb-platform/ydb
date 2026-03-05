@@ -2,10 +2,6 @@ RECURSE_FOR_TESTS(
     ut
 )
 
-RECURSE(
-    support_links
-)
-
 LIBRARY()
 
 SRCS(
@@ -16,6 +12,7 @@ SRCS(
     meta_clusters.h
     meta_cp_databases.h
     meta_cp_databases_verbose.h
+    meta_settings.h
     meta_support_links.h
     meta_db_clusters.h
     meta_versions.cpp

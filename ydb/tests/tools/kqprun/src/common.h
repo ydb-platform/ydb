@@ -4,7 +4,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/tests/tools/kqprun/runlib/settings.h>

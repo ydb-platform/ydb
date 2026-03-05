@@ -286,7 +286,8 @@ template <class TTraits> struct SIMDPack {
     /// 128-bit lane iters
     static const ui8 LaneIters = [] {
 #ifdef USE_X86_SIMD
-        if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits>) {
+        if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits> ||
+                      std::is_same_v<TTraits, NSimd::TSimdAVX512Traits>) {
             return 1;
         }
 #endif

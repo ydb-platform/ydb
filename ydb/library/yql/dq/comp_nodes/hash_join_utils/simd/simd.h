@@ -10,6 +10,7 @@
 #endif
 
 #ifdef USE_X86_SIMD
+#include "simd_avx512.h"
 #include "simd_avx2.h"
 #include "simd_sse42.h"
 #endif
@@ -27,6 +28,7 @@ struct TSimdTraits {
 };
 
 #ifdef USE_X86_SIMD
+using TSimdAVX512Traits = TSimdTraits<32, __m256i, NSimd::NAVX512::TSimd8>;
 using TSimdAVX2Traits = TSimdTraits<32, __m256i, NSimd::NAVX2::TSimd8>;
 using TSimdSSE42Traits = TSimdTraits<16, __m128i, NSimd::NSSE42::TSimd8>;
 #endif
@@ -36,7 +38,9 @@ using TSimdFallbackTraits = TSimdTraits<8, ui64, NSimd::NFallback::TSimd8>;
 template<typename TFactory>
 auto SelectSimdTraits(const TFactory& factory) {
 #ifdef USE_X86_SIMD
-    if (NX86::HaveAVX2()) {
+    if (NX86::HaveAVX512BW() && NX86::HaveAVX512VL() && NX86::HaveAVX512VBMI()) {
+        return factory.template Create<TSimdAVX512Traits>();
+    } else if (NX86::HaveAVX2()) {
         return factory.template Create<TSimdAVX2Traits>();
     } else {
         return factory.template Create<TSimdSSE42Traits>();
@@ -86,6 +90,10 @@ auto CreateUnpackMask(ui32 dataSize, ui32 stripeSize, bool needOffset) {
 
 #ifdef USE_X86_SIMD
 template
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi")))
+auto CreateUnpackMask<NSimd::TSimdAVX512Traits>(ui32, ui32, bool);
+
+template
 __attribute__((target("avx2")))
 auto CreateUnpackMask<NSimd::TSimdAVX2Traits>(ui32, ui32, bool);
 
@@ -112,6 +120,10 @@ template<typename TTraits> auto AdvanceBytesMask(const int N) {
 
 #ifdef USE_X86_SIMD
 template
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi")))
+auto AdvanceBytesMask<NSimd::TSimdAVX512Traits>(const int);
+
+template
 __attribute__((target("avx2")))
 auto AdvanceBytesMask<NSimd::TSimdAVX2Traits>(const int);
 
@@ -129,6 +141,10 @@ void PrepareMergeMasks( ui32 col1Bytes, ui32 col2Bytes, typename TTraits::TSimdI
 }
 
 #ifdef USE_X86_SIMD
+template
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi")))
+void PrepareMergeMasks<NSimd::TSimdAVX512Traits>(ui32, ui32, NSimd::TSimdAVX512Traits::TSimdI8 &, NSimd::TSimdAVX512Traits::TSimdI8 &);
+
 template
 __attribute__((target("avx2")))
 void PrepareMergeMasks<NSimd::TSimdAVX2Traits>(ui32, ui32, NSimd::TSimdAVX2Traits::TSimdI8 &, NSimd::TSimdAVX2Traits::TSimdI8 &);

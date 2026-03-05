@@ -9,6 +9,10 @@ namespace NPackedTuple {
 // -----------------------------------------------------------------
 THolder<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32) {
 #ifdef USE_X86_SIMD
+    if (NX86::HaveAVX512BW() && NX86::HaveAVX512VL() && NX86::HaveAVX512VBMI()) {
+        return MakeHolder<TPageHashTableImpl<NSimd::TSimdAVX512Traits>>(layout);
+    }
+
     if (NX86::HaveAVX2()) {
         return MakeHolder<TPageHashTableImpl<NSimd::TSimdAVX2Traits>>(layout);
     }
@@ -98,6 +102,8 @@ void TPageHashTableImpl<TTraits, Prefetch>::Build(const ui8* data, const ui8 *co
 
 template void TPageHashTableImpl<NSimd::TSimdFallbackTraits, false>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) void
+TPageHashTableImpl<NSimd::TSimdAVX512Traits, false>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 template __attribute__((target("avx2"))) void
 TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 template __attribute__((target("sse4.2"))) void
@@ -105,6 +111,8 @@ TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>::Build(const ui8* data, const
 #endif
 template void TPageHashTableImpl<NSimd::TSimdFallbackTraits, true>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) void
+TPageHashTableImpl<NSimd::TSimdAVX512Traits, true>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 template __attribute__((target("avx2"))) void
 TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 template __attribute__((target("sse4.2"))) void
@@ -174,6 +182,8 @@ ui32 TPageHashTableImpl<TTraits, Prefetch>::FindMatches(const TTupleLayout* layo
 
 template ui32 TPageHashTableImpl<NSimd::TSimdFallbackTraits, false>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) ui32
+TPageHashTableImpl<NSimd::TSimdAVX512Traits, false>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 template __attribute__((target("avx2"))) ui32
 TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 template __attribute__((target("sse4.2"))) ui32
@@ -181,6 +191,8 @@ TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>::FindMatches(const TTupleLayo
 #endif
 template ui32 TPageHashTableImpl<NSimd::TSimdFallbackTraits, true>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx512f,avx512bw,avx512vl,avx512vbmi"))) ui32
+TPageHashTableImpl<NSimd::TSimdAVX512Traits, true>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 template __attribute__((target("avx2"))) ui32
 TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 template __attribute__((target("sse4.2"))) ui32
@@ -203,11 +215,13 @@ void TPageHashTableImpl<TTraits, Prefetch>::Clear() {
 
 template void TPageHashTableImpl<NSimd::TSimdFallbackTraits, false>::Clear();
 #ifdef USE_X86_SIMD
+template void TPageHashTableImpl<NSimd::TSimdAVX512Traits, false>::Clear();
 template void TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>::Clear();
 template void TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>::Clear();
 #endif
 template void TPageHashTableImpl<NSimd::TSimdFallbackTraits, true>::Clear();
 #ifdef USE_X86_SIMD
+template void TPageHashTableImpl<NSimd::TSimdAVX512Traits, true>::Clear();
 template void TPageHashTableImpl<NSimd::TSimdSSE42Traits, true>::Clear();
 template void TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>::Clear();
 #endif

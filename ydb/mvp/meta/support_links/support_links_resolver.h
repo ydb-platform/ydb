@@ -8,14 +8,14 @@
 
 namespace NMVP::NSupportLinks {
 
-struct TLinkResolveContext {
-    size_t Place = 0;
-    TString SourceName;
-    TSupportLinkEntryConfig LinkConfig;
-    THashMap<TString, TString> ClusterColumns;
-    TVector<std::pair<TString, TString>> QueryParams;
-    NActors::TActorId Parent;
-    NActors::TActorId HttpProxyId;
+    struct TLinkResolveContext {
+        size_t Place = 0;
+        TString SourceName;
+        TSupportLinkEntryConfig LinkConfig;
+        THashMap<TString, TString> ClusterColumns;
+        NHttp::TUrlParameters UrlParameters;
+        NActors::TActorId Parent;
+        NActors::TActorId HttpProxyId;
 };
 
 } // namespace NMVP::NSupportLinks
@@ -42,7 +42,7 @@ public:
     struct TParams {
         EEntityType EntityType = EEntityType::Cluster;
         THashMap<TString, TString> ClusterColumns;
-        TVector<std::pair<TString, TString>> QueryParams;
+        NHttp::TUrlParameters UrlParameters;
         NActors::TActorId Parent;
         NActors::TActorId HttpProxyId;
     };
@@ -64,7 +64,7 @@ private:
     TVector<TResolveOutput> SourceOutputs;
     TVector<TVector<NActors::TActorId>> SourceActors;
     THashMap<TString, TString> ClusterColumns;
-    TVector<std::pair<TString, TString>> QueryParams;
+    NHttp::TUrlParameters UrlParameters;
     NActors::TActorId Parent;
     NActors::TActorId HttpProxyId;
 };

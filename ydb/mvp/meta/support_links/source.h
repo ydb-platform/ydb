@@ -12,7 +12,7 @@ public:
     struct TResolveInput {
         size_t Place = 0;
         const THashMap<TString, TString>& ClusterColumns;
-        const TVector<std::pair<TString, TString>>& QueryParams;
+        const NHttp::TUrlParameters& UrlParameters;
         const NActors::TActorId& Parent;
         const NActors::TActorId& HttpProxyId;
     };

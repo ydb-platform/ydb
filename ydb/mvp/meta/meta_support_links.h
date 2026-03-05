@@ -29,19 +29,13 @@ namespace NMVP {
 using namespace NKikimr;
 
 namespace {
-
 constexpr TStringBuf SOURCE_META = "meta";
+}
 
-} // namespace
-
-class TMetaSupportLinksGetHandlerActor
-    : THandlerActorYdb
-    , public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>
-{
+class TMetaSupportLinksGetHandlerActor : THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:
-    using EEntityType = TSupportLinksResolver::EEntityType;
-
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
+    using EEntityType = TSupportLinksResolver::EEntityType;
 
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
@@ -49,7 +43,6 @@ public:
     TMaybe<NYdb::NTable::TSession> Session;
     EEntityType EntityType = EEntityType::Cluster;
     THashMap<TString, TString> ClusterColumns;
-    TVector<std::pair<TString, TString>> QueryParams;
     std::unique_ptr<TSupportLinksResolver> SupportLinksResolver;
     TVector<NSupportLinks::TSupportError> PendingErrors;
 
@@ -69,10 +62,6 @@ public:
         if (!InitEntityType()) {
             ReplyBadRequestAndDie();
             return;
-        }
-
-        for (const auto& [name, value] : Request.Parameters.UrlParameters.Parameters) {
-            QueryParams.emplace_back(TString(name), TString(value));
         }
 
         RequestClusterInfo(ctx);
@@ -155,7 +144,7 @@ public:
         SupportLinksResolver = std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
             .EntityType = EntityType,
             .ClusterColumns = ClusterColumns,
-            .QueryParams = QueryParams,
+            .UrlParameters = Request.Parameters.UrlParameters,
             .Parent = SelfId(),
             .HttpProxyId = HttpProxyId,
         });

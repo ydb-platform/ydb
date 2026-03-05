@@ -10,7 +10,9 @@
 
 namespace NMVP {
 
-TSupportLinksResolver::TSupportLinksResolver(TParams params) {
+TSupportLinksResolver::TSupportLinksResolver(TParams params)
+    : UrlParameters(params.UrlParameters.Render())
+{
     Y_ABORT_UNLESS(InstanceMVP, "InstanceMVP must be initialized");
     const auto& linkConfigs = params.EntityType == EEntityType::Database
         ? InstanceMVP->SupportLinksConfig.Database
@@ -26,7 +28,6 @@ TSupportLinksResolver::TSupportLinksResolver(TParams params) {
     }
 
     ClusterColumns = std::move(params.ClusterColumns);
-    QueryParams = std::move(params.QueryParams);
     Parent = std::move(params.Parent);
     HttpProxyId = std::move(params.HttpProxyId);
 }
@@ -35,7 +36,7 @@ auto TSupportLinksResolver::MakeResolveInput(size_t place) const {
     return ILinkSource::TResolveInput{
         .Place = place,
         .ClusterColumns = ClusterColumns,
-        .QueryParams = QueryParams,
+        .UrlParameters = UrlParameters,
         .Parent = Parent,
         .HttpProxyId = HttpProxyId,
     };

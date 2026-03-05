@@ -8,6 +8,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
+
 namespace NKikimr::NKqp::NScanPrivate {
 
 class TKqpScanComputeActor: public NScheduler::TSchedulableComputeActorBase<TKqpScanComputeActor> {
@@ -165,8 +167,8 @@ public:
 
     void DoBootstrap();
 
-    void ExtraMonitoringInfo(TStringStream& str) override {
-        TBase::ExtraMonitoringInfo(str);
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters& cgi) override {
+        TBase::ExtraMonitoringInfo(str, cgi);
         str << Endl << "Backpressure:" << Endl;
         str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
         str << "  AcksSent: " << AcksSent << Endl;
@@ -176,7 +178,7 @@ public:
                 str << Endl << "Fetcher(s): " << Fetchers.size();
                 for (auto& fetcherId : Fetchers) {
                     str << " ";
-                    HREF(FetcherLink(SelfId(), fetcherId)) {
+                    HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(SelfId())}, {"sf", ToString(fetcherId)}, {"view", ""}})) {
                         str << fetcherId;
                     }
                 }
@@ -188,6 +190,7 @@ public:
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();
         auto sf = cgi.Get("sf");
+        UrlUnescape(sf);
         if (sf) {
             for (auto& fetcherId : Fetchers) {
                 if (sf == ToString(fetcherId)) {

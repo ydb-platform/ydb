@@ -132,6 +132,14 @@ message TEvWritePersistentBufferResult {
     optional double FreeSpace = 3;
 }
 
+message TEvWritePersistentBuffers {
+    TQueryCredentials Credentials = 1;
+    TBlockSelector Selector = 2;
+    uint64 Lsn = 3;
+    TWriteInstruction Instruction = 4;
+    repeated TDDiskId PersistentBufferIds = 5;
+}
+
 message TEvReadPersistentBuffer {
     TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;

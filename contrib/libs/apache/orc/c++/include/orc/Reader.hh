@@ -388,6 +388,41 @@ namespace orc {
      * Whether reader throws or returns null when value overflows for schema evolution.
      */
     bool getThrowOnSchemaEvolutionOverflow() const;
+
+    /**
+     * Set whether to enable async I/O prefetch of next stripe.
+     */
+    RowReaderOptions& setEnableAsyncPrefetch(bool enable);
+
+    /**
+     * Whether to enable async I/O prefetch of next stripe.
+     */
+    bool getEnableAsyncPrefetch() const;
+
+    /**
+     * Set the number of stripes to look ahead for small stripe prefetch.
+     */
+    RowReaderOptions& setSmallStripeLookAheadLimit(uint64_t numStripes);
+
+    /**
+     * Get the number of stripes to look ahead for small stripe prefetch.
+     */
+    uint64_t getSmallStripeLookAheadLimit() const;
+
+    /**
+     * Set the maximum dictionary size threshold for evaluation.
+     *
+     * Dictionaries with more entries than this threshold will not be evaluated.
+     * 0 to disable dictionary filtering.
+     *
+     * Defaults to 0.
+     */
+    RowReaderOptions& setDictionaryFilteringSizeThreshold(uint32_t threshold);
+
+    /**
+     * Get the dictionary filtering size threshold.
+     */
+    uint32_t getDictionaryFilteringSizeThreshold() const;
   };
 
   class RowReader;

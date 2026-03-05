@@ -1435,7 +1435,7 @@ TNodeResult TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     }
 
     const bool checkExist = true;
-    auto select = BuildSourceNode(Ctx_.Pos(), source, checkExist, Ctx_.Settings.EmitReadsForExists);
+    auto select = BuildSourceNode(Ctx_.Pos(), source, checkExist);
     return BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ListHasItems", {select},
                             /*isYqlSelect=*/IsYqlSelectProduced_);
 }
@@ -2654,7 +2654,6 @@ TNodePtr TSqlExpression::ToSubSelectNode(TSourcePtr source) {
         source->GetPos(),
         source,
         /*checkExist=*/false,
-        /*withTables=*/false,
         /*isInlineScalar=*/true,
         /*isPure=*/IsPure_);
 }

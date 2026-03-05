@@ -259,7 +259,6 @@ TNodePtr BuildSourceNode(
     TPosition pos,
     TSourcePtr source,
     bool checkExist = false,
-    bool withTables = false,
     bool isInlineScalar = false,
     bool isPure = false);
 TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);

@@ -29,8 +29,8 @@ class TGroupByClause: public TSqlTranslation {
     };
 
 public:
-    TGroupByClause(TContext& ctx, NSQLTranslation::ESqlMode mode, TGroupByClauseCtx::TPtr groupSetContext = {})
-        : TSqlTranslation(ctx, mode)
+    explicit TGroupByClause(TSqlTranslation& that, TGroupByClauseCtx::TPtr groupSetContext = {})
+        : TSqlTranslation(that)
         , GroupSetContext_(groupSetContext ? groupSetContext : TGroupByClauseCtx::TPtr(new TGroupByClauseCtx()))
         , CompactGroupBy_(false)
     {

@@ -2,7 +2,7 @@
 
 #include <ydb/mvp/meta/support_links/grafana_dashboard_resolver.h>
 #include <ydb/mvp/meta/support_links/grafana_dashboard_search_resolver.h>
-#include <ydb/mvp/meta/support_links/resolution_context.h>
+#include <ydb/mvp/meta/support_links/support_links_resolver.h>
 #include <ydb/mvp/meta/support_links/resolver_base.h>
 
 #include <ydb/mvp/meta/meta_settings.h>
@@ -93,7 +93,7 @@ public:
 
         TSourceOutput result{
             .Name = Config().GetSource(),
-            .Waiting = false,
+            .Ready = true,
         };
         TString url = NSupportLinks::ResolveGrafanaDashboardUrl(GetMetaSettings().GrafanaConfig, resolveContext, result.Errors);
         if (!url.empty()) {
@@ -119,7 +119,7 @@ public:
         actorSystem->Register(BuildGrafanaResolver(input));
         return TSourceOutput{
             .Name = Config().GetSource(),
-            .Waiting = true,
+            .Ready = false,
         };
     }
 };

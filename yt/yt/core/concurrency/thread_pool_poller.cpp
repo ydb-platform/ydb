@@ -145,6 +145,11 @@ struct TPollableCookie
         YT_VERIFY(cookie);
         return cookie;
     }
+
+    ~TPollableCookie()
+    {
+        Invoker.Reset();
+    }
 };
 
 EContPoll ToImplControl(EPollControl control)

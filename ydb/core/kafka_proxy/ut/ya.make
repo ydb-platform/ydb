@@ -5,6 +5,7 @@ ADDINCL(
 )
 
 SPLIT_FACTOR(5)
+FORK_TESTS()
 
 SIZE(medium)
 REQUIREMENTS(cpu:2)

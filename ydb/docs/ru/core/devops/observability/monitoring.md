@@ -19,7 +19,7 @@ http://<ydb-server-address>:<ydb-port>/counters/
 где:
 
 - `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
-- `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon -port` при запуске узла. Значение по умолчанию: 8765.
+- `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon -port` при запуске узла. Значение по умолчанию: `8765`.
 
 {% cut "Как определить значение параметра `<ydb-port>`" %}
 
@@ -121,11 +121,23 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
 
-{% list tabs %}
-
 - Обычная установка
 
   В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+
+  {% cut "Как определить значения портов узлов баз данных" %}
+
+    Определите значения портов узлов баз данных командой:
+
+    ```bash
+      ps aux | grep ydbd
+    ```
+
+    ![-](../../_assets/mon-port.png)
+
+    Возьмите значение, указанное в параметре `--mon -port`.
+
+  {% list tabs %}
 
     ```yaml
     - labels:

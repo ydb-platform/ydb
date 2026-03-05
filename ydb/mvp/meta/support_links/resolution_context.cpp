@@ -23,7 +23,7 @@ void TResolutionContext::Initialize(TParams params) {
     SourceOutputs.reserve(Sources.size());
     for (const ILinkSource* source : Sources) {
         SourceOutputs.push_back(TSourceOutput{
-            .Name = source ? source->Config().Source : TString{},
+            .Name = source ? source->Config().GetSource() : TString{},
         });
     }
 }
@@ -44,7 +44,7 @@ void TResolutionContext::Start() {
             .ActorsToRegister = &ActorsToRegister,
         });
 
-        SourceOutputs[i].Name = source->Config().Source;
+        SourceOutputs[i].Name = source->Config().GetSource();
     }
 }
 

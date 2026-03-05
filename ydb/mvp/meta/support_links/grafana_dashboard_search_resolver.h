@@ -77,15 +77,15 @@ public:
     }
 
     TString ResolveSearchUrl() const {
-        TString configuredUrl = Context.LinkConfig.Url.empty()
+        TString configuredUrl = Context.LinkConfig.GetUrl().empty()
             ? TString("/api/search")
-            : Context.LinkConfig.Url;
+            : Context.LinkConfig.GetUrl();
         TString searchUrl = TGrafanaResolverBase<TGrafanaDashboardSearchResolver>::ResolveGrafanaUrl(configuredUrl);
-        if (!Context.LinkConfig.Tag.empty()) {
-            searchUrl = AppendQueryParam(searchUrl, "tag", Context.LinkConfig.Tag);
+        if (!Context.LinkConfig.GetTag().empty()) {
+            searchUrl = AppendQueryParam(searchUrl, "tag", Context.LinkConfig.GetTag());
         }
-        if (!Context.LinkConfig.Folder.empty()) {
-            searchUrl = AppendQueryParam(searchUrl, "folderUIDs", Context.LinkConfig.Folder);
+        if (!Context.LinkConfig.GetFolder().empty()) {
+            searchUrl = AppendQueryParam(searchUrl, "folderUIDs", Context.LinkConfig.GetFolder());
         }
         return searchUrl;
     }
@@ -176,18 +176,17 @@ inline NActors::IActor* BuildGrafanaDashboardSearchResolver(TLinkResolveContext 
 
 inline void ValidateGrafanaDashboardSearchResolverConfig(const TResolverValidationContext& context)
 {
-    const TString effectiveUrl = context.LinkConfig.Url.empty()
+    const TString effectiveUrl = context.LinkConfig.GetUrl().empty()
         ? TString("/api/search")
-        : context.LinkConfig.Url;
+        : context.LinkConfig.GetUrl();
     if (!IsAbsoluteUrl(effectiveUrl) && context.GrafanaConfig.Endpoint.empty())
     {
-        ythrow yexception() << context.Where << ": grafana.endpoint is required for relative url";
+        ythrow yexception() << "grafana.endpoint is required for relative url";
     }
     if (context.GrafanaConfig.SecretName.empty()) {
         ythrow yexception()
-            << context.Where
-            << ": grafana.secret_name is required for source="
-            << context.LinkConfig.Source;
+            << "grafana.secret_name is required for source="
+            << context.LinkConfig.GetSource();
     }
 }
 

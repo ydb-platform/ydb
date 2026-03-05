@@ -22,11 +22,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
             .Endpoint = "https://grafana.example.net",
         };
 
-        NMVP::TSupportLinkEntryConfig config;
-        config.Source = "grafana/dashboard";
-        config.Title = "CPU";
-        config.Url = "/d/cpu";
-        NMVP::TGrafanaDashboardSource source(1, std::move(config));
+        NMVP::TSupportLinkEntry config;
+        config.SetSource("grafana/dashboard");
+        config.SetTitle("CPU");
+        config.SetUrl("/d/cpu");
+        NMVP::TGrafanaDashboardSource source(std::move(config));
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -59,11 +59,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
             .Endpoint = "https://grafana.example.net",
         };
 
-        NMVP::TSupportLinkEntryConfig config;
-        config.Source = "grafana/dashboard";
-        config.Title = "CPU";
-        config.Url = "/d/cpu";
-        NMVP::TGrafanaDashboardSource source(0, std::move(config));
+        NMVP::TSupportLinkEntry config;
+        config.SetSource("grafana/dashboard");
+        config.SetTitle("CPU");
+        config.SetUrl("/d/cpu");
+        NMVP::TGrafanaDashboardSource source(std::move(config));
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -96,11 +96,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
             .Endpoint = "https://grafana.example.net",
         };
 
-        NMVP::TSupportLinkEntryConfig config;
-        config.Source = "grafana/dashboard";
-        config.Title = "CPU";
-        config.Url = "/d/cpu";
-        NMVP::TGrafanaDashboardSource source(0, std::move(config));
+        NMVP::TSupportLinkEntry config;
+        config.SetSource("grafana/dashboard");
+        config.SetTitle("CPU");
+        config.SetUrl("/d/cpu");
+        NMVP::TGrafanaDashboardSource source(std::move(config));
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";

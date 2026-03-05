@@ -61,7 +61,7 @@ inline TString ResolveGrafanaDashboardUrl(
     static constexpr TStringBuf WorkspaceColumn = "workspace";
     static constexpr TStringBuf DatasourceColumn = "grafana_ds";
 
-    TString url = ResolveGrafanaUrl(grafanaConfig, context.LinkConfig.Url);
+    TString url = ResolveGrafanaUrl(grafanaConfig, context.LinkConfig.GetUrl());
     const auto workspaceIt = context.ClusterColumns.find(WorkspaceColumn);
     if (workspaceIt == context.ClusterColumns.end() || workspaceIt->second.empty()) {
         errors.emplace_back(TSupportError{
@@ -133,7 +133,7 @@ protected:
 
     TString ResolveGrafanaDashboardUrl(const TString& configuredUrl, TVector<TSupportError>& errors) const {
         TLinkResolveContext context = Context;
-        context.LinkConfig.Url = configuredUrl;
+        context.LinkConfig.SetUrl(configuredUrl);
         return NSupportLinks::ResolveGrafanaDashboardUrl(GetGrafanaConfig(), context, errors);
     }
 };

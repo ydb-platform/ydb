@@ -171,10 +171,10 @@ class TestShardStatsCollector:
     def publish_stats(self, stats_list: list[TestShardStats]):
         if self.publisher.mode is None:
             return
-        
+
         events = []
         stress_util_name = 'ydb.tests.stress.testshard_workload.workload'
-        
+
         def create_event(operation: str, type: str, count: int):
             """Helper function to create a single event with count."""
             if count <= 0:
@@ -187,7 +187,7 @@ class TestShardStatsCollector:
             # Add the event multiple times (will be aggregated by _send_to_server_many)
             for _ in range(count):
                 events.append(e)
-        
+
         for stat_item in stats_list:
             create_event('write', 'success', stat_item.write.ok)
             create_event('write', 'fail', stat_item.write.fail)
@@ -197,7 +197,7 @@ class TestShardStatsCollector:
             create_event('patch', 'fail', stat_item.patch.fail)
             create_event('delete', 'success', stat_item.delete.ok)
             create_event('delete', 'fail', stat_item.delete.fail)
-        
+
         self.publisher.publish_many(events)
 
 

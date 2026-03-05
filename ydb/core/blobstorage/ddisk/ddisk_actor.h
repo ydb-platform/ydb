@@ -604,6 +604,8 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
 
+        void Handle(TEvWritePersistentBuffers::TPtr ev);
+
         void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
 

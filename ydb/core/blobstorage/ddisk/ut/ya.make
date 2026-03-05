@@ -16,6 +16,7 @@ PEERDIR(
 
 SRCS(
     ddisk_actor_ut.cpp
+    ddisk_actor_write_persistent_buffers_ut.cpp
     segment_manager_ut.cpp
 )
 

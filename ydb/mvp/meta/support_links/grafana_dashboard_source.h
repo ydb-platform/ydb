@@ -1,7 +1,7 @@
 #pragma once
 
-#include "resolver_common.h"
-#include "grafana_dashboard.h"
+#include "source_common.h"
+#include "grafana_dashboard_common.h"
 
 #include <ydb/mvp/meta/support_links/source.h>
 
@@ -23,9 +23,9 @@ inline void ValidateGrafanaDashboardResolverConfig(const TResolverValidationCont
 
 namespace NMVP {
 
-class TGrafanaDashboardResolver : public ILinkSource {
+class TGrafanaDashboardSource : public ILinkSource {
 public:
-    TGrafanaDashboardResolver(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+    TGrafanaDashboardSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
         : Config_(std::move(config))
         , MetaSettings_(metaSettings)
     {}
@@ -77,7 +77,7 @@ inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSource(
         .LinkConfig = config,
         .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_shared<TGrafanaDashboardResolver>(std::move(config), metaSettings);
+    return std::make_shared<TGrafanaDashboardSource>(std::move(config), metaSettings);
 }
 
 } // namespace NMVP

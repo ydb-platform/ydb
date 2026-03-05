@@ -1,8 +1,8 @@
 #pragma once
 
-#include "resolver_common.h"
+#include "source_common.h"
 #include "events.h"
-#include "grafana_dashboard.h"
+#include "grafana_dashboard_common.h"
 
 #include <ydb/mvp/meta/support_links/source.h>
 

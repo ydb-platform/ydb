@@ -7,7 +7,7 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/test_creds.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>

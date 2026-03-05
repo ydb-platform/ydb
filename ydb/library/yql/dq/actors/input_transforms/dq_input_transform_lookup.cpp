@@ -47,7 +47,8 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-        const THashMap<TString, TString>& secureParams)
+        const THashMap<TString, TString>& secureParams,
+        size_t fullscanRowLimit = 5000)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -59,6 +60,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
+        , FullscanRowLimit(Min(fullscanRowLimit, (size_t)Settings.GetCacheLimit()))
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)
@@ -129,6 +131,7 @@ private: //IDqComputeActorAsyncInput
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         KeysForLookup.reset();
+        FullscanRequest.reset();
         InputFlow.Clear();
         KeyTypeHelper.reset();
         decltype(ReadyQueue){}.swap(ReadyQueue);
@@ -164,6 +167,14 @@ private: //IDqComputeActorAsyncInput
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
             LookupSourceId = this->RegisterWithSameMailbox(lookupSourceActor);
             KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+            FullscanRowLimit = Min(FullscanRowLimit, lookupSource->GetMaxSupportedFullscanRequest());
+            if (FullscanRowLimit > 0) {
+                FullscanRequest = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(FullscanRowLimit, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+                FullscanExpireTime = std::chrono::steady_clock::now();
+            } else {
+                FullscanRequested = true;
+                FullscanExpireTime = std::chrono::time_point<std::chrono::steady_clock>::max();
+            }
         }
         return KeysForLookup;
     }
@@ -226,6 +237,7 @@ protected:
 protected:
     NActors::TActorId LookupSourceId;
     size_t MaxKeysInRequest;
+    size_t FullscanRowLimit;
     const TVector<size_t> LookupInputIndexes;
     const TVector<size_t> OtherInputIndexes;
     const NMiniKQL::TMultiType* const InputRowType;
@@ -239,12 +251,17 @@ protected:
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
     size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
+    static constexpr auto MinFullscanFailureTtl = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours(1)); // TODO make tuneable
     const bool IsMultiMatches;
     size_t MinimumRowSize; // only account for unboxed parts
     size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> FullscanRequest;
+    std::chrono::time_point<std::chrono::steady_clock> FullscanExpireTime;
+    bool FullscanReady = false;
+    bool FullscanRequested = false;
     i64 LastLruSize;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
@@ -331,28 +348,61 @@ private:
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
-        Y_ABORT_UNLESS(lookupResult == KeysForLookup);
-        for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
-            auto& [lookupKey, inputOther] = AwaitingQueue.front();
-            auto lookupPayload = lookupResult->FindPtr(lookupKey);
-            if (lookupPayload == nullptr) {
-                continue;
+        bool fullscan = ev->Get()->FullscanLimit > 0;
+        bool resultIncomplete = fullscan && ev->Get()->ResultRows >= ev->Get()->FullscanLimit;
+        if (!resultIncomplete) {
+            for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
+                auto& [lookupKey, inputOther] = AwaitingQueue.front();
+                auto lookupPayload = lookupResult->FindPtr(lookupKey);
+                Y_DEBUG_ABORT_UNLESS(fullscan || lookupPayload != nullptr);
+                AddReadyQueue(lookupKey, inputOther, lookupPayload);
             }
-            AddReadyQueue(lookupKey, inputOther, lookupPayload);
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
+        } else if (!IsMultiMatches) {
+#if 0 // TODO
+            // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
+#endif
+#if 0 // TODO
+            // Opportunistially populate LRU cache with partial fullscan results
+            // (again, in case of MultiMatches, we cannot use partial results)
+            for (auto& [k, v]: *lookupResult) {
+                Y_DEBUG_ABORT_UNLESS(v);
+                LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+            }
+#endif
         }
-        for (auto&& [k, v]: *lookupResult) {
-            LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+        if (fullscan) {
+            Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
+            lookupResult.reset();
+            Y_DEBUG_ABORT_UNLESS(FullscanRequested);
+            FullscanRequested = false;
+            if (resultIncomplete) {
+                FullscanExpireTime = now + std::max(CacheTtl, MinFullscanFailureTtl);
+            } else {
+                FullscanExpireTime = now + CacheTtl;
+                FullscanReady = true;
+#if 0 // TODO
+                LruCache->Clear(); // Erase now-useless LRU cache
+#endif
+            }
+        } else {
+            Y_ABORT_UNLESS(lookupResult == KeysForLookup);
+            lookupResult.reset();
+            if (!FullscanReady) { // don't populate LRU cache when we have (complete) fullscan results
+                for (auto& [k, v]: *KeysForLookup) {
+                    LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
+            }
+            KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end()); // don't ->clear();, it's O(reserved) instead of O(size)
         }
-        KeysForLookup->clear();
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
+        LastLruSize = (i64)LruCache->Size();
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
             LruSize->Add(deltaLruSize); // Note: there can be several streamlookup tied to same counter, so Add instead of Set
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
-        LastLruSize += deltaLruSize;
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
     void Free() {
@@ -373,6 +423,9 @@ private:
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
+            if (now >= FullscanExpireTime) {
+                FullscanReady = false;
+            }
             LruCache->Prune(now);
             size_t rowLimit = std::numeric_limits<size_t>::max();
             size_t row = 0;
@@ -396,9 +449,19 @@ private:
                 }
                 if (nullsInKey) {
                     AddReadyQueue(key, other, nullptr);
+                } else if (FullscanReady) {
+                    auto it = FullscanRequest->find(key);
+                    AddReadyQueue(key, other, it != FullscanRequest->end() ? &it->second : nullptr);
                 } else if (auto lookupPayload = LruCache->Get(key, now)) {
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
+                    // TODO collect statistics and only issue fullscan once we know it is expected to be effective
+                    if (!FullscanRequested && now >= FullscanExpireTime) {
+                        Y_DEBUG_ABORT_UNLESS(FullscanRowLimit > 0);
+                        FullscanRequested = true;
+                        FullscanRequest->erase(FullscanRequest->begin(), FullscanRequest->end()); // don't ->clear();!
+                        Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(FullscanRequest, FullscanRowLimit));
+                    }
                     if (AwaitingQueue.empty()) {
                         // look ahead at most MaxDelayedRows after first missing
                         rowLimit = row + MaxDelayedRows;

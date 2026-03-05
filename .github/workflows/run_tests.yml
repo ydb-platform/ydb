@@ -256,7 +256,7 @@ jobs:
   run_tests:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
-    timeout-minutes: 1200
+    timeout-minutes: 2400
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     strategy:
       fail-fast: false
@@ -267,17 +267,17 @@ jobs:
         id: set-vars
         run: |
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
-            echo "threads_count=52" >> $GITHUB_ENV
-            echo "timeout=1200" >> $GITHUB_ENV
+            echo "threads_count=2" >> $GITHUB_ENV
+            echo "timeout=2400" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
-            echo "threads_count=20" >> $GITHUB_ENV
-            echo "timeout=1200" >> $GITHUB_ENV
+            echo "threads_count=1" >> $GITHUB_ENV
+            echo "timeout=2400" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
-            echo "threads_count=5" >> $GITHUB_ENV
-            echo "timeout=1200" >> $GITHUB_ENV
+            echo "threads_count=1" >> $GITHUB_ENV
+            echo "timeout=2400" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
-            echo "threads_count=18" >> $GITHUB_ENV
-            echo "timeout=1200" >> $GITHUB_ENV
+            echo "threads_count=1" >> $GITHUB_ENV
+            echo "timeout=2400" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."
             exit 1

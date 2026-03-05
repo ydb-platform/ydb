@@ -58,6 +58,10 @@ class FunctionalTestBase:
             if not slot.is_alive():
                 slot.stop()
 
+    def teardown_class(cls):
+        if cls.cluster is not None:
+            cls.cluster.stop()
+
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
         return yatest.common.execute(YdbCliHelper.get_cli_command() + argv)

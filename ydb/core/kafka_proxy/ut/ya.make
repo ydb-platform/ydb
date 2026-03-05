@@ -4,6 +4,8 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
+SPLIT_FACTOR(5)
+
 SIZE(medium)
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)

@@ -118,9 +118,9 @@ public:
         : Self(self)
         , Lock(std::move(lock))
         , OtherLock(std::move(otherLock))
-        , RequestId(Self.NextTieBreakerIndex++)
     {
         if (Lock->GetLockId() != OtherLock->GetLockId()) {
+            RequestId = Self.NextTieBreakerIndex++;
             Self.LockRowsWaitRequests[RequestId] = &state;
             Self.Send(
                 MakeLongTxServiceID(Self.SelfId().NodeId()),
@@ -141,14 +141,16 @@ public:
         // Note: we may fail to send the request with an exception, after
         // inserting request into LockRowsWaitRequests. Make sure the request
         // is removed when we exit the scope.
-        Self.LockRowsWaitRequests.erase(RequestId);
+        if (RequestId) {
+            Self.LockRowsWaitRequests.erase(RequestId);
+        }
     }
 
 private:
     TDataShard& Self;
     const TLockInfo::TPtr Lock;
     const TLockInfo::TPtr OtherLock;
-    const ui64 RequestId;
+    ui64 RequestId = 0;
     bool Sent = false;
 };
 
@@ -445,7 +447,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 Y_ENSURE(takenLocks.size() == 1);
                 // Perform a a very simplistic lock merge
                 ok = (
-                    takenLocks[0].Generation == res.first[0].Generation ||
+                    takenLocks[0].Generation == res.first[0].Generation &&
                     takenLocks[0].Counter == res.first[0].Counter);
             }
             takenLocks = std::move(res.first);

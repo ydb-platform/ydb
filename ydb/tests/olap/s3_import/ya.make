@@ -14,6 +14,9 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

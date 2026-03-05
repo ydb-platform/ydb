@@ -11,15 +11,17 @@
 
 #include <ydb/core/protos/set_column_constraint.pb.h>
 
+#include <ydb/core/tx/datashard/build_index/common_helper.h>
+
 namespace NKikimr::NDataShard {
 
-class TCheckColumnsScan final : public TActor<TCheckColumnsScan>, public NTable::IScan {
+class TCheckConstraintScan final : public TActor<TCheckConstraintScan>, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
-    TCheckColumnsScan(
+    TCheckConstraintScan(
         const NKikimrTxDataShard::TEvCheckConstraintRequest& request,
         const TActorId& sender,
         ui64 tabletId,
@@ -38,7 +40,7 @@ public:
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
     }
 
-    ~TCheckColumnsScan() final = default;
+    ~TCheckConstraintScan() final = default;
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(static_cast<IActor*>(this));
@@ -89,7 +91,7 @@ public:
     }
 
     void Describe(IOutputStream& out) const noexcept final {
-        out << "TCheckColumnsScan";
+        out << "TCheckConstraintScan";
     }
 
 private:
@@ -162,20 +164,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
         return;
     }
 
-    const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
-
-    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
-    if (const auto* recCard = ScanManager.Get(record.GetId())) {
-        if (recCard->SeqNo == seqNo) {
-            sendResponse(NKikimrSetColumnConstraint::ECheckStatus::IN_PROGRESS);
-            return;
-        }
-        for (ui64 scanId : recCard->ScanIds) {
-            CancelScan(userTable.LocalTid, scanId);
-        }
-        ScanManager.Drop(record.GetId());
-    }
-
     if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
         sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, "Request doesn't have Snapshot Step or TxId");
         return;
@@ -197,16 +185,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
         return;
     }
 
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10);
+    const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
-    auto scan = new TCheckColumnsScan(record, ev->Sender, TabletID(), userTable);
-    
-    ui64 scanId = QueueScan(userTable.LocalTid, scan, ev->Cookie, scanOpts);
-    
-    auto& scanIds = ScanManager.Set(record.GetId(), seqNo);
-    scanIds.push_back(scanId);
+    auto scan = new TCheckConstraintScan(record, ev->Sender, TabletID(), userTable);
+    StartScan(this, scan, record.GetId(), seqNo, rowVersion, userTable.LocalTid);
 
     sendResponse(NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
 }

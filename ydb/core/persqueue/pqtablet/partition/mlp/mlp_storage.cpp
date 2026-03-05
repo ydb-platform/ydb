@@ -931,8 +931,12 @@ void TStorage::UpdateFirstUncommittedOffset() {
     }
 }
 
-TStorage::TBatch TStorage::GetBatch() {
+TStorage::TBatch TStorage::ExtractBatch() {
     return std::exchange(Batch, {this});
+}
+
+bool TStorage::IsBatchEmpty() const {
+    return Batch.Empty();
 }
 
 const TMetrics& TStorage::GetMetrics() const {

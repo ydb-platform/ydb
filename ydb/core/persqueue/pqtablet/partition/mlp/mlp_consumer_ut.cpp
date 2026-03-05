@@ -370,7 +370,7 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
     }
 }
 
-Y_UNIT_TEST(CommitNonExistedMessage) {
+Y_UNIT_TEST(CommitNonExistentMessage) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -405,7 +405,7 @@ Y_UNIT_TEST(CommitNonExistedMessage) {
     }
 }
 
-Y_UNIT_TEST(UnlockNonExistedMessage) {
+Y_UNIT_TEST(UnlockNonExistentMessage) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -440,7 +440,7 @@ Y_UNIT_TEST(UnlockNonExistedMessage) {
     }
 }
 
-Y_UNIT_TEST(ChangeMessageDeadlineNonExistedMessage) {
+Y_UNIT_TEST(ChangeMessageDeadlineNonExistentMessage) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 

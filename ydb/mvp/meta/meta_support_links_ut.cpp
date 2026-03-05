@@ -109,24 +109,31 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         );
     }
 
+    static NMVP::TSupportLinkEntry MakeSupportLinkEntry(
+        TString source,
+        TString title,
+        TString url,
+        TString tag = {},
+        TString folder = {})
+    {
+        NMVP::TSupportLinkEntry entry;
+        entry.SetSource(std::move(source));
+        entry.SetTitle(std::move(title));
+        entry.SetUrl(std::move(url));
+        entry.SetTag(std::move(tag));
+        entry.SetFolder(std::move(folder));
+        return entry;
+    }
+
     static NMVP::TSupportLinkSources MakeConfig() {
         NMVP::TSupportLinkSources cfg;
         cfg.Cluster.push_back(NMVP::MakeGrafanaLinkSource(
             cfg.Cluster.size(),
-            NMVP::TSupportLinkEntryConfig{
-                .Source = "grafana/dashboard",
-                .Title = "Cluster CPU",
-                .Url = "/d/cluster-cpu",
-            }
+            MakeSupportLinkEntry("grafana/dashboard", "Cluster CPU", "/d/cluster-cpu")
         ));
         cfg.Database.push_back(NMVP::MakeGrafanaLinkSource(
             cfg.Database.size(),
-            NMVP::TSupportLinkEntryConfig{
-                .Source = "grafana/dashboard/search",
-                .Title = "",
-                .Url = "/api/search?limit=100&type=dash-db",
-                .Tag = "emit_error",
-            }
+            MakeSupportLinkEntry("grafana/dashboard/search", "", "/api/search?limit=100&type=dash-db", "emit_error")
         ));
         return cfg;
     }

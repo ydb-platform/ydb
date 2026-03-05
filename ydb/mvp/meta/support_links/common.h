@@ -30,7 +30,7 @@ struct TSupportError {
 struct TLinkResolveContext {
     size_t Place = 0;
     TString SourceName;
-    TSupportLinkEntryConfig LinkConfig;
+    TSupportLinkEntry LinkConfig;
     THashMap<TString, TString> ClusterColumns;
     TVector<std::pair<TString, TString>> QueryParams;
     NActors::TActorId Parent;
@@ -38,9 +38,8 @@ struct TLinkResolveContext {
 };
 
 struct TResolverValidationContext {
-    const TSupportLinkEntryConfig& LinkConfig;
+    const TSupportLinkEntry& LinkConfig;
     const TGrafanaSupportConfig& GrafanaConfig;
-    TStringBuf Where;
 };
 
 inline bool HasQueryString(const TString& url) {

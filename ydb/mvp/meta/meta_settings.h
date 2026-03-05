@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/meta/protos/config.pb.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -17,13 +18,7 @@ struct TGrafanaSupportConfig {
     TString SecretName;
 };
 
-struct TSupportLinkEntryConfig {
-    TString Source;
-    TString Title;
-    TString Url;
-    TString Tag;
-    TString Folder;
-};
+using TSupportLinkEntry = NMvp::NMeta::TMetaConfig::TSupportLinksConfig::TSupportLinkEntry;
 
 struct TSupportLinkSources {
     TSupportLinkSources();

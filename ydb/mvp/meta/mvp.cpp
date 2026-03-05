@@ -212,22 +212,18 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
         const auto& supportLinks = config.GetSupportLinks();
         const auto& clusterLinks = supportLinks.GetCluster();
         for (int i = 0; i < clusterLinks.size(); ++i) {
-            const TString where = TStringBuilder() << "support_links.cluster[" << i << "]";
             MetaSettings.SupportLinksConfig.Cluster.emplace_back(MakeLinkSource(
                 i,
                 clusterLinks[i],
-                MetaSettings.GrafanaConfig,
-                where));
+                MetaSettings.GrafanaConfig));
         }
 
         const auto& databaseLinks = supportLinks.GetDatabase();
         for (int i = 0; i < databaseLinks.size(); ++i) {
-            const TString where = TStringBuilder() << "support_links.database[" << i << "]";
             MetaSettings.SupportLinksConfig.Database.emplace_back(MakeLinkSource(
                 i,
                 databaseLinks[i],
-                MetaSettings.GrafanaConfig,
-                where));
+                MetaSettings.GrafanaConfig));
         }
     }
 }

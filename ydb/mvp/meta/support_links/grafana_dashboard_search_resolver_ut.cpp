@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.Parent = parent;
         context.HttpProxyId = anyHttpProxy;
         context.SourceName = "grafana/dashboard/search";
-        context.LinkConfig.Source = "grafana/dashboard/search";
+        context.LinkConfig.SetSource("grafana/dashboard/search");
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
         };
@@ -147,9 +147,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.Parent = parent;
         context.HttpProxyId = grafanaMockProxy;
         context.SourceName = "grafana/dashboard/search";
-        context.LinkConfig.Source = "grafana/dashboard/search";
-        context.LinkConfig.Url = "/api/search?limit=100&type=dash-db";
-        context.LinkConfig.Tag = "ydb-common";
+        context.LinkConfig.SetSource("grafana/dashboard/search");
+        context.LinkConfig.SetUrl("/api/search?limit=100&type=dash-db");
+        context.LinkConfig.SetTag("ydb-common");
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
@@ -185,9 +185,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.Parent = parent;
         context.HttpProxyId = grafanaMockProxy;
         context.SourceName = "grafana/dashboard/search";
-        context.LinkConfig.Source = "grafana/dashboard/search";
-        context.LinkConfig.Url = "/api/search?limit=100&type=dash-db";
-        context.LinkConfig.Tag = "ydb-common";
+        context.LinkConfig.SetSource("grafana/dashboard/search");
+        context.LinkConfig.SetUrl("/api/search?limit=100&type=dash-db");
+        context.LinkConfig.SetTag("ydb-common");
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
@@ -218,9 +218,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.Parent = parent;
         context.HttpProxyId = checkProxy;
         context.SourceName = "grafana/dashboard/search";
-        context.LinkConfig.Source = "grafana/dashboard/search";
-        context.LinkConfig.Tag = "ydb-common";
-        context.LinkConfig.Folder = "team-folder";
+        context.LinkConfig.SetSource("grafana/dashboard/search");
+        context.LinkConfig.SetTag("ydb-common");
+        context.LinkConfig.SetFolder("team-folder");
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.Parent = parent;
         context.HttpProxyId = forbiddenProxy;
         context.SourceName = "grafana/dashboard/search";
-        context.LinkConfig.Source = "grafana/dashboard/search";
+        context.LinkConfig.SetSource("grafana/dashboard/search");
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",

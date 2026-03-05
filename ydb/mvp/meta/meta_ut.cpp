@@ -21,33 +21,31 @@ private:
     std::unique_ptr<NMVP::TMVP> Mvp;
 };
 
-NMVP::TSupportLinkEntryConfig MakeLink(TString source, TString url = {}) {
-    NMVP::TSupportLinkEntryConfig link;
-    link.Source = std::move(source);
-    link.Url = std::move(url);
+NMVP::TSupportLinkEntry MakeLink(TString source, TString url = {}) {
+    NMVP::TSupportLinkEntry link;
+    link.SetSource(std::move(source));
+    link.SetUrl(std::move(url));
     return link;
 }
 
 void Validate(
-    const TVector<NMVP::TSupportLinkEntryConfig>& clusterLinks,
-    const TVector<NMVP::TSupportLinkEntryConfig>& databaseLinks,
+    const TVector<NMVP::TSupportLinkEntry>& clusterLinks,
+    const TVector<NMVP::TSupportLinkEntry>& databaseLinks,
     NMVP::TGrafanaSupportConfig grafanaConfig)
 {
     for (size_t i = 0; i < clusterLinks.size(); ++i) {
-        const TString where = TStringBuilder() << "support_links.cluster[" << i << "]";
-        auto source = NMVP::MakeLinkSource(i, clusterLinks[i], grafanaConfig, where);
+        auto source = NMVP::MakeLinkSource(i, clusterLinks[i], grafanaConfig);
         (void)source;
     }
     for (size_t i = 0; i < databaseLinks.size(); ++i) {
-        const TString where = TStringBuilder() << "support_links.database[" << i << "]";
-        auto source = NMVP::MakeLinkSource(i, databaseLinks[i], grafanaConfig, where);
+        auto source = NMVP::MakeLinkSource(i, databaseLinks[i], grafanaConfig);
         (void)source;
     }
 }
 
 TString ValidateAndCatch(
-    const TVector<NMVP::TSupportLinkEntryConfig>& clusterLinks,
-    const TVector<NMVP::TSupportLinkEntryConfig>& databaseLinks,
+    const TVector<NMVP::TSupportLinkEntry>& clusterLinks,
+    const TVector<NMVP::TSupportLinkEntry>& databaseLinks,
     NMVP::TGrafanaSupportConfig grafanaConfig)
 {
     try {
@@ -182,7 +180,6 @@ Y_UNIT_TEST_SUITE(SupportUrlConfiguration) {
             {});
 
         UNIT_ASSERT(!error.empty());
-        UNIT_ASSERT(error.Contains("support_links.cluster[0]"));
         UNIT_ASSERT(error.Contains("source is required"));
     }
 
@@ -237,7 +234,6 @@ Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
             std::move(grafana));
 
         UNIT_ASSERT(!error.empty());
-        UNIT_ASSERT(error.Contains("support_links.database[0]"));
         UNIT_ASSERT(error.Contains("grafana.secret_name is required"));
         UNIT_ASSERT(error.Contains("grafana/dashboard/search"));
     }
@@ -254,7 +250,6 @@ Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
             std::move(grafana));
 
         UNIT_ASSERT(!error.empty());
-        UNIT_ASSERT(error.Contains("support_links.database[0]"));
         UNIT_ASSERT(error.Contains("grafana.endpoint is required for relative url"));
     }
 

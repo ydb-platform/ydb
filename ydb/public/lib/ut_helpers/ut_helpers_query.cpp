@@ -111,8 +111,7 @@ void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, boo
 }
 
 void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expectedStatus, int expectedHint, bool& allDoneOk) {
-    using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
-    TProcessor processor = dynamic_cast<NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
+    auto* processor = dynamic_cast<NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
     UNIT_ASSERT(processor);
 
     const auto expectedHintValue = static_cast<Ydb::Query::SessionState::ShutdownHint>(expectedHint);

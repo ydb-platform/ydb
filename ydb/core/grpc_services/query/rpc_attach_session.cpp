@@ -93,6 +93,30 @@ private:
         ReplyFinishStream(Ydb::StatusIds::SUCCESS);
     }
 
+    static Ydb::Query::SessionState::ShutdownHint InternalToPublicHint(
+        NKikimrKqp::TCloseSessionResponse::EShutdownHint internal)
+    {
+        switch (internal) {
+            case NKikimrKqp::TCloseSessionResponse::SESSION:
+                return Ydb::Query::SessionState::SHUTDOWN_HINT_SESSION;
+            case NKikimrKqp::TCloseSessionResponse::NODE:
+                return Ydb::Query::SessionState::SHUTDOWN_HINT_NODE;
+            default:
+                return Ydb::Query::SessionState::SHUTDOWN_HINT_UNSPECIFIED;
+        }
+    }
+
+    void SendShutdownHint(Ydb::Query::SessionState::ShutdownHint hint) {
+        Ydb::Query::SessionState resp;
+        resp.set_status(Ydb::StatusIds::SUCCESS);
+        resp.set_shutdown_hint(hint);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD resp.SerializeToString(&out);
+
+        Request->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
+    }
+
     void HandleReady(NKqp::TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
         const auto &event = ev->Get()->Record;
         if (event.GetResponse().GetSessionId() == SessionId &&
@@ -134,30 +158,6 @@ private:
         SendAttachResult(record.GetStatus());
 
         Become(&TAttachSessionRPC::ReadyState);
-    }
-
-    static Ydb::Query::SessionState::ShutdownHint InternalToPublicHint(
-        NKikimrKqp::TCloseSessionResponse::EShutdownHint internal)
-    {
-        switch (internal) {
-            case NKikimrKqp::TCloseSessionResponse::SESSION:
-                return Ydb::Query::SessionState::SHUTDOWN_HINT_SESSION;
-            case NKikimrKqp::TCloseSessionResponse::NODE:
-                return Ydb::Query::SessionState::SHUTDOWN_HINT_NODE;
-            default:
-                return Ydb::Query::SessionState::SHUTDOWN_HINT_UNSPECIFIED;
-        }
-    }
-
-    void SendShutdownHint(Ydb::Query::SessionState::ShutdownHint hint) {
-        Ydb::Query::SessionState resp;
-        resp.set_status(Ydb::StatusIds::SUCCESS);
-        resp.set_shutdown_hint(hint);
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD resp.SerializeToString(&out);
-
-        Request->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
     }
 
     void SendAttachResult(Ydb::StatusIds::StatusCode status) {

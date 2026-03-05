@@ -1811,11 +1811,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId = txId;
 
         for (auto shard: info.Shards) {
             CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
             CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(SchemeshardShouldCompactAfterRestart) {
@@ -1846,6 +1852,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId = txId;
         env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(compactionResultCount, 1);
@@ -1860,6 +1867,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
             CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(SchemeshardShouldCompactMultipleTables) {
@@ -1880,7 +1892,9 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         auto info2 = GetPathInfo(runtime, "/MyRoot/Simple2");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 compactionId1 = txId;
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        ui64 compactionId2 = txId;
 
         for (auto shard: info1.Shards) {
             CheckShardBackgroundCompacted(runtime, info1.UserTable, shard, info1.OwnerId);
@@ -1888,6 +1902,15 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         for (auto shard: info2.Shards) {
             CheckShardBackgroundCompacted(runtime, info2.UserTable, shard, info2.OwnerId);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId1, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId2, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(SchemeshardShouldCompactMultipleTimes) {
@@ -1903,6 +1926,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId1 = txId;
 
         for (auto shard: info.Shards) {
             auto count = GetCompactionStats(
@@ -1915,6 +1939,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         }
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId2 = txId;
 
         for (auto shard: info.Shards) {
             auto count = GetCompactionStats(
@@ -1925,6 +1950,15 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(count, 2);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId1, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId2, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(SchemeshardShouldNotCompactSameTableSimultaneously) {
@@ -1935,13 +1969,20 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         // block result, so first compaction will stuck in progress
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId1 = txId;
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 1, Ydb::StatusIds::PRECONDITION_FAILED);
+        ui64 compactionId2 = txId;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId1, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_IN_PROGRESS
+        );
+        TestGetCompaction(runtime, compactionId2, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
     Y_UNIT_TEST(ShouldNotCompactServerless) {
@@ -1956,6 +1997,72 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT(!info.Shards.empty());
 
         TestCompact(runtime, schemeshardId, ++txId, "/MyRoot/User", "Simple", 1, Ydb::StatusIds::PRECONDITION_FAILED);
+        ui64 compactionId = txId;
+        TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(ShouldRetryOnTimeout) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, ++txId);
+
+        // block first CompactTableResult, should be retried
+        bool blocked = false;
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime,
+            [&](const TEvDataShard::TEvCompactTableResult::TPtr&) {
+                if (blocked) {
+                    return false;
+                } else {
+                    blocked = true;
+                    return true;
+                }
+            });
+        
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRetryOnError) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, ++txId);
+
+        // fail first CompactTableResult, should be retried
+        bool failed = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTableResult>(
+            [&](const TEvDataShard::TEvCompactTableResult::TPtr& ev) {
+                if (!failed) {
+                    failed = true;
+                    ev->Get()->Record.SetStatus(::NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                }
+            });
+        
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        ui64 compactionId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(CheckGetOperationSuccess) {
@@ -1966,7 +2073,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -1982,6 +2088,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 0);
         }
 
         block.Stop().Unblock(1); // complete one shard
@@ -1995,6 +2103,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 50.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 1);
         }
 
         block.Stop().Unblock();
@@ -2008,6 +2118,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 2);
         }
     }
 
@@ -2019,7 +2131,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2044,7 +2155,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2059,6 +2169,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 0);
         }
 
         block.Stop().Unblock();
@@ -2069,6 +2181,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 0);
         }
     }
 
@@ -2098,6 +2212,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 50.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 1);
         }
 
         block.Stop().Unblock();
@@ -2108,6 +2224,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 50.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 1);
         }
     }
 
@@ -2119,7 +2237,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2130,6 +2247,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 2);
         }
 
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId, Ydb::StatusIds::PRECONDITION_FAILED);
@@ -2143,7 +2262,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2163,7 +2281,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2174,6 +2291,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 2);
         }
 
         TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
@@ -2189,7 +2308,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
         
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
@@ -2202,6 +2320,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 0);
         }
 
         TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId, Ydb::StatusIds::PRECONDITION_FAILED);
@@ -2225,7 +2345,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
 
@@ -2236,6 +2355,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 2);
         }
 
         TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);

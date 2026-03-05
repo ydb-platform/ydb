@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common.h"
-
 #include <util/generic/yexception.h>
 
 namespace NMVP::NSupportLinks {

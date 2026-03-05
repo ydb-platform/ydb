@@ -13,10 +13,12 @@ SRCS(
     meta_clusters.h
     meta_cp_databases.h
     meta_cp_databases_verbose.h
+    meta_settings.cpp
     meta_support_links.h
     meta_db_clusters.h
     meta_versions.cpp
     mvp.cpp
+    support_links/resolution_context.cpp
 )
 
 PEERDIR(

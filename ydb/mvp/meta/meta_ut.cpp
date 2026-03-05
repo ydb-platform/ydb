@@ -2,6 +2,7 @@
 
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/common.h>
+#include <ydb/mvp/meta/link_source.h>
 
 #include <util/generic/yexception.h>
 
@@ -32,10 +33,16 @@ void Validate(
     const TVector<NMVP::TSupportLinkEntryConfig>& databaseLinks,
     NMVP::TGrafanaSupportConfig grafanaConfig)
 {
-    NMVP::InstanceMVP->SupportLinksConfig.Cluster = clusterLinks;
-    NMVP::InstanceMVP->SupportLinksConfig.Database = databaseLinks;
-    NMVP::InstanceMVP->GrafanaSupportConfig = std::move(grafanaConfig);
-    NMVP::InstanceMVP->ValidateSupportLinksConfig();
+    for (size_t i = 0; i < clusterLinks.size(); ++i) {
+        const TString where = TStringBuilder() << "support_links.cluster[" << i << "]";
+        auto source = NMVP::MakeLinkSource(i, clusterLinks[i], grafanaConfig, where);
+        (void)source;
+    }
+    for (size_t i = 0; i < databaseLinks.size(); ++i) {
+        const TString where = TStringBuilder() << "support_links.database[" << i << "]";
+        auto source = NMVP::MakeLinkSource(i, databaseLinks[i], grafanaConfig, where);
+        (void)source;
+    }
 }
 
 TString ValidateAndCatch(
@@ -55,12 +62,20 @@ void AssertMetaValidationThrows(
     TStringBuf metaApiEndpoint,
     TStringBuf metaDatabase,
     bool hasMetaConfigBlock,
-    bool isNebius,
+    NMvp::EAccessServiceType accessServiceType,
     TStringBuf errorPart)
 {
+    NMVP::TMetaSettings settings{
+        TString(metaApiEndpoint),
+        TString(metaDatabase),
+        hasMetaConfigBlock,
+        accessServiceType,
+        {},
+        {}
+    };
     TString error;
     try {
-        NMVP::ValidateMetaBaseConfig(metaApiEndpoint, metaDatabase, hasMetaConfigBlock, isNebius);
+        NMVP::ValidateMetaBaseConfig(settings);
     } catch (const yexception& e) {
         error = e.what();
     }
@@ -73,10 +88,18 @@ void AssertMetaValidationNoThrow(
     TStringBuf metaApiEndpoint,
     TStringBuf metaDatabase,
     bool hasMetaConfigBlock,
-    bool isNebius)
+    NMvp::EAccessServiceType accessServiceType)
 {
+    NMVP::TMetaSettings settings{
+        TString(metaApiEndpoint),
+        TString(metaDatabase),
+        hasMetaConfigBlock,
+        accessServiceType,
+        {},
+        {}
+    };
     UNIT_ASSERT_NO_EXCEPTION(
-        NMVP::ValidateMetaBaseConfig(metaApiEndpoint, metaDatabase, hasMetaConfigBlock, isNebius)
+        NMVP::ValidateMetaBaseConfig(settings)
     );
 }
 
@@ -105,7 +128,7 @@ Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
             "",
             "/Root/meta",
             true,
-            false,
+            NMvp::yandex_v2,
             "meta.meta_api_endpoint must be specified in meta config.");
     }
 
@@ -114,7 +137,7 @@ Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
             "grpc://meta.ydb.example.net:2135",
             "",
             true,
-            false,
+            NMvp::yandex_v2,
             "meta.meta_database must be specified in meta config.");
     }
 
@@ -123,7 +146,7 @@ Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
             "",
             "/Root/meta",
             false,
-            true,
+            NMvp::nebius_v1,
             "meta.meta_api_endpoint must be specified for access_service_type=nebius_v1.");
     }
 
@@ -132,7 +155,7 @@ Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
             "grpc://meta.ydb.example.net:2135",
             "",
             false,
-            true,
+            NMvp::nebius_v1,
             "meta.meta_database must be specified for access_service_type=nebius_v1.");
     }
 
@@ -141,11 +164,11 @@ Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
             "grpc://meta.ydb.example.net:2135",
             "/Root/meta",
             false,
-            true);
+            NMvp::nebius_v1);
     }
 
     Y_UNIT_TEST(YandexWithoutMetaBlockAllowsEmptyValues) {
-        AssertMetaValidationNoThrow("", "", false, false);
+        AssertMetaValidationNoThrow("", "", false, NMvp::yandex_v2);
     }
 }
 

@@ -1,18 +1,22 @@
 #pragma once
 
+#include <cstddef>
+
+#include <memory>
+
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 namespace NMVP {
 
+class ILinkSource;
+
 struct TGrafanaSupportConfig {
     TString Endpoint;
     TString SecretName;
 };
 
-inline constexpr TStringBuf GRAFANA_WORKSPACE_COLUMN = "workspace";
-inline constexpr TStringBuf GRAFANA_DATASOURCE_COLUMN = "grafana_ds";
 struct TSupportLinkEntryConfig {
     TString Source;
     TString Title;
@@ -21,9 +25,16 @@ struct TSupportLinkEntryConfig {
     TString Folder;
 };
 
-struct TSupportLinksConfig {
-    TVector<TSupportLinkEntryConfig> Cluster;
-    TVector<TSupportLinkEntryConfig> Database;
+struct TSupportLinkSources {
+    TSupportLinkSources();
+    ~TSupportLinkSources();
+    TSupportLinkSources(TSupportLinkSources&&) noexcept;
+    TSupportLinkSources& operator=(TSupportLinkSources&&) noexcept;
+    TSupportLinkSources(const TSupportLinkSources&) = delete;
+    TSupportLinkSources& operator=(const TSupportLinkSources&) = delete;
+
+    TVector<std::unique_ptr<ILinkSource>> Cluster;
+    TVector<std::unique_ptr<ILinkSource>> Database;
 };
 
 struct TMetaSettings {
@@ -32,7 +43,7 @@ struct TMetaSettings {
     bool HasMetaConfigBlock = false;
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TGrafanaSupportConfig GrafanaConfig;
-    TSupportLinksConfig SupportLinksConfig;
+    TSupportLinkSources SupportLinksConfig;
 };
 
 void ValidateMetaBaseConfig(const TMetaSettings& settings);

@@ -22,27 +22,7 @@ class Node;
 namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
-void ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius);
-
-struct TGrafanaSupportConfig {
-    TString Endpoint;
-    TString SecretName;
-    TString WorkspaceColumn = "workspace";
-    TString DatasourceColumn = "grafana_ds";
-};
-
-struct TSupportLinkEntryConfig {
-    TString Source;
-    TString Title;
-    TString Url;
-    TString Tag;
-    TString Folder;
-};
-
-struct TSupportLinksConfig {
-    TVector<TSupportLinkEntryConfig> Cluster;
-    TVector<TSupportLinkEntryConfig> Database;
-};
+void ValidateMetaBaseConfig(const TMetaSettings& settings);
 
 class TMVP {
 protected:
@@ -77,8 +57,6 @@ public:
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
-    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
-    void ValidateSupportLinksConfig() const;
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
@@ -89,7 +67,7 @@ public:
     NActors::TActorId HandlerId;
 
     TGrafanaSupportConfig GrafanaSupportConfig;
-    TSupportLinksConfig SupportLinksConfig;
+    TSupportLinkSources SupportLinksConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

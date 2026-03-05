@@ -1,6 +1,5 @@
 #pragma once
 
-#include "grafana_dashboard_resolver.h"
 #include "grafana_dashboard_search_resolver.h"
 
 #include <util/generic/hash.h>
@@ -63,10 +62,6 @@ public:
     static const TLinkSourceCollections& Default() {
         static const TLinkSourceCollections collections = [] {
             TLinkSourceCollections c;
-            c.Register(TResolverRegistration{
-                .SourceName = SOURCE_GRAFANA_DASHBOARD,
-                .Build = &BuildGrafanaDashboardResolver,
-            });
             c.Register(TResolverRegistration{
                 .SourceName = SOURCE_GRAFANA_DASHBOARD_SEARCH,
                 .Build = &BuildGrafanaDashboardSearchResolver,

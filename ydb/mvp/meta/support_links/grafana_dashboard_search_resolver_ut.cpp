@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             : TBase(&TSearchApiRequestCheckActor::StateWork)
         {}
 
-        void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+        void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
             const auto request = event->Get()->Request;
             const TString url(request->URL);
             const bool hasTag = url.Contains("tag=ydb-common");
@@ -66,12 +66,12 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
                     << "\r\n"
                     << body
             );
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
         }
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+                hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
             }
         }
     };
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             : TBase(&TSearchApiForbiddenActor::StateWork)
         {}
 
-        void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+        void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
             const auto request = event->Get()->Request;
             const TString body = R"({"message":"forbidden"})";
             NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
@@ -98,12 +98,12 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
                     << "\r\n"
                     << body
             );
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
         }
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+                hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
             }
         }
     };
@@ -123,8 +123,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.Source = "grafana/dashboard/search";
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
-            .WorkspaceColumn = "workspace",
-            .DatasourceColumn = "grafana_ds",
         };
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
@@ -155,8 +153,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
-            .WorkspaceColumn = "workspace",
-            .DatasourceColumn = "grafana_ds",
         };
         context.ClusterColumns["workspace"] = "ws";
         context.ClusterColumns["grafana_ds"] = "ds";
@@ -195,8 +191,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
-            .WorkspaceColumn = "workspace",
-            .DatasourceColumn = "grafana_ds",
         };
         context.ClusterColumns["grafana_ds"] = "ds";
         context.QueryParams.emplace_back("cluster", "testing-global");
@@ -230,8 +224,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
-            .WorkspaceColumn = "workspace",
-            .DatasourceColumn = "grafana_ds",
         };
         context.ClusterColumns["workspace"] = "ws";
         context.ClusterColumns["grafana_ds"] = "ds";
@@ -260,8 +252,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
-            .WorkspaceColumn = "workspace",
-            .DatasourceColumn = "grafana_ds",
         };
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));

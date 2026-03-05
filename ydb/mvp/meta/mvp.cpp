@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/meta/support_links/resolver_validation.h>
+#include <ydb/mvp/meta/link_source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -49,22 +49,22 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     }
 }
 
-void NMVP::ValidateMetaBaseConfig(TStringBuf metaApiEndpoint, TStringBuf metaDatabase, bool hasMetaConfigBlock, bool isNebius) {
-    if (hasMetaConfigBlock) {
-        if (metaApiEndpoint.empty()) {
+void NMVP::ValidateMetaBaseConfig(const TMetaSettings& settings) {
+    if (settings.HasMetaConfigBlock) {
+        if (settings.MetaApiEndpoint.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
         }
-        if (metaDatabase.empty()) {
+        if (settings.MetaDatabase.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
         }
     }
 
-    if (isNebius) {
-        if (metaApiEndpoint.empty()) {
+    if (settings.AccessServiceType == NMvp::nebius_v1) {
+        if (settings.MetaApiEndpoint.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX
                                 << "meta.meta_api_endpoint must be specified for access_service_type=nebius_v1.";
         }
-        if (metaDatabase.empty()) {
+        if (settings.MetaDatabase.empty()) {
             ythrow yexception() << CONFIG_ERROR_PREFIX
                                 << "meta.meta_database must be specified for access_service_type=nebius_v1.";
         }
@@ -197,49 +197,39 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
-}
 
-void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    GrafanaSupportConfig = {};
-    SupportLinksConfig = {};
+    MetaSettings.GrafanaConfig = {};
+    MetaSettings.SupportLinksConfig.Cluster.clear();
+    MetaSettings.SupportLinksConfig.Database.clear();
 
-    auto parseGrafana = [this](const YAML::Node& node) {
-        GrafanaSupportConfig.Endpoint = node["endpoint"].as<std::string>("");
-        GrafanaSupportConfig.SecretName = node["secret_name"].as<std::string>("");
-    };
-
-    auto parseSupportLinks = [this](const YAML::Node& node) {
-        auto parseEntity = [](const YAML::Node& linksNode, TVector<TSupportLinkEntryConfig>& out) {
-            for (const auto& linkNode : linksNode) {
-                TSupportLinkEntryConfig entry;
-                entry.Source = linkNode["source"].as<std::string>("");
-                entry.Title = linkNode["title"].as<std::string>("");
-                entry.Url = linkNode["url"].as<std::string>("");
-                entry.Tag = linkNode["tag"].as<std::string>("");
-                entry.Folder = linkNode["folder"].as<std::string>("");
-                out.emplace_back(std::move(entry));
-            }
-        };
-
-        if (node["cluster"]) {
-            parseEntity(node["cluster"], SupportLinksConfig.Cluster);
-        }
-        if (node["database"]) {
-            parseEntity(node["database"], SupportLinksConfig.Database);
-        }
-    };
-
-    if (config["meta"]) {
-        auto meta = config["meta"];
-        if (meta["grafana"]) {
-            parseGrafana(meta["grafana"]);
-        }
-        if (meta["support_links"]) {
-            parseSupportLinks(meta["support_links"]);
-        }
+    if (config.HasGrafana()) {
+        const auto& grafana = config.GetGrafana();
+        MetaSettings.GrafanaConfig.Endpoint = grafana.GetEndpoint();
+        MetaSettings.GrafanaConfig.SecretName = grafana.GetSecretName();
     }
 
-    ValidateSupportLinksConfig();
+    if (config.HasSupportLinks()) {
+        const auto& supportLinks = config.GetSupportLinks();
+        const auto& clusterLinks = supportLinks.GetCluster();
+        for (int i = 0; i < clusterLinks.size(); ++i) {
+            const TString where = TStringBuilder() << "support_links.cluster[" << i << "]";
+            MetaSettings.SupportLinksConfig.Cluster.emplace_back(MakeLinkSource(
+                i,
+                clusterLinks[i],
+                MetaSettings.GrafanaConfig,
+                where));
+        }
+
+        const auto& databaseLinks = supportLinks.GetDatabase();
+        for (int i = 0; i < databaseLinks.size(); ++i) {
+            const TString where = TStringBuilder() << "support_links.database[" << i << "]";
+            MetaSettings.SupportLinksConfig.Database.emplace_back(MakeLinkSource(
+                i,
+                databaseLinks[i],
+                MetaSettings.GrafanaConfig,
+                where));
+        }
+    }
 }
 
 void TMVP::TryGetMetaOptionsFromConfig() {
@@ -253,33 +243,14 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         if (appConfig.HasMeta()) {
             TryGetMetaOptionsFromConfig(appConfig.GetMeta());
         }
-        TryGetMetaOptionsFromConfig(config);
-        ValidateMetaBaseConfig(
-            MetaApiEndpoint,
-            MetaDatabase,
-            static_cast<bool>(config["meta"]),
-            false
-        );
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+        MetaSettings.HasMetaConfigBlock = appConfig.HasMeta();
+        ValidateMetaBaseConfig(MetaSettings);
     } catch (const YAML::Exception& e) {
         std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
     }
 }
-
-void TMVP::ValidateSupportLinksConfig() const {
-    const auto& sourceValidators = NSupportLinks::TLinkSourceConfigValidators::Default();
-    auto validateEntityLinks = [&](const TVector<TSupportLinkEntryConfig>& links, TStringBuf entityName) {
-        for (size_t i = 0; i < links.size(); ++i) {
-            const auto& link = links[i];
-            const TString where = TStringBuilder() << "support_links." << entityName << "[" << i << "]";
-            sourceValidators.Validate(link, GrafanaSupportConfig, where);
-        }
-    };
-
-    validateEntityLinks(SupportLinksConfig.Cluster, "cluster");
-    validateEntityLinks(SupportLinksConfig.Database, "database");
-}
-
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
@@ -287,9 +258,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     TryGetMetaOptionsFromConfig();
 
-    const bool isNebius = StartupOptions.AccessServiceType == NMvp::nebius_v1;
-    if (isNebius) {
-        ValidateMetaBaseConfig(MetaApiEndpoint, MetaDatabase, false, isNebius);
+    if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+        MetaSettings.HasMetaConfigBlock = false;
+        ValidateMetaBaseConfig(MetaSettings);
     }
 
     if (MetaApiEndpoint.empty()) {

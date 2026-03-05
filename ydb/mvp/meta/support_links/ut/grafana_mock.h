@@ -110,7 +110,7 @@ public:
         return {};
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
         const auto request = event->Get()->Request;
         const TString tag = ExtractQueryParam(request->URL, "tag");
 
@@ -128,12 +128,12 @@ public:
                 << responseBody
         );
 
-        ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
         }
     }
 };

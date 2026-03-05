@@ -97,7 +97,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
 
-Файл [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml)
+#### Файл [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml)
 
 {% list tabs %}
 
@@ -127,7 +127,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 {% endlist %}
 
-Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
+#### Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
 
 {% list tabs %}
 
@@ -177,7 +177,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 {% endlist %}
 
-Файл [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml)
+#### Файл [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml)
 
 При необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
 
@@ -201,9 +201,9 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 Для импорта дашбордов воспользуйтесь одним из следующих способов:
 
-- Используйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) в интерфейсе Grafana.
+- и спользуйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) в интерфейсе Grafana;
 
-- Выполните [скрипт для загрузки дашбордов](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) и при необходимости может быть модифицирован для других способов интеграции.
+- выполните [скрипт для загрузки дашбордов](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) и при необходимости может быть модифицирован для других способов интеграции.
 
 ### Результат
 

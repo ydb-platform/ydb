@@ -158,7 +158,8 @@ class YdbTopicWorkload(WorkloadBase):
             '-s', self.duration,
             '--consumers', str(number_of_consumers),
             '--threads', str(number_of_consumer_threads),
-            '--topic', topic_name
+            '--topic', topic_name,
+            '--max-memory-usage-per-consumer=2M',
         ])
 
         brDone.wait()

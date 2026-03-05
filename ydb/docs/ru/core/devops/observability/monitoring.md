@@ -127,15 +127,15 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
   {% cut "Как определить значения портов узлов баз данных" %}
 
-    Определите значения портов узлов баз данных командой:
+  Определите значения портов узлов баз данных командой:
 
-    ```bash
-      ps aux | grep ydbd
-    ```
+  ```bash
+    ps aux | grep ydbd
+  ```
 
-    ![-](../../_assets/mon-port.png)
+  ![-](../../_assets/mon-port.png)
 
-    Возьмите значение, указанное в параметре `--mon -port`.
+  Возьмите значение, указанное в параметре `--mon -port`.
 
   {% list tabs %}
 

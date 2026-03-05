@@ -40,47 +40,6 @@ BELONGS ya.make
     Files with this license:
         tif_luv.c [5:22]
 
-KEEP     BSD-3-Clause         136eef2e91c907bcedb253a3820d035b
-BELONGS ya.make
-    License text:
-        	* port/{getopt.c, strcasecmp.c, strtoul.c}: Update modules from
-        	the NetBSD source tree (the old	4-clause BSD license changed to
-        	the new 3-clause one).
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 99.00
-        Match type      : NOTICE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        ChangeLog [15519:15521]
-
-KEEP     BSD-3-Clause         5e68e5fa256f5c915df403f2dbe89b29
-BELONGS ya.make
-    License text:
-        	Merge branch 'doc_add_LZW_BSD_license_to_LICENSE_md_issue_431' into 'master'
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 99.00
-        Match type      : REFERENCE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        ChangeLog [14:14]
-
-KEEP     BSD-3-Clause         6026b27d46a2307943d2716fcd5b7d79
-BELONGS ya.make
-FILE_INCLUDE LICENSE.md found in files: ChangeLog at line 104, ChangeLog at line 15
-FILE_INCLUDE tif_lzw.c found in files: ChangeLog at line 104, ChangeLog at line 15
-    License text:
-        	Add BSD license for Lempel-Ziv & Welch compression (tif_lzw.c) to LICENSE.md
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 99.00
-        Match type      : REFERENCE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        ChangeLog [15:15]
-        ChangeLog [104:104]
-
 KEEP     MIT                  85545b6051abd36fce0fc9cd8d2d53cc
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.

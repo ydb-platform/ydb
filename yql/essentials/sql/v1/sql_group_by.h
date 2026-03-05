@@ -17,11 +17,11 @@ class TGroupByClause: public TSqlTranslation {
         Empty,
         End,
     };
-    typedef TEnumBitSet<EGroupByFeatures, static_cast<int>(EGroupByFeatures::Begin), static_cast<int>(EGroupByFeatures::End)> TGroupingSetFeatures;
+    using TGroupingSetFeatures = TEnumBitSet<EGroupByFeatures, static_cast<int>(EGroupByFeatures::Begin), static_cast<int>(EGroupByFeatures::End)>;
 
     class TGroupByClauseCtx: public TSimpleRefCount<TGroupByClauseCtx> {
     public:
-        typedef TIntrusivePtr<TGroupByClauseCtx> TPtr;
+        using TPtr = TIntrusivePtr<TGroupByClauseCtx>;
 
         TGroupingSetFeatures GroupFeatures;
         TMap<TString, TNodePtr> NodeAliases;

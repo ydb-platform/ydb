@@ -35,3 +35,7 @@ libtiff = CMakeNinjaNixProject(
     addincl_global={".": {"."}},
     post_install=post_install,
 )
+
+
+# This is just a git log, it is not intended for humans, yet increases diff size dramatically
+libtiff.copy_top_sources_except.add("ChangeLog")

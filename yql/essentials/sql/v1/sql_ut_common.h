@@ -2863,12 +2863,12 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "FOR without EVALUATE is not available before language version 2025.05");
+        "FOR without EVALUATE is not available before language version 2026.01");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+    settings.LangVer = NYql::MakeLangVersion(2026, 1);
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         FOR $i IN AsList(1,2,3) DO BEGIN
@@ -2887,7 +2887,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "PARALLEL FOR is not available before language version 2025.05");
+        "PARALLEL FOR is not available before language version 2026.01");
 }
 
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
@@ -11991,7 +11991,7 @@ Y_UNIT_TEST_SUITE(YqlSelect) {
 
 Y_UNIT_TEST(LangVer) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -12000,7 +12000,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "YqlSelect is not available before language version 2025.05");
+        "YqlSelect is not available before language version 2026.01");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

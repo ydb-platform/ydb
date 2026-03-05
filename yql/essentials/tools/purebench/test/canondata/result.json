@@ -1,10 +1,18 @@
 {
-    "test.test_purebench_smoke": [
+    "test.test_purebench_smoke[blocks]": [
         {
-            "uri": "file://test.test_purebench_smoke/out"
+            "uri": "file://test.test_purebench_smoke_blocks_/out"
         },
         {
-            "uri": "file://test.test_purebench_smoke/err"
+            "uri": "file://test.test_purebench_smoke_blocks_/err"
+        }
+    ],
+    "test.test_purebench_smoke[scalar]": [
+        {
+            "uri": "file://test.test_purebench_smoke_scalar_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_smoke_scalar_/err"
         }
     ]
 }

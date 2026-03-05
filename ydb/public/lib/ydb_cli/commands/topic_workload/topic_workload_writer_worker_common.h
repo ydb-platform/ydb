@@ -195,7 +195,6 @@ inline void ProcessWriterLoopCommon(
         }
 
         if (writingAllowed && !waitForCommitTx) {
-            const TInstant createTimestamp = getCreateTs();
             // Глобальный счётчик для expectedTs/логов.
             bytesWritten += params.MessageSize;
             // Локальный счётчик в рамках текущего окна лимита скорости.
@@ -209,6 +208,7 @@ inline void ProcessWriterLoopCommon(
                 transaction = *txSupport->Transaction;
             }
 
+            const TInstant createTimestamp = getCreateTs();
             producer->Send(createTimestamp, transaction);
 
             if (txSupport) {
@@ -236,7 +236,7 @@ inline void ProcessWriterLoopCommon(
                 const ui64 bytesMustBeWrittenWindow = windowSeconds > 0
                     ? static_cast<ui64>(windowSeconds * params.BytesPerSec / params.ProducerThreadCount)
                     : 0;
-                WRITE_LOG(params.Log, ELogPriority::TLOG_ERR,
+                WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG,
                     LogPrefix(sessionId)
                         << "Rate window stats: bytesWrittenInWindow=" << bytesWrittenInWindow
                         << " bytesMustBeWrittenWindow=" << bytesMustBeWrittenWindow

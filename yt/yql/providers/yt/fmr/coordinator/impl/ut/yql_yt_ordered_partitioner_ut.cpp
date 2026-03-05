@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_ordered_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_ordered_partitioner.h>
 #include <yt/yql/providers/yt/fmr/test_tools/fmr_coordinator_service_helper/yql_yt_mock_coordinator_service.h>
 #include <algorithm>
 

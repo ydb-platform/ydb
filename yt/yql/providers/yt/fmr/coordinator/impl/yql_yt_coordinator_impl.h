@@ -10,6 +10,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl/yql_yt_coordinator_service_impl.h>
 #include <yt/yql/providers/yt/fmr/gc_service/impl/yql_yt_gc_service_impl.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
 
 namespace NYql::NFmr {
 
@@ -31,16 +32,6 @@ struct TFmrCoordinatorSettings {
 struct TPartIdInfo {
     TString TableId;
     TString PartId;
-};
-
-struct TPartitionOperationResult {
-    TString PartitionId;
-    TMaybe<TFmrError> Error;
-};
-
-struct TFmrResourceTasksResult {
-    std::vector<TFmrResourceTaskInfo> Tasks;
-    TMaybe<TFmrError> Error;
 };
 
 IFmrCoordinator::TPtr MakeFmrCoordinator(

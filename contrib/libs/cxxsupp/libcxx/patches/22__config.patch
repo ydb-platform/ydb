@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index c8224b0..a72ada0 100644
+index e14632f..d7f3e0d 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -530,7 +530,7 @@ typedef __char32_t char32_t;
+@@ -511,7 +511,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
@@ -11,7 +11,7 @@ index c8224b0..a72ada0 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
        __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
-@@ -828,7 +828,8 @@ typedef __char32_t char32_t;
+@@ -823,7 +823,8 @@ typedef __char32_t char32_t;
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \
@@ -22,21 +22,21 @@ index c8224b0..a72ada0 100644
  #      undef _LIBCPP_HAS_THREAD_API_PTHREAD
  #      define _LIBCPP_HAS_THREAD_API_PTHREAD 1
 diff --git a/include/__configuration/compiler.h b/include/__configuration/compiler.h
-index cf459a0..761c779 100644
+index 4b6c6ca..bd43342 100644
 --- a/include/__configuration/compiler.h
 +++ b/include/__configuration/compiler.h
 @@ -34,7 +34,8 @@
  // LLVM RELEASE Update the minimum compiler versions
  #  if defined(_LIBCPP_CLANG_VER)
- #    if _LIBCPP_CLANG_VER < 1800
--#      warning "Libc++ only supports Clang 18 and later"
+ #    if _LIBCPP_CLANG_VER < 1900
+-#      warning "Libc++ only supports Clang 19 and later"
 +// We allow clang 14 and newer
-+// #      warning "Libc++ only supports Clang 18 and later"
++// #      warning "Libc++ only supports Clang 19 and later"
  #    endif
  #  elif defined(_LIBCPP_APPLE_CLANG_VER)
  #    if _LIBCPP_APPLE_CLANG_VER < 1500
 diff --git a/include/__configuration/platform.h b/include/__configuration/platform.h
-index 8d0f8f6..50be389 100644
+index f3c199d..87ba2cd 100644
 --- a/include/__configuration/platform.h
 +++ b/include/__configuration/platform.h
 @@ -20,7 +20,7 @@

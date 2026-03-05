@@ -172,6 +172,10 @@ public:
     }
 
     ~TDynamicLinearProxy() override {
+        if (!Consumed_) {
+            CastCtx_->PyCtx->TypeInfoHelper->NotifyNotConsumedLinear(CastCtx_->PyCtx->Pos);
+        }
+
         const TPyGilLocker lock;
         PyObject_.Reset();
     }

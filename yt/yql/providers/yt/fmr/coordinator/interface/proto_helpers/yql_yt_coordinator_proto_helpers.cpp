@@ -98,6 +98,7 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
 
 TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoPrepareOperationRequest) {
     TPrepareOperationRequest PrepareOperationRequest;
+    PrepareOperationRequest.TaskType = static_cast<ETaskType>(protoPrepareOperationRequest.GetTaskType());
     PrepareOperationRequest.OperationParams = OperationParamsFromProto(protoPrepareOperationRequest.GetOperationParams());
     std::unordered_map<TFmrTableId, TClusterConnection> PrepareOperationRequestClusterConnections;
     for (auto& [tableName, conn]: protoPrepareOperationRequest.GetClusterConnections()) {
@@ -112,6 +113,7 @@ TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepare
 
 NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& PrepareOperationRequest) {
     NProto::TPrepareOperationRequest protoPrepareOperationRequest;
+    protoPrepareOperationRequest.SetTaskType(static_cast<NProto::ETaskType>(PrepareOperationRequest.TaskType));
     auto protoOperationParams = OperationParamsToProto(PrepareOperationRequest.OperationParams);
     protoPrepareOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
 

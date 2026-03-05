@@ -1363,6 +1363,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextPathId, Self->NextLocalPathId));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeSequenceId, Self->NextSchemeChangeSequenceId));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_SchemeChangeRecordCount, Self->SchemeChangeRecordCount));
+
+        {
+            auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
+            if (!subRowset.IsReady()) return false;
+            Self->HasSchemeChangeSubscribers = !subRowset.EndOfSet();
+        }
+
+        {
+            ui64 actualCount = 0;
+            auto recRowset = db.Table<Schema::SchemeChangeRecords>().Range().Select();
+            if (!recRowset.IsReady()) return false;
+            while (!recRowset.EndOfSet()) {
+                ++actualCount;
+                if (!recRowset.Next()) return false;
+            }
+            if (actualCount != Self->SchemeChangeRecordCount) {
+                Self->SchemeChangeRecordCount = actualCount;
+            }
+        }
 
         {
             ui64 isReadOnlyModeVal = 0;

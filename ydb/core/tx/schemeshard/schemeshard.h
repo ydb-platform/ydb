@@ -7,6 +7,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/schemeshard/scheme_change_records.pb.h>
 #include <ydb/core/protos/tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -108,6 +109,22 @@ namespace TEvSchemeShard {
         EvShredInfoRequest,
         EvShredInfoResponse,
         EvShredManualStartupRequest,
+
+        // Scheme Change Records events
+        EvRegisterSubscriber,
+        EvRegisterSubscriberResult,
+        EvFetchSchemeChangeRecords,
+        EvFetchSchemeChangeRecordsResult,
+        EvAckSchemeChangeRecords,
+        EvAckSchemeChangeRecordsResult,
+        EvForceAdvanceSubscriber,
+        EvForceAdvanceSubscriberResult,
+        EvUnregisterSubscriber,
+        EvUnregisterSubscriberResult,
+        EvWakeupToRunSchemeChangeRecordsCleanup,
+        // Test-only:
+        EvInternalReadSchemeChangeRecords,
+        EvInternalReadSchemeChangeRecordsResult,
 
         EvEnd
     };
@@ -415,6 +432,9 @@ namespace TEvSchemeShard {
     };
 
     struct TEvWakeupToRunShredBSC : public TEventLocal<TEvWakeupToRunShredBSC, EvWakeupToRunShredBSC> {
+    };
+
+    struct TEvWakeupToRunSchemeChangeRecordsCleanup : public TEventLocal<TEvWakeupToRunSchemeChangeRecordsCleanup, EvWakeupToRunSchemeChangeRecordsCleanup> {
     };
 
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
@@ -725,6 +745,51 @@ namespace TEvSchemeShard {
     };
 
     struct TEvShredManualStartupRequest : TEventPB<TEvShredManualStartupRequest, NKikimrScheme::TEvShredManualStartupRequest, EvShredManualStartupRequest> {};
+
+    // Scheme Change Records events (proto-backed)
+    struct TEvRegisterSubscriber : public TEventPB<TEvRegisterSubscriber,
+        NKikimrSchemeShard::TEvRegisterSubscriber, EvRegisterSubscriber> {};
+    struct TEvRegisterSubscriberResult : public TEventPB<TEvRegisterSubscriberResult,
+        NKikimrSchemeShard::TEvRegisterSubscriberResult, EvRegisterSubscriberResult> {};
+    struct TEvFetchSchemeChangeRecords : public TEventPB<TEvFetchSchemeChangeRecords,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecords, EvFetchSchemeChangeRecords> {};
+    struct TEvFetchSchemeChangeRecordsResult : public TEventPB<TEvFetchSchemeChangeRecordsResult,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordsResult, EvFetchSchemeChangeRecordsResult> {};
+    struct TEvAckSchemeChangeRecords : public TEventPB<TEvAckSchemeChangeRecords,
+        NKikimrSchemeShard::TEvAckSchemeChangeRecords, EvAckSchemeChangeRecords> {};
+    struct TEvAckSchemeChangeRecordsResult : public TEventPB<TEvAckSchemeChangeRecordsResult,
+        NKikimrSchemeShard::TEvAckSchemeChangeRecordsResult, EvAckSchemeChangeRecordsResult> {};
+    struct TEvForceAdvanceSubscriber : public TEventPB<TEvForceAdvanceSubscriber,
+        NKikimrSchemeShard::TEvForceAdvanceSubscriber, EvForceAdvanceSubscriber> {};
+    struct TEvForceAdvanceSubscriberResult : public TEventPB<TEvForceAdvanceSubscriberResult,
+        NKikimrSchemeShard::TEvForceAdvanceSubscriberResult, EvForceAdvanceSubscriberResult> {};
+    struct TEvUnregisterSubscriber : public TEventPB<TEvUnregisterSubscriber,
+        NKikimrSchemeShard::TEvUnregisterSubscriber, EvUnregisterSubscriber> {};
+    struct TEvUnregisterSubscriberResult : public TEventPB<TEvUnregisterSubscriberResult,
+        NKikimrSchemeShard::TEvUnregisterSubscriberResult, EvUnregisterSubscriberResult> {};
+
+    // Test-only: non-proto-backed events for reading scheme change records in tests
+    struct TEvInternalReadSchemeChangeRecords : public TEventLocal<TEvInternalReadSchemeChangeRecords, EvInternalReadSchemeChangeRecords> {
+    };
+
+    struct TEvInternalReadSchemeChangeRecordsResult : public TEventLocal<TEvInternalReadSchemeChangeRecordsResult, EvInternalReadSchemeChangeRecordsResult> {
+        struct TEntry {
+            ui64 SequenceId = 0;
+            ui64 TxId = 0;
+            ui32 OperationType = 0;
+            ui64 PathOwnerId = 0;
+            ui64 PathLocalId = 0;
+            TString PathName;
+            ui32 ObjectType = 0;
+            ui32 Status = 0;
+            TString UserSID;
+            ui64 SchemaVersion = 0;
+            ui64 CompletedAt = 0;
+            ui64 PlanStep = 0;
+        };
+        TVector<TEntry> Entries;
+        ui64 MinInFlightPlanStep = 0;
+    };
 };
 
 }

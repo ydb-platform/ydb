@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package NKikimrSchemeShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvRegisterSubscriber {
+    string SubscriberId = 1;
+}
+
+message TEvRegisterSubscriberResult {
+    uint32 Status = 1;
+    string Reason = 2;
+    uint64 CurrentSequenceId = 3;
+}
+
+message TSchemeChangeRecord {
+    uint64 SequenceId = 1;
+    uint64 TxId = 2;
+    uint32 OperationType = 3;
+    uint64 PathOwnerId = 4;
+    uint64 PathLocalId = 5;
+    string PathName = 6;
+    uint32 ObjectType = 7;
+    uint32 Status = 8;
+    string UserSID = 9;
+    uint64 SchemaVersion = 10;
+    uint64 CompletedAt = 11;
+    uint64 PlanStep = 12;
+}
+
+message TEvFetchSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 AfterSequenceId = 2;
+    uint32 MaxCount = 3;
+}
+
+message TEvFetchSchemeChangeRecordsResult {
+    uint32 Status = 1;
+    string Reason = 2;
+    repeated TSchemeChangeRecord Entries = 3;
+    uint64 LastSequenceId = 4;
+    bool HasMore = 5;
+    uint64 SkippedEntries = 6;
+    uint64 MinInFlightPlanStep = 7;
+}
+
+message TEvAckSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 UpToSequenceId = 2;
+}
+
+message TEvAckSchemeChangeRecordsResult {
+    uint32 Status = 1;
+    string Reason = 2;
+    uint64 NewCursor = 3;
+}
+
+message TEvForceAdvanceSubscriber {
+    string SubscriberId = 1;
+}
+
+message TEvForceAdvanceSubscriberResult {
+    uint32 Status = 1;
+    string Reason = 2;
+    uint64 NewCursor = 3;
+}
+
+message TEvUnregisterSubscriber {
+    string SubscriberId = 1;
+}
+
+message TEvUnregisterSubscriberResult {
+    uint32 Status = 1;
+    string Reason = 2;
+}

@@ -92,7 +92,6 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     L6.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L6"));
     L7.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L7"));
     IdleLight.Initialize(StateGroup, TLightCounterConfig::Create()
-        .WithCount("DeviceBusyPeriods")
         .WithRedMs("DeviceIdleTimeMsPerSec")
         .WithGreenMs("DeviceBusyTimeMsPerSec"));
 

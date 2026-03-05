@@ -29,15 +29,22 @@ private:
 
 public:
     TChunkKeeperActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
-            std::unique_ptr<TChunkKeeperData>&& data)
+            std::unique_ptr<TChunkKeeperData>&& data, bool isActive)
         : LogCtx(logCtx)
         , Committed(std::move(data))
+        , IsActive(isActive)
     {}
 
     void Bootstrap() {
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK07, VDISKP(LogCtx->VCtx, "Bootstrap TChunkKeeperActor"),
-                (CommittedData, PrintCommittedData()));
-        Become(&TThis::StateAccepting);
+                (CommittedData, PrintCommittedData()),
+                (IsActive, IsActive));
+        if (IsActive) {
+            Become(&TThis::StateAccepting);
+        } else {
+            DropAllChunks();
+            Become(&TThis::StateError);
+        }
     }
 
 private:
@@ -81,6 +88,15 @@ private:
         IgnoreFunc(TEvChunkKeeperAllocate)
         IgnoreFunc(TEvChunkKeeperFree)
         IgnoreFunc(TEvChunkKeeperDiscover)
+        IgnoreFunc(NPDisk::TEvCutLog)
+        cFunc(TEvents::TEvPoison::EventType, PassAway)
+    )
+
+    STRICT_STFUNC(StateError,
+        hFunc(TEvChunkKeeperAllocate, HandleError)
+        hFunc(TEvChunkKeeperFree, HandleError)
+        hFunc(TEvChunkKeeperDiscover, HandleError)
+        hFunc(NPDisk::TEvLogResult, HandleError)
         IgnoreFunc(NPDisk::TEvCutLog)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     )
@@ -477,6 +493,51 @@ private:
         return data;
     }
 
+    // Error State
+
+    void DropAllChunks() {
+        NPDisk::TCommitRecord commitRecord;
+        for (const auto& [chunkIdx, _] : Committed->Chunks) {
+            DeletionsInFlight.insert(chunkIdx);
+            commitRecord.DeleteChunks.push_back(chunkIdx);
+        }
+        IssueCommit(std::move(commitRecord));
+    }
+
+    void HandleError(const TEvChunkKeeperAllocate::TPtr& ev) {
+        ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
+                (Subsystem, subsystem));
+        Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt,
+                NKikimrProto::ERROR, "ChunkKeeper is disabled"));
+    }
+
+    void HandleError(const TEvChunkKeeperFree::TPtr& ev) {
+        ui32 chunkIdx = ev->Get()->ChunkIdx;
+        ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
+                (ChunkIdx, chunkIdx),
+                (Subsystem, subsystem));
+        Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR,
+                "ChunkKeeper is disabled"));
+    }
+
+    void HandleError(const TEvChunkKeeperDiscover::TPtr& ev) {
+        ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
+                (Subsystem, subsystem));
+        Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}));
+    }
+
+    void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
+                (Event, ev->Get()->ToString()));
+        CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
+        Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
+        DeletionsInFlight.clear();
+        Committed.reset();  // ensure it won't be used
+    }
+
 private:
     const TIntrusivePtr<TVDiskLogContext> LogCtx;
 
@@ -490,11 +551,12 @@ private:
     std::optional<TRequest> ActiveRequest;
 
     ui64 CurEntryPointLsn = 0;
+    bool IsActive;
 };
 
 IActor* CreateChunkKeeperActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
-        std::unique_ptr<TChunkKeeperData>&& data) {
-    return new TChunkKeeperActor(logCtx, std::move(data));
+        std::unique_ptr<TChunkKeeperData>&& data, bool isActive) {
+    return new TChunkKeeperActor(logCtx, std::move(data), isActive);
 }
 
 } // namespace NKikimr

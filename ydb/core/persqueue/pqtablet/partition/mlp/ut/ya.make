@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 #TIMEOUT(30)
 
 SRCS(
+    mlp_commit_ut.cpp
     mlp_consumer_ut.cpp
     mlp_counters_ut.cpp
     mlp_dlq_mover_ut.cpp

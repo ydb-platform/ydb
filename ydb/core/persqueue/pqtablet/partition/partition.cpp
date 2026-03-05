@@ -1839,7 +1839,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorConte
     if (!UsersInfoStorage) {
         return;
     }
-    
+
     auto userInfo = UsersInfoStorage.Get()->GetIfExists(ev->Get()->ClientId);
     if (!userInfo || !userInfo->LabeledCounters) {
         return;
@@ -3067,6 +3067,14 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                             "Partition end offset " << GetEndOffset() <<
                             ", range end " << operation.GetCommitOffsetsBegin());
                 result = false;
+            } else if (IsCommitOffsetForbiddenForMLPConsumer(consumer, false)) {
+                LOG_W("Partition " << Partition <<
+                         " Consumer '" << consumer << "'" <<
+                         " Bad request (changing commit offset for MLP consumer) " <<
+                         " EndOffset " << GetEndOffset() <<
+                         " End " << operation.GetCommitOffsetsEnd());
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Commit offset for MLP consumer.");
+                result = false;
             }
 
             if (!result) {
@@ -3492,6 +3500,10 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
     TxIdHasChanged = true;
 }
 
+bool TPartition::IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPRequest) const {
+    return !explicitMLPRequest && MLPConsumers.contains(consumer);
+}
+
 TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
@@ -3527,6 +3539,13 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (begin > end)");
+            return EProcessResult::ContinueDrop;
+        }
+        if (IsCommitOffsetForbiddenForMLPConsumer(user, false)) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "commit offset for MLP consumer");
             return EProcessResult::ContinueDrop;
         }
 
@@ -3774,6 +3793,13 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
                            NPersQueue::NErrorCode::WRONG_COOKIE,
                            TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
 
+        return;
+    }
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && IsCommitOffsetForbiddenForMLPConsumer(act.ClientId, act.MLPRequest)) {
+        ScheduleReplyError(act.Cookie, act.IsInternal,
+                           NPersQueue::NErrorCode::BAD_REQUEST,
+                           TStringBuilder() << "set offset for consumer is forbidden");
         return;
     }
 

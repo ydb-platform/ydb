@@ -1,10 +1,8 @@
 #pragma once
 
 #include "events.h"
+#include "common.h"
 
-#include <util/generic/hash.h>
-#include <util/generic/string.h>
-#include <util/generic/vector.h>
 #include <memory>
 
 namespace NMVP {

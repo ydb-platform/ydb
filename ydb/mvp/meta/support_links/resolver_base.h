@@ -93,12 +93,13 @@ class TGrafanaResolverBase : public TResolverBase<TDerived> {
 protected:
     using TResolverBase<TDerived>::Context;
 
-    explicit TGrafanaResolverBase(TLinkResolveContext context)
+    explicit TGrafanaResolverBase(TLinkResolveContext context, const TMetaSettings& metaSettings)
         : TResolverBase<TDerived>(std::move(context))
+        , MetaSettings(metaSettings)
     {}
 
     const TGrafanaSupportConfig& GetGrafanaConfig() const {
-        return InstanceMVP->GrafanaSupportConfig;
+        return MetaSettings.GrafanaConfig;
     }
 
     bool ValidateRequiredClusterColumns(TVector<TSupportError>& errors) const {
@@ -136,6 +137,9 @@ protected:
         context.LinkConfig.SetUrl(configuredUrl);
         return NSupportLinks::ResolveGrafanaDashboardUrl(GetGrafanaConfig(), context, errors);
     }
+
+private:
+    const TMetaSettings& MetaSettings;
 };
 
 } // namespace NMVP::NSupportLinks

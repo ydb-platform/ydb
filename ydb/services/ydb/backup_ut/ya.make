@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
+SPLIT_FACTOR(10)
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

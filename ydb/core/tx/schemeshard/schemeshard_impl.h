@@ -1754,6 +1754,7 @@ public:
 
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
+    ui64 ForcedCompactionTotalInQueues = 0;
 
     TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> DoneShardsToPersist;
     ui32 ForcedCompactionPersistBatchSize = 100;
@@ -1804,6 +1805,7 @@ public:
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     void RetryForcedCompactionForShard(const TShardIdx& shardIdx);
     void ProcessForcedCompactionQueues();
+    void UpdateForcedCompactionQueueMetrics();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);
     NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);

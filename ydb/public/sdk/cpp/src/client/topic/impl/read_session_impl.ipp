@@ -2255,7 +2255,6 @@ inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPar
     }
 
     std::vector<TIntrusivePtr<TPartitionStreamImpl<false>>> partitionStreams;
-
     {
         std::lock_guard guard(Lock);
         for (auto& [_, s] : PartitionStreams) {

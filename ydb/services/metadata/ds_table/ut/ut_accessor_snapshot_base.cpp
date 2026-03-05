@@ -120,8 +120,8 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
         runtime.GetAppData().TenantName = "test_db";
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
-                Cerr <<"Sender:"<< ev->Sender << Endl;
-                Cerr <<"Recipient:"<< ev->Recipient << Endl;
+                Cerr << "Sender: " << ev->Sender << Endl;
+                Cerr << "Recipient: " << ev->Recipient << Endl;
 
                 auto nav = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
                 auto& entry = nav->ResultSet.emplace_back();

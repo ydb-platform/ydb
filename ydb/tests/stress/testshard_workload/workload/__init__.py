@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 import json
 import logging
 import subprocess
@@ -5,14 +6,13 @@ import tempfile
 import os
 import stat
 import time
-import urllib.request
-import urllib.error
-from dataclasses import dataclass, field
 from typing import Optional
+import urllib
 from library.python import resource
 
 
 from ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.stress.common.publish_metrics import ErrorEvent, get_metrics_publisher
 
 logger = logging.getLogger("YdbTestShardWorkload")
 
@@ -85,6 +85,7 @@ class TestShardStats:
 
 class TestShardStatsCollector:
     def __init__(self, monitoring_url: str):
+        self.publisher = get_metrics_publisher()
         self.monitoring_url = monitoring_url
 
     def fetch_tablet_stats(self, tablet_id: int, timeout: int = 5) -> TestShardStats:
@@ -166,6 +167,38 @@ class TestShardStatsCollector:
         logger.info(format_counters("Read", aggregated['read']))
         logger.info("-" * 70)
         logger.info(format_counters("Overall", aggregated['overall']))
+
+    def publish_stats(self, stats_list: list[TestShardStats]):
+        if self.publisher.mode is None:
+            return
+        
+        events = []
+        stress_util_name = 'ydb.tests.stress.testshard_workload.workload'
+        
+        def create_event(operation: str, type: str, count: int):
+            """Helper function to create a single event with count."""
+            if count <= 0:
+                return
+            e = ErrorEvent()
+            e.stress_util_name = stress_util_name
+            e.operation = operation
+            e.type = type
+            e.kind = 'query'
+            # Add the event multiple times (will be aggregated by _send_to_server_many)
+            for _ in range(count):
+                events.append(e)
+        
+        for stat_item in stats_list:
+            create_event('write', 'success', stat_item.write.ok)
+            create_event('write', 'fail', stat_item.write.fail)
+            create_event('read', 'success', stat_item.read.ok)
+            create_event('read', 'fail', stat_item.read.fail)
+            create_event('patch', 'success', stat_item.patch.ok)
+            create_event('patch', 'fail', stat_item.patch.fail)
+            create_event('delete', 'success', stat_item.delete.ok)
+            create_event('delete', 'fail', stat_item.delete.fail)
+        
+        self.publisher.publish_many(events)
 
 
 class YdbTestShardWorkload(WorkloadBase):
@@ -281,6 +314,7 @@ class YdbTestShardWorkload(WorkloadBase):
 
         aggregated = collector.aggregate_stats(stats_list)
         collector.print_stats(aggregated)
+        collector.publish_stats(stats_list)
 
     def _start_tsserver(self):
         if self.tsserver_process is not None:

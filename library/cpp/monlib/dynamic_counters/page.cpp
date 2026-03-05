@@ -203,15 +203,17 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         base << "labels=" << labels;
     }
 
+    const TString escapedBase = NHtml::EscapeAttributeValue(base);
+
     HTML(out) {
         DIV() {
-            out << "<a href='" << NHtml::EscapeAttributeValue(base);
+            out << "<a href=\"" << escapedBase;
             if (!wasParam) {
                 out << '?';
             } else {
                 out << "&amp;";
             }
-            out << "@format=json'>Counters as JSON</a>";
+            out << "@format=json\">Counters as JSON</a>";
             out << " for Solomon";
         }
 
@@ -225,7 +227,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     auto escValue = value;
                     Quote(escName);
                     Quote(escValue);
-                    out << "\n<a href='" << NHtml::EscapeAttributeValue(base);
+                    out << "\n<a href=\"" << escapedBase;
                     if (labels.empty()) {
                         if (!wasParam) {
                             out << '?';
@@ -236,7 +238,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     } else {
                         out << ',';
                     }
-                    out << escName << '=' << escValue << "'>" << NHtml::EscapeText(name) << " " << NHtml::EscapeText(value) << "</a>";
+                    out << escName << '=' << escValue << "\">" << NHtml::EscapeText(name) << " " << NHtml::EscapeText(value) << "</a>";
                 }
             });
         }

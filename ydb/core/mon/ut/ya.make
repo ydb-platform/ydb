@@ -3,6 +3,9 @@ UNITTEST_FOR(ydb/core/mon)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/core/mon

@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/services/config)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     bsconfig_ut.cpp

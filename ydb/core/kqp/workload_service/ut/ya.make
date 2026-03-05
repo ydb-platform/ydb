@@ -3,6 +3,9 @@ UNITTEST_FOR(ydb/core/kqp/workload_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 SRCS(
     kqp_workload_service_actors_ut.cpp

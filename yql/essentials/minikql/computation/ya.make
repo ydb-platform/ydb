@@ -10,6 +10,7 @@ SRCS(
     mkql_datum_validate.cpp
     mkql_computation_node_holders.cpp
     mkql_computation_node_impl.cpp
+    mkql_external_node_invalidator.cpp
     mkql_computation_node_pack.cpp
     mkql_computation_node_pack_impl.cpp
     mkql_custom_list.cpp

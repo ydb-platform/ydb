@@ -160,6 +160,8 @@ private:
 
     void InvalidateValue(TComputationContext& compCtx) const final;
 
+    void CollectInvalidationIndexes(std::set<ui32>& out) const final;
+
     const IComputationNode* GetSource() const final;
 
 protected:

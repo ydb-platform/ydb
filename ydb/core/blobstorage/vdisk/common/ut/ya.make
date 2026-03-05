@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
 ENDIF()

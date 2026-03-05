@@ -9,18 +9,6 @@
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-inline TString ActorLink(const NActors::TActorId& actorId) {
-    return TStringBuilder() << "/node/" << actorId.NodeId() << "/actors/kqp_node?ca=" << actorId;
-}
-
-inline TString FetcherLink(const NActors::TActorId& computeActorId, const NActors::TActorId& fetcherId) {
-    return TStringBuilder() << "/node/" << computeActorId.NodeId() << "/actors/kqp_node?ca=" << computeActorId << "&sf=" << fetcherId;
-}
-
-inline TString TabletLink(ui64 tabletId) {
-    return TStringBuilder() << "/tablets?TabletID=" << tabletId;
-}
-
 using TShardState = NComputeActor::TShardState;
 
 bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::EComponent component);

@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/services/keyvalue)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     grpc_service_ut.cpp

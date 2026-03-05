@@ -3,7 +3,7 @@
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
 #include <ydb/mvp/meta/support_links/events.h>
-#include <ydb/mvp/meta/link_source.h>
+#include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/meta/support_links/support_links_resolver.h>
 
 #include <memory>

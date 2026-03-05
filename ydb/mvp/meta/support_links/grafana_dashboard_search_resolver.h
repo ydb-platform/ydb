@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "events.h"
-#include "resolver_base.h"
+#include "grafana_dashboard.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>

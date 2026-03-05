@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/meta/link_source.h>
+#include <ydb/mvp/meta/support_links/source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>

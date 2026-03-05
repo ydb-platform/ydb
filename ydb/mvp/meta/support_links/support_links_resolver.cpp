@@ -1,5 +1,5 @@
 #include "support_links_resolver.h"
-#include <ydb/mvp/meta/link_source.h>
+#include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <utility>

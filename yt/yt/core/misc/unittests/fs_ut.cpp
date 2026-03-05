@@ -1,9 +1,17 @@
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
+
+#include <library/cpp/yt/system/handle_eintr.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/fs.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
 #include <util/folder/dirut.h>
+#include <util/folder/tempdir.h>
+
 
 namespace NYT::NFS {
 namespace {
@@ -87,6 +95,308 @@ TEST(TFSTest, TestCombinePathsWithBackslashUnix)
     EXPECT_EQ(CombinePaths("/", "path/with/back\\slashed/file"), "/path/with/back\\slashed/file");
 }
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+#ifdef _linux_
+
+template <class... Ts>
+auto DoSyscall(std::invocable<Ts...> auto syscall, Ts... args)
+{
+    auto result = HandleEintr(syscall, args...);
+    if (result == -1) {
+        auto errorText = Format(
+            "Syscall failed at with error %qv (errno %v)",
+            LastSystemErrorText(),
+            LastSystemError());
+        YT_ABORT(errorText);
+    }
+    return result;
+}
+
+class TSpliceAsyncTest
+    : public ::testing::Test
+{
+public:
+    TSpliceAsyncTest()
+        : Poller_(NConcurrency::CreateThreadPoolPoller(1, "test"))
+        , Invoker_(Poller_->GetInvoker())
+        , Dir_()
+        , Filename_(Dir_.Name() + "/file")
+        , Filename2_(Dir_.Name() + "/file2")
+        , PipeFilename_(Dir_.Name() + "/pipe")
+        , PipeFilename2_(Dir_.Name() + "/pipe2")
+    {
+        DoSyscall(::mkfifo, PipeFilename_.c_str(), 0600);
+        DoSyscall(::mkfifo, PipeFilename2_.c_str(), 0600);
+    }
+
+protected:
+    NConcurrency::IPollerPtr Poller_;
+    IInvokerPtr Invoker_;
+    TTempDir Dir_;
+
+    std::string Filename_;
+    std::string Filename2_;
+
+    std::string PipeFilename_;
+    std::string PipeFilename2_;
+
+    static TFile OpenPipe(const std::string& name, int flags)
+    {
+        auto pipe = TFile(DoSyscall(::open, name.c_str(), flags | O_NONBLOCK));
+        DoSyscall(::fcntl, pipe.GetHandle(), F_SETFL, flags);
+        return pipe;
+    }
+
+    static std::vector<ui8> MakeRandomData()
+    {
+        constexpr i64 dataSize = 1_MB;
+        auto data = std::vector<ui8>(dataSize);
+        for (ui8& elem : data) {
+            elem = RandomNumber<ui8>();
+        }
+        return data;
+    }
+
+    static void WriteToFile(const std::string& filename, const std::vector<ui8>& data)
+    {
+        TFile(filename.c_str(), WrOnly | CreateAlways | CloseOnExec).Write(data.data(), data.size());
+    }
+
+    static void ReadExpectedByte(TFile& file, ui8 expected)
+    {
+        ui8 actual = {};
+        auto count = file.Read(&actual, 1);
+        EXPECT_EQ(count, size_t{1});
+        EXPECT_EQ(actual, expected);
+    }
+
+    static void ReadExpectedFile(const std::string& filename, const std::vector<ui8>& expected)
+    {
+        auto file = TFile(filename.c_str(), RdOnly);
+        auto result = std::vector<ui8>(expected.size());
+        EXPECT_EQ(file.Read(result.data(), result.size()), expected.size());
+        EXPECT_EQ(file.Read(result.data(), result.size()), size_t{0});
+        EXPECT_EQ(result, expected);
+    }
+};
+
+TEST_F(TSpliceAsyncTest, TestReadFileSimple)
+{
+    auto data = MakeRandomData();
+    WriteToFile(Filename_, data);
+
+    auto pipe = OpenPipe(PipeFilename_, O_RDONLY);
+
+    auto future = SpliceAsync(
+        TFile(Filename_.c_str(), RdOnly),
+        OpenPipe(PipeFilename_, O_WRONLY),
+        /*pipeIsSrc=*/ false,
+        Invoker_,
+        Poller_);
+
+    for (ui8 elem : data) {
+        ReadExpectedByte(pipe, elem);
+    }
+
+    NConcurrency::WaitForFast(future)
+        .ThrowOnError();
+
+    ui8 readElem = 0;
+    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
+}
+
+TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
+{
+    auto data = MakeRandomData();
+    WriteToFile(Filename_, data);
+
+    auto pipe = OpenPipe(PipeFilename_, O_RDONLY);
+    auto pipe2 = OpenPipe(PipeFilename2_, O_RDONLY);
+
+    auto future = SpliceAsync(
+        TFile(Filename_.c_str(), RdOnly),
+        OpenPipe(PipeFilename_, O_WRONLY),
+        /*pipeIsSrc=*/ false,
+        Invoker_,
+        Poller_);
+
+    auto future2 = SpliceAsync(
+        TFile(Filename_.c_str(), RdOnly),
+        OpenPipe(PipeFilename2_, O_WRONLY),
+        /*pipeIsSrc=*/ false,
+        Invoker_,
+        Poller_);
+
+    constexpr i64 chunk = 100_KB;
+    i64 i = 0;
+    i64 i2 = 0;
+
+    while (i != ssize(data) && i2 != ssize(data)) {
+        for (i64 j = 0; j != chunk && i != ssize(data); ++j, ++i) {
+            ReadExpectedByte(pipe, data[i]);
+        }
+
+        for (i64 j = 0; j != chunk && i2 != ssize(data); ++j, ++i2) {
+            ReadExpectedByte(pipe2, data[i2]);
+        }
+    }
+
+    NConcurrency::WaitForFast(AllSucceeded<void>({future, future2}))
+        .ThrowOnError();
+
+    ui8 readElem = 0;
+    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
+    EXPECT_EQ(pipe2.Read(&readElem, 1), size_t{0});
+}
+
+TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
+{
+    auto data = MakeRandomData();
+    WriteToFile(Filename_, data);
+
+    auto pipe = OpenPipe(PipeFilename_, O_RDONLY);
+
+    auto future = SpliceAsync(
+        TFile(Filename_.c_str(), RdOnly),
+        OpenPipe(PipeFilename_, O_WRONLY),
+        /*pipeIsSrc=*/ false,
+        Invoker_,
+        Poller_);
+
+    int bytesBeforeClose = 100_KB;
+
+    for (int i = 0; i < bytesBeforeClose; ++i) {
+        ReadExpectedByte(pipe, data[i]);
+    }
+
+    pipe.Close();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        NConcurrency::WaitForFast(future)
+            .ThrowOnError(),
+        "Broken pipe");
+}
+
+TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
+{
+    auto data = MakeRandomData();
+    auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
+    auto pipeWrite = OpenPipe(PipeFilename_, O_WRONLY);
+
+    auto future = SpliceAsync(
+        pipeRead,
+        TFile(Filename_.c_str(), CreateAlways | WrOnly),
+        /*pipeIsSrc=*/ true,
+        Invoker_,
+        Poller_);
+
+    for (ui8 elem : data) {
+        pipeWrite.Write(&elem, 1);
+        if (future.IsSet()) {
+            NConcurrency::WaitForFast(future)
+                .ThrowOnError();
+            YT_ABORT();
+        }
+    }
+
+    pipeWrite.Close();
+
+    NConcurrency::WaitForFast(future)
+        .ThrowOnError();
+
+    ReadExpectedFile(Filename_, data);
+}
+
+TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
+{
+    auto data = MakeRandomData();
+    auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
+    auto pipeWrite = OpenPipe(PipeFilename_, O_WRONLY);
+
+    auto data2 = MakeRandomData();
+    auto pipeRead2 = OpenPipe(PipeFilename2_, O_RDONLY);
+    auto pipeWrite2 = OpenPipe(PipeFilename2_, O_WRONLY);
+
+    auto future = SpliceAsync(
+        pipeRead,
+        TFile(Filename_.c_str(), CreateAlways | WrOnly),
+        /*pipeIsSrc=*/ true,
+        Invoker_,
+        Poller_);
+
+    auto future2 = SpliceAsync(
+        pipeRead2,
+        TFile(Filename2_.c_str(), CreateAlways | WrOnly),
+        /*pipeIsSrc=*/ true,
+        Invoker_,
+        Poller_);
+
+    constexpr i64 chunk = 100_KB;
+    i64 i = 0;
+    i64 i2 = 0;
+
+    while (i != ssize(data) && i2 != ssize(data)) {
+        for (i64 j = 0; j != chunk && i != ssize(data); ++j, ++i) {
+            pipeWrite.Write(&data[i], 1);
+        }
+
+        for (i64 j = 0; j != chunk && i2 != ssize(data); ++j, ++i2) {
+            pipeWrite2.Write(&data2[i2], 1);
+        }
+    }
+
+    pipeWrite.Close();
+    pipeWrite2.Close();
+
+    NConcurrency::WaitForFast(AllSucceeded<void>({future, future2}))
+        .ThrowOnError();
+
+    auto result = std::vector<ui8>(data.size());
+
+    ReadExpectedFile(Filename_, data);
+    ReadExpectedFile(Filename2_, data2);
+}
+
+
+TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
+{
+    auto data = MakeRandomData();
+    auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
+    auto pipeWrite = OpenPipe(PipeFilename_, O_WRONLY);
+
+    auto future = SpliceAsync(
+        pipeRead,
+        TFile(Filename_.c_str(), CreateAlways | WrOnly),
+        /*pipeIsSrc=*/ true,
+        Invoker_,
+        Poller_);
+
+    int bytesBeforeCancel = 1_KB;
+    for (int i = 0; i < bytesBeforeCancel; ++i) {
+        pipeWrite.Write(&data[i], 1);
+    }
+
+    EXPECT_TRUE(future.Cancel({}));
+    EXPECT_THROW_WITH_SUBSTRING(
+        NConcurrency::WaitForFast(future)
+            .ThrowOnError(),
+        "Operation canceled");
+
+    int bytesAfterCancel = 1_KB;
+    for (int i = 0; i < bytesAfterCancel; ++i) {
+        pipeWrite.Write(&data[i], 1);
+    }
+
+    pipeWrite.Close();
+
+    auto buffer = std::vector<ui8>(bytesBeforeCancel + bytesAfterCancel);
+    auto remainder = pipeRead.Read(buffer.data(), buffer.size());
+    EXPECT_GE(remainder, static_cast<size_t>(bytesAfterCancel));
+}
+
+#endif // _linux
 
 ////////////////////////////////////////////////////////////////////////////////
 

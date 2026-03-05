@@ -247,6 +247,16 @@ void Splice(
     const TFile& destination,
     i64 chunkSize);
 
+//! Asynchronously copies data via splice syscall,
+//! releasing invoker thread when pipe is blocked.
+TFuture<void> SpliceAsync(
+    const TFile& src,
+    const TFile& dst,
+    bool pipeIsSrc,
+    const IInvokerPtr& ioInvoker,
+    const NConcurrency::IPollerPtr& poller,
+    i64 chunkSize = 16_MB);
+
 TError AttachLsofOutput(TError error, const std::string& path);
 TError AttachFindOutput(TError error, const std::string& path);
 

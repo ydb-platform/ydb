@@ -89,9 +89,12 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StateGroup, AtLeastOneVDiskNotLogged, false);
     COUNTER_INIT(StateGroup, TooMuchLogChunks, false);
     COUNTER_INIT(StateGroup, SerialNumberMismatched, false);
-    L6. Initialize(StateGroup, "L6");
-    L7. Initialize(StateGroup, "L7");
-    IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec");
+    L6.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L6"));
+    L7.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L7"));
+    IdleLight.Initialize(StateGroup, TLightCounterConfig::Create()
+        .WithCount("DeviceBusyPeriods")
+        .WithRedMs("DeviceIdleTimeMsPerSec")
+        .WithGreenMs("DeviceBusyTimeMsPerSec"));
 
     COUNTER_INIT_IF_EXTENDED(StateGroup, OwnerIdsIssued, false);
     COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);

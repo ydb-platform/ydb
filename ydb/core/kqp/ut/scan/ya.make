@@ -8,6 +8,9 @@ IF (WITH_VALGRIND)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:2)
+    ENDIF()
 ENDIF()
 
 SRCS(

@@ -12,6 +12,9 @@ IF (WITH_VALGRIND)
     )
 ELSE()
     SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:4)
+    ENDIF()
 ENDIF()
 
 SRCS(

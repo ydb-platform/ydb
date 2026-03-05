@@ -70,7 +70,51 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
+    const auto maybeFinalStage = phyStages.back();
+    const auto finalStage = GetFinalStage(maybeFinalStage);
+    if (finalStage.Get() != maybeFinalStage.Get()) {
+        phyStages.push_back(finalStage);
+    }
+
     return phyStages;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
+    auto& ctx = RBOCtx.ExprCtx;
+    TExprNode::TPtr finalStage;
+    bool needFinalUnionStage = false;
+    // Final stage, which is input for DqCnResult, should have only one 1 task.
+    for (const auto& input : TDqPhyStage(stage).Inputs()) {
+        if (!input.Maybe<TDqCnUnionAll>()) {
+            needFinalUnionStage = true;
+            break;
+        }
+    }
+
+    if (needFinalUnionStage) {
+        // clang-format off
+        auto input = Build<TDqCnUnionAll>(ctx, stage->Pos())
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .Done().Ptr();
+
+        finalStage = Build<TDqPhyStage>(ctx, stage->Pos())
+            .Inputs()
+                .Add({input})
+            .Build()
+            .Program<TCoLambda>()
+                .Args({"arg"})
+                .Body("arg")
+            .Build()
+            .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, stage->Pos()))
+        .Done().Ptr();
+    // clang-format on
+    } else {
+        finalStage = stage;
+    }
+    return finalStage;
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPtr>&& physicalStages) {

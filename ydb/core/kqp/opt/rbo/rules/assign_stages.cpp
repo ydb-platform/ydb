@@ -146,13 +146,14 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOConte
 
         const auto newStageId = props.StageGraph.AddStage();
         unionAll->Props.StageId = newStageId;
+        const bool parallelUnionAllConnections = ctx.KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend();
 
-        props.StageGraph.Connect(
-            *leftStage, newStageId,
-            MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage), props.StageGraph.GetOutputIndex(*leftStage)));
-        props.StageGraph.Connect(
-            *rightStage, newStageId,
-            MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage), props.StageGraph.GetOutputIndex(*rightStage)));
+        props.StageGraph.Connect(*leftStage, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage), props.StageGraph.GetOutputIndex(*leftStage),
+                                                                    parallelUnionAllConnections));
+        props.StageGraph.Connect(*rightStage, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage), props.StageGraph.GetOutputIndex(*rightStage),
+                                                                    parallelUnionAllConnections));
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {

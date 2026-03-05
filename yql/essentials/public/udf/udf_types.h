@@ -292,31 +292,31 @@ protected:
 class ITypeVisitor: public ITypeVisitor5 {
 protected:
     using TBase = ITypeVisitor5;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 class ITypeVisitor: public ITypeVisitor4 {
 protected:
     using TBase = ITypeVisitor4;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 class ITypeVisitor: public ITypeVisitor3 {
 protected:
     using TBase = ITypeVisitor3;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 class ITypeVisitor: public ITypeVisitor2 {
 protected:
     using TBase = ITypeVisitor2;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #else
 class ITypeVisitor: public ITypeVisitor1 {
 protected:
     using TBase = ITypeVisitor1;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #endif
 

@@ -9267,6 +9267,8 @@ struct TPeepHoleRules {
         {"FinalizeByKey", &ExpandFinalizeByKey},
         {"SkipNullMembers", &ExpandSkipNullFields},
         {"SkipNullElements", &ExpandSkipNullFields},
+        {"FilterNullMembers", &ExpandFilterNullFields},
+        {"FilterNullElements", &ExpandFilterNullFields},
         {"ConstraintsOf", &ExpandConstraintsOf},
         {"==", &ExpandSqlEqual<true, false>},
         {"!=", &ExpandSqlEqual<false, false>},

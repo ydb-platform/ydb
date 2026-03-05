@@ -1424,6 +1424,135 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
         .Seal().Build();
 }
 
+TExprNode::TPtr ExpandFilterNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable({"FilterNullMembers", "FilterNullElements"}));
+    YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
+    const bool isTuple = node->IsCallable("FilterNullElements");
+    const auto seqItemType = GetSeqItemType(node->Head().GetTypeAnn());
+    const auto structType = isTuple ? nullptr : seqItemType->Cast<TStructExprType>();
+
+    TExprNode::TListType fields;
+    if (node->ChildrenSize() > 1) {
+        fields = node->Child(1)->ChildrenList();
+    } else if (isTuple) {
+        fields = GetOptionals(node->Pos(), *seqItemType->Cast<TTupleExprType>(), ctx);
+    } else {
+        fields = GetOptionals(node->Pos(), *structType, ctx);
+    }
+    if (fields.empty()) {
+        return node->HeadPtr();
+    }
+
+    THashSet<TStringBuf> filterSet;
+    if (!isTuple) {
+        for (const auto& f : fields) {
+            filterSet.insert(f->Content());
+        }
+    }
+
+    auto filtered = ctx.Builder(node->Pos())
+        .Callable("OrderedFilter")
+            .Add(0, node->HeadPtr())
+            .Lambda(1)
+                .Param("item")
+                .Callable("And")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < fields.size(); ++i) {
+                            parent
+                                .Callable(i, "Exists")
+                                    .Callable(0, isTuple ? "Nth" : "Member")
+                                        .Arg(0, "item")
+                                        .Add(1, fields[i])
+                                    .Seal()
+                                .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+
+    if (isTuple) {
+        const auto tupleType = seqItemType->Cast<TTupleExprType>();
+        THashSet<ui32> filterIndices;
+        for (const auto& f : fields) {
+            filterIndices.insert(FromString<ui32>(f->Content()));
+        }
+        return ctx.Builder(node->Pos())
+            .Callable("OrderedMap")
+                .Add(0, std::move(filtered))
+                .Lambda(1)
+                    .Param("item")
+                    .List()
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
+                                auto idx = ctx.NewAtom(node->Pos(), ToString(i));
+                                if (filterIndices.contains(i)) {
+                                    const auto* baseType = tupleType->GetItems()[i]->Cast<TOptionalExprType>()->GetItemType();
+                                    parent.Callable(i, "Coalesce")
+                                        .Callable(0, "Nth")
+                                            .Arg(0, "item")
+                                            .Add(1, idx)
+                                        .Seal()
+                                        .Callable(1, "Default")
+                                            .Add(0, ExpandType(node->Pos(), *baseType, ctx))
+                                        .Seal()
+                                    .Seal();
+                                } else {
+                                    parent.Callable(i, "Nth")
+                                        .Arg(0, "item")
+                                        .Add(1, idx)
+                                    .Seal();
+                                }
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedMap")
+            .Add(0, std::move(filtered))
+            .Lambda(1)
+                .Param("item")
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0;
+                        for (const auto& member : structType->GetItems()) {
+                            if (filterSet.contains(member->GetName())) {
+                                const auto* baseType = member->GetItemType()->Cast<TOptionalExprType>()->GetItemType();
+                                parent.List(i)
+                                    .Atom(0, member->GetName())
+                                    .Callable(1, "Coalesce")
+                                        .Callable(0, "Member")
+                                            .Arg(0, "item")
+                                            .Atom(1, member->GetName())
+                                        .Seal()
+                                        .Callable(1, "Default")
+                                            .Add(0, ExpandType(node->Pos(), *baseType, ctx))
+                                        .Seal()
+                                    .Seal()
+                                .Seal();
+                            } else {
+                                parent.List(i)
+                                    .Atom(0, member->GetName())
+                                    .Callable(1, "Member")
+                                        .Arg(0, "item")
+                                        .Atom(1, member->GetName())
+                                    .Seal()
+                                .Seal();
+                            }
+                            ++i;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types) {
     if (!predicate->IsCallable("And")) {
         return {};

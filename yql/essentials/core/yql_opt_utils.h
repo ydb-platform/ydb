@@ -97,6 +97,7 @@ TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& c
 TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TPtr ExpandFilterNullFields(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns);

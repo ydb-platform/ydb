@@ -1378,24 +1378,14 @@ TExprBase DqBuildHashJoin(
 
             if (commonType) {
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
-                    const bool isJustOptionalDiff = useBlockHashJoin
-                        && keyType1->GetKind() == ETypeAnnotationKind::Optional
-                        && IsSameAnnotation(*keyType1->Cast<TOptionalExprType>()->GetItemType(), *commonType);
-                    if (!isJustOptionalDiff) {
-                        TString rename = (TString("_yql_dq_key_left_") + ToString(i));
-                        leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
-                        remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
-                    }
+                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
+                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
                 }
                 if (!IsSameAnnotation(*keyType2, *commonType)) {
-                    const bool isJustOptionalDiff = useBlockHashJoin
-                        && keyType2->GetKind() == ETypeAnnotationKind::Optional
-                        && IsSameAnnotation(*keyType2->Cast<TOptionalExprType>()->GetItemType(), *commonType);
-                    if (!isJustOptionalDiff) {
-                        TString rename = TString("_yql_dq_key_right_") + ToString(i);
-                        rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
-                        remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
-                    }
+                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
+                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
                 }
             } else
                 badKey = true;

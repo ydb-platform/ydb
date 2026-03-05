@@ -137,6 +137,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
 
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disconnected simultaneously while other cluster parts (pile) remain operational. A pile can remain operational when other cluster nodes are disconnected. Pile are used in [bridge mode](#bridge) to divide the cluster into several parts with synchronous replication between them. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
+
 ### Table {#table}
 
 A **table** is a structured piece of information arranged in rows and columns. Each row represents a single record or entry, while each column represents a specific attribute or field with a particular data type.

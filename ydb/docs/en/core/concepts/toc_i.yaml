@@ -16,6 +16,8 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
+- name: Bridge mode
+  href: bridge.md
 - name: Query execution
   href: query_execution.md
 - name: Transactions

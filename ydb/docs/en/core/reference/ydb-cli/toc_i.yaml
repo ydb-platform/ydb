@@ -145,3 +145,8 @@ items:
     include:
       mode: link
       path: commands/configuration/toc_p.yaml
+  - name: Managing a cluster in bridge mode
+    href: commands/bridge/index.md
+    include:
+      mode: link
+      path: commands/bridge/toc_p.yaml

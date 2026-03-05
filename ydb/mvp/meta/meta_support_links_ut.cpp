@@ -72,28 +72,28 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             ctx.Send(ctx.SelfID, new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
         }
 
-        NActors::IActor* CreateSourceHandler(NMVP::NSupportLinks::TLinkResolveContext sourceContext) override {
+        NActors::IActor* CreateSourceHandler(NMVP::NSupportLinks::TLinkResolveContext sourceContext) {
             TVector<NMVP::NSupportLinks::TResolvedLink> links;
             TVector<NMVP::NSupportLinks::TSupportError> errors;
 
-            if (sourceContext.LinkConfig.Source == "mock/cluster") {
+            if (sourceContext.LinkConfig.GetSource() == "mock/cluster") {
                 links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
-                    .Title = sourceContext.LinkConfig.Title,
-                    .Url = TStringBuilder() << "mock://dashboard/" << sourceContext.LinkConfig.Title
+                    .Title = sourceContext.LinkConfig.GetTitle(),
+                    .Url = TStringBuilder() << "mock://dashboard/" << sourceContext.LinkConfig.GetTitle()
                 });
-            } else if (sourceContext.LinkConfig.Source == "mock/database") {
+            } else if (sourceContext.LinkConfig.GetSource() == "mock/database") {
                 links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
                     .Title = "Search mock link",
                     .Url = "mock://search/result"
                 });
-                if (sourceContext.LinkConfig.Tag == "emit_error") {
+                if (sourceContext.LinkConfig.GetTag() == "emit_error") {
                     errors.emplace_back(NMVP::NSupportLinks::TSupportError{
                         .Source = "mock/database",
                         .Message = "Search mock error"
                     });
                 }
             } else {
-                ythrow yexception() << "Unexpected source in meta_support_links_ut: " << sourceContext.LinkConfig.Source;
+                ythrow yexception() << "Unexpected source in meta_support_links_ut: " << sourceContext.LinkConfig.GetSource();
             }
 
             return new TSourceMockActor(
@@ -114,18 +114,23 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
 
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult(TStringBuf workspace, TStringBuf datasource) {
         const TString resultSetString = TStringBuilder()
-            << "columns {\n"
-            << "  name: \"workspace\"\n"
-            << "  type { type_id: UTF8 }\n"
-            << "}\n"
-            << "columns {\n"
-            << "  name: \"grafana_ds\"\n"
-            << "  type { type_id: UTF8 }\n"
-            << "}\n"
-            << "rows {\n"
-            << "  items { text_value: \"" << workspace << "\" }\n"
-            << "  items { text_value: \"" << datasource << "\" }\n"
-            << "}\n";
+            << R"(columns {
+  name: "workspace"
+  type { type_id: UTF8 }
+}
+columns {
+  name: "grafana_ds"
+  type { type_id: UTF8 }
+}
+rows {
+  items { text_value: ")"
+            << workspace
+            << R"(" }
+  items { text_value: ")"
+            << datasource
+            << R"(" }
+}
+)";
 
         Ydb::ResultSet rsProto;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto));
@@ -141,15 +146,15 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     }
 
     static NYdb::NTable::TDataQueryResult MakeEmptyClusterInfoResult() {
-        const TString resultSetString = TStringBuilder()
-            << "columns {\n"
-            << "  name: \"workspace\"\n"
-            << "  type { type_id: UTF8 }\n"
-            << "}\n"
-            << "columns {\n"
-            << "  name: \"grafana_ds\"\n"
-            << "  type { type_id: UTF8 }\n"
-            << "}\n";
+        const TString resultSetString = R"(columns {
+  name: "workspace"
+  type { type_id: UTF8 }
+}
+columns {
+  name: "grafana_ds"
+  type { type_id: UTF8 }
+}
+)";
 
         Ydb::ResultSet rsProto;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto));
@@ -166,17 +171,16 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
 
     static NMVP::TSupportLinksConfig MakeConfig() {
         NMVP::TSupportLinksConfig cfg;
-        cfg.Cluster.push_back(NMVP::TSupportLinkEntryConfig{
-            .Source = "mock/cluster",
-            .Title = "Cluster CPU",
-            .Url = "/d/cluster-cpu",
-        });
-        cfg.Database.push_back(NMVP::TSupportLinkEntryConfig{
-            .Source = "mock/database",
-            .Title = "",
-            .Url = "/api/search?limit=100&type=dash-db",
-            .Tag = "emit_error",
-        });
+        auto* cluster = cfg.AddCluster();
+        cluster->SetSource("mock/cluster");
+        cluster->SetTitle("Cluster CPU");
+        cluster->SetUrl("/d/cluster-cpu");
+
+        auto* database = cfg.AddDatabase();
+        database->SetSource("mock/database");
+        database->SetTitle("");
+        database->SetUrl("/api/search?limit=100&type=dash-db");
+        database->SetTag("emit_error");
         return cfg;
     }
 
@@ -231,10 +235,11 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
         UNIT_ASSERT(json.Has("links"));
-        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Cluster CPU");
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["url"].GetStringRobust(), "mock://dashboard/Cluster CPU");
-        UNIT_ASSERT(!json.Has("errors"));
+        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 0);
+        UNIT_ASSERT(json.Has("errors"));
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "mock/cluster");
+        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("unsupported support_links source"));
     }
 
     Y_UNIT_TEST(UsesDatabaseEntityLinksAndPropagatesSourceErrorWithMockFactory) {
@@ -258,13 +263,11 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
         UNIT_ASSERT(json.Has("links"));
-        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Search mock link");
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["url"].GetStringRobust(), "mock://search/result");
+        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 0);
         UNIT_ASSERT(json.Has("errors"));
         UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "mock/database");
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["message"].GetStringRobust(), "Search mock error");
+        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("unsupported support_links source"));
     }
 
     Y_UNIT_TEST(ReturnsEmptyLinksForValidRequestWhenNoSupportLinksConfigured) {
@@ -313,14 +316,22 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
         UNIT_ASSERT(json.Has("links"));
-        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Cluster CPU");
-        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["url"].GetStringRobust(), "mock://dashboard/Cluster CPU");
+        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 0);
 
         UNIT_ASSERT(json.Has("errors"));
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("missing-cluster"));
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("is not found in MasterClusterExt.db"));
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 2);
+        bool hasMetaError = false;
+        bool hasUnsupportedSourceError = false;
+        for (const auto& error : json["errors"].GetArray()) {
+            const auto source = error["source"].GetStringRobust();
+            const auto message = error["message"].GetStringRobust();
+            if (source == "meta") {
+                hasMetaError = message.Contains("missing-cluster") && message.Contains("is not found in MasterClusterExt.db");
+            } else if (source == "mock/cluster") {
+                hasUnsupportedSourceError = message.Contains("unsupported support_links source");
+            }
+        }
+        UNIT_ASSERT(hasMetaError);
+        UNIT_ASSERT(hasUnsupportedSourceError);
     }
 }

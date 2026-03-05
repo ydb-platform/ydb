@@ -8,14 +8,14 @@ namespace NMVP::NSupportLinks {
 
 class TLinkSourceConfigValidators {
 public:
-    void Validate(const TSupportLinkEntryConfig& linkConfig, const TGrafanaSupportConfig&, TStringBuf where) const {
-        if (linkConfig.Source.empty()) {
+    void Validate(const TSupportLinkEntryConfig& linkConfig, TStringBuf where) const {
+        if (linkConfig.GetSource().empty()) {
             ythrow yexception() << where << ": source is required";
         }
 
         ythrow yexception() << where
                             << ": support_links sources are not available in this build"
-                            << " (source=" << linkConfig.Source << ")";
+                            << " (source=" << linkConfig.GetSource() << ")";
     }
 
     static const TLinkSourceConfigValidators& Default() {

@@ -10,6 +10,20 @@ message TMetaConfig {
     optional bool MetaCache = 3 [default = false];
     optional string MetaDatabaseTokenName = 4;
     optional bool DbUserTokenAccess = 5 [default = false];
+    message TSupportLinkEntry {
+        optional string Source = 1;
+        optional string Title = 2;
+        optional string Url = 3;
+        optional string Tag = 4;
+        optional string Folder = 5;
+    }
+
+    message TSupportLinksConfig {
+        repeated TSupportLinkEntry Cluster = 1;
+        repeated TSupportLinkEntry Database = 2;
+    }
+
+    optional TSupportLinksConfig SupportLinks = 6;
 }
 
 message TMetaAppConfig {

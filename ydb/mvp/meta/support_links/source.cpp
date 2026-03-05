@@ -21,11 +21,11 @@ public:
 
     TResolveOutput Resolve(const TResolveInput&) const override {
         TResolveOutput output;
-        output.Name = Config_.Source;
+        output.Name = Config_.GetSource();
         output.Ready = true;
         output.Errors.emplace_back(NSupportLinks::TSupportError{
-            .Source = Config_.Source,
-            .Message = TStringBuilder() << "unsupported support_links source: " << Config_.Source,
+            .Source = Config_.GetSource(),
+            .Message = TStringBuilder() << "unsupported support_links source: " << Config_.GetSource(),
         });
         return output;
     }
@@ -36,7 +36,7 @@ private:
 };
 
 std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntryConfig config) {
-    if (config.Source.empty()) {
+    if (config.GetSource().empty()) {
         ythrow yexception() << "source is required";
     }
     return std::make_shared<TUnsupportedLinkSource>(place, std::move(config));

@@ -20,9 +20,11 @@ protected:
         // Accept any data, parse nothing
         return true; 
     }
+
     TString DoSerializeToString() const override {
         return "test_snapshot";
     }
+
 public:
     using NFetcher::ISnapshot::ISnapshot;
 };
@@ -31,7 +33,7 @@ class TMockFetcher : public NFetcher::ISnapshotsFetcher {
     std::vector<IClassBehaviour::TPtr> Managers;
 public:
     TMockFetcher(std::vector<IClassBehaviour::TPtr> managers) 
-        : Managers(std::move(managers)) 
+        : Managers(std::move(managers))
     {}
 
 protected:
@@ -52,17 +54,20 @@ public:
     TTestAccessor(const NRequest::TConfig& cfg,
                   ISnapshotConstructorController::TPtr out,
                   NFetcher::ISnapshotsFetcher::TPtr fetcher)
-        : TDSAccessorBase(cfg, fetcher), OutputController(out) {}
+        : TDSAccessorBase(cfg, fetcher)
+        , OutputController(out)
+    {}
 
     void OnBootstrap() override {
         Become(&TDSAccessorBase::StateMain);
-        // Populates ManagersByPath and ExistenceChecks
         StartSnapshotsFetching();
     }
+
     void OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr s) override {
         OutputController->OnSnapshotConstructionResult(s);
         PassAway();
     }
+
     void OnConstructSnapshotError(const TString& msg) override {
         TDSAccessorBase::OnConstructSnapshotError(msg);
         PassAway();

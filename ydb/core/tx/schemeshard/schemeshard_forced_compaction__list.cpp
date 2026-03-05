@@ -19,6 +19,10 @@ public:
         , Request(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_LIST_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
         LOG_N("TForcedCompaction::TTxList DoExecute " << request.ShortDebugString());
@@ -77,7 +81,7 @@ public:
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxList DoComplete");
+        LOG_N("TForcedCompaction::TTxList DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

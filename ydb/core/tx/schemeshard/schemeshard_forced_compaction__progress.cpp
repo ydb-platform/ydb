@@ -13,8 +13,12 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         : TRwTxBase(self)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_PROGRESS_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoExecute");
+        LOG_N("TForcedCompaction::TTxProgress DoExecute, CompactionsToPersist size: " << CompactionsToPersist.size());
         NIceDb::TNiceDb db(txc.DB);
         for (auto& [shardIdx, forcedCompactionInfo] : Self->DoneShardsToPersist) {
             if (Self->InProgressForcedCompactionsByShard.erase(shardIdx)) {
@@ -60,7 +64,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoComplete");
+        LOG_N("TForcedCompaction::TTxProgress DoComplete, CompactionsToPersist size: " << CompactionsToPersist.size());
         for (auto& [info, completed] : CompactionsToPersist) {
             if (completed) {
                 TransitToFinalState(*info);

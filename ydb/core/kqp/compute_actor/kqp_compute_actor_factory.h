@@ -124,7 +124,6 @@ public:
         std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
-        bool EnableWatermarks;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };

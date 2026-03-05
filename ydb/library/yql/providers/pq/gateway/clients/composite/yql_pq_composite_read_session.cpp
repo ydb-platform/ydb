@@ -846,8 +846,9 @@ private:
         {
             const auto update = [&](TPartitionSet& p) {
                 while (!p.empty() && (*p.begin())->IsIdle()) {
-                    Y_VALIDATE(IdlePartitions.emplace(*p.begin()).second, "Unexpected IdlePartitions");
+                    auto key = *p.begin();
                     p.erase(p.begin());
+                    Y_VALIDATE(IdlePartitions.emplace(key).second, "Unexpected IdlePartitions");
                 }
             };
             update(SuspendedPartitions);
@@ -858,8 +859,9 @@ private:
         const auto timeLowerBound = std::min(ExternalReadTime, GetMinimalLocalReadTime());
         while (!SuspendedPartitions.empty() && (*SuspendedPartitions.begin())->GetReadTime() <= timeLowerBound + MaxPartitionReadSkew / 3) {
             unsuspendedPartitionsCount++;
-            DistributePartitionSession(*SuspendedPartitions.begin());
+            auto key = *SuspendedPartitions.begin();
             SuspendedPartitions.erase(SuspendedPartitions.begin());
+            DistributePartitionSession(key);
         }
 
         SRC_LOG_AS_T("Unsuspended partitions count: " << unsuspendedPartitionsCount);
@@ -964,13 +966,14 @@ private:
                     continue;
                 }
 
-                if ((*it)->IsSuspended(timeLowerBound)) {
-                    Y_VALIDATE(SuspendedPartitions.emplace(*it).second, "Unexpected SuspendedPartitions");
-                } else {
-                    Y_VALIDATE(ReadyPartitions.emplace(*it).second, "Unexpected ReadyPartitions");
-                }
-
+                auto key = *it;
                 it = p.erase(it);
+
+                if (key->IsSuspended(timeLowerBound)) {
+                    Y_VALIDATE(SuspendedPartitions.emplace(key).second, "Unexpected SuspendedPartitions");
+                } else {
+                    Y_VALIDATE(ReadyPartitions.emplace(key).second, "Unexpected ReadyPartitions");
+                }
             }
         };
         update(PendingPartitions);

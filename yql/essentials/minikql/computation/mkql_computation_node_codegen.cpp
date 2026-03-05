@@ -2207,6 +2207,133 @@ Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType,
     return call;
 }
 
+Value* CallBoxedValueFetch(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr) {
+    auto& codegen = ctx.Codegen;
+    const auto statusType = Type::getInt32Ty(codegen.GetContext());
+    const auto valueType = Type::getInt128Ty(codegen.GetContext());
+    const auto tempPtr = new AllocaInst(valueType, 0U, "fetch_tmp", &ctx.Func->getEntryBlock().back());
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    auto* status = CallBoxedValueVirtualMethodImpl(
+        NUdf::TBoxedValueAccessor::GetMethodPtr<NUdf::TBoxedValueAccessor::EMethod::Fetch>(),
+        statusType, value, codegen, block, tempPtr);
+
+    const auto unref = BasicBlock::Create(codegen.GetContext(), "unref", ctx.Func);
+    const auto copy = BasicBlock::Create(codegen.GetContext(), "copy", ctx.Func);
+    const auto done = BasicBlock::Create(codegen.GetContext(), "done", ctx.Func);
+
+    const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE,
+                                      status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block);
+    BranchInst::Create(unref, copy, icmp, block);
+
+    block = unref;
+    SafeUnRefUnboxedOne(tempPtr, ctx, block);
+    BranchInst::Create(done, block);
+
+    block = copy;
+    SafeUnRefUnboxedOne(outputPtr, ctx, block);
+    new StoreInst(new LoadInst(valueType, tempPtr, "val", block), outputPtr, block);
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    BranchInst::Create(done, block);
+
+    block = done;
+    return status;
+}
+
+Value* CallBoxedValueNext(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr) {
+    auto& codegen = ctx.Codegen;
+    const auto resultType = Type::getInt1Ty(codegen.GetContext());
+    const auto valueType = Type::getInt128Ty(codegen.GetContext());
+    const auto tempPtr = new AllocaInst(valueType, 0U, "next_tmp", &ctx.Func->getEntryBlock().back());
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    auto* result = CallBoxedValueVirtualMethodImpl(
+        NUdf::TBoxedValueAccessor::GetMethodPtr<NUdf::TBoxedValueAccessor::EMethod::Next>(),
+        resultType, value, codegen, block, tempPtr);
+
+    const auto unref = BasicBlock::Create(codegen.GetContext(), "unref", ctx.Func);
+    const auto copy = BasicBlock::Create(codegen.GetContext(), "copy", ctx.Func);
+    const auto done = BasicBlock::Create(codegen.GetContext(), "done", ctx.Func);
+    const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
+                                      result, ConstantInt::get(resultType, 0), "cond", block);
+
+    BranchInst::Create(unref, copy, icmp, block);
+
+    block = unref;
+    SafeUnRefUnboxedOne(tempPtr, ctx, block);
+    BranchInst::Create(done, block);
+
+    block = copy;
+    SafeUnRefUnboxedOne(outputPtr, ctx, block);
+    new StoreInst(new LoadInst(valueType, tempPtr, "val", block), outputPtr, block);
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    BranchInst::Create(done, block);
+
+    block = done;
+    return result;
+}
+
+std::pair<Value*, Value*> RefValueWithCallResult(ICodegeneratorExternalNode* codegenItem, const TCodegenContext& ctx, BasicBlock*& block, std::function<Value*(Value*)> elementGetter) {
+    const auto valueType = Type::getInt128Ty(ctx.Codegen.GetContext());
+    const auto tempPtr =
+        ctx.Func->getEntryBlock().empty() ? new AllocaInst(valueType, 0U, "next_tmp", &ctx.Func->getEntryBlock()) : new AllocaInst(valueType, 0U, "next_tmp", &ctx.Func->getEntryBlock().back());
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    const auto result = elementGetter(tempPtr);
+    const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
+    SafeUnRefUnboxedOne(itemPtr, ctx, block);
+    new StoreInst(new LoadInst(valueType, tempPtr, "val", block), itemPtr, block);
+    new StoreInst(ConstantInt::get(valueType, 0), tempPtr, block);
+    return {result, itemPtr};
+}
+
+Value* CallBoxedValueWideFetch(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr, ui32 width) {
+    const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
+    return CallBoxedValueVirtualMethodImpl(
+        NUdf::TBoxedValueAccessor::GetMethodPtr<NUdf::TBoxedValueAccessor::EMethod::WideFetch>(),
+        indexType,
+        value,
+        ctx.Codegen,
+        block,
+        outputPtr,
+        ConstantInt::get(indexType, width));
+}
+
+Value* CallBoxedValueNextPair(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* keyPtr, Value* payPtr) {
+    auto& codegen = ctx.Codegen;
+    const auto resultType = Type::getInt1Ty(codegen.GetContext());
+    const auto valueType = Type::getInt128Ty(codegen.GetContext());
+    const auto keyTemp = new AllocaInst(valueType, 0U, "next_pair_key_tmp", &ctx.Func->getEntryBlock().back());
+    const auto payTemp = new AllocaInst(valueType, 0U, "next_pair_pay_tmp", &ctx.Func->getEntryBlock().back());
+    new StoreInst(ConstantInt::get(valueType, 0), keyTemp, block);
+    new StoreInst(ConstantInt::get(valueType, 0), payTemp, block);
+    auto* result = CallBoxedValueVirtualMethodImpl(
+        NUdf::TBoxedValueAccessor::GetMethodPtr<NUdf::TBoxedValueAccessor::EMethod::NextPair>(),
+        resultType, value, codegen, block, keyTemp, payTemp);
+
+    const auto unref = BasicBlock::Create(codegen.GetContext(), "unref", ctx.Func);
+    const auto copy = BasicBlock::Create(codegen.GetContext(), "copy", ctx.Func);
+    const auto done = BasicBlock::Create(codegen.GetContext(), "done", ctx.Func);
+    const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
+                                      result, ConstantInt::get(resultType, 0), "cond", block);
+
+    BranchInst::Create(unref, copy, icmp, block);
+
+    block = unref;
+    SafeUnRefUnboxedOne(keyTemp, ctx, block);
+    SafeUnRefUnboxedOne(payTemp, ctx, block);
+    BranchInst::Create(done, block);
+
+    block = copy;
+    SafeUnRefUnboxedOne(keyPtr, ctx, block);
+    SafeUnRefUnboxedOne(payPtr, ctx, block);
+    new StoreInst(new LoadInst(valueType, keyTemp, "key", block), keyPtr, block);
+    new StoreInst(new LoadInst(valueType, payTemp, "pay", block), payPtr, block);
+    new StoreInst(ConstantInt::get(valueType, 0), keyTemp, block);
+    new StoreInst(ConstantInt::get(valueType, 0), payTemp, block);
+    BranchInst::Create(done, block);
+
+    block = done;
+    return result;
+}
+
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value,
                                      NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     auto& context = codegen.GetContext();

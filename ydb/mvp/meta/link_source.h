@@ -32,7 +32,7 @@ public:
     virtual ~ILinkSource() = default;
     virtual size_t Place() const = 0;
     virtual const TSupportLinkEntry& Config() const = 0;
-    virtual TSourceOutput Resolve(const TResolveInput& input) const = 0;
+    virtual TResolveOutput Resolve(const TResolveInput& input) const = 0;
 };
 
 class TGrafanaLinkSourceBase : public ILinkSource {
@@ -79,7 +79,7 @@ public:
         : TGrafanaLinkSourceBase(std::move(config), metaSettings)
     {}
 
-    TSourceOutput Resolve(const TResolveInput& input) const override
+    TResolveOutput Resolve(const TResolveInput& input) const override
     {
         NSupportLinks::TLinkResolveContext resolveContext{
             .Place = input.Place,
@@ -91,7 +91,7 @@ public:
             .HttpProxyId = input.HttpProxyId,
         };
 
-        TSourceOutput result{
+        TResolveOutput result{
             .Name = Config().GetSource(),
             .Ready = true,
         };
@@ -112,14 +112,15 @@ public:
         : TGrafanaLinkSourceBase(std::move(config), metaSettings)
     {}
 
-    TSourceOutput Resolve(const TResolveInput& input) const override
+    TResolveOutput Resolve(const TResolveInput& input) const override
     {
         auto* actorSystem = NActors::TActivationContext::ActorSystem();
         Y_ABORT_UNLESS(actorSystem, "ActorSystem is unavailable in activation context");
-        actorSystem->Register(BuildGrafanaResolver(input));
-        return TSourceOutput{
+        NActors::TActorId actorId = actorSystem->Register(BuildGrafanaResolver(input));
+        return TResolveOutput{
             .Name = Config().GetSource(),
             .Ready = false,
+            .Actors = {actorId},
         };
     }
 };

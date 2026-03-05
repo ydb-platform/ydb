@@ -11,17 +11,17 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/string/cast.h>
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
 
 namespace NMVP::NSupportLinks {
 
-class TGrafanaDashboardSearchResolver
-    : public NActors::TActorBootstrapped<TGrafanaDashboardSearchResolver>
-    , public TGrafanaResolverBase<TGrafanaDashboardSearchResolver> {
+class TGrafanaDashboardSearchResolver : public NActors::TActorBootstrapped<TGrafanaDashboardSearchResolver> {
 public:
     TGrafanaDashboardSearchResolver(TLinkResolveContext context, const TMetaSettings& metaSettings)
-        : TGrafanaResolverBase<TGrafanaDashboardSearchResolver>(std::move(context), metaSettings)
+        : Context(std::move(context))
+        , MetaSettings(metaSettings)
     {}
 
     void Bootstrap() {
@@ -80,7 +80,7 @@ public:
         TString configuredUrl = Context.LinkConfig.GetUrl().empty()
             ? TString("/api/search")
             : Context.LinkConfig.GetUrl();
-        TString searchUrl = TGrafanaResolverBase<TGrafanaDashboardSearchResolver>::ResolveGrafanaUrl(configuredUrl);
+        TString searchUrl = NSupportLinks::ResolveGrafanaUrl(GetGrafanaConfig(), configuredUrl);
         if (!Context.LinkConfig.GetTag().empty()) {
             searchUrl = AppendQueryParam(searchUrl, "tag", Context.LinkConfig.GetTag());
         }
@@ -136,7 +136,7 @@ public:
                 continue;
             }
 
-            TString url = ResolveGrafanaDashboardUrl(dashboardPath, Errors);
+            TString url = ResolveGrafanaDashboardUrl(dashboardPath);
             if (!url.empty()) {
                 Links.emplace_back(TResolvedLink{
                     .Title = std::move(title),
@@ -149,16 +149,8 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
-    }
-
-    void HandleTimeout() {
-        Errors.emplace_back(TSupportError{
-            .Source = Context.SourceName,
-            .Message = "Timeout while calling Grafana Search API"
-        });
-        SendResultAndDie();
     }
 
     void SendSourceResponse() {
@@ -167,6 +159,73 @@ public:
 
     void DieResolver() {
         PassAway();
+    }
+
+private:
+    TVector<TResolvedLink> Links;
+    TVector<TSupportError> Errors;
+    TLinkResolveContext Context;
+    const TMetaSettings& MetaSettings;
+
+    void AddHttpError(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
+        TSupportError error;
+        error.Source = Context.SourceName;
+        if (event->Get()->Response) {
+            ui32 status = 0;
+            if (TryFromString<ui32>(event->Get()->Response->Status, status)) {
+                error.Status = status;
+            }
+            error.Reason = TString(event->Get()->Response->Message);
+        }
+        if (!event->Get()->Error.empty()) {
+            error.Message = event->Get()->Error;
+        } else if (event->Get()->Response) {
+            error.Message = TStringBuilder() << event->Get()->Response->Status << " " << event->Get()->Response->Message;
+        } else {
+            error.Message = "Unknown Grafana request error";
+        }
+        Errors.emplace_back(std::move(error));
+    }
+
+    void SendResultAndDie() {
+        SendSourceResponse();
+        DieResolver();
+    }
+
+    const TGrafanaSupportConfig& GetGrafanaConfig() const {
+        return MetaSettings.GrafanaConfig;
+    }
+
+    bool ValidateRequiredClusterColumns(TVector<TSupportError>& errors) const {
+        static constexpr TStringBuf WorkspaceColumn = "workspace";
+        static constexpr TStringBuf DatasourceColumn = "grafana_ds";
+        bool ok = true;
+
+        const auto workspaceIt = Context.ClusterColumns.find(WorkspaceColumn);
+        if (workspaceIt == Context.ClusterColumns.end() || workspaceIt->second.empty()) {
+            errors.emplace_back(TSupportError{
+                .Source = TString(SOURCE_META),
+                .Message = TStringBuilder() << "Cluster metadata column '" << WorkspaceColumn << "' is missing or empty"
+            });
+            ok = false;
+        }
+
+        const auto datasourceIt = Context.ClusterColumns.find(DatasourceColumn);
+        if (datasourceIt == Context.ClusterColumns.end() || datasourceIt->second.empty()) {
+            errors.emplace_back(TSupportError{
+                .Source = TString(SOURCE_META),
+                .Message = TStringBuilder() << "Cluster metadata column '" << DatasourceColumn << "' is missing or empty"
+            });
+            ok = false;
+        }
+
+        return ok;
+    }
+
+    TString ResolveGrafanaDashboardUrl(const TString& configuredUrl) {
+        TLinkResolveContext context = Context;
+        context.LinkConfig.SetUrl(configuredUrl);
+        return NSupportLinks::ResolveGrafanaDashboardUrl(GetGrafanaConfig(), context, Errors);
     }
 };
 

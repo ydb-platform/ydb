@@ -27,7 +27,6 @@ public:
         const TVector<std::pair<TString, TString>>& QueryParams;
         const NActors::TActorId& Parent;
         const NActors::TActorId& HttpProxyId;
-        TVector<NActors::IActor*>* ActorsToRegister = nullptr;
     };
 
     virtual ~ILinkSource() = default;
@@ -105,8 +104,9 @@ public:
 
     TSourceOutput Resolve(const TResolveInput& input) const override
     {
-        Y_ABORT_UNLESS(input.ActorsToRegister, "ActorsToRegister must be provided for async source");
-        input.ActorsToRegister->push_back(BuildGrafanaResolver(input));
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        Y_ABORT_UNLESS(actorSystem, "ActorSystem is unavailable in activation context");
+        actorSystem->Register(BuildGrafanaResolver(input));
         return TSourceOutput{
             .Name = Config().GetSource(),
             .Waiting = true,

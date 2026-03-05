@@ -18,6 +18,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
+#include <random>
+
 namespace NKikimr::NKqp {
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
@@ -40,7 +42,6 @@ struct TEvPrivate {
         TString UserSID;
         ui64 CompilationDurationMs = 0;
         TString Metadata;
-        TString SessionId;  // SessionId for cancellation
         TString QueryType;  // EQueryType name from compile_cache_queries (e.g. QUERY_TYPE_SQL_DML)
     };
 
@@ -364,6 +365,19 @@ private:
             break;
         }
     }
+    // spawn sessions to be able to cancel request when hard deadline is reached
+    STFUNC(StateCreatingSessions) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSessionResponse);
+            hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
+            cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
+        default:
+            LOG_W("StateCreatingSessions: unexpected event " << ev->GetTypeRewrite());
+            break;
+        }
+    }
 
     STFUNC(StateCompiling) {
         switch (ev->GetTypeRewrite()) {
@@ -420,8 +434,17 @@ private:
     void StartFetch() {
         ui32 maxNodesToQuery = Config.MaxNodesToRequest;
         if (maxNodesToQuery == 0) {
-            maxNodesToQuery = NodeIds.size(); // 0 means query all nodes
+            maxNodesToQuery = NodeIds.size();
         }
+
+        if (maxNodesToQuery < NodeIds.size()) {
+            auto rng = std::mt19937(TInstant::Now().MicroSeconds());
+            for (ui32 i = 0; i < maxNodesToQuery; ++i) {
+                std::uniform_int_distribution<ui32> dist(i, NodeIds.size() - 1);
+                std::swap(NodeIds[i], NodeIds[dist(rng)]);
+            }
+        }
+
         LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
@@ -451,8 +474,50 @@ private:
             Complete(true, "No queries to warm up");
             return;
         }
-        Become(&TThis::StateCompiling);
-        StartCompilations();
+        // sort to compile the longest queries first
+        std::sort(QueriesToCompile.begin(), QueriesToCompile.end(),
+            [](const TEvPrivate::TQueryToCompile& a, const TEvPrivate::TQueryToCompile& b) {
+                return a.CompilationDurationMs > b.CompilationDurationMs;
+            });
+
+        StartCreateSessions();
+    }
+
+    void StartCreateSessions() {
+        SessionsToCreate = std::min<ui32>(MaxConcurrentCompilations, QueriesToCompile.size());
+        LOG_I("Creating " << SessionsToCreate << " sessions for warmup compilations");
+
+        for (ui32 i = 0; i < SessionsToCreate; ++i) {
+            auto ev = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+            ev->Record.MutableRequest()->SetDatabase(Database);
+            Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        }
+
+        Become(&TThis::StateCreatingSessions);
+    }
+
+    void HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            TString sessionId = record.GetResponse().GetSessionId();
+            SessionSlots.push_back({sessionId, false});
+            LOG_D("Created warmup session: " << sessionId);
+        } else {
+            LOG_W("Failed to create warmup session: "
+                  << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus()));
+        }
+
+        SessionsCreated++;
+        if (SessionsCreated >= SessionsToCreate) {
+            if (SessionSlots.empty()) {
+                Complete(false, "Failed to create any sessions for warmup compilations");
+                return;
+            }
+            LOG_I("Created " << SessionSlots.size() << "/" << SessionsToCreate
+                  << " sessions, starting compilations");
+            Become(&TThis::StateCompiling);
+            StartCompilations();
+        }
     }
 
     void HandleQueryResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -493,6 +558,8 @@ private:
             LOG_W("Received response for unknown cookie: " << cookie
                   << ", success: " << success);
         }
+
+        ReleaseSessionSlot(cookie);
 
         if (success) {
             EntriesLoaded++;
@@ -538,9 +605,8 @@ private:
         request.SetQuery(queryText);
         request.SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
         request.SetType(ParseQueryType(queryTypeStr));
-        request.SetKeepSession(false);
         request.SetTimeoutMs(timeout.MilliSeconds());
-        request.SetIsInternalCall(true);
+        request.SetIsInternalCall(false);
         request.SetIsWarmupCompilation(true);
 
         if (!metadata.empty()) {
@@ -551,18 +617,33 @@ private:
     }
 
     void SendPrepareRequest(const TEvPrivate::TQueryToCompile& query) {
-        LOG_T("Sending PREPARE request for user: " << query.UserSID
-              << ", query length: " << query.QueryText.size()
-              << ", has_metadata: " << !query.Metadata.empty());
+        ui32 slotIndex = Max<ui32>();
+        for (ui32 i = 0; i < SessionSlots.size(); ++i) {
+            if (!SessionSlots[i].InUse) {
+                slotIndex = i;
+                break;
+            }
+        }
+
+        Y_ABORT_UNLESS(slotIndex != Max<ui32>(),
+            "No free session slot for compilation: slots=%zu, pending=%u",
+            SessionSlots.size(), PendingCompilations);
+
+        SessionSlots[slotIndex].InUse = true;
 
         ui64 cookie = NextCookie++;
-        auto& pendingQuery = PendingQueriesByCookie[cookie];
-        pendingQuery = query;
+        PendingQueriesByCookie[cookie] = query;
+        CookieToSlotIndex[cookie] = slotIndex;
 
-        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.SoftDeadline, query.Metadata, query.QueryType);
-        if (not request->GetSessionId().empty()) {
-            pendingQuery.SessionId = request->GetSessionId();
-        } // otherwise SessionId will be created by KqpProxy and returned in response
+        LOG_D("Sending PREPARE request for user: " << query.UserSID
+              << ", query length: " << query.QueryText.size()
+              << ", has_metadata: " << !query.Metadata.empty()
+              << ", session: " << SessionSlots[slotIndex].SessionId);
+
+        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID,
+                                            Config.SoftDeadline, query.Metadata, query.QueryType);
+        request->Record.MutableRequest()->SetSessionId(SessionSlots[slotIndex].SessionId);
+        request->Record.MutableRequest()->SetKeepSession(true);
 
         Send(MakeKqpProxyID(SelfId().NodeId()), request.release(), 0, cookie);
     }
@@ -585,6 +666,26 @@ private:
         }
     }
 
+    void ReleaseSessionSlot(ui64 cookie) {
+        if (auto it = CookieToSlotIndex.find(cookie); it != CookieToSlotIndex.end()) {
+            ui32 idx = it->second;
+            if (idx < SessionSlots.size()) {
+                SessionSlots[idx].InUse = false;
+            }
+            CookieToSlotIndex.erase(it);
+        }
+    }
+
+    void CloseAllSessions() {
+        for (const auto& slot : SessionSlots) {
+            auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+            closeEv->Record.MutableRequest()->SetSessionId(slot.SessionId);
+            Send(MakeKqpProxyID(SelfId().NodeId()), closeEv.Release());
+        }
+        SessionSlots.clear();
+        CookieToSlotIndex.clear();
+    }
+
     void HandleHardDeadline() {
         ui32 pendingCount = PendingCompilations;
         ui32 cancelledCount = 0;
@@ -592,16 +693,20 @@ private:
         // stop all pending compilations
         if (pendingCount > 0) {
             LOG_I("Hard deadline reached, cancelling " << pendingCount << " pending compilation requests");
-            for (auto& [cookie, query] : PendingQueriesByCookie) {
-                if (!query.SessionId.empty()) {
+            for (ui32 i = 0; i < SessionSlots.size(); ++i) {
+                auto& slot = SessionSlots[i];
+                if (slot.InUse) {
+                    LOG_D("Cancelling compilation on session: " << slot.SessionId);
                     auto cancelEv = MakeHolder<TEvKqp::TEvCancelQueryRequest>();
-                    cancelEv->Record.MutableRequest()->SetSessionId(query.SessionId);
+                    cancelEv->Record.MutableRequest()->SetSessionId(slot.SessionId);
                     Send(MakeKqpProxyID(SelfId().NodeId()), cancelEv.Release());
                     cancelledCount++;
+                    slot.InUse = false;
                 }
             }
 
             PendingQueriesByCookie.clear();
+            CookieToSlotIndex.clear();
             PendingCompilations = 0;
         }
 
@@ -649,6 +754,8 @@ private:
         }
         Completed = true;
 
+        CloseAllSessions();
+
         LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
 
         for (const auto& actorId : NotifyActorIds) {
@@ -658,6 +765,11 @@ private:
         PassAway();
     }
 
+
+    struct TSessionSlot {
+        TString SessionId;
+        bool InUse = false;
+    };
 
     const TKqpWarmupConfig Config;
 
@@ -670,7 +782,11 @@ private:
 
     std::deque<TEvPrivate::TQueryToCompile> QueriesToCompile;
     THashMap<ui64, TEvPrivate::TQueryToCompile> PendingQueriesByCookie;
-    ui64 NextCookie = 1;
+    THashMap<ui64, ui32> CookieToSlotIndex;
+    TVector<TSessionSlot> SessionSlots;
+    ui32 SessionsCreated = 0;
+    ui32 SessionsToCreate = 0;
+    ui64 NextCookie = 0;
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;

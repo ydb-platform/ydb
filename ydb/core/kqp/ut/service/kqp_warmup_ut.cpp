@@ -774,6 +774,12 @@ namespace {
             auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
             auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
 
+            std::atomic<ui32> cancels{0};
+            const auto cancelObserver = env.Runtime.AddObserver<TEvKqp::TEvCancelQueryRequest>(
+                [&cancels](TEvKqp::TEvCancelQueryRequest::TPtr&) {
+                    cancels++;
+                });
+
             const auto compileBlocker = env.Runtime.AddObserver<TEvKqp::TEvQueryResponse>(
                 [warmupActorId](TEvKqp::TEvQueryResponse::TPtr& ev) {
                     if (ev->Recipient == warmupActorId) {
@@ -796,6 +802,12 @@ namespace {
             UNIT_ASSERT_C(!warmupComplete->Get()->Success,
                 "Warmup should fail when compilations are stuck (hard deadline): "
                 << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded == 0,
+                "No compilations should succeed when responses are blocked, loaded: "
+                << warmupComplete->Get()->EntriesLoaded);
+            UNIT_ASSERT_C(cancels > 0,
+                "Hard deadline should send cancel requests for stuck compilations, got "
+                << cancels.load() << " cancel requests");
         }
 
         Y_UNIT_TEST(WarmupAllCompilationsFail) {

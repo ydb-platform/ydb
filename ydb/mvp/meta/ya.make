@@ -2,6 +2,10 @@ RECURSE_FOR_TESTS(
     ut
 )
 
+RECURSE(
+    support_links
+)
+
 LIBRARY()
 
 SRCS(
@@ -16,12 +20,11 @@ SRCS(
     meta_db_clusters.h
     meta_versions.cpp
     mvp.cpp
-    support_links/source.cpp
-    support_links/support_links_resolver.cpp
 )
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/meta/support_links
     ydb/mvp/meta/protos
     ydb/public/api/client/yc_private/resourcemanager
     yql/essentials/public/udf

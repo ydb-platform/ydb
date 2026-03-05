@@ -243,7 +243,6 @@ void TMVP::ValidateSupportLinksConfig() const {
     validateEntityLinks(SupportLinksConfig.GetDatabase(), "database");
 }
 
-
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";

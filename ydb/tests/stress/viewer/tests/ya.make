@@ -11,6 +11,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 DEPENDS(
     ydb/tests/stress/viewer

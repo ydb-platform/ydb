@@ -11,9 +11,11 @@ PY3TEST()
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
+        REQUIREMENTS(cpu:2)
         TAG(ya:fat)
     ELSE()
         SIZE(MEDIUM)
+        REQUIREMENTS(cpu:2)
     ENDIF()
 
     PEERDIR(

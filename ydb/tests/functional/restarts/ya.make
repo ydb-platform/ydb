@@ -15,6 +15,7 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

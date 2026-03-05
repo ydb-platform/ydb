@@ -94,6 +94,9 @@ public:
     const std::map<std::string, std::string>& GetAttributes() const;
     bool GetKeepMessagesOrder() const;
     TDuration GetDefaultProcessingTimeout() const;
+    bool GetContentBasedDeduplication() const;
+    TDuration GetDefaultDelayMessageTimeMs() const;
+    TDuration GetDefaultReceiveMessageWaitTimeMs() const;
     const TDeadLetterPolicy& GetDeadLetterPolicy() const;
 
 private:
@@ -106,6 +109,9 @@ private:
     std::vector<ECodec> SupportedCodecs_;
     bool KeepMessagesOrder_;
     TDuration DefaultProcessingTimeout_;
+    bool ContentBasedDeduplication_;
+    TDuration DefaultDelayMessageTimeMs_;
+    TDuration DefaultReceiveMessageWaitTimeMs_;
     TDeadLetterPolicy DeadLetterPolicy_;
 };
 
@@ -657,6 +663,10 @@ struct TConsumerSettings {
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
     FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
 
+    FLUENT_SETTING_OPTIONAL(bool, ContentBasedDeduplication);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultDelayMessageTimeMs);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultReceiveMessageWaitTimeMs);
+
     FLUENT_SETTING(TAttributes, Attributes);
 
     TConsumerSettings& AddAttribute(const std::string& key, const std::string& value) {
@@ -730,6 +740,10 @@ struct TAlterConsumerSettings {
 
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
     FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
+
+    FLUENT_SETTING_OPTIONAL(bool, ContentBasedDeduplication);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultDelayMessageTimeMs);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultReceiveMessageWaitTimeMs);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);

@@ -421,9 +421,26 @@ def build_html_dashboard(
       return Number.isFinite(n) ? n : null;
     }}
     function axisLayout(xsDisp) {{
+      const msVals = Array.isArray(xsDisp) ? xsDisp.map(_toMs).filter(v => v != null) : [];
+      let tickVals = null;
+      let tickText = null;
+      if (msVals.length) {{
+        let minMs = Number.POSITIVE_INFINITY;
+        let maxMs = Number.NEGATIVE_INFINITY;
+        for (const v of msVals) {{
+          if (v < minMs) minMs = v;
+          if (v > maxMs) maxMs = v;
+        }}
+        const ticks = _buildTickVals(minMs, maxMs, 8);
+        tickVals = ticks.map(ms => new Date(ms).toISOString());
+        tickText = ticks.map(ms => _formatTick(ms));
+      }}
       return {{
         title: axisTitle(),
         type: 'date',
+        tickmode: tickVals ? 'array' : 'auto',
+        tickvals: tickVals || undefined,
+        ticktext: tickText || undefined,
         hoverformat: '%Y-%m-%d %H:%M:%S',
         // Hide Plotly default unified X title like "1.772e12".
         unifiedhovertitle: {{ text: '' }},
@@ -448,7 +465,9 @@ def build_html_dashboard(
         Plotly.relayout(el, {{
           'xaxis.title': ax.title,
           'xaxis.type': 'date',
-          'xaxis.tickmode': 'auto',
+          'xaxis.tickmode': ax.tickmode,
+          'xaxis.tickvals': ax.tickvals,
+          'xaxis.ticktext': ax.ticktext,
           'xaxis.hoverformat': '%Y-%m-%d %H:%M:%S',
           'xaxis.unifiedhovertitle.text': '',
           'hoverdistance': -1,
@@ -581,7 +600,10 @@ def build_html_dashboard(
       xSources.forEach(arr => {{
         if (!Array.isArray(arr)) return;
         arr.forEach(v => {{
-          const n = Number(v);
+          let n = Number(v);
+          if (!Number.isFinite(n)) {{
+            n = Number(xFromDisplay(v));
+          }}
           if (!Number.isFinite(n)) return;
           if (n < minSec) minSec = n;
           if (n > maxSec) maxSec = n;
@@ -601,7 +623,7 @@ def build_html_dashboard(
       if (meta) {{
         meta.textContent = runner + '  |  ' + new Date(fromMs).toISOString() + ' .. ' + new Date(toMs).toISOString();
       }}
-      wrap.style.display = '';
+      wrap.style.display = 'block';
     }}
     setupMonitoringLink();
 
@@ -1696,12 +1718,12 @@ def build_html_dashboard(
             xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
           }}
           Plotly.newPlot('diskLayer', [
-            {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }},
-            {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }}
+            {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
+            {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
-            title: 'Disk I/O (MB per 1s interval)',
+            title: 'Disk bandwidth (+Write, -Read)',
             xaxis: xaxisOpt,
-            yaxis: {{ title: 'MB' }},
+            yaxis: {{ title: 'MB/s' }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
           }}, {{ responsive: true }});
@@ -1742,12 +1764,12 @@ def build_html_dashboard(
           xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
         }}
         Plotly.newPlot('diskLayerSuite', [
-          {{ x: xDisp, y: ro.disk_read_mb || [], mode: 'lines', name: 'Disk read (MB/s)', line: {{ color: '#ea580c' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }},
-          {{ x: xDisp, y: ro.disk_write_mb || [], mode: 'lines', name: 'Disk write (MB/s)', line: {{ color: '#7c3aed' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }}
+          {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
+          {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
-          title: 'Disk I/O (MB per 1s interval)',
+          title: 'Disk bandwidth (+Write, -Read)',
           xaxis: xaxisOpt,
-          yaxis: {{ title: 'MB' }},
+          yaxis: {{ title: 'MB/s' }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
         }}, {{ responsive: true }});

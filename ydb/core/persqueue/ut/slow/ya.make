@@ -8,6 +8,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

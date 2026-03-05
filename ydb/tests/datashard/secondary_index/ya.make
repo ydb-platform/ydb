@@ -5,6 +5,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(28)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 TEST_SRCS(
     test_secondary_index.py

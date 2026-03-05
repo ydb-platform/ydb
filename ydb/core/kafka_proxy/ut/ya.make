@@ -5,6 +5,9 @@ ADDINCL(
 )
 
 SIZE(medium)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

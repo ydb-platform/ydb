@@ -118,7 +118,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
@@ -127,7 +126,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UncompressMessages = true,
-                .UserToken = std::move(userToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
         }

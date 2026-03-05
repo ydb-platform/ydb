@@ -1282,6 +1282,8 @@ private:
     bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 
+    bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
+
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
 };
 

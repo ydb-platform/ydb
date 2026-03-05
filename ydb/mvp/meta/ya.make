@@ -10,6 +10,7 @@ SRCS(
     meta_cache.cpp
     meta_versions.cpp
     mvp.cpp
+    support_links/source.cpp
     support_links/support_links_resolver.cpp
 )
 

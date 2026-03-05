@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "resolver_common.h"
 
 namespace NMVP::NSupportLinks {
 

@@ -1,17 +1,24 @@
 #include "initialization.h"
 #include "kqp_common.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata {
+
+TString GetStoragePrefix() {
+    TString path = NMetadata::NProvider::TServiceOperator::GetPath();
+    Y_ENSURE(path, "Service operator path must not be empty");
+    return CanonizePath("/" + AppData()->TenantName + "/" + path);
+}
 
 TString IClassBehaviour::GetStorageTableDirectory() const {
     return TFsPath(GetStorageTablePath()).Fix().Parent().GetPath();
 }
 
 TString IClassBehaviour::GetStorageTablePath() const {
-    return "/" + AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + GetInternalStorageTablePath();
+    return GetStoragePrefix() + "/" + GetInternalStorageTablePath();
 }
 
 TString IClassBehaviour::GetStorageHistoryTablePath() const {
@@ -19,7 +26,8 @@ TString IClassBehaviour::GetStorageHistoryTablePath() const {
     if (!internalTablePath) {
         return "";
     }
-    return "/" + AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + internalTablePath;
+
+    return GetStoragePrefix() + "/" + internalTablePath;
 }
 
 NInitializer::IInitializationBehaviour::TPtr IClassBehaviour::GetInitializer() const {

@@ -13,7 +13,6 @@ namespace NMVP {
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
     : UrlParameters(params.UrlParameters.Render())
 {
-    Y_ABORT_UNLESS(InstanceMVP, "InstanceMVP must be initialized");
     OwnedSources.clear();
     Sources.clear();
     if (!params.Sources.empty()) {
@@ -46,16 +45,16 @@ auto TSupportLinksResolver::MakeResolveInput(size_t place) const {
 
 void TSupportLinksResolver::Start() {
     SourceOutputs.clear();
-    SourceOutputs.reserve(Sources.size());
+    SourceOutputs.resize(Sources.size());
     SourceActors.clear();
-    SourceActors.reserve(Sources.size());
+    SourceActors.resize(Sources.size());
 
     for (size_t i = 0; i < Sources.size(); ++i) {
         const ILinkSource* source = Sources[i];
         TResolveOutput sourceOutput = source->Resolve(MakeResolveInput(i));
         sourceOutput.Name = source->Config().GetSource();
-        SourceActors.push_back(sourceOutput.Actors);
-        SourceOutputs.push_back(std::move(sourceOutput));
+        SourceActors[i] = sourceOutput.Actors;
+        SourceOutputs[i] = std::move(sourceOutput);
     }
 }
 
@@ -66,28 +65,23 @@ void TSupportLinksResolver::OnSourceResponse(const NSupportLinks::TEvPrivate::TE
         slot.Ready = true;
         slot.Links = msg->Links;
         slot.Errors.insert(slot.Errors.end(), msg->Errors.begin(), msg->Errors.end());
-        if (msg->Place < SourceActors.size()) {
-            SourceActors[msg->Place].clear();
-        }
+        SourceActors[msg->Place].clear();
     }
 }
 
 void TSupportLinksResolver::HandleTimeout() {
     auto* actorSystem = NActors::TActivationContext::ActorSystem();
-    Y_ABORT_UNLESS(actorSystem, "ActorSystem is unavailable in activation context");
 
     for (size_t place = 0; place < SourceOutputs.size(); ++place) {
         auto& sourceOutput = SourceOutputs[place];
         if (!sourceOutput.Ready) {
-            if (place < SourceActors.size()) {
-                for (const auto& actorId : SourceActors[place]) {
-                    actorSystem->Send(new NActors::IEventHandle(
-                        actorId,
-                        Parent,
-                        new NActors::TEvents::TEvPoisonPill()));
-                }
-                SourceActors[place].clear();
+            for (const auto& actorId : SourceActors[place]) {
+                actorSystem->Send(new NActors::IEventHandle(
+                    actorId,
+                    Parent,
+                    new NActors::TEvents::TEvPoisonPill()));
             }
+            SourceActors[place].clear();
             sourceOutput.Errors.emplace_back(NSupportLinks::TSupportError{
                 .Source = sourceOutput.Name,
                 .Message = "Timeout while resolving support links source"

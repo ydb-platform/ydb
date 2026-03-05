@@ -25,23 +25,23 @@ inline TVector<NSupportLinks::TResolvedLink> MakeMockLinks() {
 class TMockLinkSourceSync final : public ILinkSource {
 public:
     explicit TMockLinkSourceSync(TSupportLinkEntryConfig config)
-        : Config_(std::move(config))
+        : SourceConfig(std::move(config))
     {}
 
     const TSupportLinkEntryConfig& Config() const override {
-        return Config_;
+        return SourceConfig;
     }
 
     TResolveOutput Resolve(const TResolveInput&) const override {
         TResolveOutput out;
-        out.Name = Config_.GetSource();
+        out.Name = SourceConfig.GetSource();
         out.Ready = true;
         out.Links = MakeMockLinks();
         return out;
     }
 
 private:
-    TSupportLinkEntryConfig Config_;
+    TSupportLinkEntryConfig SourceConfig;
 };
 
 class TMockReplyActor final : public NActors::TActorBootstrapped<TMockReplyActor> {
@@ -67,16 +67,16 @@ private:
 class TMockLinkSourceAsync final : public ILinkSource {
 public:
     explicit TMockLinkSourceAsync(TSupportLinkEntryConfig config)
-        : Config_(std::move(config))
+        : SourceConfig(std::move(config))
     {}
 
     const TSupportLinkEntryConfig& Config() const override {
-        return Config_;
+        return SourceConfig;
     }
 
     TResolveOutput Resolve(const TResolveInput& input) const override {
         TResolveOutput out;
-        out.Name = Config_.GetSource();
+        out.Name = SourceConfig.GetSource();
         out.Ready = false;
         auto actorId = NActors::TActivationContext::Register(
             new TMockReplyActor(input.Parent, input.Place),
@@ -86,7 +86,7 @@ public:
     }
 
 private:
-    TSupportLinkEntryConfig Config_;
+    TSupportLinkEntryConfig SourceConfig;
 };
 
 inline std::shared_ptr<ILinkSource> MakeMockLinkSourceSync(TSupportLinkEntryConfig config) {

@@ -23,26 +23,26 @@ std::mutex& LinkSourceFactoriesMutex() {
 class TUnsupportedLinkSource final : public ILinkSource {
 public:
     explicit TUnsupportedLinkSource(TSupportLinkEntryConfig config)
-        : Config_(std::move(config))
+        : SourceConfig(std::move(config))
     {}
 
     const TSupportLinkEntryConfig& Config() const override {
-        return Config_;
+        return SourceConfig;
     }
 
     TResolveOutput Resolve(const TResolveInput&) const override {
         TResolveOutput output;
-        output.Name = Config_.GetSource();
+        output.Name = SourceConfig.GetSource();
         output.Ready = true;
         output.Errors.emplace_back(NSupportLinks::TSupportError{
-            .Source = Config_.GetSource(),
-            .Message = TStringBuilder() << "unsupported support_links source: " << Config_.GetSource(),
+            .Source = SourceConfig.GetSource(),
+            .Message = TStringBuilder() << "unsupported support_links source: " << SourceConfig.GetSource(),
         });
         return output;
     }
 
 private:
-    TSupportLinkEntryConfig Config_;
+    TSupportLinkEntryConfig SourceConfig;
 };
 
 void RegisterLinkSource(TString source, TLinkSourceFactory factory) {

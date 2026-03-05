@@ -189,7 +189,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             } else {
                 base << '&';
             }
-            base << name << '=' << value;
+            base << part;
         }
     });
 

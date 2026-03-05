@@ -57,9 +57,6 @@ void TCommandImportBase::Config(TConfig& config) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 
-    config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
-        .RequiredArgument("PROPERTY=VALUE,...");
-
     config.Opts->AddLongOption("description", "Textual description of import operation")
         .RequiredArgument("STRING").StoreResult(&Description);
 
@@ -288,7 +285,7 @@ void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
 TCommandImportFromS3::TCommandImportFromS3()
     : TCommandImportBase("s3", "Create import from S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3")
 {
-    TItem::DefineFields({
+    TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
@@ -328,6 +325,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
+
+    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
@@ -463,7 +463,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
 TCommandImportFromFs::TCommandImportFromFs()
     : TCommandImportBase("fs", "Create import from file system.")
 {
-    TItem::DefineFields({
+    TItemFs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to base_path)", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
@@ -471,6 +471,9 @@ TCommandImportFromFs::TCommandImportFromFs()
 
 void TCommandImportFromFs::Config(TConfig& config) {
     TCommandImportBase::Config(config);
+
+    config.Opts->AddLongOption("item", TItemFs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("base-path", "Base path for import in file system")
         .RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);

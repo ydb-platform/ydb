@@ -264,9 +264,6 @@ void TCommandExportBase::Config(TConfig& config) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 
-    config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
-        .RequiredArgument("PROPERTY=VALUE,...");
-
     config.Opts->AddLongOption("description", "Textual description of export operation")
         .RequiredArgument("STRING").StoreResult(&Description);
 
@@ -464,7 +461,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 TCommandExportToS3::TCommandExportToS3()
     : TCommandExportBase("s3", "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
 {
-    TItem::DefineFields({
+    TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "S3 object key prefix", true}},
     });
@@ -529,6 +526,9 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonDestinationPrefix);
 
+    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
+
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
@@ -583,7 +583,7 @@ int TCommandExportToS3::Run(TConfig& config) {
 TCommandExportToFs::TCommandExportToFs()
     : TCommandExportBase("fs", "Create export in file system.")
 {
-    TItem::DefineFields({
+    TItemFs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path in file system (relative to base_path)", true}},
     });
@@ -591,6 +591,10 @@ TCommandExportToFs::TCommandExportToFs()
 
 void TCommandExportToFs::Config(TConfig& config) {
     TCommandExportBase::Config(config);
+
+
+    config.Opts->AddLongOption("item", TItemFs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("base-path", "Base path for export in file system")
         .RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);

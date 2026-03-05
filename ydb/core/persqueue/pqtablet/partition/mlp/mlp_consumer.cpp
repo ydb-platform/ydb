@@ -632,7 +632,7 @@ void TConsumerActor::Persist() {
 
     Storage->Compact();
 
-    auto batch = Storage->GetBatch();
+    auto batch = Storage->ExtractBatch();
     if (batch.Empty()) {
         LOG_D("Batch is empty");
         MoveToDLQIfPossible();

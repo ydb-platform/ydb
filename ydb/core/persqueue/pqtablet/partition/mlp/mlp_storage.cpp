@@ -931,7 +931,7 @@ void TStorage::UpdateFirstUncommittedOffset() {
     }
 }
 
-TStorage::TBatch TStorage::GetBatch() {
+TStorage::TBatch TStorage::ExtractBatch() {
     return std::exchange(Batch, {this});
 }
 

@@ -4,6 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     kqp_arrow_in_channels_ut.cpp

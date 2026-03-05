@@ -42,8 +42,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
 
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/pq/gateway/dummy
-    ydb/library/yql/providers/pq/gateway/native
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/async_io
 
     ydb/library/yql/providers/solomon/provider

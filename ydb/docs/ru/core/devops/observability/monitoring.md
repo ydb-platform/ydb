@@ -121,6 +121,8 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
 
+{% list tabs %}
+
 - Обычная установка
 
   В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
@@ -137,7 +139,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
   Возьмите значение, указанное в параметре `--mon -port`.
 
-  {% list tabs %}
+  {% endcut %}
 
     ```yaml
     - labels:

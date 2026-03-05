@@ -1,7 +1,6 @@
 #pragma once
 
 #include "events.h"
-#include "types.h"
 
 #include <memory>
 
@@ -44,6 +43,7 @@ public:
 private:
     auto MakeResolveInput(size_t place) const;
 
+    TVector<std::shared_ptr<ILinkSource>> OwnedSources;
     TVector<const ILinkSource*> Sources;
     TVector<TResolveOutput> SourceOutputs;
     TVector<TVector<NActors::TActorId>> SourceActors;

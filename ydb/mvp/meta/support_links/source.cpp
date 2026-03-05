@@ -1,23 +1,45 @@
 #include "source.h"
 
-#include "grafana_dashboard_source.h"
-#include "grafana_dashboard_search_source.h"
-
 #include <util/generic/yexception.h>
 
 namespace NMVP {
 
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
-    (void)place;
-    if (config.GetSource().empty()) {
+class TUnsupportedLinkSource final : public ILinkSource {
+public:
+    TUnsupportedLinkSource(size_t place, TSupportLinkEntryConfig config)
+        : Place_(place)
+        , Config_(std::move(config))
+    {}
+
+    size_t Place() const override {
+        return Place_;
+    }
+
+    const TSupportLinkEntryConfig& Config() const override {
+        return Config_;
+    }
+
+    TResolveOutput Resolve(const TResolveInput&) const override {
+        TResolveOutput output;
+        output.Name = Config_.Source;
+        output.Ready = true;
+        output.Errors.emplace_back(NSupportLinks::TSupportError{
+            .Source = Config_.Source,
+            .Message = TStringBuilder() << "unsupported support_links source: " << Config_.Source,
+        });
+        return output;
+    }
+
+private:
+    size_t Place_;
+    TSupportLinkEntryConfig Config_;
+};
+
+std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntryConfig config) {
+    if (config.Source.empty()) {
         ythrow yexception() << "source is required";
     }
-    ythrow yexception() << "unsupported source=" << config.GetSource();
-}
-
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config) {
-    Y_ABORT_UNLESS(InstanceMVP);
-    return MakeLinkSource(place, std::move(config), InstanceMVP->MetaSettings);
+    return std::make_shared<TUnsupportedLinkSource>(place, std::move(config));
 }
 
 } // namespace NMVP

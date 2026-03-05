@@ -1,9 +1,7 @@
 #pragma once
 
 #include <ydb/mvp/meta/support_links/support_links_resolver.h>
-
-#include <ydb/mvp/meta/meta_settings.h>
-#include <ydb/mvp/meta/protos/config.pb.h>
+#include <ydb/mvp/meta/mvp.h>
 
 #include <memory>
 
@@ -21,11 +19,10 @@ public:
 
     virtual ~ILinkSource() = default;
     virtual size_t Place() const = 0;
-    virtual const TSupportLinkEntry& Config() const = 0;
+    virtual const TSupportLinkEntryConfig& Config() const = 0;
     virtual TResolveOutput Resolve(const TResolveInput& input) const = 0;
 };
 
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings);
-std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config);
+std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntryConfig config);
 
 } // namespace NMVP

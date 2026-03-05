@@ -12,7 +12,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TTypeHandleWrapper: public TMutableComputationNode<TTypeHandleWrapper> {
-    typedef TMutableComputationNode<TTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTypeHandleWrapper>;
 
 public:
     TTypeHandleWrapper(TComputationMutables& mutables, TString yson, ui32 exprCtxMutableIndex)

@@ -25,13 +25,13 @@ namespace NYql::NUdf {
 
 template <typename Type>
 struct TStdAllocatorForUdf {
-    typedef Type value_type;
-    typedef Type* pointer;
-    typedef const Type* const_pointer;
-    typedef Type& reference;
-    typedef const Type& const_reference;
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    using value_type = Type;
+    using pointer = Type*;
+    using const_pointer = const Type*;
+    using reference = Type&;
+    using const_reference = const Type&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
 
     TStdAllocatorForUdf() noexcept = default;
     ~TStdAllocatorForUdf() noexcept = default;
@@ -40,7 +40,7 @@ struct TStdAllocatorForUdf {
     explicit TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
     template <typename U>
     struct rebind { // NOLINT(readability-identifier-naming)
-        typedef TStdAllocatorForUdf<U> other;
+        using other = TStdAllocatorForUdf<U>;
     };
     template <typename U>
     bool operator==(const TStdAllocatorForUdf<U>&) const {

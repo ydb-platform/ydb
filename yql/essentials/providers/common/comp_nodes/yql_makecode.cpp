@@ -43,7 +43,7 @@ struct TMakeCodeArgs<NYql::TExprNode::Lambda> {
 
 template <NYql::TExprNode::EType Type>
 class TMakeCodeWrapper: public TMutableComputationNode<TMakeCodeWrapper<Type>> {
-    typedef TMutableComputationNode<TMakeCodeWrapper<Type>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TMakeCodeWrapper<Type>>;
 
 public:
     TMakeCodeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)

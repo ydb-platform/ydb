@@ -2,6 +2,7 @@
 
 #include <yql/essentials/public/purecalc/common/names.h>
 
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -126,12 +127,21 @@ protected:
     TVector<ui32> DatumToMemberIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
     size_t BatchLengthID_;
+    bool UntrackBatch_;
+
+    arrow::Datum& PrepareDatum(arrow::Datum& datum) {
+        if (UntrackBatch_) {
+            UntrackDatum(datum);
+        }
+        return datum;
+    }
 
 public:
     explicit TArrowOutputConverter(
         const TArrowOutputSpec& outputSpec,
         IWorker* worker)
         : Factory_(worker->GetGraph().GetHolderFactory())
+        , UntrackBatch_(outputSpec.UntrackBatches())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
 
@@ -178,8 +188,8 @@ public:
         for (size_t i = 0; i < nvalues; i++) {
             const ui32 id = DatumToMemberIDMap_[i];
             const auto& datumValue = value.GetElement(id);
-            const auto& datum = TArrowBlock::From(datumValue).GetDatum();
-            datums[i] = datum;
+            auto datum = TArrowBlock::From(datumValue).GetDatum();
+            datums[i] = PrepareDatum(datum);
             if (datum.is_scalar()) {
                 continue;
             }
@@ -528,13 +538,18 @@ ConsumerType TInputSpecTraits<TArrowInputSpec>::MakeConsumer(
     return MakeHolder<TArrowConsumerImpl>(inputSpec, std::move(worker));
 }
 
-TArrowOutputSpec::TArrowOutputSpec(NYT::TNode schema)
+TArrowOutputSpec::TArrowOutputSpec(NYT::TNode schema, bool untrackBatches)
     : Schema_(std::move(schema))
+    , UntrackBatches_(untrackBatches)
 {
 }
 
 const NYT::TNode& TArrowOutputSpec::GetSchema() const {
     return Schema_;
+}
+
+bool TArrowOutputSpec::UntrackBatches() const {
+    return UntrackBatches_;
 }
 
 PullListReturnType TOutputSpecTraits<TArrowOutputSpec>::ConvertPullListWorkerToOutputType(

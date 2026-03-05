@@ -26,7 +26,7 @@ using namespace NKikimr::NMiniKQL;
 class TUdfResolverWithIndex: public IUdfResolver {
     class TResourceFile: public TThrRefBase {
     public:
-        typedef TIntrusivePtr<TResourceFile> TPtr;
+        using TPtr = TIntrusivePtr<TResourceFile>;
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)

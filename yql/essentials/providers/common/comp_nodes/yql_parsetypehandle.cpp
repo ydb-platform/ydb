@@ -15,7 +15,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TParseTypeHandleWrapper: public TMutableComputationNode<TParseTypeHandleWrapper> {
-    typedef TMutableComputationNode<TParseTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TParseTypeHandleWrapper>;
 
 public:
     TParseTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* str, ui32 exprCtxMutableIndex, NYql::TPosition pos)

@@ -2098,9 +2098,9 @@ bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, cons
     }
 }
 
-typedef std::pair<const TExprNode*, const TExprNode*> TPairOfNodePotinters;
-typedef std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>> TNodesPairSet;
-typedef TNodeMap<std::pair<ui32, ui32>> TArgumentsMap;
+using TPairOfNodePotinters = std::pair<const TExprNode*, const TExprNode*>;
+using TNodesPairSet = std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>>;
+using TArgumentsMap = TNodeMap<std::pair<ui32, ui32>>;
 
 bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArgumentsMap& argumentsMap, ui32 level, TNodesPairSet& visited) {
     const auto ins = visited.emplace(one, two);
@@ -2258,7 +2258,7 @@ TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& 
     return result;
 }
 
-typedef TNodeMap<long> TRefCountsMap;
+using TRefCountsMap = TNodeMap<long>;
 
 void CalculateReferences(const TExprNode& node, TRefCountsMap& refCounts) {
     if (!refCounts[&node]++) {

@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index a72ada0..4169f6d 100644
+index d7f3e0d..1c86e37 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1124,7 +1124,11 @@ typedef __char32_t char32_t;
+@@ -1118,7 +1118,11 @@ typedef __char32_t char32_t;
  // Optional attributes - these are useful for a better QoI, but not required to be available
  
  #  define _LIBCPP_NOALIAS __attribute__((__malloc__))
@@ -16,13 +16,13 @@ index a72ada0..4169f6d 100644
  #  define _LIBCPP_INIT_PRIORITY_MAX __attribute__((__init_priority__(100)))
  #  define _LIBCPP_ATTRIBUTE_FORMAT(archetype, format_string_index, first_format_arg_index)                             \
 diff --git a/include/__format/buffer.h b/include/__format/buffer.h
-index c88b7f3..7cb338b 100644
+index e7454f0..67f7106 100644
 --- a/include/__format/buffer.h
 +++ b/include/__format/buffer.h
 @@ -496,7 +496,7 @@ private:
  // Selects the type of the buffer used for the output iterator.
  template <class _OutIt, __fmt_char_type _CharT>
- class _LIBCPP_TEMPLATE_VIS __buffer_selector {
+ class __buffer_selector {
 -  using _Container _LIBCPP_NODEBUG = __back_insert_iterator_container<_OutIt>::type;
 +  using _Container _LIBCPP_NODEBUG = typename __back_insert_iterator_container<_OutIt>::type;
  
@@ -30,7 +30,7 @@ index c88b7f3..7cb338b 100644
    using type _LIBCPP_NODEBUG =
 @@ -511,7 +511,7 @@ public:
  template <class _OutIt, __fmt_char_type _CharT>
- class _LIBCPP_TEMPLATE_VIS __format_to_n_buffer : private __buffer_selector<_OutIt, _CharT>::type {
+ class __format_to_n_buffer : private __buffer_selector<_OutIt, _CharT>::type {
  public:
 -  using _Base _LIBCPP_NODEBUG = __buffer_selector<_OutIt, _CharT>::type;
 +  using _Base _LIBCPP_NODEBUG = typename __buffer_selector<_OutIt, _CharT>::type;

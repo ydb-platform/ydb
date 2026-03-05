@@ -20,27 +20,13 @@ struct TGrafanaSupportConfig {
 
 using TSupportLinkEntry = NMvp::NMeta::TMetaConfig::TSupportLinksConfig::TSupportLinkEntry;
 
-struct TSupportLinkSources {
-    TSupportLinkSources();
-    ~TSupportLinkSources();
-    TSupportLinkSources(TSupportLinkSources&&) noexcept;
-    TSupportLinkSources& operator=(TSupportLinkSources&&) noexcept;
-    TSupportLinkSources(const TSupportLinkSources&) = delete;
-    TSupportLinkSources& operator=(const TSupportLinkSources&) = delete;
-
-    TVector<std::unique_ptr<ILinkSource>> Cluster;
-    TVector<std::unique_ptr<ILinkSource>> Database;
-};
-
 struct TMetaSettings {
     TString MetaApiEndpoint;
     TString MetaDatabase;
-    bool HasMetaConfigBlock = false;
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TGrafanaSupportConfig GrafanaConfig;
-    TSupportLinkSources SupportLinksConfig;
+    TVector<std::shared_ptr<ILinkSource>> ClusterLinkSources;
+    TVector<std::shared_ptr<ILinkSource>> DatabaseLinkSources;
 };
-
-void ValidateMetaBaseConfig(const TMetaSettings& settings);
 
 } // namespace NMVP

@@ -49,28 +49,6 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     }
 }
 
-void NMVP::ValidateMetaBaseConfig(const TMetaSettings& settings) {
-    if (settings.HasMetaConfigBlock) {
-        if (settings.MetaApiEndpoint.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
-        }
-        if (settings.MetaDatabase.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
-        }
-    }
-
-    if (settings.AccessServiceType == NMvp::nebius_v1) {
-        if (settings.MetaApiEndpoint.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX
-                                << "meta.meta_api_endpoint must be specified for access_service_type=nebius_v1.";
-        }
-        if (settings.MetaDatabase.empty()) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX
-                                << "meta.meta_database must be specified for access_service_type=nebius_v1.";
-        }
-    }
-}
-
 void TMVP::OnTerminate(int) {
     AtomicSet(Quit, true);
 }
@@ -198,26 +176,31 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
 
-    MetaSettings.GrafanaConfig = {};
-    MetaSettings.SupportLinksConfig.Cluster.clear();
-    MetaSettings.SupportLinksConfig.Database.clear();
-
     if (config.HasGrafana()) {
         const auto& grafana = config.GetGrafana();
         MetaSettings.GrafanaConfig.Endpoint = grafana.GetEndpoint();
         MetaSettings.GrafanaConfig.SecretName = grafana.GetSecretName();
+
+        if (MetaSettings.GrafanaConfig.Endpoint.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.grafana.endpoint must be specified if meta.grafana is set.";
+        }
+
+        if (MetaSettings.GrafanaConfig.SecretName.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.grafana.secret_name must be specified if meta.grafana is set.";
+        }
     }
 
     if (config.HasSupportLinks()) {
         const auto& supportLinks = config.GetSupportLinks();
+
         const auto& clusterLinks = supportLinks.GetCluster();
         for (int i = 0; i < clusterLinks.size(); ++i) {
-            MetaSettings.SupportLinksConfig.Cluster.emplace_back(MakeLinkSource(i, clusterLinks[i], MetaSettings));
+            MetaSettings.ClusterLinkSources.emplace_back(MakeLinkSource(i, clusterLinks[i], MetaSettings));
         }
 
         const auto& databaseLinks = supportLinks.GetDatabase();
         for (int i = 0; i < databaseLinks.size(); ++i) {
-            MetaSettings.SupportLinksConfig.Database.emplace_back(MakeLinkSource(i, databaseLinks[i], MetaSettings));
+            MetaSettings.DatabaseLinkSources.emplace_back(MakeLinkSource(i, databaseLinks[i], MetaSettings));
         }
     }
 }
@@ -234,8 +217,6 @@ void TMVP::TryGetMetaOptionsFromConfig() {
             TryGetMetaOptionsFromConfig(appConfig.GetMeta());
         }
         MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
-        MetaSettings.HasMetaConfigBlock = appConfig.HasMeta();
-        ValidateMetaBaseConfig(MetaSettings);
     } catch (const YAML::Exception& e) {
         std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
@@ -250,8 +231,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
         MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
-        MetaSettings.HasMetaConfigBlock = false;
-        ValidateMetaBaseConfig(MetaSettings);
     }
 
     if (MetaApiEndpoint.empty()) {

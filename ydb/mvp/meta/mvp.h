@@ -22,7 +22,6 @@ class Node;
 namespace NMVP {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
-void ValidateMetaBaseConfig(const TMetaSettings& settings);
 
 class TMVP {
 protected:
@@ -67,7 +66,6 @@ public:
     NActors::TActorId HandlerId;
 
     TGrafanaSupportConfig GrafanaSupportConfig;
-    TSupportLinkSources SupportLinksConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

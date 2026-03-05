@@ -125,21 +125,20 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         return entry;
     }
 
-    static NMVP::TSupportLinkSources MakeConfig() {
-        NMVP::TSupportLinkSources cfg;
-        cfg.Cluster.push_back(NMVP::MakeGrafanaLinkSource(
-            cfg.Cluster.size(),
+    static void FillConfig(NMVP::TMetaSettings& settings) {
+        settings.ClusterLinkSources.push_back(NMVP::MakeGrafanaLinkSource(
+            settings.ClusterLinkSources.size(),
             MakeSupportLinkEntry("grafana/dashboard", "Cluster CPU", "/d/cluster-cpu")
         ));
-        cfg.Database.push_back(NMVP::MakeGrafanaLinkSource(
-            cfg.Database.size(),
+        settings.DatabaseLinkSources.push_back(NMVP::MakeGrafanaLinkSource(
+            settings.DatabaseLinkSources.size(),
             MakeSupportLinkEntry("grafana/dashboard/search", "", "/api/search?limit=100&type=dash-db", "emit_error")
         ));
-        return cfg;
     }
 
-    static NMVP::TSupportLinkSources MakeEmptyConfig() {
-        return {};
+    static void ClearConfig(NMVP::TMetaSettings& settings) {
+        settings.ClusterLinkSources.clear();
+        settings.DatabaseLinkSources.clear();
     }
 
     Y_UNIT_TEST(SupportLinksReturnsBadRequestWhenClusterMissing) {
@@ -150,7 +149,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        ClearConfig(NMVP::InstanceMVP->MetaSettings);
+        FillConfig(NMVP::InstanceMVP->MetaSettings);
 
         auto request = BuildHttpRequest("/meta/support_links?database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -176,7 +176,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        ClearConfig(NMVP::InstanceMVP->MetaSettings);
+        FillConfig(NMVP::InstanceMVP->MetaSettings);
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -205,7 +206,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        ClearConfig(NMVP::InstanceMVP->MetaSettings);
+        FillConfig(NMVP::InstanceMVP->MetaSettings);
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -233,7 +235,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeEmptyConfig();
+        ClearConfig(NMVP::InstanceMVP->MetaSettings);
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
         auto result = MakeClusterInfoResult("ws", "ds");
@@ -258,7 +260,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         auto sender = runtime.AllocateEdgeActor();
         auto anyHttpProxy = runtime.AllocateEdgeActor();
         TYdbLocation location("meta", "meta", {}, "/Root");
-        NMVP::InstanceMVP->MetaSettings.SupportLinksConfig = MakeConfig();
+        ClearConfig(NMVP::InstanceMVP->MetaSettings);
+        FillConfig(NMVP::InstanceMVP->MetaSettings);
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=missing-cluster");
         auto result = MakeEmptyClusterInfoResult();

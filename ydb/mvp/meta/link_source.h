@@ -124,7 +124,7 @@ public:
     }
 };
 
-inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSource(
+inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSource(
     TSupportLinkEntry config,
     const TMetaSettings& metaSettings)
 {
@@ -132,10 +132,10 @@ inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSource(
         .LinkConfig = config,
         .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_unique<TGrafanaDashboardSource>(std::move(config), metaSettings);
+    return std::make_shared<TGrafanaDashboardSource>(std::move(config), metaSettings);
 }
 
-inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSearchSource(
+inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSearchSource(
     TSupportLinkEntry config,
     const TMetaSettings& metaSettings)
 {
@@ -143,21 +143,21 @@ inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSearchSource(
         .LinkConfig = config,
         .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
+    return std::make_shared<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
 }
 
-inline std::unique_ptr<ILinkSource> MakeLinkSourceUnchecked(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
+inline std::shared_ptr<ILinkSource> MakeLinkSourceUnchecked(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
     (void)place;
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD) {
-        return std::make_unique<TGrafanaDashboardSource>(std::move(config), metaSettings);
+        return std::make_shared<TGrafanaDashboardSource>(std::move(config), metaSettings);
     }
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD_SEARCH) {
-        return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
+        return std::make_shared<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
     }
     ythrow yexception() << "unsupported source=" << config.GetSource();
 }
 
-inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
+inline std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
     (void)place;
     if (config.GetSource().empty()) {
         ythrow yexception() << "source is required";
@@ -171,12 +171,12 @@ inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEnt
     ythrow yexception() << "unsupported source=" << config.GetSource();
 }
 
-inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config) {
+inline std::shared_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config) {
     Y_ABORT_UNLESS(InstanceMVP);
     return MakeLinkSource(place, std::move(config), InstanceMVP->MetaSettings);
 }
 
-inline std::unique_ptr<ILinkSource> MakeGrafanaLinkSource(size_t place, TSupportLinkEntry config) {
+inline std::shared_ptr<ILinkSource> MakeGrafanaLinkSource(size_t place, TSupportLinkEntry config) {
     Y_ABORT_UNLESS(InstanceMVP);
     return MakeLinkSourceUnchecked(place, std::move(config), InstanceMVP->MetaSettings);
 }

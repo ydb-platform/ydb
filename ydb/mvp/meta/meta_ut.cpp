@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/common.h>
 #include <ydb/mvp/meta/link_source.h>
@@ -9,17 +10,6 @@
 #include <memory>
 
 namespace {
-
-class TMvpGuard {
-public:
-    TMvpGuard() {
-        const char* argv[] = {"support_links_configuration_ut"};
-        Mvp = std::make_unique<NMVP::TMVP>(1, argv);
-    }
-
-private:
-    std::unique_ptr<NMVP::TMVP> Mvp;
-};
 
 NMVP::TSupportLinkEntry MakeLink(TString source, TString url = {}) {
     NMVP::TSupportLinkEntry link;
@@ -59,57 +49,13 @@ TString ValidateAndCatch(
     return {};
 }
 
-void AssertMetaValidationThrows(
-    TStringBuf metaApiEndpoint,
-    TStringBuf metaDatabase,
-    bool hasMetaConfigBlock,
-    NMvp::EAccessServiceType accessServiceType,
-    TStringBuf errorPart)
-{
-    NMVP::TMetaSettings settings{
-        TString(metaApiEndpoint),
-        TString(metaDatabase),
-        hasMetaConfigBlock,
-        accessServiceType,
-        {},
-        {}
-    };
-    TString error;
-    try {
-        NMVP::ValidateMetaBaseConfig(settings);
-    } catch (const yexception& e) {
-        error = e.what();
-    }
-
-    UNIT_ASSERT(!error.empty());
-    UNIT_ASSERT(error.Contains(errorPart));
-}
-
-void AssertMetaValidationNoThrow(
-    TStringBuf metaApiEndpoint,
-    TStringBuf metaDatabase,
-    bool hasMetaConfigBlock,
-    NMvp::EAccessServiceType accessServiceType)
-{
-    NMVP::TMetaSettings settings{
-        TString(metaApiEndpoint),
-        TString(metaDatabase),
-        hasMetaConfigBlock,
-        accessServiceType,
-        {},
-        {}
-    };
-    UNIT_ASSERT_NO_EXCEPTION(
-        NMVP::ValidateMetaBaseConfig(settings)
-    );
-}
-
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(MetaBaseConfiguration) {
 
     Y_UNIT_TEST(AcceptsValidGrafanaDashboardAndSearchConfig) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         NMVP::TGrafanaSupportConfig grafana;
         grafana.Endpoint = "https://grafana.example.net";
@@ -124,58 +70,81 @@ Y_UNIT_TEST_SUITE(MetaBaseConfiguration) {
 }
 
 Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
-    Y_UNIT_TEST(MetaBlockWithoutApiEndpointThrows) {
-        AssertMetaValidationThrows(
-            "",
-            "/Root/meta",
-            true,
-            NMvp::yandex_v2,
-            "meta.meta_api_endpoint must be specified in meta config.");
+    Y_UNIT_TEST(MetaBlockWithoutApiEndpointAllowsEmptyValues) {
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_database: "/Root/meta"
+)", "mvp_meta_missing_endpoint", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
-    Y_UNIT_TEST(MetaBlockWithoutDatabaseThrows) {
-        AssertMetaValidationThrows(
-            "grpc://meta.ydb.example.net:2135",
-            "",
-            true,
-            NMvp::yandex_v2,
-            "meta.meta_database must be specified in meta config.");
+    Y_UNIT_TEST(MetaBlockWithoutDatabaseAllowsEmptyValues) {
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+)", "mvp_meta_missing_database", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
-    Y_UNIT_TEST(NebiusWithoutApiEndpointThrows) {
-        AssertMetaValidationThrows(
-            "",
-            "/Root/meta",
-            false,
-            NMvp::nebius_v1,
-            "meta.meta_api_endpoint must be specified for access_service_type=nebius_v1.");
+    Y_UNIT_TEST(NebiusWithoutApiEndpointAllowsEmptyValues) {
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "nebius_v1"
+)", "mvp_meta_nebius_without_endpoint", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
-    Y_UNIT_TEST(NebiusWithoutDatabaseThrows) {
-        AssertMetaValidationThrows(
-            "grpc://meta.ydb.example.net:2135",
-            "",
-            false,
-            NMvp::nebius_v1,
-            "meta.meta_database must be specified for access_service_type=nebius_v1.");
+    Y_UNIT_TEST(NebiusWithoutDatabaseAllowsEmptyValues) {
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "nebius_v1"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: ""
+)", "mvp_meta_nebius_without_database", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
     Y_UNIT_TEST(NebiusWithRequiredFieldsDoesNotThrow) {
-        AssertMetaValidationNoThrow(
-            "grpc://meta.ydb.example.net:2135",
-            "/Root/meta",
-            false,
-            NMvp::nebius_v1);
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "nebius_v1"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+)", "mvp_meta_nebius_with_required_fields", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
     Y_UNIT_TEST(YandexWithoutMetaBlockAllowsEmptyValues) {
-        AssertMetaValidationNoThrow("", "", false, NMvp::yandex_v2);
+        TTempFileHandle tmpYaml = MakeTestFile(R"(
+generic:
+  access_service_type: "yandex_v2"
+)", "mvp_meta_yandex_without_meta_block", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 }
 
 Y_UNIT_TEST_SUITE(SupportUrlConfiguration) {
     Y_UNIT_TEST(RejectsMissingSource) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         const TString error = ValidateAndCatch(
             {MakeLink("", "/d/cpu")},
@@ -187,7 +156,8 @@ Y_UNIT_TEST_SUITE(SupportUrlConfiguration) {
     }
 
     Y_UNIT_TEST(RejectsUnsupportedSource) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         const TString error = ValidateAndCatch(
             {MakeLink("unknown/source", "/x")},
@@ -199,7 +169,8 @@ Y_UNIT_TEST_SUITE(SupportUrlConfiguration) {
     }
 
     Y_UNIT_TEST(RejectsGrafanaDashboardWithoutUrl) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         const TString error = ValidateAndCatch(
             {MakeLink(NMVP::NSupportLinks::SOURCE_GRAFANA_DASHBOARD)},
@@ -214,7 +185,8 @@ Y_UNIT_TEST_SUITE(SupportUrlConfiguration) {
 
 Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
     Y_UNIT_TEST(RejectsRelativeGrafanaDashboardUrlWithoutEndpoint) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         const TString error = ValidateAndCatch(
             {MakeLink(NMVP::NSupportLinks::SOURCE_GRAFANA_DASHBOARD, "/d/cpu")},
@@ -226,7 +198,8 @@ Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
     }
 
     Y_UNIT_TEST(RejectsGrafanaSearchWithoutSecretName) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         NMVP::TGrafanaSupportConfig grafana;
         grafana.Endpoint = "https://grafana.example.net";
@@ -242,7 +215,8 @@ Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
     }
 
     Y_UNIT_TEST(RejectsGrafanaSearchDefaultRelativeUrlWithoutEndpoint) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         NMVP::TGrafanaSupportConfig grafana;
         grafana.SecretName = "grafana-secret";
@@ -257,7 +231,8 @@ Y_UNIT_TEST_SUITE(GrafanaConfiguration) {
     }
 
     Y_UNIT_TEST(AcceptsGrafanaSearchWithSecretName) {
-        TMvpGuard guard;
+        const char* argv[] = {"support_links_configuration_ut"};
+        auto mvp = std::make_unique<NMVP::TMVP>(1, argv);
 
         NMVP::TGrafanaSupportConfig grafana;
         grafana.Endpoint = "https://grafana.example.net";

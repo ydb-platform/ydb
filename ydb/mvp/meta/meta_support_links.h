@@ -91,9 +91,9 @@ public:
     }
 
     TVector<const ILinkSource*> GetRequestedSources() const {
-        const TVector<std::unique_ptr<ILinkSource>>* links = &InstanceMVP->MetaSettings.SupportLinksConfig.Cluster;
+        const TVector<std::shared_ptr<ILinkSource>>* links = &InstanceMVP->MetaSettings.ClusterLinkSources;
         if (EntityType && *EntityType == EEntityType::Database) {
-            links = &InstanceMVP->MetaSettings.SupportLinksConfig.Database;
+            links = &InstanceMVP->MetaSettings.DatabaseLinkSources;
         }
 
         TVector<const ILinkSource*> requestedLinks;

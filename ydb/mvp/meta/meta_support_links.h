@@ -2,7 +2,6 @@
 
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
-#include <ydb/mvp/meta/support_links/resolver_factory.h>
 #include <ydb/mvp/meta/support_links/events.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -20,6 +19,12 @@
 namespace NMVP {
 
 using namespace NKikimr;
+
+namespace {
+
+constexpr TStringBuf SOURCE_META = "meta";
+
+} // namespace
 
 class TMetaSupportLinksGetHandlerActor : THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:
@@ -92,8 +97,8 @@ public:
         if (cluster.empty()) {
             SourceSlots.resize(1);
             SourceSlots[0].Errors.emplace_back(NSupportLinks::TSupportError{
-                .Source = TString(NSupportLinks::SOURCE_META),
-                .Message = TString(NSupportLinks::INVALID_IDENTITY_PARAMS_MESSAGE)
+                .Source = TString(SOURCE_META),
+                .Message = "Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'."
             });
             return false;
         }
@@ -120,7 +125,27 @@ public:
     }
 
     virtual NActors::IActor* CreateSourceHandler(NSupportLinks::TLinkResolveContext sourceContext) {
-        return NSupportLinks::BuildSourceHandler(std::move(sourceContext));
+        class TUnsupportedSourceResolver : public NActors::TActorBootstrapped<TUnsupportedSourceResolver> {
+        public:
+            explicit TUnsupportedSourceResolver(NSupportLinks::TLinkResolveContext context)
+                : Context(std::move(context))
+            {}
+
+            void Bootstrap(const NActors::TActorContext& ctx) {
+                TVector<NSupportLinks::TSupportError> errors;
+                errors.emplace_back(NSupportLinks::TSupportError{
+                    .Source = Context.LinkConfig.Source,
+                    .Message = TStringBuilder() << "unsupported support_links source: " << Context.LinkConfig.Source
+                });
+                ctx.Send(Context.Parent, new NSupportLinks::TEvPrivate::TEvSourceResponse(Context.Place, {}, std::move(errors)));
+                Die(ctx);
+            }
+
+        private:
+            NSupportLinks::TLinkResolveContext Context;
+        };
+
+        return new TUnsupportedSourceResolver(std::move(sourceContext));
     }
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
@@ -163,7 +188,7 @@ public:
         NYdb::TResultSetParser rsParser(resultSet);
         if (!rsParser.TryNextRow()) {
             AddCommonError({
-                .Source = TString(NSupportLinks::SOURCE_META),
+                .Source = TString(SOURCE_META),
                 .Message = TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db"
             });
         } else {
@@ -229,7 +254,7 @@ public:
     void AddCommonError(NSupportLinks::TSupportError error) {
         if (SourceSlots.empty()) {
             SourceSlots.resize(1);
-            SourceSlots[0].Source = TString(NSupportLinks::SOURCE_META);
+            SourceSlots[0].Source = TString(SOURCE_META);
         }
         SourceSlots[0].Errors.emplace_back(std::move(error));
     }

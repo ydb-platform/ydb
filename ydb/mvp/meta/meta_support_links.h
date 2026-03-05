@@ -30,7 +30,7 @@ using namespace NKikimr;
 
 inline constexpr TStringBuf SOURCE_META = "meta";
 
-class TMetaSupportLinksGetHandlerActor : THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
+class TMetaSupportLinksGetHandlerActor : private THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
     using EEntityType = TSupportLinksResolver::EEntityType;

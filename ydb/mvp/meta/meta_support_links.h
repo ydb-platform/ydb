@@ -4,7 +4,7 @@
 #include <ydb/mvp/core/core_ydb_impl.h>
 #include <ydb/mvp/meta/support_links/events.h>
 #include <ydb/mvp/meta/link_source.h>
-#include <ydb/mvp/meta/support_links/resolution_context.h>
+#include <ydb/mvp/meta/support_links/support_links_resolver.h>
 
 #include <memory>
 
@@ -33,10 +33,7 @@ class TMetaSupportLinksGetHandlerActor
     , public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>
 {
 public:
-    enum class EEntityType {
-        Cluster,
-        Database,
-    };
+    using EEntityType = TSupportLinksResolver::EEntityType;
 
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
 
@@ -44,10 +41,10 @@ public:
     const TYdbLocation& Location;
     TRequest Request;
     TMaybe<NYdb::NTable::TSession> Session;
-    TMaybe<EEntityType> EntityType;
+    EEntityType EntityType = EEntityType::Cluster;
     THashMap<TString, TString> ClusterColumns;
     TVector<std::pair<TString, TString>> QueryParams;
-    std::unique_ptr<TResolutionContext> ResolutionContext;
+    std::unique_ptr<TSupportLinksResolver> SupportLinksResolver;
     TVector<NSupportLinks::TSupportError> PendingErrors;
 
     TMetaSupportLinksGetHandlerActor(
@@ -80,28 +77,11 @@ public:
         const TString database = Request.Parameters["database"];
 
         if (cluster.empty()) {
-            AddCommonError(NSupportLinks::TSupportError{
-                .Source = TString(NSupportLinks::SOURCE_META),
-                .Message = TString(NSupportLinks::INVALID_IDENTITY_PARAMS_MESSAGE)
-            });
+            AddCommonError(NSupportLinks::INVALID_IDENTITY_PARAMS_MESSAGE);
             return false;
         }
         EntityType = database.empty() ? EEntityType::Cluster : EEntityType::Database;
         return true;
-    }
-
-    TVector<const ILinkSource*> GetRequestedSources() const {
-        const TVector<std::shared_ptr<ILinkSource>>* links = &InstanceMVP->MetaSettings.ClusterLinkSources;
-        if (EntityType && *EntityType == EEntityType::Database) {
-            links = &InstanceMVP->MetaSettings.DatabaseLinkSources;
-        }
-
-        TVector<const ILinkSource*> requestedLinks;
-        requestedLinks.reserve(links->size());
-        for (const auto& link : *links) {
-            requestedLinks.push_back(link.get());
-        }
-        return requestedLinks;
     }
 
     virtual void RequestClusterInfo(const NActors::TActorContext& ctx) {
@@ -154,10 +134,7 @@ public:
         const auto& columnsMeta = resultSet.GetColumnsMeta();
         NYdb::TResultSetParser rsParser(resultSet);
         if (!rsParser.TryNextRow()) {
-            AddCommonError({
-                .Source = TString(NSupportLinks::SOURCE_META),
-                .Message = TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db"
-            });
+            AddCommonError(TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db");
         } else {
             for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
                 const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
@@ -169,15 +146,15 @@ public:
     }
 
     void ResolveSources() {
-        ResolutionContext = TResolutionContext::Build(TResolutionContext::TParams{
-            .Sources = GetRequestedSources(),
+        SupportLinksResolver = std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
+            .EntityType = EntityType,
             .ClusterColumns = ClusterColumns,
             .QueryParams = QueryParams,
             .Parent = SelfId(),
             .HttpProxyId = HttpProxyId,
         });
-        ResolutionContext->Start();
-        if (ResolutionContext->IsFinished()) {
+        SupportLinksResolver->Start();
+        if (SupportLinksResolver->IsFinished()) {
             ReplyOkAndDie();
             return;
         }
@@ -185,21 +162,24 @@ public:
     }
 
     void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {
-        ResolutionContext->OnSourceResponse(event);
-        if (ResolutionContext->IsFinished()) {
+        SupportLinksResolver->OnSourceResponse(event);
+        if (SupportLinksResolver->IsFinished()) {
             ReplyOkAndDie();
         }
     }
 
     void HandleTimeout() {
-        if (ResolutionContext) {
-            ResolutionContext->HandleTimeout();
+        if (SupportLinksResolver) {
+            SupportLinksResolver->HandleTimeout();
         }
         ReplyOkAndDie();
     }
 
-    void AddCommonError(NSupportLinks::TSupportError error) {
-        PendingErrors.emplace_back(std::move(error));
+    void AddCommonError(TString message) {
+        PendingErrors.emplace_back(NSupportLinks::TSupportError{
+            .Source = TString(NSupportLinks::SOURCE_META),
+            .Message = std::move(message),
+        });
     }
 
     void ReplyOkAndDie() {
@@ -236,8 +216,8 @@ public:
         NJson::TJsonValue errorsJson;
         errorsJson.SetType(NJson::JSON_ARRAY);
 
-        if (ResolutionContext) {
-            for (const auto& sourceOutput : ResolutionContext->GetSourceOutput()) {
+        if (SupportLinksResolver) {
+            for (const auto& sourceOutput : SupportLinksResolver->GetSourceOutput()) {
                 for (const auto& link : sourceOutput.Links) {
                     NJson::TJsonValue& linkItem = linksJson.AppendValue(NJson::TJsonValue());
                     if (!link.Title.empty()) {

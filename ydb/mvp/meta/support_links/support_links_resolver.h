@@ -11,34 +11,37 @@ class ILinkSource;
 
 struct TSourceOutput {
     TString Name;
-    bool Waiting = true;
+    bool Ready = false;
     TVector<NSupportLinks::TResolvedLink> Links;
     TVector<NSupportLinks::TSupportError> Errors;
 };
 
-class TResolutionContext {
+class TSupportLinksResolver {
 public:
+    enum class EEntityType {
+        Cluster,
+        Database,
+    };
+
     struct TParams {
-        TVector<const ILinkSource*> Sources;
+        EEntityType EntityType = EEntityType::Cluster;
         THashMap<TString, TString> ClusterColumns;
         TVector<std::pair<TString, TString>> QueryParams;
         NActors::TActorId Parent;
         NActors::TActorId HttpProxyId;
     };
 
-    static std::unique_ptr<TResolutionContext> Build(TParams params);
+    explicit TSupportLinksResolver(TParams params);
     void Start();
 
     void OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event);
     void HandleTimeout();
     void ReportResolved(size_t place, TVector<NSupportLinks::TResolvedLink> links, TVector<NSupportLinks::TSupportError> errors);
     const TVector<TSourceOutput>& GetSourceOutput() const;
-    bool Waiting() const;
     bool IsFinished() const;
 
 private:
-    TResolutionContext() = default;
-    void Initialize(TParams params);
+    auto MakeResolveInput(size_t place) const;
 
     TVector<const ILinkSource*> Sources;
     TVector<TSourceOutput> SourceOutputs;

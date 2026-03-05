@@ -122,11 +122,9 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
                 PutTabletLogResponseTime256.Increment(durationMs);
                 Y_DEBUG_ABORT_UNLESS(PutTabletLogResponseTimeHist256Ki[idx]);
                 PutTabletLogResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
-                PutTabletLogResponseTimeMax256Ki[idx].Collect(durationMs);
             } else {
                 Y_DEBUG_ABORT_UNLESS(PutTabletLogResponseTimeHistInf[idx]);
                 PutTabletLogResponseTimeHistInf[idx]->Collect(durationMsFloat);
-                PutTabletLogResponseTimeMaxInf[idx].Collect(durationMs);
                 if (size < (512 << 10)) {
                     PutTabletLogResponseTime512.Increment(durationMs);
                 }
@@ -136,13 +134,11 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
             PutAsyncBlobResponseTime.Increment(durationMs);
             Y_DEBUG_ABORT_UNLESS(PutAsyncBlobResponseTimeHist[idx]);
             PutAsyncBlobResponseTimeHist[idx]->Collect(durationMsFloat);
-            PutAsyncBlobResponseTimeMax[idx].Collect(durationMs);
             break;
         case NKikimrBlobStorage::EPutHandleClass::UserData:
             PutUserDataResponseTime.Increment(durationMs);
             Y_DEBUG_ABORT_UNLESS(PutUserDataResponseTimeHist[idx]);
             PutUserDataResponseTimeHist[idx]->Collect(durationMsFloat);
-            PutUserDataResponseTimeMax[idx].Collect(durationMs);
             break;
         default:
             Y_ABORT("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
@@ -161,32 +157,27 @@ void TDsProxyNodeMon::CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlob
             GetAsyncReadResponseTime.Increment(durationMs);
             Y_DEBUG_ABORT_UNLESS(GetAsyncReadResponseTimeHist[idx]);
             GetAsyncReadResponseTimeHist[idx]->Collect(durationMsFloat);
-            GetAsyncReadResponseTimeMax[idx].Collect(durationMs);
             break;
         case NKikimrBlobStorage::EGetHandleClass::FastRead:
             if (size < (256 << 10)) {
                 GetFastReadResponseTime256Ki.Increment(durationMs);
                 Y_DEBUG_ABORT_UNLESS(GetFastReadResponseTimeHist256Ki[idx]);
                 GetFastReadResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
-                GetFastReadResponseTimeMax256Ki[idx].Collect(durationMs);
             } else {
                 GetFastReadResponseTimeInf.Increment(durationMs);
                 Y_DEBUG_ABORT_UNLESS(GetFastReadResponseTimeHistInf[idx]);
                 GetFastReadResponseTimeHistInf[idx]->Collect(durationMsFloat);
-                GetFastReadResponseTimeMaxInf[idx].Collect(durationMs);
             }
             break;
         case NKikimrBlobStorage::EGetHandleClass::Discover:
             GetDiscoverResponseTime.Increment(durationMs);
             Y_DEBUG_ABORT_UNLESS(GetDiscoverResponseTimeHist[idx]);
             GetDiscoverResponseTimeHist[idx]->Collect(durationMsFloat);
-            GetDiscoverResponseTimeMax[idx].Collect(durationMs);
             break;
         case NKikimrBlobStorage::EGetHandleClass::LowRead:
             GetLowReadResponseTime.Increment(durationMs);
             Y_DEBUG_ABORT_UNLESS(GetLowReadResponseTimeHist[idx]);
             GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat);
-            GetLowReadResponseTimeMax[idx].Collect(durationMs);
             break;
         default:
             Y_ABORT("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
@@ -200,7 +191,6 @@ void TDsProxyNodeMon::CountPatchResponseTime(NPDisk::EDeviceType type, TDuration
     const ui32 idx = IdxForType(type);
     Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
     PatchResponseTimeHist[idx]->Collect(durationMsFloat);
-    PatchResponseTimeMax[idx].Collect(durationMs);
 }
 
 void TDsProxyNodeMon::CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration) {
@@ -210,7 +200,6 @@ void TDsProxyNodeMon::CountGetBlockResponseTime(NPDisk::EDeviceType type, TDurat
     const ui32 idx = IdxForType(type);
     Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
     GetBlockResponseTimeHist[idx]->Collect(durationMsFloat);
-    GetBlockResponseTimeMax[idx].Collect(durationMs);
 }
 
 void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type) {
@@ -227,27 +216,16 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type
         };
 
         PutTabletLogResponseTimeHist256Ki[idx] = getNamedHisto("putTabletLog256KiMs");
-        PutTabletLogResponseTimeMax256Ki[idx].Init(subGroup->GetCounter("putTabletLog256KiMsMax", false));
         PutTabletLogResponseTimeHistInf[idx] = getNamedHisto("putTabletLogInfMs");
-        PutTabletLogResponseTimeMaxInf[idx].Init(subGroup->GetCounter("putTabletLogInfMsMax", false));
         PutAsyncBlobResponseTimeHist[idx] = getNamedHisto("putAsyncBlobMs");
-        PutAsyncBlobResponseTimeMax[idx].Init(subGroup->GetCounter("putAsyncBlobMsMax", false));
         PutUserDataResponseTimeHist[idx] = getNamedHisto("putUserDataMs");
-        PutUserDataResponseTimeMax[idx].Init(subGroup->GetCounter("putUserDataMsMax", false));
         GetAsyncReadResponseTimeHist[idx] = getNamedHisto("getAsyncReadMs");
-        GetAsyncReadResponseTimeMax[idx].Init(subGroup->GetCounter("getAsyncReadMsMax", false));
         GetFastReadResponseTimeHist256Ki[idx] = getNamedHisto("getFastRead256KiMs");
-        GetFastReadResponseTimeMax256Ki[idx].Init(subGroup->GetCounter("getFastRead256KiMsMax", false));
         GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs");
-        GetFastReadResponseTimeMaxInf[idx].Init(subGroup->GetCounter("getFastReadInfMsMax", false));
         GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs");
-        GetDiscoverResponseTimeMax[idx].Init(subGroup->GetCounter("getDiscoverMsMax", false));
         GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs");
-        GetLowReadResponseTimeMax[idx].Init(subGroup->GetCounter("getLowReadMsMax", false));
         GetBlockResponseTimeHist[idx] = getNamedHisto("getBlockMs");
-        GetBlockResponseTimeMax[idx].Init(subGroup->GetCounter("getBlockMsMax", false));
         PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
-        PatchResponseTimeMax[idx].Init(subGroup->GetCounter("patchMsMax", false));
     }
 }
 
@@ -272,21 +250,6 @@ void TDsProxyNodeMon::Update() {
     IndexRestoreGetResponseTime.Update();
     RangeResponseTime.Update();
     PatchResponseTime.Update();
-    for (ui32 idx = 0; idx < KnownDeviceTypesCount; ++idx) {
-        PutTabletLogResponseTimeMax256Ki[idx].Update();
-        PutTabletLogResponseTimeMaxInf[idx].Update();
-        PutAsyncBlobResponseTimeMax[idx].Update();
-        PutUserDataResponseTimeMax[idx].Update();
-
-        GetAsyncReadResponseTimeMax[idx].Update();
-        GetFastReadResponseTimeMax256Ki[idx].Update();
-        GetFastReadResponseTimeMaxInf[idx].Update();
-        GetDiscoverResponseTimeMax[idx].Update();
-        GetLowReadResponseTimeMax[idx].Update();
-        GetBlockResponseTimeMax[idx].Update();
-
-        PatchResponseTimeMax[idx].Update();
-    }
 }
 
 } // NKikimr

@@ -36,42 +36,30 @@ struct TDsProxyNodeMon : public TThrRefBase {
 
     static constexpr ui32 KnownDeviceTypesCount = 4;
     using THistoPtrForDeviceType = std::array<NMonitoring::THistogramPtr, KnownDeviceTypesCount>;
-    using TMaxTrackerForDeviceType = std::array<TMaxTracker, KnownDeviceTypesCount>;
     THistoPtrForDeviceType PutTabletLogResponseTimeHist256Ki;
-    TMaxTrackerForDeviceType PutTabletLogResponseTimeMax256Ki;
     THistoPtrForDeviceType PutTabletLogResponseTimeHistInf;
-    TMaxTrackerForDeviceType PutTabletLogResponseTimeMaxInf;
 
     NMonitoring::TPercentileTracker<4, 512, 15> PutAsyncBlobResponseTime;
     THistoPtrForDeviceType PutAsyncBlobResponseTimeHist;
-    TMaxTrackerForDeviceType PutAsyncBlobResponseTimeMax;
     NMonitoring::TPercentileTracker<4, 512, 15> PutUserDataResponseTime;
     THistoPtrForDeviceType PutUserDataResponseTimeHist;
-    TMaxTrackerForDeviceType PutUserDataResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> GetResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> GetAsyncReadResponseTime;
     THistoPtrForDeviceType GetAsyncReadResponseTimeHist;
-    TMaxTrackerForDeviceType GetAsyncReadResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTime256Ki;
     THistoPtrForDeviceType GetFastReadResponseTimeHist256Ki;
-    TMaxTrackerForDeviceType GetFastReadResponseTimeMax256Ki;
     NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTimeInf;
     THistoPtrForDeviceType GetFastReadResponseTimeHistInf;
-    TMaxTrackerForDeviceType GetFastReadResponseTimeMaxInf;
     NMonitoring::TPercentileTracker<16, 512, 15> GetDiscoverResponseTime;
     THistoPtrForDeviceType GetDiscoverResponseTimeHist;
-    TMaxTrackerForDeviceType GetDiscoverResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetLowReadResponseTime;
     THistoPtrForDeviceType GetLowReadResponseTimeHist;
-    TMaxTrackerForDeviceType GetLowReadResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetBlockResponseTime;
     THistoPtrForDeviceType GetBlockResponseTimeHist;
-    TMaxTrackerForDeviceType GetBlockResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime;
     THistoPtrForDeviceType PatchResponseTimeHist;
-    TMaxTrackerForDeviceType PatchResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> BlockResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime;

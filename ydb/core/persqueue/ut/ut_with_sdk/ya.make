@@ -8,7 +8,7 @@ FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
-    REQUIREMENTS(cpu:8)
+    REQUIREMENTS(cpu:4)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)

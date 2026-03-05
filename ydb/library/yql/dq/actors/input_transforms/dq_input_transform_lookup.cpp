@@ -47,6 +47,10 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
+<<<<<<< HEAD
+=======
+        TDqComputeActorWatermarks* watermarksTracker,
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
         const THashMap<TString, TString>& secureParams,
         size_t fullscanRowLimit = 5000)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
@@ -359,6 +363,10 @@ private:
                 Y_DEBUG_ABORT_UNLESS(fullscan || lookupPayload != nullptr);
                 AddReadyQueue(lookupKey, inputOther, lookupPayload);
             }
+<<<<<<< HEAD
+=======
+            PushReadyWatermark();
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
         } else if (!IsMultiMatches) {
 #if 0 // TODO
@@ -367,11 +375,17 @@ private:
 #if 0 // TODO
             // Opportunistially populate LRU cache with partial fullscan results
             // (again, in case of MultiMatches, we cannot use partial results)
+<<<<<<< HEAD
             if (!DisableLruCache) {
                 for (auto& [k, v]: *lookupResult) {
                     Y_DEBUG_ABORT_UNLESS(v);
                     LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
                 }
+=======
+            for (auto& [k, v]: *lookupResult) {
+                Y_DEBUG_ABORT_UNLESS(v);
+                LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
             }
 #endif
         }
@@ -392,7 +406,11 @@ private:
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);
             lookupResult.reset();
+<<<<<<< HEAD
             if (!FullscanReady && !DisableLruCache) { // don't populate LRU cache when we have (complete) fullscan results
+=======
+            if (!FullscanReady) { // don't populate LRU cache when we have (complete) fullscan results
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
                 for (auto& [k, v]: *KeysForLookup) {
                     LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
                 }

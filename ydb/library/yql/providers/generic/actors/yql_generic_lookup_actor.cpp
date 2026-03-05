@@ -227,7 +227,11 @@ namespace NYql::NDq {
 
         void Handle(TEvListSplitsPart::TPtr ev) {
             auto response = std::move(ev->Get()->Response);
+<<<<<<< HEAD
             Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
+=======
+            Y_ABORT_UNLESS(response.splits_size() == 1);
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 
@@ -321,6 +325,14 @@ namespace NYql::NDq {
         void Handle(TEvLookupRequest::TPtr ev) {
             auto guard = Guard(*Alloc);
             CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
+<<<<<<< HEAD
+=======
+        }
+
+        void HandleException(const std::exception& e) {
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+            SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
+>>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
         }
 
     private:

@@ -1,3 +1,4 @@
+// CI: resource monitoring (CPU/RAM/disk) during ya make
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>

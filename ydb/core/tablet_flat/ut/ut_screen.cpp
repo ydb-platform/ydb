@@ -1,3 +1,4 @@
+// CI: resource monitoring (CPU/RAM/disk) during ya make
 #include <ydb/core/tablet_flat/flat_part_shrink.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/rows/mass.h>

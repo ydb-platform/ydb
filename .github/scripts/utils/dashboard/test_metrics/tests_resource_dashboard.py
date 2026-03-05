@@ -750,8 +750,9 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         cpu_ya_cores.append(float(r.get("cpu_ya_pct", 0) or 0) / 100.0 * cpu_cores)
         ram_gb.append(float(r.get("ram_used_kb", 0) or 0) / (1024 * 1024))
         ram_ya_gb.append(float(r.get("ram_ya_kb", 0) or 0) / (1024 * 1024))
-        disk_read_mb.append(float(r.get("disk_read_mb_delta", 0) or 0))
-        disk_write_mb.append(float(r.get("disk_write_mb_delta", 0) or 0))
+        # Prefer normalized MB/s; fallback to legacy per-sample deltas.
+        disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
+        disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
     if not xs_evlog:
         return None
     return {

@@ -11,6 +11,7 @@ Output format (JSONL, one JSON object per line):
   - cpu_total_pct, ram_used_kb: system-wide CPU/RAM usage
   - disk_*_sectors: ABSOLUTE system-wide disk I/O counters (cumulative)
   - disk_*_mb_delta (e.g. disk_read_mb_delta): per-sample delta in MB
+  - disk_*_mbps (e.g. disk_read_mbps): normalized MB/s by actual sample interval
   - cpu_ya_pct, ram_ya_kb, disk_ya_*: ya make process tree only
   - cpu_per_pid: ALL processes in ya tree (no top-N limit)
 """
@@ -215,20 +216,25 @@ def get_ram_total_gb() -> float:
 
 
 def read_diskstats() -> tuple[int, int]:
-    """Read /proc/diskstats. Return (total_read_sectors, total_write_sectors) for block devices."""
+    """Read /proc/diskstats. Return (total_read_sectors, total_write_sectors) for root block devices."""
     read_sectors = 0
     write_sectors = 0
+    try:
+        root_block_devices = {p.name for p in Path("/sys/block").iterdir() if p.is_dir()}
+    except OSError:
+        root_block_devices = set()
     with open("/proc/diskstats") as f:
         for line in f:
             parts = line.split()
             if len(parts) < 14:
                 continue
-            # Skip partitions (major 1 = ram, 7 = loop, 11 = sr - skip; keep 8, 259 = nvme/sd)
             try:
-                major = int(parts[0])
-                minor = int(parts[1])
                 name = parts[2]
-                # Skip dm-*, loop*, ram*
+                # Keep only root block devices from /sys/block.
+                # This avoids double-counting partitions (e.g. nvme0n1 + nvme0n1p1).
+                if root_block_devices and name not in root_block_devices:
+                    continue
+                # Skip virtual devices that distort host-level picture.
                 if name.startswith("dm-") or name.startswith("loop") or name.startswith("ram"):
                     continue
                 # columns 4-5: read sectors, 8-9: write sectors (0-indexed)
@@ -252,6 +258,7 @@ def run_monitor(
     prev_ya_io: tuple[int, int] = (0, 0)
     meta_added = False
     time.sleep(interval_sec)
+    prev_ts = time.time()
 
     with open(output_jsonl, "w") as jf:
         while True:
@@ -259,6 +266,10 @@ def run_monitor(
                 break
             ts = time.time()
             ts_us = int(ts * 1_000_000)
+            dt = ts - prev_ts
+            prev_ts = ts
+            if dt <= 0:
+                dt = interval_sec if interval_sec > 0 else 1.0
 
             # CPU total (absolute)
             curr_stat = read_proc_stat()
@@ -305,6 +316,8 @@ def run_monitor(
             # ya disk delta
             disk_ya_read_mb = (ya_read_bytes - prev_ya_io[0]) / (1024 * 1024)
             disk_ya_write_mb = (ya_write_bytes - prev_ya_io[1]) / (1024 * 1024)
+            disk_ya_read_mbps = disk_ya_read_mb / dt
+            disk_ya_write_mbps = disk_ya_write_mb / dt
             prev_ya_io = (ya_read_bytes, ya_write_bytes)
 
             # RAM (absolute)
@@ -317,10 +330,13 @@ def run_monitor(
             prev_disk = curr_disk
             disk_read_mb = disk_read_delta * 512 / (1024 * 1024)
             disk_write_mb = disk_write_delta * 512 / (1024 * 1024)
+            disk_read_mbps = disk_read_mb / dt
+            disk_write_mbps = disk_write_mb / dt
 
             record = {
                 "ts": round(ts, 3),
                 "ts_us": ts_us,
+                "dt_sec": round(dt, 6),
                 "cpu_total_pct": round(cpu_total_pct, 2),
                 "cpu_ya_pct": round(cpu_ya_pct, 2),
                 "cpu_per_pid": cpu_per_pid,
@@ -330,8 +346,12 @@ def run_monitor(
                 "disk_write_sectors": curr_disk[1],
                 "disk_read_mb_delta": round(disk_read_mb, 2),
                 "disk_write_mb_delta": round(disk_write_mb, 2),
+                "disk_read_mbps": round(disk_read_mbps, 2),
+                "disk_write_mbps": round(disk_write_mbps, 2),
                 "disk_ya_read_mb_delta": round(disk_ya_read_mb, 2),
                 "disk_ya_write_mb_delta": round(disk_ya_write_mb, 2),
+                "disk_ya_read_mbps": round(disk_ya_read_mbps, 2),
+                "disk_ya_write_mbps": round(disk_ya_write_mbps, 2),
             }
             if not meta_added:
                 record["cpu_cores"] = get_cpu_cores()

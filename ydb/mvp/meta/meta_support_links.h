@@ -20,6 +20,9 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <memory>

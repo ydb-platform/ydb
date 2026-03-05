@@ -233,9 +233,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     TryGetMetaOptionsFromConfig();
 
-    const bool isNebius = StartupOptions.AccessServiceType == NMvp::nebius_v1;
-    if (isNebius) {
-        ValidateMetaBaseConfig(MetaApiEndpoint, MetaDatabase, false, isNebius);
+    if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+        MetaSettings.HasMetaConfigBlock = false;
+        ValidateMetaBaseConfig(MetaSettings);
     }
 
     if (MetaApiEndpoint.empty()) {

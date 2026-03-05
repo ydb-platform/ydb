@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "events.h"
-#include "grafana_resolver_base.h"
+#include "resolver_base.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -24,10 +24,10 @@ public:
         : TGrafanaResolverBase<TGrafanaDashboardSearchResolver>(std::move(context))
     {}
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
+    void Bootstrap() {
         TString token = ReadToken();
         if (token.empty()) {
-            SendResultAndDie(ctx);
+            SendResultAndDie();
             return;
         }
 
@@ -37,7 +37,7 @@ public:
 
         auto request = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
         request->Timeout = TDuration::Seconds(30);
-        ctx.Send(Context.HttpProxyId, request.Release());
+        Send(Context.HttpProxyId, request.Release());
 
         Become(&TGrafanaDashboardSearchResolver::StateWork, TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
@@ -90,15 +90,15 @@ public:
         return searchUrl;
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
         if (!event->Get()->Error.empty() || !event->Get()->Response || event->Get()->Response->Status != "200") {
             AddHttpError(event);
-            SendResultAndDie(ctx);
+            SendResultAndDie();
             return;
         }
 
         ParseDashboards(event->Get()->Response->Body);
-        SendResultAndDie(ctx);
+        SendResultAndDie();
     }
 
     void ParseDashboards(TStringBuf body) {
@@ -148,21 +148,25 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void HandleTimeout(const NActors::TActorContext& ctx) {
+    void HandleTimeout() {
         Errors.emplace_back(TSupportError{
             .Source = Context.SourceName,
             .Message = "Timeout while calling Grafana Search API"
         });
-        SendResultAndDie(ctx);
+        SendResultAndDie();
     }
 
-    void DieResolver(const NActors::TActorContext& ctx) {
-        Die(ctx);
+    void SendSourceResponse() {
+        Send(Context.Parent, new TEvPrivate::TEvSourceResponse(Context.Place, std::move(this->Links), std::move(this->Errors)));
+    }
+
+    void DieResolver() {
+        PassAway();
     }
 };
 

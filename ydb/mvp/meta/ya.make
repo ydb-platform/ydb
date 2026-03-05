@@ -10,6 +10,7 @@ SRCS(
     meta_cache.cpp
     meta_versions.cpp
     mvp.cpp
+    support_links/resolution_context.cpp
 )
 
 PEERDIR(

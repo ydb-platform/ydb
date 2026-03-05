@@ -121,11 +121,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.HttpProxyId = anyHttpProxy;
         context.SourceName = "grafana/dashboard/search";
         context.LinkConfig.SetSource("grafana/dashboard/search");
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
         };
 
-        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
+        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
         auto* response = runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetSource("grafana/dashboard/search");
         context.LinkConfig.SetUrl("/api/search?limit=100&type=dash-db");
         context.LinkConfig.SetTag("ydb-common");
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.QueryParams.emplace_back("cluster", "testing-global");
         context.QueryParams.emplace_back("database", "/root/test");
 
-        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
+        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
         auto* response = runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 3);
@@ -188,14 +188,14 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetSource("grafana/dashboard/search");
         context.LinkConfig.SetUrl("/api/search?limit=100&type=dash-db");
         context.LinkConfig.SetTag("ydb-common");
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
         context.ClusterColumns["grafana_ds"] = "ds";
         context.QueryParams.emplace_back("cluster", "testing-global");
 
-        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
+        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
         auto* response = runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
@@ -221,14 +221,14 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetSource("grafana/dashboard/search");
         context.LinkConfig.SetTag("ydb-common");
         context.LinkConfig.SetFolder("team-folder");
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
         context.ClusterColumns["workspace"] = "ws";
         context.ClusterColumns["grafana_ds"] = "ds";
 
-        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
+        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
         auto* response = runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
@@ -249,12 +249,12 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.HttpProxyId = forbiddenProxy;
         context.SourceName = "grafana/dashboard/search";
         context.LinkConfig.SetSource("grafana/dashboard/search");
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
 
-        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context)));
+        runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
         auto* response = runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);

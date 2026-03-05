@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
 
     Y_UNIT_TEST(BuildsResolvedGrafanaDashboardUrl) {
         TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
         };
 
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config));
+        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
 
     Y_UNIT_TEST(ReturnsPartialUrlAndErrorWhenDatasourceMissing) {
         TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
         };
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config));
+        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
 
     Y_UNIT_TEST(EncodesQueryParamReservedCharacters) {
         TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->GrafanaSupportConfig = NMVP::TGrafanaSupportConfig{
+        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.example.net",
         };
 
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config));
+        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["workspace"] = "ws";

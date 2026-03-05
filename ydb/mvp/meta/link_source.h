@@ -37,8 +37,9 @@ public:
 
 class TGrafanaLinkSourceBase : public ILinkSource {
 public:
-    explicit TGrafanaLinkSourceBase(TSupportLinkEntry config)
+    explicit TGrafanaLinkSourceBase(TSupportLinkEntry config, const TMetaSettings& metaSettings)
         : Config_(std::move(config))
+        , MetaSettings_(metaSettings)
     {}
 
     size_t Place() const override {
@@ -60,16 +61,23 @@ protected:
             .Parent = input.Parent,
             .HttpProxyId = input.HttpProxyId,
         };
-        return NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(resolveContext));
+        return NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(resolveContext), MetaSettings_);
+    }
+
+    const TMetaSettings& GetMetaSettings() const {
+        return MetaSettings_;
     }
 
 private:
     TSupportLinkEntry Config_;
+    const TMetaSettings& MetaSettings_;
 };
 
 class TGrafanaDashboardSource : public TGrafanaLinkSourceBase {
 public:
-    using TGrafanaLinkSourceBase::TGrafanaLinkSourceBase;
+    TGrafanaDashboardSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+        : TGrafanaLinkSourceBase(std::move(config), metaSettings)
+    {}
 
     TSourceOutput Resolve(const TResolveInput& input) const override
     {
@@ -87,7 +95,7 @@ public:
             .Name = Config().GetSource(),
             .Waiting = false,
         };
-        TString url = NSupportLinks::ResolveGrafanaDashboardUrl(InstanceMVP->GrafanaSupportConfig, resolveContext, result.Errors);
+        TString url = NSupportLinks::ResolveGrafanaDashboardUrl(GetMetaSettings().GrafanaConfig, resolveContext, result.Errors);
         if (!url.empty()) {
             result.Links.emplace_back(NSupportLinks::TResolvedLink{
                 .Title = Config().GetTitle(),
@@ -100,7 +108,9 @@ public:
 
 class TGrafanaDashboardSearchSource : public TGrafanaLinkSourceBase {
 public:
-    using TGrafanaLinkSourceBase::TGrafanaLinkSourceBase;
+    TGrafanaDashboardSearchSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+        : TGrafanaLinkSourceBase(std::move(config), metaSettings)
+    {}
 
     TSourceOutput Resolve(const TResolveInput& input) const override
     {
@@ -116,58 +126,59 @@ public:
 
 inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSource(
     TSupportLinkEntry config,
-    const TGrafanaSupportConfig& grafanaConfig)
+    const TMetaSettings& metaSettings)
 {
     NSupportLinks::ValidateGrafanaDashboardResolverConfig(NSupportLinks::TResolverValidationContext{
         .LinkConfig = config,
-        .GrafanaConfig = grafanaConfig,
+        .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_unique<TGrafanaDashboardSource>(std::move(config));
+    return std::make_unique<TGrafanaDashboardSource>(std::move(config), metaSettings);
 }
 
 inline std::unique_ptr<ILinkSource> BuildGrafanaDashboardSearchSource(
     TSupportLinkEntry config,
-    const TGrafanaSupportConfig& grafanaConfig)
+    const TMetaSettings& metaSettings)
 {
     NSupportLinks::ValidateGrafanaDashboardSearchResolverConfig(NSupportLinks::TResolverValidationContext{
         .LinkConfig = config,
-        .GrafanaConfig = grafanaConfig,
+        .GrafanaConfig = metaSettings.GrafanaConfig,
     });
-    return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config));
+    return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
 }
 
-inline std::unique_ptr<ILinkSource> MakeLinkSourceUnchecked(size_t place, TSupportLinkEntry config) {
+inline std::unique_ptr<ILinkSource> MakeLinkSourceUnchecked(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
     (void)place;
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD) {
-        return std::make_unique<TGrafanaDashboardSource>(std::move(config));
+        return std::make_unique<TGrafanaDashboardSource>(std::move(config), metaSettings);
     }
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD_SEARCH) {
-        return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config));
+        return std::make_unique<TGrafanaDashboardSearchSource>(std::move(config), metaSettings);
     }
     ythrow yexception() << "unsupported source=" << config.GetSource();
 }
 
-inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TGrafanaSupportConfig& grafanaConfig) {
+inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config, const TMetaSettings& metaSettings) {
     (void)place;
     if (config.GetSource().empty()) {
         ythrow yexception() << "source is required";
     }
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD) {
-        return BuildGrafanaDashboardSource(std::move(config), grafanaConfig);
+        return BuildGrafanaDashboardSource(std::move(config), metaSettings);
     }
     if (config.GetSource() == NSupportLinks::SOURCE_GRAFANA_DASHBOARD_SEARCH) {
-        return BuildGrafanaDashboardSearchSource(std::move(config), grafanaConfig);
+        return BuildGrafanaDashboardSearchSource(std::move(config), metaSettings);
     }
     ythrow yexception() << "unsupported source=" << config.GetSource();
 }
 
 inline std::unique_ptr<ILinkSource> MakeLinkSource(size_t place, TSupportLinkEntry config) {
     Y_ABORT_UNLESS(InstanceMVP);
-    return MakeLinkSource(place, std::move(config), InstanceMVP->MetaSettings.GrafanaConfig);
+    return MakeLinkSource(place, std::move(config), InstanceMVP->MetaSettings);
 }
 
 inline std::unique_ptr<ILinkSource> MakeGrafanaLinkSource(size_t place, TSupportLinkEntry config) {
-    return MakeLinkSourceUnchecked(place, std::move(config));
+    Y_ABORT_UNLESS(InstanceMVP);
+    return MakeLinkSourceUnchecked(place, std::move(config), InstanceMVP->MetaSettings);
 }
 
 } // namespace NMVP

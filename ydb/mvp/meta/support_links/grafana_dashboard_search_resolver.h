@@ -20,8 +20,8 @@ class TGrafanaDashboardSearchResolver
     : public NActors::TActorBootstrapped<TGrafanaDashboardSearchResolver>
     , public TGrafanaResolverBase<TGrafanaDashboardSearchResolver> {
 public:
-    explicit TGrafanaDashboardSearchResolver(TLinkResolveContext context)
-        : TGrafanaResolverBase<TGrafanaDashboardSearchResolver>(std::move(context))
+    TGrafanaDashboardSearchResolver(TLinkResolveContext context, const TMetaSettings& metaSettings)
+        : TGrafanaResolverBase<TGrafanaDashboardSearchResolver>(std::move(context), metaSettings)
     {}
 
     void Bootstrap() {
@@ -170,8 +170,8 @@ public:
     }
 };
 
-inline NActors::IActor* BuildGrafanaDashboardSearchResolver(TLinkResolveContext context) {
-    return new TGrafanaDashboardSearchResolver(std::move(context));
+inline NActors::IActor* BuildGrafanaDashboardSearchResolver(TLinkResolveContext context, const TMetaSettings& metaSettings) {
+    return new TGrafanaDashboardSearchResolver(std::move(context), metaSettings);
 }
 
 inline void ValidateGrafanaDashboardSearchResolverConfig(const TResolverValidationContext& context)

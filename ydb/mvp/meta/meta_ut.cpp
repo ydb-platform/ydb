@@ -33,12 +33,15 @@ void Validate(
     const TVector<NMVP::TSupportLinkEntry>& databaseLinks,
     NMVP::TGrafanaSupportConfig grafanaConfig)
 {
+    NMVP::TMetaSettings settings;
+    settings.GrafanaConfig = std::move(grafanaConfig);
+
     for (size_t i = 0; i < clusterLinks.size(); ++i) {
-        auto source = NMVP::MakeLinkSource(i, clusterLinks[i], grafanaConfig);
+        auto source = NMVP::MakeLinkSource(i, clusterLinks[i], settings);
         (void)source;
     }
     for (size_t i = 0; i < databaseLinks.size(); ++i) {
-        auto source = NMVP::MakeLinkSource(i, databaseLinks[i], grafanaConfig);
+        auto source = NMVP::MakeLinkSource(i, databaseLinks[i], settings);
         (void)source;
     }
 }

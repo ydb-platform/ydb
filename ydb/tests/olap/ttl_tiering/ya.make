@@ -16,7 +16,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-SPLIT_FACTOR(4)
+SPLIT_FACTOR(10)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)

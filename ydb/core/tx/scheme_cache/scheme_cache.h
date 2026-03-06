@@ -153,6 +153,7 @@ enum class ETableKind {
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
     KindFulltextIndexTable = 5,
+    KindJsonIndexTable = 6,
 };
 
 struct TSchemeCacheNavigate {

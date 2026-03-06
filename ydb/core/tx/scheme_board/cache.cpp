@@ -920,6 +920,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return NSchemeCache::ETableKind::KindVectorIndexTable;
             case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
                 return NSchemeCache::ETableKind::KindFulltextIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
+                return NSchemeCache::ETableKind::KindJsonIndexTable;
             default:
                 return NSchemeCache::ETableKind::KindRegularTable;
             }
@@ -933,6 +935,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
                     return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;

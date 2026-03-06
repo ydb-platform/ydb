@@ -11,7 +11,7 @@
 namespace NMVP {
 
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : UrlParameters(params.UrlParameters.Render())
+    : UrlParameters(std::move(params.UrlParameters))
 {
     if (!params.Sources.empty()) {
         OwnedSources = std::move(params.Sources);

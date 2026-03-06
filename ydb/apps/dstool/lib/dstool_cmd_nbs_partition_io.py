@@ -1,3 +1,4 @@
+import json
 import ydb.apps.dstool.lib.common as common
 import ydb.public.api.protos.draft.ydb_nbs_pb2 as nbs
 
@@ -42,4 +43,9 @@ def do_read(args):
 
     result = nbs.ReadBlocksResult()
     response.operation.result.Unpack(result)
-    print(result)
+
+    # Extract data from IOVector buffers and convert to string
+    data_buffers = [buf.decode('utf-8', errors='replace') for buf in result.Blocks.Buffers]
+
+    output = {'status': common.get_status(response), 'data': ''.join(data_buffers) if data_buffers else ''}
+    print(json.dumps(output))

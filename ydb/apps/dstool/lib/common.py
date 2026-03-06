@@ -742,10 +742,16 @@ def invoke_nbs_request(request_type, request):
     return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
 
 
-def print_nbs_request_result(args, request, response):
+def get_status(response):
     success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+
+    return 'success' if success else 'failure'
+
+
+def print_nbs_request_result(args, request, response):
+    status = get_status(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
+    print_status_if_verbose(args, status, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')

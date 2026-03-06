@@ -71,8 +71,8 @@ message DeletePartitionResult {
 
 message GetLoadActorAdapterActorIdRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    // Partition tablet id (actor id string).
-    string TabletId = 2;
+    // Disk id.
+    string DiskId = 2;
 }
 
 message GetLoadActorAdapterActorIdResponse {

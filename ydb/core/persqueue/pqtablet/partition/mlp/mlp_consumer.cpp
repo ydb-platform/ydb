@@ -10,13 +10,18 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
-static constexpr size_t MaxWALCount = 256;
+static constexpr size_t MaxWALCount = 1024;
 
 enum class EKvCookie {
     InitialRead = 1,
     WALRead = 2,
     TxWrite = 3,
     BackgroundWrite = 4
+};
+
+enum EWakeUpTag {
+    Regular = 1,
+    Processing = 2,
 };
 
 void ReplyError(const TActorIdentity selfActorId, ui32 partitionId, const TActorId& sender, ui64 cookie, TString&& error) {
@@ -131,7 +136,7 @@ void TConsumerActor::Bootstrap() {
 
     Send(TabletActorId, std::move(request));
 
-    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+    Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
 void TConsumerActor::PassAway() {
@@ -187,27 +192,27 @@ void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     Queue(ev);
-    ProcessEventQueue();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     Queue(ev);
-    ProcessEventQueue();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     Queue(ev);
-    ProcessEventQueue();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     Queue(ev);
-    ProcessEventQueue();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     Queue(ev);
-    ProcessEventQueue();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
@@ -369,8 +374,8 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     ReplyOk<TEvPQ::TEvMLPPurgeResponse>(SelfId(), PartitionId, PendingPurgeQueue);
 
     MoveToDLQIfPossible();
-    ProcessEventQueue();
     FetchMessagesIfNeeded();
+    ScheduleProcessing();
 }
 
 void TConsumerActor::CommitIfNeeded() {
@@ -540,8 +545,32 @@ void TConsumerActor::Restart(TString&& error) {
     PassAway();
 }
 
+void TConsumerActor::ScheduleProcessing() {
+    if (ProcessingScheduled) {
+        return;
+    }
+
+    if (ReadRequestsQueue.empty() &&
+        CommitRequestsQueue.empty() &&
+        UnlockRequestsQueue.empty() &&
+        ChangeMessageDeadlineRequestsQueue.empty() &&
+        PurgeRequestsQueue.empty()) {
+        return;
+    }
+
+    auto now = TInstant::Now();
+    if (NextProcessingTime > now) {
+        ProcessingScheduled = true;
+        Schedule(NextProcessingTime - now, new TEvents::TEvWakeup(EWakeUpTag::Processing));
+    } else {
+        ProcessEventQueue();
+    }
+}
+
 void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
+
+    NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliseconds());
 
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
@@ -644,7 +673,7 @@ void TConsumerActor::Persist() {
     LOG_T("Dump befor persist: " << Storage->DebugString());
 
     auto tryInlineChannel = [](auto& write) {
-        if (write->GetValue().size() < 1000) {
+        if (write->GetValue().size() < 2048) {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
     };
@@ -834,9 +863,8 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         LastTimeWithMessages = TInstant::Now();
         NotifyPQRB();
     }
-
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ProcessEventQueue();
+        ScheduleProcessing();
     }
 }
 
@@ -844,12 +872,22 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
     Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
 }
 
-void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
-    FetchMessagesIfNeeded();
-    ProcessEventQueue();
-    UpdateMetrics();
-    NotifyPQRB();
-    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
+    switch (ev->Get()->Tag) {
+        case EWakeUpTag::Regular: {
+            FetchMessagesIfNeeded();
+            ScheduleProcessing();
+            UpdateMetrics();
+            NotifyPQRB();
+            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
+            break;
+        }
+        case EWakeUpTag::Processing: {
+            ProcessingScheduled = false;
+            ProcessEventQueue();
+            break;
+        }
+    }
 }
 
 void TConsumerActor::MoveToDLQIfPossible() {
@@ -906,7 +944,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ProcessEventQueue();
+        ScheduleProcessing();
     }
 }
 
@@ -914,7 +952,7 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
     UpdateMetrics();
     NotifyPQRB();
-    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+    Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {

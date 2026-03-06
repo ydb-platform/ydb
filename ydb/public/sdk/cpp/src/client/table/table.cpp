@@ -2900,8 +2900,9 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     }
     case EIndexType::GlobalJson: {
         auto& settings = *proto.mutable_global_json_index()->mutable_settings();
-        if (GlobalIndexSettings_.size() == 1)
-            GlobalIndexSettings_[0].SerializeTo(settings);
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
+        }
         break;
     }
     case EIndexType::Unknown:

@@ -1484,7 +1484,10 @@ void TTablet::GcLogChannel(ui32 step) {
                     true,
                     gen, step,
                     nullptr, nullptr, TInstant::Max(),
-                    false
+                    false,
+                    false,
+                    false,
+                    TWriteSource::Tablet(TWriteSource::EOp::GcLogChannel)
                 )
             );
         }
@@ -1496,7 +1499,10 @@ void TTablet::GcLogChannel(ui32 step) {
                 true,
                 gen, step,
                 nullptr, nullptr, TInstant::Max(),
-                false
+                false,
+                false,
+                false,
+                TWriteSource::Tablet(TWriteSource::EOp::GcLogChannel)
                 )
             );
     }

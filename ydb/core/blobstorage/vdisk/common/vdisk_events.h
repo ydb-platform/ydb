@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/blobstorage_write_source.h>
 
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
@@ -591,14 +592,16 @@ namespace NKikimr {
 
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls, bool checksumming)
+                NKikimrBlobStorage::EPutHandleClass cls, bool checksumming,
+                TWriteSource writeSource = TWriteSource::Unknown())
         {
-            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
+            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls, writeSource);
             StorePayload(std::move(buffer), checksumming);
         }
 
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
-                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls)
+                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls,
+                TWriteSource writeSource = TWriteSource::Unknown())
         {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&logoBlobId, sizeof(logoBlobId));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
@@ -621,6 +624,9 @@ namespace NKikimr {
             }
             Record.SetHandleClass(cls);
             Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
+            if (writeSource.Op != TWriteSource::EOp::Unknown) {
+                Record.SetWriteSourceOp(writeSource.ToProtoOp());
+            }
         }
 
         bool GetIgnoreBlock() const {
@@ -886,7 +892,8 @@ namespace NKikimr {
         TRope GetItemBuffer(ui64 itemIdx) const;
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie, bool issueKeepFlag, bool ignoreBlock,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool checksumming) {
+                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool checksumming,
+                TWriteSource writeSource = TWriteSource::Unknown()) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
@@ -910,6 +917,9 @@ namespace NKikimr {
             }
             if (traceId) {
                 traceId.Serialize(item->MutableTraceId());
+            }
+            if (writeSource.Op != TWriteSource::EOp::Unknown) {
+                item->SetWriteSourceOp(writeSource.ToProtoOp());
             }
         }
 
@@ -1844,7 +1854,8 @@ namespace NKikimr {
         TEvVBlock()
         {}
 
-        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline, ui64 issuerGuid = 0)
+        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline, ui64 issuerGuid = 0,
+                TWriteSource writeSource = TWriteSource::Unknown())
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
@@ -1856,6 +1867,9 @@ namespace NKikimr {
                 Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
             }
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+            if (writeSource.Op != TWriteSource::EOp::Unknown) {
+                Record.SetWriteSourceOp(writeSource.ToProtoOp());
+            }
         }
     };
 
@@ -2407,7 +2421,8 @@ namespace NKikimr {
         TEvVCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel, bool collect,
             ui32 collectGeneration, ui32 collectStep, bool hard,
             const TVector<TLogoBlobID> *keep, const TVector<TLogoBlobID> *doNotKeep,
-            const TVDiskID &vdisk, TInstant deadline)
+            const TVDiskID &vdisk, TInstant deadline,
+            TWriteSource writeSource = TWriteSource::Unknown())
         {
             Record.SetTabletId(tabletId);
             Record.SetRecordGeneration(recordGeneration);
@@ -2433,6 +2448,9 @@ namespace NKikimr {
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+            if (writeSource.Op != TWriteSource::EOp::Unknown) {
+                Record.SetWriteSourceOp(writeSource.ToProtoOp());
+            }
         }
 
         TString ToString() const override {

@@ -3,7 +3,88 @@
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <array>
+
 namespace NKikimr {
+
+namespace {
+
+using TWriteSourceOp = TWriteSource::EOp;
+
+constexpr std::array<std::pair<TWriteSourceOp, const char*>, 29> WriteSourceOpNames = {{
+    {TWriteSourceOp::Unknown, "Unknown"},
+    {TWriteSourceOp::WriteLogEntry, "WriteLogEntry"},
+    {TWriteSourceOp::WriteLogReference, "WriteLogReference"},
+    {TWriteSourceOp::BlockBlobStorage, "BlockBlobStorage"},
+    {TWriteSourceOp::GcLogChannel, "GcLogChannel"},
+    {TWriteSourceOp::DeleteHardBarrier, "DeleteHardBarrier"},
+    {TWriteSourceOp::FlatCompactionPut, "FlatCompactionPut"},
+    {TWriteSourceOp::FlatCollectGarbage, "FlatCollectGarbage"},
+    {TWriteSourceOp::SkeletonHandoffDelLogoBlob, "SkeletonHandoffDelLogoBlob"},
+    {TWriteSourceOp::SkeletonAddBulkSst, "SkeletonAddBulkSst"},
+    {TWriteSourceOp::SkeletonLocalSyncData, "SkeletonLocalSyncData"},
+    {TWriteSourceOp::SkeletonAnubisOsirisPut, "SkeletonAnubisOsirisPut"},
+    {TWriteSourceOp::SkeletonPhantomBlobs, "SkeletonPhantomBlobs"},
+    {TWriteSourceOp::SyncLogCommitterWrite, "SyncLogCommitterWrite"},
+    {TWriteSourceOp::SyncLogCommitterCommit, "SyncLogCommitterCommit"},
+    {TWriteSourceOp::HugeKeeperWriteBlob, "HugeKeeperWriteBlob"},
+    {TWriteSourceOp::HugeKeeperAllocChunk, "HugeKeeperAllocChunk"},
+    {TWriteSourceOp::HugeKeeperFreeChunk, "HugeKeeperFreeChunk"},
+    {TWriteSourceOp::HugeKeeperEntryPoint, "HugeKeeperEntryPoint"},
+    {TWriteSourceOp::HullDbCommit, "HullDbCommit"},
+    {TWriteSourceOp::HullCompactWorkerWrite, "HullCompactWorkerWrite"},
+    {TWriteSourceOp::HullWriteSst, "HullWriteSst"},
+    {TWriteSourceOp::ChunkKeeperCommit, "ChunkKeeperCommit"},
+    {TWriteSourceOp::MetadataCommit, "MetadataCommit"},
+    {TWriteSourceOp::ScrubWrite, "ScrubWrite"},
+    {TWriteSourceOp::ScrubCommit, "ScrubCommit"},
+    {TWriteSourceOp::LogCutterCutLog, "LogCutterCutLog"},
+    {TWriteSourceOp::SyncerCommit, "SyncerCommit"},
+    {TWriteSourceOp::RecoveredHugeBlob, "RecoveredHugeBlob"},
+}};
+
+constexpr bool IsKnownWriteSourceOpCode(ui32 code) {
+    const auto op = static_cast<TWriteSourceOp>(code);
+    return code == static_cast<ui32>(TWriteSourceOp::Unknown)
+        || TWriteSource::IsTabletOp(op)
+        || TWriteSource::IsVDiskOp(op);
+}
+
+constexpr bool HasNameForWriteSourceOpCode(ui32 code) {
+    for (const auto& [op, _] : WriteSourceOpNames) {
+        if (static_cast<ui32>(op) == code) {
+            return true;
+        }
+    }
+    return false;
+}
+
+constexpr bool ValidateWriteSourceOpNames() {
+    for (size_t i = 0; i < WriteSourceOpNames.size(); ++i) {
+        const ui32 code = static_cast<ui32>(WriteSourceOpNames[i].first);
+        if (!IsKnownWriteSourceOpCode(code)) {
+            return false;
+        }
+        for (size_t j = i + 1; j < WriteSourceOpNames.size(); ++j) {
+            if (WriteSourceOpNames[i].first == WriteSourceOpNames[j].first) {
+                return false;
+            }
+        }
+    }
+
+    for (ui32 code = 0; code <= Max<ui16>(); ++code) {
+        if (IsKnownWriteSourceOpCode(code) && !HasNameForWriteSourceOpCode(code)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static_assert(ValidateWriteSourceOpNames(),
+    "WriteSource op-name table must contain unique names for all known TWriteSource::EOp codes");
+
+} // namespace
 
 TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
         TPDiskConfig *cfg)
@@ -272,6 +353,18 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
 
+    for (const auto& [op, name] : WriteSourceOpNames) {
+        auto [it, inserted] = LogWriteOpCounters.try_emplace(static_cast<ui32>(op));
+        Y_ABORT_UNLESS(inserted);
+        it->second.Setup(true, PDiskGroup, TString(name), EVisibility::Public);
+    }
+
+    for (const auto& [op, name] : WriteSourceOpNames) {
+        auto [it, inserted] = ChunkWriteOpCounters.try_emplace(static_cast<ui32>(op));
+        Y_ABORT_UNLESS(inserted);
+        it->second.Setup(false, PDiskGroup, TString(name), EVisibility::Public);
+    }
+
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
     COUNTER_INIT(PDiskGroup, SubmitThreadCPU, true);
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
@@ -472,6 +565,34 @@ void TPDiskMon::UpdateStats() {
 
     *FreeSpacePerMile = freePerMile;
     *UsedSpacePerMile = usedPerMile;
+}
+
+TPDiskMon::TOpCounters& TPDiskMon::GetLogWriteOpCounters(const TWriteSource& source) {
+    if (auto it = LogWriteOpCounters.find(source.ToProtoOp()); it != LogWriteOpCounters.end()) {
+        return it->second;
+    }
+
+    auto itUnknown = LogWriteOpCounters.find(static_cast<ui32>(TWriteSource::EOp::Unknown));
+    Y_ABORT_UNLESS(itUnknown != LogWriteOpCounters.end());
+    return itUnknown->second;
+}
+
+TPDiskMon::TOpCounters& TPDiskMon::GetChunkWriteOpCounters(const TWriteSource& source) {
+    if (auto it = ChunkWriteOpCounters.find(source.ToProtoOp()); it != ChunkWriteOpCounters.end()) {
+        return it->second;
+    }
+
+    auto itUnknown = ChunkWriteOpCounters.find(static_cast<ui32>(TWriteSource::EOp::Unknown));
+    Y_ABORT_UNLESS(itUnknown != ChunkWriteOpCounters.end());
+    return itUnknown->second;
+}
+
+void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
+    GetLogWriteOpCounters(source).CountRequest(size);
+}
+
+void TPDiskMon::CountChunkWriteOpRequest(const TWriteSource& source, ui32 size) {
+    GetChunkWriteOpCounters(source).CountRequest(size);
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {

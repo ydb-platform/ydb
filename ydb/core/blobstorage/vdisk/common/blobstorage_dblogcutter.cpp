@@ -149,7 +149,9 @@ namespace NKikimr {
                 ui8 signature = TLogSignature::SignatureHullCutLog;
                 ctx.Send(LogCutterCtx.LoggerId,
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
-                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
+                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr,
+                        NPDisk::TEvLog::TCallback(),
+                        TWriteSource::VDisk(TWriteSource::EOp::LogCutterCutLog)));
                 WriteInProgress = true;
                 FirstLsnToKeepLastWritten = curLsn;
 

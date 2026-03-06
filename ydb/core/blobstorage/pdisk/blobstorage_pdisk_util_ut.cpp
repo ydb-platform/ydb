@@ -509,6 +509,29 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         UNIT_ASSERT(memcmp(data.Get(), readData.Get(), size) == 0);
     }
 
+    Y_UNIT_TEST(TPDiskMonWriteOpCounters) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+
+        mon->CountLogWriteOpRequest(TWriteSource::Tablet(TWriteSource::EOp::WriteLogEntry), 100);
+        mon->CountLogWriteOpRequest(TWriteSource::VDisk(TWriteSource::EOp::SyncLogCommitterCommit), 200);
+        mon->CountLogWriteOpRequest(TWriteSource::Unknown(), 300);
+
+        auto pdiskGroup = counters->GetSubgroup("subsystem", "pdisk");
+        auto getCounterValue = [&](const TString& opName, const TString& counterName) -> i64 {
+            return pdiskGroup->GetSubgroup("op", opName)->GetCounter(counterName, true)->Val();
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogRequests"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogBytes"), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogRequests"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogBytes"), 200);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogRequests"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogBytes"), 300);
+    }
+
     Y_UNIT_TEST(FormatSectorMap) {
         TIntrusivePtr<TSectorMap> sectorMap(new TSectorMap(1024*1024*1024));
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;

@@ -40,6 +40,10 @@ TCommandImport::TCommandImport()
 TCommandImportBase::TCommandImportBase(const TString& name, const TString& description)
     : TYdbOperationCommand(name, {}, description)
 {
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "Source path", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
+    });
 }
 
 void TCommandImportBase::Config(TConfig& config) {

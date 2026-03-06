@@ -3,7 +3,6 @@
 #include "target_with_stream.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
 
 namespace NKikimrProto::NMetricsConfig {
     class TMetricsConfig;

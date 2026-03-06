@@ -81,7 +81,7 @@ public:
         auto actorId = NActors::TActivationContext::Register(
             new TMockReplyActor(input.Parent, input.Place),
             input.Parent);
-        out.Actors.push_back(actorId);
+        out.Actor = actorId;
         return out;
     }
 

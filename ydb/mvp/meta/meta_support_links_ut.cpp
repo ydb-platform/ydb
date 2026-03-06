@@ -1,16 +1,17 @@
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/registar.h>
-#include <google/protobuf/text_format.h>
-#include <memory>
-
-#include <ydb/library/actors/testlib/test_runtime.h>
-
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/meta_support_links.h>
 #include <ydb/mvp/meta/support_links/ut/mock_link_source.h>
 
+#include <ydb/library/actors/testlib/test_runtime.h>
+
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/testing/unittest/registar.h>
+
 #include <util/generic/yexception.h>
+
+#include <google/protobuf/text_format.h>
+#include <memory>
 
 Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     class TMvpGuard {
@@ -61,9 +62,9 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         }
     };
 
-    static NHttp::THttpIncomingRequestPtr BuildHttpRequest(TStringBuf url) {
+    static NHttp::THttpIncomingRequestPtr BuildHttpRequest(TStringBuf url, TStringBuf method = "GET") {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, TStringBuilder() << "GET " << url << " HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        EatWholeString(request, TStringBuilder() << method << " " << url << " HTTP/1.1\r\nHost: localhost\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         return request;
     }
@@ -184,6 +185,31 @@ columns {
         UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
         UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("Invalid identity parameters"));
+    }
+
+    Y_UNIT_TEST(SupportLinksReturnsMethodNotAllowedForNonGet) {
+        TMvpGuard mvpGuard;
+        TTestActorRuntime runtime;
+        TAutoPtr<NActors::IEventHandle> handle;
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto anyHttpProxy = runtime.AllocateEdgeActor();
+        TYdbLocation location("meta", "meta", {}, "/Root");
+
+        auto handler = runtime.Register(new NMVP::TMetaSupportLinksHandlerActor(anyHttpProxy, location));
+        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global", "POST");
+        runtime.Send(new NActors::IEventHandle(handler, sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "405");
+
+        NJson::TJsonReaderConfig jsonReaderConfig;
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
+        UNIT_ASSERT(json.Has("errors"));
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
+        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["message"].GetStringRobust(), "Only GET method is supported");
     }
 
     static void AssertMockResponse(TStringBuf body) {

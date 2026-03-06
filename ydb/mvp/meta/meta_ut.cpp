@@ -1,9 +1,9 @@
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/mvp/core/utils.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/source.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/yexception.h>
 #include <yaml-cpp/yaml.h>
@@ -17,7 +17,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_missing_endpoint", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(MetaBlockWithoutDatabaseThrows) {
@@ -28,7 +28,7 @@ meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
 )", "mvp_meta_missing_database", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutApiEndpointThrows) {
@@ -39,7 +39,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_nebius_without_endpoint", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutDatabaseThrows) {
@@ -50,7 +50,7 @@ meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
 )", "mvp_meta_nebius_without_database", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithRequiredFieldsDoesNotThrow) {
@@ -62,7 +62,7 @@ meta:
   meta_database: "/Root/meta"
 )", "mvp_meta_nebius_with_required_fields", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_NO_EXCEPTION(new NMVP::TMVP(3, argv));
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::TMVP(3, argv));
     }
 
     Y_UNIT_TEST(WithoutMetaBlockThrows) {
@@ -72,7 +72,7 @@ generic:
 )", "mvp_meta_yandex_without_meta_block", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            new NMVP::TMVP(3, argv),
+            NMVP::TMVP(3, argv),
             yexception,
             "Check that `meta` section exists and is on the same indentation as `generic` section"
         );
@@ -93,7 +93,7 @@ meta:
         url: "https://example.test"
 )", "mvp_meta_support_links_missing_source", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(new NMVP::TMVP(3, argv), yexception, "source is required");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "source is required");
     }
 
     Y_UNIT_TEST(UnsupportedSourceInConfigDoesNotThrow) {

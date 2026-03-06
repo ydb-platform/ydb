@@ -200,10 +200,12 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appCon
 
     if (config.HasSupportLinks()) {
         const auto& supportLinks = config.GetSupportLinks();
+        MetaSettings.ClusterLinkSources.clear();
         MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
         for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
             MetaSettings.ClusterLinkSources.push_back(MakeLinkSource(supportLinks.GetCluster(i)));
         }
+        MetaSettings.DatabaseLinkSources.clear();
         MetaSettings.DatabaseLinkSources.reserve(supportLinks.GetDatabase().size());
         for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
             MetaSettings.DatabaseLinkSources.push_back(MakeLinkSource(supportLinks.GetDatabase(i)));

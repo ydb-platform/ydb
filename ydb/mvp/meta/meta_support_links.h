@@ -6,8 +6,6 @@
 #include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/meta/support_links/support_links_resolver.h>
 
-#include <memory>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -23,6 +21,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
+#include <memory>
 
 namespace NMVP {
 
@@ -35,14 +34,19 @@ public:
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
     using EEntityType = TSupportLinksResolver::EEntityType;
 
+protected:
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
     TRequest Request;
-    TMaybe<NYdb::NTable::TSession> Session;
     EEntityType EntityType = EEntityType::Cluster;
     THashMap<TString, TString> ClusterColumns;
+
+private:
+    TMaybe<NYdb::NTable::TSession> Session;
     std::unique_ptr<TSupportLinksResolver> SupportLinksResolver;
     TVector<NSupportLinks::TSupportError> PendingErrors;
+
+public:
 
     TMetaSupportLinksGetHandlerActor(
         const NActors::TActorId& httpProxyId,
@@ -273,7 +277,21 @@ public:
             Register(new TMetaSupportLinksGetHandlerActor(HttpProxyId, Location, event->Sender, request));
             return;
         }
-        auto response = event->Get()->Request->CreateResponseBadRequest();
+
+        NJson::TJsonValue root;
+        NJson::TJsonValue errorsJson;
+        errorsJson.SetType(NJson::JSON_ARRAY);
+        NJson::TJsonValue& item = errorsJson.AppendValue(NJson::TJsonValue());
+        item["source"] = TString(SOURCE_META);
+        item["message"] = "Only GET method is supported";
+        root["errors"] = std::move(errorsJson);
+
+        auto response = CreateResponse(
+            request,
+            "405",
+            "Method Not Allowed",
+            "application/json; charset=utf-8",
+            NJson::WriteJson(root, false));
         Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 

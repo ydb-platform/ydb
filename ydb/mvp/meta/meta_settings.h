@@ -3,9 +3,9 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/meta/protos/config.pb.h>
 
-#include <memory>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <memory>
 
 namespace NMVP {
 

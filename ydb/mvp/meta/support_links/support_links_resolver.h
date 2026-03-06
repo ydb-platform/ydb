@@ -4,6 +4,7 @@
 
 #include <ydb/mvp/meta/mvp.h>
 
+#include <util/generic/maybe.h>
 #include <memory>
 
 namespace NMVP {
@@ -15,7 +16,7 @@ struct TResolveOutput {
     bool Ready = false;
     TVector<NSupportLinks::TResolvedLink> Links;
     TVector<NSupportLinks::TSupportError> Errors;
-    TVector<NActors::TActorId> Actors;
+    TMaybe<NActors::TActorId> Actor;
 };
 
 class TSupportLinksResolver {
@@ -31,7 +32,6 @@ public:
         NHttp::TUrlParameters UrlParameters;
         NActors::TActorId Parent;
         NActors::TActorId HttpProxyId;
-        TVector<std::shared_ptr<ILinkSource>> Sources;
     };
 
     explicit TSupportLinksResolver(TParams params);
@@ -45,10 +45,9 @@ public:
 private:
     auto MakeResolveInput(size_t place) const;
 
-    TVector<std::shared_ptr<ILinkSource>> OwnedSources;
-    TVector<const ILinkSource*> Sources;
+    TVector<std::shared_ptr<ILinkSource>> Sources;
     TVector<TResolveOutput> SourceOutputs;
-    TVector<TVector<NActors::TActorId>> SourceActors;
+    TVector<TMaybe<NActors::TActorId>> SourceActors;
     THashMap<TString, TString> ClusterColumns;
     NHttp::TUrlParameters UrlParameters;
     NActors::TActorId Parent;

@@ -1,8 +1,7 @@
 #include "source.h"
 
-#include <mutex>
-
 #include <util/generic/yexception.h>
+#include <mutex>
 
 namespace NMVP {
 

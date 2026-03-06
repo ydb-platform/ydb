@@ -524,7 +524,50 @@ void TPlan::Load(const NJson::TJsonValue& node) {
     if (!TotalCpuTimes.empty()) {
         TotalCpuTime.Load(TotalCpuTimes, TotalCpuValues, TotalCpuTimes.front(), TotalCpuTimes.back());
     }
+
+    if (auto* subNode = node.GetValueByPath("Nodes")) {
+        for (auto& node : subNode->GetArray()) {
+            LoadNode(node);
+        }
+        std::sort(Nodes.begin(), Nodes.end(),
+            [](std::shared_ptr<TClusterNode>& a, std::shared_ptr<TClusterNode>& b) {
+                return a->NodeId < b->NodeId;
+            }
+        );
+    }
 }
+
+void TPlan::LoadNode(const NJson::TJsonValue& node) {
+    if (auto* nodeIdNode = node.GetValueByPath("NodeId")) {
+        auto clusterNode = std::make_shared<TClusterNode>(nodeIdNode->GetIntegerSafe());
+        if (auto* tasksNode = node.GetValueByPath("Tasks")) {
+            clusterNode->Tasks = tasksNode->GetIntegerSafe();
+        }
+        if (auto* finishedTasksNode = node.GetValueByPath("FinishedTasks")) {
+            clusterNode->FinishedTasks = finishedTasksNode->GetIntegerSafe();
+        }
+        if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
+            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(NodeOutputBytes, *outputBytesNode);
+            clusterNode->OutputBytes->FirstMessage.Min = clusterNode->OutputBytes->History.MinTime;
+            clusterNode->OutputBytes->FirstMessage.Max = clusterNode->OutputBytes->FirstMessage.Min;
+            clusterNode->OutputBytes->LastMessage.Max = clusterNode->OutputBytes->History.MaxTime;
+            clusterNode->OutputBytes->LastMessage.Min = clusterNode->OutputBytes->LastMessage.Max;
+        }
+        if (auto* maxMemoryUsageNode = node.GetValueByPath("MaxMemoryUsage")) {
+            clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(NodeMaxMemoryUsage, *maxMemoryUsageNode);
+        }
+        if (auto* cpuTimeNode = node.GetValueByPath("CpuTimeUs")) {
+            clusterNode->CpuTime = std::make_shared<TSingleMetric>(NodeCpuTime, *cpuTimeNode);
+        }
+        if (auto* inputBytesNode = node.GetValueByPath("InputBytes")) {
+            clusterNode->InputBytes = std::make_shared<TSingleMetric>(NodeInputBytes, *inputBytesNode);
+        }
+        if (auto* ingressBytesNode = node.GetValueByPath("IngressBytes")) {
+            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(NodeIngressBytes, *ingressBytesNode);
+        }
+        Nodes.push_back(clusterNode);
+    }
+ }
 
 void TPlan::ResolveCteRefs() {
     if (CtePlanRef) {
@@ -1579,6 +1622,22 @@ void TPlan::MarkLayout() {
         ui32 offsetY = 0;
         MarkStageIndent(0, offsetY, Stages.front());
     }
+    if (!Nodes.empty()) {
+        NodeOffsetY = Height;
+        ui32 nodeOffsetY = GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
+        Height += nodeOffsetY; // only node header
+        for (auto& node : Nodes) {
+            node->OffsetY = nodeOffsetY;
+            node->Height =
+                (   (node->OutputBytes != nullptr)
+                    + 2 /* MEM, CPU */
+                    + (node->InputBytes != nullptr)
+                    + (node->IngressBytes != nullptr)
+                ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+            nodeOffsetY += (GAP_Y + node->Height);
+        }
+        NodeIndentY = nodeOffsetY;
+    }
 }
 
 void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color, bool backgroundRect) {
@@ -2570,6 +2629,94 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     }
 }
 
+void TPlan::PrintNodes(TStringBuilder& builder) {
+    builder << SvgRect(0, GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, INDENT_X, "100%", "clone");
+    builder << "<svg data-stage='inner cluster' class='folded' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
+
+    builder
+        << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, "100%", "clone")
+        << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "clone")
+        << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "clone")
+        << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "clone")
+        << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "clone")
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, TStringBuilder() << "Cluster of " << Nodes.size() << " node(s)")
+        << "<g><g class='plus button'>"
+        << SvgRect(INTERNAL_GAP_X, GAP_Y, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_minus' class='icon_minus' transform='translate(" << INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
+        << "<use href='#icon_plus' class='icon_plus' transform='translate(" << INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g></g>" << Endl
+        ;
+
+    builder << "</svg>" << Endl;
+
+    for (auto& node : Nodes) {
+        builder
+            << "<svg data-stage='outer node' data-height='" << GAP_Y + node->Height << "' width='" << Config.Width << "' height='" << GAP_Y + node->Height << "' x='0' y='" << node->OffsetY << "'>" << Endl
+            << "<svg data-stage='inner node' data-height='" << node->Height << "' width='" << Config.Width << "' height='" << node->Height << "' x='0' y='" << GAP_Y << "'>" << Endl
+            << SvgRect(Config.HeaderLeft + INDENT_X + GAP_X, 0, Config.HeaderWidth - (INDENT_X + GAP_X), "100%", "stage")
+            << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "stage")
+            << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "stage")
+            << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "stage")
+            << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "stage")
+            << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
+
+        ui32 y0 = INTERNAL_GAP_Y;
+
+        if (node->OutputBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            auto px = Config.TimelineLeft;
+            auto pw = Config.TimelineWidth;
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325");
+            // PrintTimeline(builder, builder, "Output", node->OutputBytes->FirstMessage, node->OutputBytes->LastMessage, Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, Config.Palette.OutputMedium, true);
+            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.OutputMedium, Config.Palette.OutputMedium);
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+
+        if (node->MaxMemoryUsage) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, 0, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->CpuTime) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, 0, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->InputBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, 0, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325");
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+
+        if (node->IngressBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, 0, "#icon_ingress", Config.Palette.IngressMedium, "0.9 0.9");
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+
+        if (node->Tasks) {
+            if (node->FinishedTasks && node->FinishedTasks <= node->Tasks) {
+                auto unfinishedPercent = 100 * (node->Tasks - node->FinishedTasks) / node->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                builder
+                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            builder
+            << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(node->Tasks));
+        }
+        builder
+            << "</svg>" << Endl
+            << "</svg>" << Endl;
+    }
+}
+
 void TPlan::PrintSvg(TStringBuilder& builder) {
     auto headerHeight = GAP_Y + TIME_HEIGHT + INTERNAL_HEIGHT;
     builder << "<svg data-height='" << Height + headerHeight << "' width='" << Config.Width << "' height='" << Height + headerHeight << "' x='0' y='" << OffsetY << "'>" << Endl;
@@ -2578,6 +2725,12 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
         auto& stage = Stages.front();
         builder << "<svg data-stage='outer " << stage->PhysicalStageId << "' data-height='" << stage->IndentY - stage->OffsetY << "' width='" << Config.Width << "' height='" << stage->IndentY - stage->OffsetY << "' x='0' y='" << headerHeight << "'>" << Endl;
         PrintStage(builder, stage, nullptr);
+        builder << "</svg>" << Endl;
+    }
+    if (!Nodes.empty()) {
+        auto clusterHeight = GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
+        builder << "<svg data-stage='outer cluster' data-height='" << NodeIndentY << "' width='" << Config.Width << "' height='" << clusterHeight << "' x='0' y='" << NodeOffsetY + headerHeight << "'>" << Endl;
+        PrintNodes(builder);
         builder << "</svg>" << Endl;
     }
     builder << "</svg>" << Endl;

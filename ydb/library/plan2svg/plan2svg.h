@@ -213,6 +213,21 @@ public:
     TConnection* IngressConnection = nullptr;
 };
 
+class TClusterNode {
+public:
+    TClusterNode(ui32 nodeId) : NodeId(nodeId) {}
+    const ui32 NodeId;
+    ui32 Tasks = 0;
+    ui32 FinishedTasks = 0;
+    ui32 OffsetY = 0;
+    ui32 Height = 0;
+    std::shared_ptr<TSingleMetric> OutputBytes;
+    std::shared_ptr<TSingleMetric> MaxMemoryUsage;
+    std::shared_ptr<TSingleMetric> CpuTime;
+    std::shared_ptr<TSingleMetric> InputBytes;
+    std::shared_ptr<TSingleMetric> IngressBytes;
+};
+
 struct TColorPalette {
     TColorPalette();
     TString StageMain;
@@ -302,12 +317,18 @@ public:
         OperatorInputThroughput = std::make_shared<TSummaryMetric>();
         OperatorOutputThroughput = std::make_shared<TSummaryMetric>();
         StageInputThroughput = std::make_shared<TSummaryMetric>();
+        NodeOutputBytes = std::make_shared<TSummaryMetric>();
+        NodeCpuTime = std::make_shared<TSummaryMetric>();
+        NodeMaxMemoryUsage = std::make_shared<TSummaryMetric>();
+        NodeInputBytes = std::make_shared<TSummaryMetric>();
+        NodeIngressBytes = std::make_shared<TSummaryMetric>();
     }
 
     void Load(const NJson::TJsonValue& node);
     void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
+    void LoadNode(const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
     void ResolveCteRefs();
@@ -321,6 +342,7 @@ public:
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
+    void PrintNodes(TStringBuilder& builder);
     const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
@@ -350,6 +372,11 @@ public:
     std::shared_ptr<TSummaryMetric> OperatorInputThroughput;
     std::shared_ptr<TSummaryMetric> OperatorOutputThroughput;
     std::shared_ptr<TSummaryMetric> StageInputThroughput;
+    std::shared_ptr<TSummaryMetric> NodeOutputBytes;
+    std::shared_ptr<TSummaryMetric> NodeMaxMemoryUsage;
+    std::shared_ptr<TSummaryMetric> NodeCpuTime;
+    std::shared_ptr<TSummaryMetric> NodeInputBytes;
+    std::shared_ptr<TSummaryMetric> NodeIngressBytes;
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;
@@ -369,6 +396,9 @@ public:
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;
     TStringBuilder _Builder;
+    std::vector<std::shared_ptr<TClusterNode>> Nodes;
+    ui32 NodeOffsetY = 0;
+    ui32 NodeIndentY = 0;
 };
 
 class TPlanVisualizer {

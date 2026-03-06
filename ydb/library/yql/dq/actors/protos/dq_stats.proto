@@ -475,6 +475,28 @@ message TDqStageStats {
     google.protobuf.Any Extra = 100;
 }
 
+message TDqNodeStats {
+    uint32 NodeId = 1;
+    uint32 TotalTasksCount = 2;
+    uint32 FinishedTasksCount = 3;
+    uint64 BaseTimeMs = 15;
+
+    TDqStatsAggr CpuTimeUs = 4;
+    TDqStatsAggr MaxMemoryUsage = 5;
+
+    TDqStatsAggr InputBytes = 6;
+    TDqStatsAggr OutputBytes = 7;
+    TDqStatsAggr ResultBytes = 8;
+
+    TDqStatsAggr IngressBytes = 9;
+    TDqStatsAggr EgressBytes = 10;
+
+    TDqStatsAggr SpillingComputeBytes = 11;
+    TDqStatsAggr SpillingChannelBytes = 12;
+    TDqStatsAggr SpillingComputeTimeUs = 13;
+    TDqStatsAggr SpillingChannelTimeUs = 14;
+}
+
 // graph execution stats
 message TDqExecutionStats {
     // basic stats
@@ -494,6 +516,7 @@ message TDqExecutionStats {
     uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds
 
     repeated TDqStageStats Stages = 14;
+    repeated TDqNodeStats Nodes = 18;
     repeated string TxPlansWithStats = 15;
 
     uint64 StatFinishBytes = 16;

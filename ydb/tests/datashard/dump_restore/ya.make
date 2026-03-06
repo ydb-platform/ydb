@@ -6,6 +6,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(18)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 TEST_SRCS(
     test_dump_restore.py

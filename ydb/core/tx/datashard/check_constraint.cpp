@@ -9,7 +9,7 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/core/tx/datashard/build_index/common_helper.h>
 
@@ -22,7 +22,7 @@ public:
     }
 
     TCheckConstraintScan(
-        const NKikimrTxDataShard::TEvCheckConstraintRequest& request,
+        const NKikimrTxDataShard::TEvValidateRowConditionRequest& request,
         const TActorId& sender,
         ui64 tabletId,
         const TUserTable& tableInfo
@@ -33,9 +33,9 @@ public:
         , TabletId(tabletId)
     {
         TVector<TString> columnNames;
-        columnNames.reserve(Request.CheckingColumnsSize());
-        for (const auto& col : Request.GetCheckingColumns()) {
-            columnNames.push_back(col.GetColumnName());
+        columnNames.reserve(Request.NotNullColumnsSize());
+        for (const auto& col : Request.GetNotNullColumns()) {
+            columnNames.push_back(col);
         }
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
     }
@@ -57,7 +57,8 @@ public:
         const TConstArrayRef<TCell> rowCells = *row;
         for (const auto& cell : rowCells) {
             if (cell.IsNull()) {
-                Status = NKikimrSetColumnConstraint::ECheckStatus::ERROR;
+                IsValid = false;
+                Status = NKikimrIndexBuilder::EBuildStatus::DONE;
                 return EScan::Final;
             }
         }
@@ -65,17 +66,18 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus) noexcept final {
-        auto response = MakeHolder<TEvDataShard::TEvCheckConstraintResponse>();
+        auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
 
-        if (Status == NKikimrSetColumnConstraint::ECheckStatus::INVALID) {
-            Status = NKikimrSetColumnConstraint::ECheckStatus::SUCCESS;
+        if (Status == NKikimrIndexBuilder::EBuildStatus::INVALID) {
+            Status = NKikimrIndexBuilder::EBuildStatus::DONE;
         }
 
         response->Record.SetStatus(Status);
+        response->Record.SetIsValid(IsValid);
 
-        if (Status == NKikimrSetColumnConstraint::ECheckStatus::ERROR) {
+        if (!IsValid) {
             auto* issue = response->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message("Constraint violation: NULL value found.");
@@ -102,16 +104,17 @@ private:
         }
     }
 
-    const NKikimrTxDataShard::TEvCheckConstraintRequest Request;
+    const NKikimrTxDataShard::TEvValidateRowConditionRequest Request;
     const TActorId Sender;
     const ui64 TabletId;
     TTags ScanTags;
-    NKikimrSetColumnConstraint::ECheckStatus Status = NKikimrSetColumnConstraint::ECheckStatus::INVALID;
+    NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
+    bool IsValid = true;
 };
 
-class TDataShard::TTxHandleSafeCheckConstraintScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxHandleSafeValidateRowConditionScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeCheckConstraintScan(TDataShard* self, TEvDataShard::TEvCheckConstraintRequest::TPtr&& ev)
+    TTxHandleSafeValidateRowConditionScan(TDataShard* self, TEvDataShard::TEvValidateRowConditionRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -124,14 +127,14 @@ public:
     void Complete(const TActorContext&) override {}
 
 private:
-    TEvDataShard::TEvCheckConstraintRequest::TPtr Ev;
+    TEvDataShard::TEvValidateRowConditionRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext&) {
-    Execute(new TTxHandleSafeCheckConstraintScan(this, std::move(ev)));
+void TDataShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext&) {
+    Execute(new TTxHandleSafeValidateRowConditionScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -140,8 +143,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
         return;
     }
 
-    auto sendResponse = [&](NKikimrSetColumnConstraint::ECheckStatus status, const TString& error = "") {
-        auto response = MakeHolder<TEvDataShard::TEvCheckConstraintResponse>();
+    auto sendResponse = [&](NKikimrIndexBuilder::EBuildStatus status, const TString& error = "") {
+        auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(record.GetId());
         response->Record.SetTabletId(TabletID());
         response->Record.SetStatus(status);
@@ -154,25 +157,25 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
     };
 
     if (record.GetTabletId() != TabletID()) {
-        sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
+        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
         return;
     }
 
     const auto tableId = TTableId(record.GetOwnerId(), record.GetPathId());
     if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
-        sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
+        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
         return;
     }
 
     if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
-        sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, "Request doesn't have Snapshot Step or TxId");
+        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, "Request doesn't have Snapshot Step or TxId");
         return;
     }
 
     const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
     const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
     if (!snapshot) {
-        sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, TStringBuilder()
+        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder()
                    << "No snapshot has been found"
                    << ", path id is " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
                    << ", snapshot step is " << snapshotKey.Step
@@ -181,7 +184,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
     }
 
     if (!IsStateActive()) {
-        sendResponse(NKikimrSetColumnConstraint::ECheckStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
+        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
     }
 
@@ -190,8 +193,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, c
 
     auto scan = new TCheckConstraintScan(record, ev->Sender, TabletID(), userTable);
     StartScan(this, scan, record.GetId(), seqNo, rowVersion, userTable.LocalTid);
-
-    sendResponse(NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
 }
 
 } // namespace NKikimr::NDataShard

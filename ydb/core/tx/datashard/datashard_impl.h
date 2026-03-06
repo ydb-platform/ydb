@@ -249,7 +249,7 @@ class TDataShard
     class TTxHandleSafeStatisticsScan;
     class TTxHandleSafeBuildFulltextIndexScan;
     class TTxHandleSafeBuildFulltextDictScan;
-    class TTxHandleSafeCheckConstraintScan;
+    class TTxHandleSafeValidateRowConditionScan;
 
     class TTxMediatorStateRestored;
 
@@ -1359,8 +1359,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvCheckConstraintRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -3325,7 +3325,7 @@ protected:
             HFunc(TEvDataShard::TEvFilterKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextDictRequest, Handle);
-            HFunc(TEvDataShard::TEvCheckConstraintRequest, Handle);
+            HFunc(TEvDataShard::TEvValidateRowConditionRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

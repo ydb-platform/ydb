@@ -1,6 +1,6 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 namespace NKikimr {
 
@@ -33,13 +33,12 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/test" });
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
-        auto request = MakeHolder<TEvDataShard::TEvCheckConstraintRequest>();
+        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(100);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        auto* col = request->Record.AddCheckingColumns();
-        col->SetColumnName("value");
+        request->Record.AddNotNullColumns("value");
         request->Record.SetSnapshotStep(snapshot.Step);
         request->Record.SetSnapshotTxId(snapshot.TxId);
 
@@ -47,14 +46,9 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
-        }
-
-        {
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::SUCCESS);
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), true);
         }
     }
 
@@ -81,13 +75,12 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_nulls" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_nulls");
 
-        auto request = MakeHolder<TEvDataShard::TEvCheckConstraintRequest>();
+        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(101);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        auto* col = request->Record.AddCheckingColumns();
-        col->SetColumnName("value");
+        request->Record.AddNotNullColumns("value");
         request->Record.SetSnapshotStep(snapshot.Step);
         request->Record.SetSnapshotTxId(snapshot.TxId);
 
@@ -95,14 +88,9 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
-        }
-
-        {
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ERROR);
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), false);
         }
     }
 
@@ -134,13 +122,12 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_cols" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols");
 
-        auto request = MakeHolder<TEvDataShard::TEvCheckConstraintRequest>();
+        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(102);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        auto* col = request->Record.AddCheckingColumns();
-        col->SetColumnName("col3");
+        request->Record.AddNotNullColumns("col3");
         request->Record.SetSnapshotStep(snapshot.Step);
         request->Record.SetSnapshotTxId(snapshot.TxId);
 
@@ -148,14 +135,9 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
-        }
-
-        {
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::SUCCESS);
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), true);
         }
     }
 
@@ -187,13 +169,12 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_cols_null" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols_null");
 
-        auto request = MakeHolder<TEvDataShard::TEvCheckConstraintRequest>();
+        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(103);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        auto* col = request->Record.AddCheckingColumns();
-        col->SetColumnName("col2");
+        request->Record.AddNotNullColumns("col2");
         request->Record.SetSnapshotStep(snapshot.Step);
         request->Record.SetSnapshotTxId(snapshot.TxId);
 
@@ -201,14 +182,9 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ACCEPTED);
-        }
-
-        {
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCheckConstraintResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrSetColumnConstraint::ECheckStatus::ERROR);
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), false);
         }
     }
 }

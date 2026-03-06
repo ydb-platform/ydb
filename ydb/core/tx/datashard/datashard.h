@@ -378,8 +378,8 @@ namespace TEvDataShard {
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
 
-        EvCheckConstraintRequest,
-        EvCheckConstraintResponse,
+        EvValidateRowConditionRequest,
+        EvValidateRowConditionResponse,
 
         EvEnd
     };
@@ -1992,17 +1992,17 @@ namespace TEvDataShard {
     {
     };
 
-    struct TEvCheckConstraintRequest
-        : public TEventPB<TEvCheckConstraintRequest,
-                          NKikimrTxDataShard::TEvCheckConstraintRequest,
-                          TEvDataShard::EvCheckConstraintRequest>
+    struct TEvValidateRowConditionRequest
+        : public TEventPB<TEvValidateRowConditionRequest,
+                          NKikimrTxDataShard::TEvValidateRowConditionRequest,
+                          TEvDataShard::EvValidateRowConditionRequest>
     {
     };
 
-    struct TEvCheckConstraintResponse
-        : public TEventPB<TEvCheckConstraintResponse,
-                          NKikimrTxDataShard::TEvCheckConstraintResponse,
-                          TEvDataShard::EvCheckConstraintResponse>
+    struct TEvValidateRowConditionResponse
+        : public TEventPB<TEvValidateRowConditionResponse,
+                          NKikimrTxDataShard::TEvValidateRowConditionResponse,
+                          TEvDataShard::EvValidateRowConditionResponse>
     {
     };
 };

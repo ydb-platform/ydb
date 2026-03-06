@@ -4,7 +4,11 @@ import os
 import logging
 import pytest
 import yatest
+<<<<<<< HEAD
 import time
+=======
+import yaml
+>>>>>>> cc6332c8440 (Remove misapplied dstool test (#35504))
 
 from io import StringIO
 from unittest.mock import patch
@@ -184,13 +188,6 @@ class Test(TestBase):
             self._trace('--dry-run', 'pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1]', with_grpc_calls=True),
             self._trace('pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1000]', '[2:1]', with_grpc_calls=True),
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
-        ]
-
-    def test_vdisk_ready_stable_period(self):
-        return [
-            self._trace('group', 'list'),
-            time.sleep(16),  # ReadyStablePeriod + 1 for sure
-            self._trace('group', 'list'),
         ]
 
     def test_cluster_get_set(self):

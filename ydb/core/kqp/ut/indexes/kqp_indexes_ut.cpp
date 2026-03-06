@@ -970,7 +970,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             Cerr << stats.DebugString() << Endl;
 
             if (useStreamIndex) {
-                UNIT_ASSERT(useSink);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
@@ -986,7 +985,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 24);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(1).has_deletes());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + (useSink ? 4 : 5));
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + 4);
 
                 // One read from main table
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -995,11 +994,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
-                if (!useSink) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
-                }
-
-                const auto finalStage = useSink ? 3 : 4;
+                const auto finalStage = 3;
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 2);
 
@@ -1041,7 +1036,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             Cerr << stats.DebugString() << Endl;
 
             if (useStreamIndex) {
-                UNIT_ASSERT(useSink);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), uniq ? 2 : 1);
 
@@ -1060,7 +1054,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     UNIT_ASSERT(            !stats.query_phases(0).table_access(1).has_deletes());
                 }
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + (useSink ? 4 : 5));
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + 4);
 
                 // One read from main table
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -1069,11 +1063,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
-                if (!useSink) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
-                }
-
-                const auto finalStage = useSink ? 3 : 4;
+                const auto finalStage = 3;
 
                 // One update of main table
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);

@@ -8,10 +8,9 @@
 #include <ydb/core/util/stlog.h>
 
 #include <cerrno>
+#include <optional>
 
 namespace NKikimr::NDDisk {
-
-#if defined(__linux__)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDDiskActor::TDirectIoOpBase
@@ -28,13 +27,16 @@ public:
 
     virtual ~TDirectIoOpBase();
 
-    virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept;
-    virtual void OnDrop() noexcept;
+    // IO uring callbacks
+    virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
+    virtual void OnDrop() noexcept override final;
 
-    virtual void Reply(NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status);
+    // reply should not access raw uring result field – use just status and data if status OK
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept;
 
-    void PrepareWrite(TRope&& data, ui64 offset);
-    void PrepareRead(size_t size, ui64 offset);
+    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
+    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
 
     void SetSpan(NWilson::TSpan&& span) { Span = std::move(span); }
     NWilson::TSpan& GetSpan() { return Span; }
@@ -44,10 +46,17 @@ public:
 
     const TActorId& GetDDiskId() const { return DDiskId; }
 
-protected:
-    TRcBuf&& ExtractAlignedDataHolder() {
-        return std::move(AlignedDataHolder);
-    }
+    TRope ExtractData();
+
+public:
+    // methods to use when we fallback to PDisk instead of direct I/O
+
+    TChunkIdx GetChunkIdx() const { return ChunkIdx; }
+    ui32 GetChunkOffset() const { return ChunkOffsetInBytes; }
+
+    using NPDisk::TUringOperationBase::SetResult;
+
+    void SetResult(i32 result, TRope&& data);
 
 private:
     TActorId DDiskId;
@@ -57,9 +66,14 @@ private:
 
     ui64 Cookie = 0;
 
+    // PDisk fallback data
+    TChunkIdx ChunkIdx = 0;
+    ui32 ChunkOffsetInBytes = 0;
+
     NWilson::TSpan Span;
 
     TRcBuf AlignedDataHolder;
+    std::optional<TRope> Data;
 
     // shared with DDisk actor
     std::atomic<ui32>& InFlightCount;
@@ -76,7 +90,8 @@ public:
         : TDirectIoOpBase(ddiskId, inFlightCount, counters)
     {}
 
-    virtual void Reply(NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) override;
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
 
     void SetPartCookie(ui64 partCookie) {
         PartCookie = partCookie;
@@ -91,5 +106,33 @@ private:
     bool IsErase = false;
 };
 
-#endif
-}
+class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    TInternalSyncWriteOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    {}
+
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+
+    void SetRequestId(ui64 requestId) {
+        RequestId = requestId;
+    }
+
+    void SetSegment(ui64 begin, ui64 end) {
+        SegmentBegin = begin;
+        SegmentEnd = end;
+    }
+
+    void SetSyncId(ui64 syncId) {
+        SyncId = syncId;
+    }
+
+private:
+    ui64 SyncId = 0;
+    ui64 RequestId = 0;
+    ui64 SegmentBegin = 0;
+    ui64 SegmentEnd = 0;
+};
+
+} // namespace NKikimr::NDDisk

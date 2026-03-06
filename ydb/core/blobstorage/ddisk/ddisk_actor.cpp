@@ -140,6 +140,7 @@ namespace NKikimr::NDDisk {
 
             hFunc(TEvReadResult, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
+            hFunc(TEvPrivate::TEvInternalSyncWriteResult, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)

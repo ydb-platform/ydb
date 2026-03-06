@@ -1,5 +1,7 @@
 #pragma once
 
+#include "uring_operation.h"
+
 #include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
@@ -66,95 +68,6 @@ struct TUringRouterConfig {
     }
 
     TString ToString() const;
-};
-
-// Our cookie passed through io_uring user_data.
-// Callers derive from this and add their own context fields.
-// Should be allocated from a pool to avoid dynamic allocation in the hot path.
-class TUringOperationBase {
-    friend class TUringRouter;
-
-public:
-    enum EOperationType {
-        ENOT_SET = 0,
-        EREAD,
-        EWRITE,
-    };
-
-    virtual ~TUringOperationBase() = default;
-
-    // Callbacks
-
-    // Called from the dedicated completion polling thread outside actor system,
-    // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
-    // After OnComplete() returns, TUringRouter will not access object anymore.
-    virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept = 0;
-
-    // A cleanup callback called by TUringRouter::Stop() for CQEs drained
-    // after shutdown without invoking OnComplete. Use this to release operation-
-    // owned memory/resources for in-flight requests that are no longer delivered.
-    // After OnDrop() returns, TUringRouter will not access object anymore.
-    virtual void OnDrop() noexcept = 0;
-
-    // note, that buf should be valid until operation is finished:
-    // normally only tests should use this "externally", while
-    // derived classes keep the buf and use this to prepare I/O
-    void PrepareIov(void* buf, size_t size, ui64 offset) {
-        // additional calls are normally from AdvanceIov()
-        if (TotalSize == 0) {
-            TotalSize = size;
-        }
-
-        DiskOffset = offset;
-
-        Iov.iov_base = buf;
-        Iov.iov_len = size;
-    }
-
-    void AdvanceIov(size_t bytesProcessed) {
-        auto* nextBuffer = static_cast<char*>(Iov.iov_base) + bytesProcessed;
-        const size_t nextSize = Iov.iov_len - bytesProcessed;
-        const ui64 nextOffset = DiskOffset + bytesProcessed;
-        PrepareIov(nextBuffer, nextSize, nextOffset);
-    }
-
-    void SetOperationType(EOperationType opType) {
-        OperationType = opType;
-    }
-
-    EOperationType GetOperationType() const {
-        return OperationType;
-    }
-
-    size_t GetOperationBytes() const {
-        return Iov.iov_len;
-    }
-
-    i32 GetResult() const {
-        return Result;
-    }
-
-    ui64 GetTotalSize() const {
-        return TotalSize;
-    }
-
-private:
-    // Filled by TUringRouter on completion
-    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
-
-    // Submission metadata for non-fixed Read/Write operations.
-
-    EOperationType OperationType = ENOT_SET;
-
-    // never changes after set: needed in case of short read/write to have
-    // initially requested size
-    ui64 TotalSize = 0;
-
-    ui64 DiskOffset = 0;
-
-    // Scratch space for the iovec used by readv/writev submissions.
-    // Populated by TUringRouter user and must remain valid until OnComplete is called.
-    struct iovec Iov = {};
 };
 
 // TUringRouter is NOT thread-safe.  All public methods (Register*, Start,

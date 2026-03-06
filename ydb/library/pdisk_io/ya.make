@@ -51,6 +51,8 @@ SRCS(
     drivedata.h
     sector_map.cpp
     sector_map.h
+    uring_operation.h
+    uring_operation.cpp
     wcache.cpp
     wcache.h
 )

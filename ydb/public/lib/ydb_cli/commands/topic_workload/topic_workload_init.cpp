@@ -62,6 +62,11 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
         .Optional()
         .Hidden()
         .StoreTrue(&Scenario.CleanupPolicyCompact);
+
+    config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+        .Optional()
+        .Hidden()
+        .StoreResult(&Scenario.PartitionsPerTablet);
 }
 
 void TCommandWorkloadTopicInit::Parse(TConfig& config)

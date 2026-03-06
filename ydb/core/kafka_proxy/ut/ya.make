@@ -4,8 +4,9 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
-SPLIT_FACTOR(5)
+SPLIT_FACTOR(10)
 FORK_TESTS()
+FORK_SUBTESTS()
 
 SIZE(medium)
 REQUIREMENTS(cpu:2)

@@ -2,6 +2,7 @@
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr::NRpcService {
 

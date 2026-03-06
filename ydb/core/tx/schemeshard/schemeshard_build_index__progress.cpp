@@ -440,6 +440,29 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> PublishShadowPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex, "Unknown operation kind while building PublishShadowPropose");
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpPublishShadowData);
+    modifyScheme.SetInternal(true);
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+    modifyScheme.MutablePublishShadowData()->SetTableName(NTableIndex::ImplTable);
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "PublishShadowPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -1040,6 +1063,13 @@ private:
             buildInfo.IndexColumns.end()
         };
 
+        // Check snapshot and pass it to Validate if it's present
+        if (Self->TablesWithSnapshots.contains(path->PathId)) {
+            auto snapId = Self->TablesWithSnapshots.at(path->PathId);
+            record.SetSnapshotTxId(ui64(snapId));
+            record.SetSnapshotStep(ui64(Self->SnapshotsStepIds.at(snapId)));
+        }
+
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         record.SetTabletId(ui64(shardId));
 
@@ -1370,12 +1400,22 @@ private:
                 // - Validating each index shard for index keys uniqueness
                 // - Applying cross-shard validation
                 NIceDb::TNiceDb db{txc.DB};
-                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+                buildInfo.SubState = TIndexBuildInfo::ESubState::PublishShadow;
                 Self->PersistBuildIndexState(db, buildInfo);
-                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
                 ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
                 Progress(BuildId);
             }
+            return false;
+        }
+        case TIndexBuildInfo::ESubState::PublishShadow: {
+            // LockBuild from above finishes here at Filling again
+            // Switch to PublishShadow + UniqIndexValidation, it will also finish at Filling
+            NIceDb::TNiceDb db{txc.DB};
+            buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+            Self->PersistBuildIndexState(db, buildInfo);
+            Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+            ChangeState(BuildId, TIndexBuildInfo::EState::PublishShadow);
+            Progress(BuildId);
             return false;
         }
         case TIndexBuildInfo::ESubState::UniqIndexValidation: {
@@ -2107,6 +2147,7 @@ public:
             Y_ENSURE(buildInfo.IsBuildVectorIndex() && (buildInfo.KMeans.Level > 1 ||
                 buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter) ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
+                buildInfo.SubState == TIndexBuildInfo::ESubState::PublishShadow ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
@@ -2114,7 +2155,8 @@ public:
                 TString tableName;
                 if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
                     tableName = NTableIndex::ImplTable;
-                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation) {
+                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
+                    buildInfo.SubState == TIndexBuildInfo::ESubState::PublishShadow) {
                     tableName = NTableIndex::ImplTable;
                 } else {
                     tableName = buildInfo.KMeans.ReadFrom();
@@ -2143,6 +2185,28 @@ public:
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), AlterSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.ApplyTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+            } else {
+                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexApplyTxId(db, buildInfo);
+                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+
+                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                Progress(BuildId);
+            }
+            break;
+        case TIndexBuildInfo::EState::PublishShadow:
+            Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex);
+            if (buildInfo.ApplyTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), PublishShadowPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -3091,6 +3155,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::PublishShadow:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -3263,6 +3328,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::PublishShadow:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
@@ -3442,6 +3508,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::PublishShadow:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:

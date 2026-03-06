@@ -50,16 +50,6 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         void RequestClusterInfo() override {
             Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
         }
-
-        std::unique_ptr<NMVP::TSupportLinksResolver> CreateSupportLinksResolver() override {
-            return std::make_unique<NMVP::TSupportLinksResolver>(NMVP::TSupportLinksResolver::TParams{
-                .EntityType = EntityType,
-                .ClusterColumns = ClusterColumns,
-                .UrlParameters = Request.Parameters.UrlParameters,
-                .Parent = SelfId(),
-                .HttpProxyId = HttpProxyId,
-            });
-        }
     };
 
     static NHttp::THttpIncomingRequestPtr BuildHttpRequest(TStringBuf url, TStringBuf method = "GET") {

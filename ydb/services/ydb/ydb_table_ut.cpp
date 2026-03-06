@@ -74,7 +74,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
     auto driver = NYdb::TDriver(
         TDriverConfig()
             .SetAuthToken("badguy@builtin")
-            .UseSecureConnection(NYdbSslTestData::CaCrt)
+            .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
             .SetEndpoint(location)
             .SetDiscoveryMode(asyncDiscovery ? EDiscoveryMode::Async : EDiscoveryMode::Sync));
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         auto connection = NYdb::TDriver(
             TDriverConfig()
                 .SetAuthToken("root@builtin")
-                .UseSecureConnection(NYdbSslTestData::CaCrt)
+                .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
                 .SetEndpoint(location));
 
         {

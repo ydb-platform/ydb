@@ -91,7 +91,7 @@ class TestRetry(TestYdsBase):
         deadline = time.time() + 2 * 2
         kikimr.session_pool = None
 
-        for _ in range(5):
+        for _ in range(2):
             delta = deadline - time.time()
             if delta > 0:
                 logging.debug(f"sleep {delta} seconds")

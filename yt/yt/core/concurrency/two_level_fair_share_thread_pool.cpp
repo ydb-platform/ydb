@@ -682,6 +682,7 @@ public:
     void Invoke(TClosure callback, TBucket* bucket) override
     {
         YT_VERIFY(bucket);
+        YT_VERIFY(NYT::GetRefCounter(bucket)->GetRefCount() > 0);
 
         // We can't guarantee read of |true| in time anyway
         // So relaxed order is enough.

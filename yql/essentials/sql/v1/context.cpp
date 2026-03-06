@@ -43,7 +43,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
 
 using TPragmaField = bool TContext::*;
 
-// TODO(vitya-smirnov): register thsese names automatically using TABLE_ELEM macro.
+// TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},

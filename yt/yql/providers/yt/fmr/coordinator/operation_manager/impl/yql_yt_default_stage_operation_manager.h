@@ -5,6 +5,6 @@
 
 namespace NYql::NFmr {
 
-IFmrStageOperationManager::TPtr MakeStageOperationManager(ETaskType taskType);
+IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operationType);
 
-}
+} // namespace NYql::NFmr

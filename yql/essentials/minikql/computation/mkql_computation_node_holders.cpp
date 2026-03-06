@@ -233,7 +233,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return Items_.GetItems();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -428,7 +432,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return TBaseVector::data();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -556,7 +564,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const override {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return &None_;
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     const NUdf::TUnboxedValue None_;

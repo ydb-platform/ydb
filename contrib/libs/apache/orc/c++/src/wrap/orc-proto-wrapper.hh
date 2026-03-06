@@ -27,6 +27,7 @@ DIAGNOSTIC_PUSH
 #if defined(__GNUC__) || defined(__clang__)
 DIAGNOSTIC_IGNORE("-Wconversion")
 DIAGNOSTIC_IGNORE("-Wdeprecated")
+DIAGNOSTIC_IGNORE("-Wdeprecated-declarations")
 DIAGNOSTIC_IGNORE("-Wsign-conversion")
 DIAGNOSTIC_IGNORE("-Wunused-parameter")
 #endif

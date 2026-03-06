@@ -21,6 +21,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -161,6 +162,7 @@ private:
 
 class IArrowKernelComputationNode;
 class IComputationExternalNode;
+class TComputationExternalNodeInvalidator;
 using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
@@ -232,6 +234,10 @@ public:
     using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>;
     virtual void SetGetter(TGetter&& getter) = 0;
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
+
+private:
+    friend class TComputationExternalNodeInvalidator;
+    virtual void CollectInvalidationIndexes(std::set<ui32>& out) const = 0;
 };
 
 enum class EFetchResult: i32 {

@@ -128,9 +128,11 @@ private:
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 if (!Position) {
-                    if (!Iter.Next(Item->RefValue(CompCtx))) {
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    if (!Iter.Next(fetchResult)) {
                         return false;
                     }
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                 }
 
                 value = NewItems[Position]->GetValue(CompCtx);
@@ -382,9 +384,9 @@ private:
 
         block = zero;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
-
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
         BranchInst::Create(good, done, status, block);
         block = good;
 

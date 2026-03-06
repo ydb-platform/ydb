@@ -79,7 +79,7 @@ private:
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        SA_LOG_D("Got TEvPoison");
+        SA_LOG_D("[" << SelfId() << "]: Got TEvPoison");
         Finish(Ydb::StatusIds::ABORTED, "Query aborted");
     }
 
@@ -132,7 +132,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-        SA_LOG_W("Navigate request failed with " << entry.Status
+        SA_LOG_W("[" << SelfId() << "]: Navigate request failed with " << entry.Status
             << ", operationId: " << OperationId.Quote()
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
@@ -223,7 +223,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
     const NSchemeCache::TSchemeCacheRequest::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-        SA_LOG_W("Resolve request failed with " << entry.Status
+        SA_LOG_W("[" << SelfId() << "]: Resolve request failed with " << entry.Status
             << ", operationId: " << OperationId.Quote()
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
@@ -335,7 +335,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
 
     if (!IsColumnTable) {
         Y_ENSURE(ScanActorsInFlight.empty());
-        SA_LOG_D("Dispatching scan actor for the whole table");
+        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor for the whole table");
         dispatchActor(0, std::nullopt);
         return;
     }
@@ -368,7 +368,8 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         Y_ENSURE(!node->PendingTablets.empty());
         ui64 tabletId = node->PendingTablets.back();
 
-        SA_LOG_D("Dispatching scan actor, tabletId: " << tabletId << ", nodeId: " << node->Id);
+        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor"
+            << ", tabletId: " << tabletId << ", nodeId: " << node->Id);
         dispatchActor(node->Id, tabletId);
         node->PendingTablets.pop_back();
         ++node->TabletsInFlight;

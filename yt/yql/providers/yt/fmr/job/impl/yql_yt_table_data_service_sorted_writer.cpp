@@ -26,27 +26,15 @@ void TFmrTableDataServiceSortedWriter::PutRows() {
     }
     auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
 
-    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
-
     auto parserKeyIndexes = TParserFragmentListIndex(currentYsonContent, KeyColumns_.Columns);
     parserKeyIndexes.Parse();
     const auto& chunkIndexes = parserKeyIndexes.GetRows();
 
     CheckIsSorted(currentYsonContent, chunkIndexes);
+
     auto sortedChunkStats = GetSortedChunkStats(currentYsonContent, chunkIndexes);
 
-    PutYsonByColumnGroups(currentYsonContent).GetValueSync();
-
-    if (ColumnGroupSpec_.IsEmpty()) {
-        TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
-        TStringStream metadataStream;
-        metadata.Save(&metadataStream);
-        TableDataService_->Put(
-            tableDataServiceGroup,
-            GetTableDataServiceMetaChunkId(ChunkCount_),
-            metadataStream.Str()
-        ).GetValueSync();
-    }
+    PutYsonByColumnGroups(currentYsonContent);
 
     PartIdChunkStats_.emplace_back(TChunkStats{
         .Rows = CurrentChunkRows_,

@@ -11,6 +11,11 @@ namespace {
 
 class TMapStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TMapStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         const auto& operationParams = std::get<TMapOperationParams>(context.OperationParams);
         const auto& fmrOperationSpec = context.FmrOperationSpec;
@@ -72,12 +77,41 @@ public:
 
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
+
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+        TGetNewPartIdsForTaskResult result;
+        TMapTaskParams& mapTaskParams = std::get<TMapTaskParams>(context.Task->TaskParams);
+        TString newPartId = GenerateId();
+
+        for (auto& fmrTableOutputRef: mapTaskParams.Output) {
+            TString tableId = fmrTableOutputRef.TableId;
+            fmrTableOutputRef.PartId = newPartId;
+            result.NewPartIdsForTables[tableId].emplace_back(newPartId);
+        }
+
+        return result;
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+        std::vector<TPartIdInfo> groupsToClear;
+        TMapTaskParams& mapTaskParams = std::get<TMapTaskParams>(context.Task->TaskParams);
+        for (auto& fmrTableOutputRef: mapTaskParams.Output) {
+            TString tableId = fmrTableOutputRef.TableId;
+            if (!fmrTableOutputRef.PartId.empty() && context.PartIdStats.contains(fmrTableOutputRef.PartId)) {
+                auto prevPartId = fmrTableOutputRef.PartId;
+                groupsToClear.emplace_back(tableId, prevPartId);
+            }
+        }
+        return groupsToClear;
+    }
 };
+
+
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeMapStageOperationManager() {
-    return MakeIntrusive<TMapStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeMapStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TMapStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

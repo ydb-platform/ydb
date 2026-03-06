@@ -11,6 +11,11 @@ namespace {
 
 class TUploadStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         const auto& operationParams = std::get<TUploadOperationParams>(context.OperationParams);
         const auto& fmrOperationSpec = context.FmrOperationSpec;
@@ -52,8 +57,8 @@ public:
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeUploadStageOperationManager() {
-    return MakeIntrusive<TUploadStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TUploadStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

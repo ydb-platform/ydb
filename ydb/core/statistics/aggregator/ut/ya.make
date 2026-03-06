@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/statistics/aggregator)
 
 FORK_SUBTESTS()
+FORK_TEST_FILES()
 
 SPLIT_FACTOR(60)
 

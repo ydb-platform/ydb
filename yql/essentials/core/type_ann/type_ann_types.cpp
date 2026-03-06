@@ -1484,6 +1484,11 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (underlyingType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(underlyingType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         auto varType = ctx.Expr.MakeType<TVariantExprType>(underlyingType);
         if (!varType->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;

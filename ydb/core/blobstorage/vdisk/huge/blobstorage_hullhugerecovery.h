@@ -90,6 +90,7 @@ namespace NKikimr {
             ui64 PersistentLsn = 0;
             bool LoadedFromProto = false;
             bool EnableTinyDisks = false;
+            TControlWrapper ChunksSoftLocking;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,

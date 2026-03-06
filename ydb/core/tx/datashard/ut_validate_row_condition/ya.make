@@ -16,7 +16,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_scan_check_constraints.cpp
+    datashard_ut_validate_row_condition_scan.cpp
 )
 
 END()

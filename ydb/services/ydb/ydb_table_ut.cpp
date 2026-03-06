@@ -75,6 +75,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
         TDriverConfig()
             .SetAuthToken("badguy@builtin")
             .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+            .SetDatabase("/Root")
             .SetEndpoint(location)
             .SetDiscoveryMode(asyncDiscovery ? EDiscoveryMode::Async : EDiscoveryMode::Sync));
 
@@ -92,7 +93,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
     NYdb::NTable::TTableClient clientbad2(driver, settings2);
 */
     const TString sql = R"__(
-        CREATE TABLE `Root/Test` (
+        CREATE TABLE `/Root/Test` (
             Key Uint32,
             Value String,
             PRIMARY KEY (Key)
@@ -692,13 +693,14 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             TDriverConfig()
                 .SetAuthToken("root@builtin")
                 .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+                .SetDatabase("/Root")
                 .SetEndpoint(location));
 
         {
             auto session = CreateSession(connection, "root@builtin");
             {
                 auto status = session.ExecuteSchemeQuery(R"__(
-                CREATE TABLE `Root/Test` (
+                CREATE TABLE `/Root/Test` (
                     Key Uint32,
                     Value String,
                     PRIMARY KEY (Key)
@@ -709,7 +711,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             }
             {
                 auto scheme = NYdb::NScheme::TSchemeClient(connection);
-                auto status = scheme.ModifyPermissions("Root/Test",
+                auto status = scheme.ModifyPermissions("/Root/Test",
                     NYdb::NScheme::TModifyPermissionsSettings()
                         .AddGrantPermissions(
                             NYdb::NScheme::TPermissions("pupkin@builtin", {"ydb.tables.modify"})
@@ -726,7 +728,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             }
             {
                 auto scheme = NYdb::NScheme::TSchemeClient(connection);
-                auto status = scheme.DescribePath("Root/Test").ExtractValueSync();
+                auto status = scheme.DescribePath("/Root/Test").ExtractValueSync();
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
                 auto entry = status.GetEntry();
@@ -745,7 +747,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
             {
                 auto status = session.ExecuteDataQuery(R"__(
-                    SELECT * FROM `Root/Test`;
+                    SELECT * FROM `/Root/Test`;
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
@@ -766,27 +768,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
-
-        { // no db
-            TString location = TStringBuilder() << "localhost:" << grpc;
-            auto driver = NYdb::TDriver(
-                TDriverConfig()
-                    .SetEndpoint(location));
-
-            NYdb::NTable::TClientSettings settings;
-            settings.AuthToken(clusterAdminToken);
-
-            NYdb::NTable::TTableClient client(driver, settings);
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
-                Cerr << "Call\n";
-                return client.CreateSession().ExtractValueSync();
-            };
-            auto status = client.RetryOperationSync(call);
-
-            // KIKIMR-14509 - reslore old behaviour allow requests without database for storage nodes
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-
-        }
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = NYdb::TDriver(
             TDriverConfig()

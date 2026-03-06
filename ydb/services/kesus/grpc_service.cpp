@@ -663,6 +663,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                                               \
             YDB_API_DEFAULT_COUNTER_BLOCK(coordination, methodName),                   \
             auditMode,                                                                 \
+            EEmptyDatabaseMode::EmptyDatabaseForbidden,                                \
             COMMON,                                                                    \
             ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                        \
             GRpcRequestProxyId_,                                                       \
@@ -683,6 +684,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                                                                   \
             YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(coordination, methodName),                                \
             auditMode,                                                                                     \
+            EEmptyDatabaseMode::EmptyDatabaseForbidden,                                                    \
             operationCallClass,                                                                            \
             GRpcRequestProxyId_,                                                                           \
             cq,                                                                                            \

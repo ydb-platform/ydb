@@ -183,6 +183,7 @@ private:
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRights = false;
+        const EEmptyDatabaseMode emptyDatabaseMode = requestBaseCtx->GetEmptyDatabaseMode();
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             if (IsBootstrapClusterEvent(event)) {
@@ -196,7 +197,9 @@ private:
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
-                    if (DynamicNode && !AllowYdbRequestsWithoutDatabase) {
+                    if (!AllowYdbRequestsWithoutDatabase &&
+                        (DynamicNode || emptyDatabaseMode == EEmptyDatabaseMode::EmptyDatabaseForbidden))
+                    {
                         requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
                         requestBaseCtx->FinishSpan();
                         return;

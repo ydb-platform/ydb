@@ -29,7 +29,7 @@ void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_LOGIN_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, login, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, login, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_LOGIN_METHOD(Login, DoLoginRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Login));
 

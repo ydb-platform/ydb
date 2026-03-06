@@ -48,21 +48,22 @@ void TKeyValueGRpcServiceV2::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 #error SETUP_KV_METHOD macro already defined
 #endif
 
-#define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode)             \
-    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
-        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
-        Y_CAT(methodName, Result),                                                        \
-        methodCallback,                                                                                   \
-        rlMode,                                                                                           \
-        requestType,                                                                                      \
-        YDB_API_DEFAULT_COUNTER_BLOCK(keyvalue_v2, methodName),                                           \
-        auditMode,                                                                                        \
-        COMMON,                                                                                           \
-        ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                                               \
-        GRpcRequestProxyId_,                                                                              \
-        CQ_,                                                                                              \
-        nullptr,                                                                                          \
-        nullptr                                                                                           \
+#define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                                          \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                   \
+        Y_CAT(methodName, Result),                                                  \
+        methodCallback,                                                             \
+        rlMode,                                                                     \
+        requestType,                                                                \
+        YDB_API_DEFAULT_COUNTER_BLOCK(keyvalue_v2, methodName),                     \
+        auditMode,                                                                  \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                                 \
+        COMMON,                                                                     \
+        ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                       \
+        GRpcRequestProxyId_,                                                        \
+        CQ_,                                                                        \
+        nullptr,                                                                    \
+        nullptr                                                                     \
     )
 
     SETUP_KV_METHOD(AcquireLock, DoAcquireLockKeyValueV2, RLMODE(Rps), KEYVALUE_ACQUIRELOCK, TAuditMode::NonModifying());

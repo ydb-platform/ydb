@@ -583,6 +583,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             TDriverConfig()
                 .SetAuthToken("test_user@builtin")
                 .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+                .SetDatabase("/Root")
                 .SetEndpoint(location));
 
         auto client = NYdb::NTable::TTableClient(connection);

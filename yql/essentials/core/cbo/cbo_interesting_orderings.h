@@ -181,10 +181,7 @@ struct TShuffling {
         : Ordering(std::move(ordering))
     {}
 
-    TShuffling& SetNatural() { IsNatural = true; return *this; }
-
     std::vector<TJoinColumn> Ordering;
-    bool IsNatural = false; // look at the IsNatural field at the Ordering struct
 };
 
 /*

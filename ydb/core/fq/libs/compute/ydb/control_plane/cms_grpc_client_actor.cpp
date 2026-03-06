@@ -84,7 +84,7 @@ public:
 
         const TString folderId = NYdb::NFq::TScope(request.Scope).ParseFolder();
         const TString cloudId = request.CloudId;
-        const TString baseId = GetSharedDatabaseId(request.BasePath);
+        const TString databaseId = GetSharedDatabaseId(request.BasePath);
 
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
         forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
@@ -93,10 +93,10 @@ public:
             forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
         }
         if (!cloudId.empty()) {
-            forwardRequest->Request.mutable_attributes()->emplace("cloud_id", folderId);
+            forwardRequest->Request.mutable_attributes()->emplace("cloud_id", cloudId);
         }
-        if (!baseId.empty()) {
-            forwardRequest->Request.mutable_attributes()->emplace("database_id", baseId);
+        if (!databaseId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("database_id", databaseId);
         }
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
@@ -194,7 +194,7 @@ public:
 private:
     TString GetSharedDatabaseId(const TString& basePath) const {
         size_t dbIdInd = basePath.find_last_of("/");
-        if (dbIdInd == TString::npos) {
+        if (dbIdInd == TString::npos || dbIdInd >= basePath.size() - 1) {
             return "";
         }
 

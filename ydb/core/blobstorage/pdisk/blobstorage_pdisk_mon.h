@@ -255,7 +255,7 @@ struct TPDiskMon {
 
     ::NMonitoring::TDynamicCounters::TCounterPtr NumActiveSlots;
     ::NMonitoring::TDynamicCounters::TCounterPtr ExpectedSlotCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SlotSizeBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpectedSlotSizeBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr SlotSizeInUnits;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedWriteErrors;

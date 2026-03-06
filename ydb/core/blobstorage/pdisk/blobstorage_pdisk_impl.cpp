@@ -1625,9 +1625,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (*Mon.PDiskBriefState == TPDiskMon::TPDisk::Error || !ExpectedSlotCount) {
-            *Mon.SlotSizeBytes = 0;
+            *Mon.ExpectedSlotSizeBytes = 0;
         } else {
-            *Mon.SlotSizeBytes = totalSize / ExpectedSlotCount;
+            *Mon.ExpectedSlotSizeBytes = totalSize / ExpectedSlotCount;
         }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();

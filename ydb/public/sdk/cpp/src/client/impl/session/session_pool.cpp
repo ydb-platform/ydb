@@ -257,16 +257,29 @@ void TSessionPool::IncrementActiveCounterUnsafe() {
 }
 
 void TSessionPool::Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&)> cb, bool close) {
-    std::lock_guard guard(Mtx_);
-    Closed_ = close;
-    for (auto it = Sessions_.begin(); it != Sessions_.end();) {
-        it->second->UpdateServerCloseHandler(nullptr);
-        const bool cont = cb(std::move(it->second));
-        it = Sessions_.erase(it);
-        if (!cont)
-            break;
+    std::vector<std::unique_ptr<IGetSessionCtx>> waitersToReplyError;
+    {
+        std::lock_guard guard(Mtx_);
+        Closed_ = close;
+        for (auto it = Sessions_.begin(); it != Sessions_.end();) {
+            it->second->UpdateServerCloseHandler(nullptr);
+            const bool cont = cb(std::move(it->second));
+            it = Sessions_.erase(it);
+            if (!cont)
+                break;
+        }
+        if (close) {
+            // Collect pending waiters to reply with error outside the lock.
+            // When the pool is permanently closed, all pending session requests
+            // must be rejected to avoid them waiting indefinitely.
+            WaitersQueue_.GetOld(TDeadline::Max(), waitersToReplyError);
+        }
+        UpdateStats();
     }
-    UpdateStats();
+    for (auto& waiter : waitersToReplyError) {
+        FakeSessionsCounter_.Inc();
+        waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
+    }
 }
 
 TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakClient,

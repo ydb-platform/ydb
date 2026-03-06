@@ -343,7 +343,11 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
     auto it = WaitingShredShards.find(shardIdx);
     if (it != WaitingShredShards.end()) {
         Queue->Remove(shardIdx);
-        ActivePipes.erase(shardIdx);
+        if (ActivePipes.erase(shardIdx)) {
+            RunnigShardsCounter->Dec();
+        } else {
+            WaitingShardsCounter->Dec();
+        }
         WaitingShredShards.erase(it);
         if (WaitingShredShards.empty()) {
             Status = EShredStatus::COMPLETED;
@@ -379,8 +383,7 @@ struct TSchemeShard::TTxRunTenantShred : public TSchemeShard::TRwTxBase {
             NIceDb::TNiceDb db(txc.DB);
             shredManager->StartShred(db, record.GetGeneration());
         }
-        if (record.GetGeneration() < shredManager->GetGeneration() ||
-            record.GetGeneration() == shredManager->GetGeneration() && shredManager->GetStatus() == EShredStatus::COMPLETED) {
+        if (record.GetGeneration() <= shredManager->GetCompletedGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxRunTenantShred: Already complete"
                 << " for requested generation# " << record.GetGeneration()

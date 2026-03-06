@@ -10,7 +10,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/util/throughput_meter.h>
-#include <ydb/core/util/max_tracker.h>
 #include <ydb/core/mon/mon.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
@@ -111,7 +110,6 @@ struct TDsProxyNodeMon : public TThrRefBase {
             TDuration duration);
     void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration);
     void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration);
-    void Update();
 
     // Called only from NodeWarder
     void CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type);

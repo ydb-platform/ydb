@@ -228,28 +228,4 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type
         PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
     }
 }
-
-void TDsProxyNodeMon::Update() {
-    PutResponseTime.Update();
-    PutTabletLogResponseTime.Update();
-    PutTabletLogResponseTime256.Update();
-    PutTabletLogResponseTime512.Update();
-    PutAsyncBlobResponseTime.Update();
-    PutUserDataResponseTime.Update();
-
-    GetResponseTime.Update();
-    GetAsyncReadResponseTime.Update();
-    GetFastReadResponseTime256Ki.Update();
-    GetFastReadResponseTimeInf.Update();
-    GetDiscoverResponseTime.Update();
-    GetLowReadResponseTime.Update();
-    GetBlockResponseTime.Update();
-
-    BlockResponseTime.Update();
-    DiscoverResponseTime.Update();
-    IndexRestoreGetResponseTime.Update();
-    RangeResponseTime.Update();
-    PatchResponseTime.Update();
-}
-
 } // NKikimr

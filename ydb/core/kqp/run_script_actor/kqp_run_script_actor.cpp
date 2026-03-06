@@ -25,12 +25,12 @@
 
 #include <forward_list>
 
-#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_I(stream) LOG_INFO_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_N(stream) LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_W(stream) LOG_WARN_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
+#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_I(stream) LOG_INFO_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_N(stream) LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_W(stream) LOG_WARN_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
 
 namespace NKikimr::NKqp {
 
@@ -134,7 +134,7 @@ public:
         , Counters(settings.Counters)
     {}
 
-    [[maybe_unused]] static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
+    static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
         const auto& traceId = Request.GetTraceId();
@@ -370,9 +370,8 @@ private:
     void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
         LeaseUpdateQueryRunning = false;
 
-        const auto status = ev->Get()->Status;
         const auto& issues = ev->Get()->Issues;
-        if (status != Ydb::StatusIds::SUCCESS) {
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             LOG_E("Lease update " << ev->Sender << " failed " << status << ", Issues: " << issues.ToOneLineString() << ", ExecutionEntryExists: " << ev->Get()->ExecutionEntryExists);
         } else {
             LOG_D("Lease updated by " << ev->Sender << ", CurrentDeadline: " << ev->Get()->CurrentDeadline << ", ExecutionEntryExists: " << ev->Get()->ExecutionEntryExists);
@@ -389,9 +388,9 @@ private:
 
         if (FinishAfterLeaseUpdate) {
             RunScriptExecutionFinisher();
-        } else if (IsExecuting() && status != Ydb::StatusIds::SUCCESS) {
-            Issues.AddIssues(AddRootIssue("Internal error. Failed to update lease state", issues, true));
-            Finish(status);
+        } else if (IsExecuting() && !ev->Get()->ExecutionEntryExists) {
+            Issues.AddIssues(AddRootIssue("Script execution lease was lost", issues, true));
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED);
         }
 
         if (LeaseUpdateRequired()) {
@@ -973,6 +972,10 @@ private:
 
     i64 GetFreeSpaceBytes() const {
         return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) - static_cast<i64>(SaveResultInflightBytes);
+    }
+
+    TString LogPrefix() const {
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". ";
     }
 
 private:

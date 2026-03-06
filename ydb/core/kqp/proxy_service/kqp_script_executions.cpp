@@ -746,14 +746,13 @@ public:
 
         NYdb::TResultSetParser result(ResultSets[0]);
         if (!result.TryNextRow()) {
-            LeaseExists = false;
             Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
             return;
         }
 
         const auto leaseGenerationInDatabase = result.ColumnParser("lease_generation").GetOptionalInt64();
         if (!leaseGenerationInDatabase) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation, lease was lost");
             return;
         }
 
@@ -768,6 +767,7 @@ public:
             return;
         }
 
+        LeaseExists = true;
         UpdateLease();
     }
 

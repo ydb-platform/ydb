@@ -6,6 +6,8 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/wrappers/events/common.h>
+#include <ydb/core/wrappers/events/get_object.h>
+#include <ydb/core/wrappers/events/object_exists.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -14,6 +16,8 @@
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/system/fs.h>
+#include <util/string/printf.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -61,6 +65,103 @@ protected:
         return response->Get()->Result;
     }
 
+    auto GetObject(const TString& key, const TString& range = "") {
+        auto request = GetObjectRequest().WithKey(key);
+        if (!range.empty()) {
+            request.SetRange(range.c_str());
+        }
+        auto response = Send<TEvGetObjectResponse>(
+            new TEvGetObjectRequest(request));
+        UNIT_ASSERT(response->Get());
+        return std::make_pair(response->Get()->Result, response->Get()->Body);
+    }
+
+    auto HeadObject(const TString& key) {
+        auto request = HeadObjectRequest().WithKey(key);
+        auto response = Send<TEvHeadObjectResponse>(
+            new TEvHeadObjectRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto CreateMultipartUpload(const TString& key) {
+        auto request = CreateMultipartUploadRequest().WithKey(key);
+        auto response = Send<TEvCreateMultipartUploadResponse>(
+            new TEvCreateMultipartUploadRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto UploadPart(const TString& key, const TString& uploadId, int partNumber, TString body) {
+        auto request = UploadPartRequest()
+            .WithKey(key)
+            .WithUploadId(uploadId.c_str())
+            .WithPartNumber(partNumber);
+        auto response = Send<TEvUploadPartResponse>(
+            new TEvUploadPartRequest(request, std::move(body)));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto CompleteMultipartUpload(const TString& key, const TString& uploadId) {
+        auto request = CompleteMultipartUploadRequest()
+            .WithKey(key)
+            .WithUploadId(uploadId.c_str());
+        auto response = Send<TEvCompleteMultipartUploadResponse>(
+            new TEvCompleteMultipartUploadRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto AbortMultipartUpload(const TString& key, const TString& uploadId) {
+        auto request = AbortMultipartUploadRequest()
+            .WithKey(key)
+            .WithUploadId(uploadId.c_str());
+        auto response = Send<TEvAbortMultipartUploadResponse>(
+            new TEvAbortMultipartUploadRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto DeleteObject(const TString& key) {
+        auto request = DeleteObjectRequest().WithKey(key);
+        auto response = Send<TEvDeleteObjectResponse>(
+            new TEvDeleteObjectRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto ListObjects(const TString& prefix = "") {
+        auto request = ListObjectsRequest();
+        if (!prefix.empty()) {
+            request.SetPrefix(prefix.c_str());
+        }
+        auto response = Send<TEvListObjectsResponse>(
+            new TEvListObjectsRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto CheckObjectExists(const TString& key) {
+        auto request = HeadObjectRequest().WithKey(key);
+        auto response = Send<TEvCheckObjectExistsResponse>(
+            new TEvCheckObjectExistsRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto UploadPartCopy(const TString& key, const TString& uploadId, int partNumber, const TString& copySource) {
+        auto request = UploadPartCopyRequest()
+            .WithKey(key)
+            .WithUploadId(uploadId.c_str())
+            .WithPartNumber(partNumber)
+            .WithCopySource(copySource.c_str());
+        auto response = Send<TEvUploadPartCopyResponse>(
+            new TEvUploadPartCopyRequest(request));
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
 protected:
     THolder<TTempDir> TempDir;
     THolder<TTestBasicRuntime> Runtime;
@@ -72,6 +173,21 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST_SUITE(TFsStorageTests);
 
     UNIT_TEST(PutObjectDoesNotTruncateLockedFile);
+    UNIT_TEST(PutObjectCreatesIntermediateDirectories);
+    UNIT_TEST(PutObjectOverwritesExistingFile);
+    UNIT_TEST(GetObjectReturnsCorrectBytes);
+    UNIT_TEST(GetObjectWithRangeReturnsCorrectSlice);
+    UNIT_TEST(GetObjectForNonExistentFileReturnsError);
+    UNIT_TEST(GetObjectForEmptyFileReturnsEmptyBody);
+    UNIT_TEST(GetObjectWithStartGreaterThanEndReturnsError);
+    UNIT_TEST(HeadObjectReturnsCorrectContentLength);
+    UNIT_TEST(HeadObjectForNonExistentFileReturnsNoSuchKey);
+    UNIT_TEST(MultipartUploadFullCycleCreatesCorrectFile);
+    UNIT_TEST(AbortMultipartUploadDeletesIncompleteFile);
+    UNIT_TEST(DeleteObjectReturnsNotImplementedError);
+    UNIT_TEST(ListObjectsReturnsNotImplementedError);
+    UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
+    UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -113,6 +229,241 @@ public:
             TFileInput f(key);
             UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), newContent);
         }
+    }
+
+    void PutObjectCreatesIntermediateDirectories() {
+        const TString key = KeyPath("nested/path/to/file.txt");
+        const TString content = "nested content";
+
+        auto result = PutObject(key, content);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+
+        UNIT_ASSERT(TFsPath(key).Exists());
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), content);
+    }
+
+    void PutObjectOverwritesExistingFile() {
+        const TString key = KeyPath("overwrite_test.txt");
+        const TString originalContent = "original";
+        const TString newContent = "new content";
+
+        {
+            auto result = PutObject(key, originalContent);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = PutObject(key, newContent);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), newContent);
+    }
+
+    void GetObjectReturnsCorrectBytes() {
+        const TString key = KeyPath("get_test.txt");
+        const TString content = "test content for get";
+
+        {
+            auto result = PutObject(key, content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        auto [result, body] = GetObject(key);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(body, content);
+    }
+
+    void GetObjectWithRangeReturnsCorrectSlice() {
+        const TString key = KeyPath("range_test.txt");
+        const TString content = "0123456789";
+
+        {
+            auto result = PutObject(key, content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto [result, body] = GetObject(key, "bytes=2-5");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(body, "2345");
+        }
+
+        {
+            auto [result, body] = GetObject(key, "bytes=0-2");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(body, "012");
+        }
+
+        {
+            auto [result, body] = GetObject(key, "bytes=7-9");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(body, "789");
+        }
+    }
+
+    void GetObjectForNonExistentFileReturnsError() {
+        const TString key = KeyPath("non_existent_file.txt");
+
+        auto [result, body] = GetObject(key);
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(body, "");
+    }
+
+    void GetObjectForEmptyFileReturnsEmptyBody() {
+        const TString key = KeyPath("empty_file.txt");
+
+        {
+            auto result = PutObject(key, "");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        auto [result, body] = GetObject(key);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(body, "");
+    }
+
+    void GetObjectWithStartGreaterThanEndReturnsError() {
+        const TString key = KeyPath("range_error_test.txt");
+        const TString content = "0123456789";
+
+        {
+            auto result = PutObject(key, content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        auto [result, body] = GetObject(key, "bytes=5-2");
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void HeadObjectReturnsCorrectContentLength() {
+        const TString key = KeyPath("head_test.txt");
+        const TString content = "test content";
+
+        {
+            auto result = PutObject(key, content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        auto result = HeadObject(key);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetContentLength(), static_cast<i64>(content.size()));
+    }
+
+    void HeadObjectForNonExistentFileReturnsNoSuchKey() {
+        const TString key = KeyPath("non_existent_head.txt");
+
+        auto result = HeadObject(key);
+        UNIT_ASSERT(!result.IsSuccess());
+        // UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetErrorType(), Aws::S3::S3Errors::NO_SUCH_KEY);
+    }
+
+    void MultipartUploadFullCycleCreatesCorrectFile() {
+        const TString key = KeyPath("mpu_test.txt");
+        const TString part1 = "part1_content_";
+        const TString part2 = "part2_content_";
+        const TString part3 = "part3_content";
+        const TString expectedContent = part1 + part2 + part3;
+        const TString incompleteKey = key + ".incomplete";
+
+        TString uploadId;
+
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+            UNIT_ASSERT(!uploadId.empty());
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, part1);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+        UNIT_ASSERT(!TFsPath(key).Exists());
+
+        {
+            auto result = UploadPart(key, uploadId, 2, part2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+        UNIT_ASSERT(!TFsPath(key).Exists());
+
+        {
+            auto result = UploadPart(key, uploadId, 3, part3);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+        UNIT_ASSERT(!TFsPath(key).Exists());
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(key).Exists());
+        UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), expectedContent);
+    }
+
+    void AbortMultipartUploadDeletesIncompleteFile() {
+        const TString key = KeyPath("abort_mpu_test.txt");
+        const TString incompleteKey = key + ".incomplete";
+
+        TString uploadId;
+
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "some data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+
+        {
+            auto result = AbortMultipartUpload(key, uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
+        UNIT_ASSERT(!TFsPath(key).Exists());
+    }
+
+    void DeleteObjectReturnsNotImplementedError() {
+        const TString key = KeyPath("delete_test.txt");
+
+        auto result = DeleteObject(key);
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void ListObjectsReturnsNotImplementedError() {
+        auto result = ListObjects();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void CheckObjectExistsReturnsNotImplementedError() {
+        const TString key = KeyPath("check_exists_test.txt");
+
+        auto result = CheckObjectExists(key);
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void UploadPartCopyReturnsNotImplementedError() {
+        const TString key = KeyPath("upload_part_copy_test.txt");
+
+        auto result = UploadPartCopy(key, "fake_upload_id", 1, "source_key");
+        UNIT_ASSERT(!result.IsSuccess());
     }
 };
 

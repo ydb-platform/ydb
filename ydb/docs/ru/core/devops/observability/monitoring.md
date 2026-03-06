@@ -1,6 +1,14 @@
 # Настройка мониторинга кластера {{ ydb-short-name }}
 
-На этой странице рассказано, как настроить мониторинг кластера {{ ydb-short-name }}.
+В этом разделе приведён обзор различных способов мониторинга состояния и производительности кластера {{ ydb-short-name }}, а также рекомендации по использованию доступных инструментов и интерфейсов для отслеживания ключевых метрик.
+
+## Доступ к метрикам через веб-интерфейс
+
+{% note tip %}
+
+Перед началом работы ознакомьтесь с [описанием метрик](../../reference/observability/metrics/index.md).
+
+{% endnote %}
 
 {{ ydb-short-name }} предоставляет множество метрик состояния системы. Мгновенные значения метрик можно посмотреть в веб-интерфейсе:
 
@@ -10,13 +18,30 @@ http://<ydb-server-address>:<ydb-port>/counters/
 
 где:
 
-- `<ydb-server-address>` – адрес сервера {{ ydb-short-name }}.
+- `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
+- `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon -port` при запуске узла. Значение по умолчанию: `8765`.
 
-  Для локального однонодового кластера {{ ydb-short-name }}, запущенного с помощью инструкции по [Быстрому началу работы](../../quickstart.md), используйте адрес `localhost`.
+{% cut "Как определить значение параметра `<ydb-port>`" %}
 
-- `<ydb-port>` – порт {{ ydb-short-name }}. Значение по умолчанию: 8765.
+Определите значение параметра `<ydb-port>` командой:
 
-Связанные метрики объединены в подгруппы (например `counters auth`). Чтобы посмотреть значения метрик только определенной подгруппы, перейдите по URL следующего вида:
+```bash
+ps aux | grep ydbd
+```
+
+![-](../../_assets/mon-port.png)
+
+Возьмите значение, указанное в параметре `--mon -port`.
+
+{% endcut %}
+
+{% cut "Пример интерфейса" %}
+
+![-](../../_assets/monitoring-UI.png)
+
+{% endcut %}
+
+Связанные метрики объединены в подгруппы (например, `counters auth`). Чтобы посмотреть значения метрик только определенной подгруппы, перейдите по URL следующего вида:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
@@ -30,7 +55,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 ```
 
-Для сбора значений метрик вы можете использовать популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/) или любую другую систему с поддержкой этого формата. Значения метрик {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
+Для сбора значений метрик используйте популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/) или любую другую систему с поддержкой этого формата. Значения метрик {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
@@ -38,80 +63,152 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 - `<servicename>` — имя подгруппы метрик.
 
-Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Grafana](https://grafana.com/), [Zabbix](https://www.zabbix.com/ru/) или [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/):
+Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например:
 
-![grafana-actors](../../_assets/grafana-actors.png)
+- [Grafana](https://grafana.com/);
+- [Zabbix](https://www.zabbix.com/ru/);
+- [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/).
 
 ## Настройка мониторинга с помощью Prometheus и Grafana {#prometheus-grafana}
 
-Чтобы настроить мониторинг кластера {{ ydb-short-name }} с помощью [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/):
+Для настройки мониторинга кластера {{ ydb-short-name }} с использованием [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/) выполните следующие шаги.
 
-1. [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
+{% note tip %}
 
-1. Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
+Перед началом работы:
 
-    1. В файле [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
+- ознакомьтесь [со справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md);
 
-        ```json
-        - labels:
-            container: ydb-static
-          targets:
-          - "ydb-s1.example.com:8765"
-          - "ydb-s2.example.com:8765"
-          - "ydb-s3.example.com:8765"
-        ```
+- определите вариант установки {{ ydb-short-name }}:
 
-        Для локального однонодового кластера YDB в секции `targets` укажите один адрес:
+  - [обычная установка](../deployment-options/index.md);
 
-        ```json
-        - labels:
-            container: ydb-static
-          targets:
-          - "localhost:8765"
-        ```
+  - [быстрая установка](../../quickstart.md);
 
-    1. В файле [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+{% endnote %}
 
-        ```json
-        - labels:
-            container: ydb-dynamic
-          targets:
-          - "ydb-s1.example.com:31002"
-          - "ydb-s1.example.com:31012"
-          - "ydb-s1.example.com:31022"
-          - "ydb-s2.example.com:31002"
-          - "ydb-s2.example.com:31012"
-          - "ydb-s2.example.com:31022"
-          - "ydb-s3.example.com:31002"
-          - "ydb-s3.example.com:31012"
-          - "ydb-s3.example.com:31022"
-        ```
+### Подготовка к установке
 
-        Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
+- [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-        ```json
-        - labels:
-            container: ydb-dynamic
-          targets:
-          - "localhost:8765"
-        ```
+- [Установите](https://grafana.com/docs/grafana/latest/setup-grafana/) Grafana.
 
-    1. В файле [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+### Подготовьте файлы конфигурации Prometheus
 
-       ```json
-       scheme: https
-       tls_config:
-           ca_file: '<ydb-ca-file>'
-       ```
+Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
 
-1. Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, указав в опциях запуска файл конфигурации `prometheus_ydb.yml`.
+#### Файл [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml)
 
-1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+{% list tabs %}
 
-1. [Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `prometheus` в Grafana и подсоедините его к запущенному экземпляру Prometheus.
+- Обычная установка
 
-1. Загрузите [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
+  В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 
-    Вы можете загрузить дашборды с помощью инструмента [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) Grafana UI или выполнить [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. Для других случаев модифицируйте скрипт.
+    ```yaml
+    - labels:
+        container: ydb-static
+      targets:
+      - "ydb-s1.example.com:8765"
+      - "ydb-s2.example.com:8765"
+      - "ydb-s3.example.com:8765"
+    ```
 
-    Ознакомьтесь со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
+- Быстрая установка
+
+  Для локального однонодового кластера YDB в секции `targets` укажите один адрес:
+
+    ```yaml
+    - labels:
+        container: ydb-static
+      targets:
+      - "localhost:8765"
+    ```
+
+{% endlist %}
+
+#### Файл [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml)
+
+{% list tabs %}
+
+- Обычная установка
+
+  В секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+
+  {% cut "Как определить значения портов узлов баз данных" %}
+
+  Определите значения портов узлов баз данных командой:
+
+  ```bash
+    ps aux | grep ydbd
+  ```
+
+  ![-](../../_assets/mon-port.png)
+
+  Возьмите значение, указанное в параметре `--mon -port`.
+
+  {% endcut %}
+
+    ```yaml
+    - labels:
+        container: ydb-dynamic
+      targets:
+      - "ydb-s1.example.com:31002"
+      - "ydb-s1.example.com:31012"
+      - "ydb-s1.example.com:31022"
+      - "ydb-s2.example.com:31002"
+      - "ydb-s2.example.com:31012"
+      - "ydb-s2.example.com:31022"
+      - "ydb-s3.example.com:31002"
+      - "ydb-s3.example.com:31012"
+      - "ydb-s3.example.com:31022"
+    ```
+
+- Быстрая установка
+
+  Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
+
+    ```yaml
+    - labels:
+        container: ydb-dynamic
+      targets:
+      - "localhost:8765"
+    ```
+
+{% endlist %}
+
+#### Файл [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml)
+
+При необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+
+  ```yaml
+  scheme: https
+  tls_config:
+      ca_file: '<ydb-ca-file>'
+  ```
+
+Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, указав в опциях запуска файл конфигурации `prometheus_ydb.yml`.
+
+### Настройка интеграции Grafana с Prometheus
+
+#### Создание источника данных в Grafana
+
+[Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `Prometheus` в Grafana и подключите его к работающему экземпляру Prometheus.
+
+#### Импорт дашбордов в Grafana
+
+Импортируйте необходимые [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) в Grafana.
+
+Для импорта дашбордов воспользуйтесь одним из следующих способов:
+
+- и спользуйте функцию [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) в интерфейсе Grafana;
+
+- выполните [скрипт для загрузки дашбордов](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) и при необходимости может быть модифицирован для других способов интеграции.
+
+### Результат
+
+{% cut "Пример дашборда в Grafana" %}
+
+![-](../../_assets/grafana.png)
+
+{% endcut %}

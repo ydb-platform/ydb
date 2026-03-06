@@ -1995,7 +1995,7 @@ namespace NKikimr {
 
             // run chunk keeper actor
             IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperData),
-                    Config->EnableChunkKeeper);
+                    Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
             Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
             ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 

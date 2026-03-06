@@ -29,10 +29,11 @@ private:
 
 public:
     TChunkKeeperActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
-            std::unique_ptr<TChunkKeeperData>&& data, bool isActive)
+            std::unique_ptr<TChunkKeeperData>&& data, bool isActive, bool readOnly)
         : LogCtx(logCtx)
         , Committed(std::move(data))
         , IsActive(isActive)
+        , ReadOnly(readOnly)
     {}
 
     void Bootstrap() {
@@ -42,7 +43,9 @@ public:
         if (IsActive) {
             Become(&TThis::StateAccepting);
         } else {
-            DropAllChunks();
+            if (!ReadOnly) {
+                DropAllChunks();
+            }
             Become(&TThis::StateError);
         }
     }
@@ -107,6 +110,15 @@ private:
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperAllocate"),
                 (Subsystem, subsystem));
+        { // validation
+            if (ReadOnly) {
+                TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, Subsystem# " << subsystem;
+                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(LogCtx->VCtx, "Bad allocation request"),
+                        (ErrorReason, errorReason));
+                Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, errorReason));
+                return;
+            }
+        }
         PendingRequests.push_back(TRequest(TRequestAllocate{
             .Sender = ev->Sender,
             .Subsystem = subsystem,
@@ -122,6 +134,13 @@ private:
                 (Subsystem, subsystem));
 
         { // validation
+            if (ReadOnly) {
+                TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, ChunkIdx# " << chunkIdx << " Subsystem# " << subsystem;
+                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(LogCtx->VCtx, "Bad deallocation request"),
+                        (ErrorReason, errorReason));
+                Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
+                return;
+            }
             auto it = Committed->Chunks.find(ev->Get()->ChunkIdx);
             if (it == Committed->Chunks.end()) {
                 TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx << " is not allocated";
@@ -168,6 +187,9 @@ private:
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK18, VDISKP(LogCtx->VCtx, "Handle TEvCutLog"),
                 (CurEntryPointLsn, CurEntryPointLsn),
                 (FreeUpToLsn, ev->Get()->FreeUpToLsn));
+        if (ReadOnly) {
+            return;
+        }
         if (CurEntryPointLsn < ev->Get()->FreeUpToLsn) {
             PendingRequests.push_front(TRequestCutLog{});
         }
@@ -552,11 +574,12 @@ private:
 
     ui64 CurEntryPointLsn = 0;
     bool IsActive;
+    bool ReadOnly;
 };
 
 IActor* CreateChunkKeeperActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
-        std::unique_ptr<TChunkKeeperData>&& data, bool isActive) {
-    return new TChunkKeeperActor(logCtx, std::move(data), isActive);
+        std::unique_ptr<TChunkKeeperData>&& data, bool isActive, bool readOnly) {
+    return new TChunkKeeperActor(logCtx, std::move(data), isActive, readOnly);
 }
 
 } // namespace NKikimr

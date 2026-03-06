@@ -1853,7 +1853,7 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 }
 
@@ -1881,6 +1881,10 @@ Tests::TServer& TTestExtEnv::GetServer() const {
 
 Tests::TClient& TTestExtEnv::GetClient() const {
     return *Client;
+}
+
+const TString& TTestExtEnv::GetEndpoint() const {
+    return Endpoint;
 }
 
 void CheckOwner(TSession& session, const TString& path, const TString& name) {

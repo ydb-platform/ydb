@@ -133,7 +133,7 @@ TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceO
     auto lambda = TCoLambda(lambdaPtr);
     auto body = lambda.Body().Ptr();
     auto lambdaArg = lambda.Args().Arg(0);
-    auto bodyType = body->GetTypeAnn();
+    const TTypeAnnotationNode* bodyType = body->GetTypeAnn();
     Y_ENSURE(bodyType);
     // Force optional by adding Just.
     if (!bodyType->IsOptionalOrNull() && forceOptional) {
@@ -197,7 +197,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::T
     }
 
     for (auto typeExpr : opInfuseDeps.Types()) {
-        auto type = typeExpr.Ptr()->GetTypeAnn();
+        const TTypeAnnotationNode* type = typeExpr.Ptr()->GetTypeAnn();
         types.push_back(type->Cast<TTypeExprType>()->GetType());
     }
 

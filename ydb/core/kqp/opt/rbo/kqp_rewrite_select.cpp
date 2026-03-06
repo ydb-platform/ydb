@@ -1560,7 +1560,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         // Process result items
         for (auto resultItem : result->Child(1)->Children()) {
             auto maybeColumn = resultItem->Child(0);
-            auto itemType = resultItem->GetTypeAnn();
+            const TTypeAnnotationNode* itemType = resultItem->GetTypeAnn();
 
             // We can have a single column or mutlitple columns in the item
             if (maybeColumn->IsAtom()) {

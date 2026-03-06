@@ -61,6 +61,7 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/library/actors/async/async.h>
 #include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/async/low_priority.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -291,6 +292,7 @@ class TDataShard
     friend class TCdcStreamHeartbeatManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
+    friend class TMultiTxIdManager;
 
     friend class TTableStatsCoroBuilder;
     friend class TReadTableScan;
@@ -1103,6 +1105,25 @@ class TDataShard
             >;
         };
 
+        struct MultiTxIds : Table<37> {
+            struct MultiTxId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockedRows : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Flags : Column<3, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<MultiTxId>;
+            using TColumns = TableColumns<MultiTxId, LockedRows, Flags>;
+        };
+
+        struct MultiTxIdGraph : Table<38> {
+            struct EdgeId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct MultiTxId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct NestedTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct NestedLockMode : Column<4, NScheme::NTypeIds::Uint8> { using Type = NTable::ELockMode; };
+
+            using TKey = TableKey<EdgeId>;
+            using TColumns = TableColumns<EdgeId, MultiTxId, NestedTxId, NestedLockMode>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1111,7 +1132,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1275,6 +1296,7 @@ class TDataShard
     void ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx);
     void CheckLockRowsRejectAll();
     bool CheckLockRowsReject(TLockRowsRequestState& state);
+    TLockInfo::TPtr FindValidLockOwner(ui64 lockId);
     void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
     void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
     void HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev);
@@ -2079,6 +2101,9 @@ public:
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
     void EmitHeartbeats();
 
+    TMultiTxIdManager& GetMultiTxIdManager() { return MultiTxIdManager; }
+    const TMultiTxIdManager& GetMultiTxIdManager() const { return MultiTxIdManager; }
+
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
@@ -2231,6 +2256,9 @@ public:
         Y_ENSURE(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    async<ui64> AllocateGlobalTxId();
+    void RecycleGlobalTxId(ui64 txId);
 
     void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
@@ -2783,6 +2811,7 @@ private:
     TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
+    TMultiTxIdManager MultiTxIdManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3130,6 +3159,9 @@ private:
     TDeque<TRecentWriteForTli> RecentWritesForTli;
 
     TAsyncLowPriorityQueue LowPriorityQueue;
+
+    TVector<ui64> GlobalTxIdCache;
+    TAsyncEvent GlobalTxIdCacheAdded;
 
 public:
     struct TBreakerInfo {

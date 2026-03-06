@@ -133,6 +133,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , SchemaSnapshotManager(this)
     , VolatileTxManager(this)
     , ConflictsCache(this)
+    , MultiTxIdManager(*this)
     , DisableByKeyFilter(0, 0, 1)
     , MaxTxInFly(15000, 0, 100000)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
@@ -4820,7 +4821,33 @@ void TDataShard::Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const T
         Pipeline.ProvideGlobalTxId(op, ev->Get()->TxId);
         Pipeline.AddCandidateOp(op);
         PlanQueue.Progress(ctx);
+    } else {
+        GlobalTxIdCache.push_back(ev->Get()->TxId);
+        GlobalTxIdCacheAdded.NotifyOne();
     }
+}
+
+async<ui64> TDataShard::AllocateGlobalTxId() {
+    if (GlobalTxIdCache.empty()) {
+        // Note: this request is not tied to any operation, ev->Cookie == 0
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId());
+        // Wait until an allocated TxId is added to cache
+        co_await GlobalTxIdCacheAdded.Wait();
+        // We must have at least one cached TxId
+        Y_ENSURE(!GlobalTxIdCache.empty());
+    }
+
+    ui64 txId = GlobalTxIdCache.back();
+    GlobalTxIdCache.pop_back();
+    co_return txId;
+}
+
+void TDataShard::RecycleGlobalTxId(ui64 txId) {
+    // Note: we don't notify waiting coroutines to avoid patological cases
+    // where they wake up after the cache becomes empty repeatedly. Those
+    // coroutines will wake up when corresponding TEvAllocateTxIdResult
+    // messages are received.
+    GlobalTxIdCache.push_back(txId);
 }
 
 void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &ctx) {

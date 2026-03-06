@@ -739,6 +739,8 @@ public:
     }
 
     void OnGetLeaseInfo() {
+        LeaseExists = false;
+
         if (ResultSets.size() != 1) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
@@ -819,7 +821,7 @@ private:
     const TDuration LeaseDuration;
     const i64 LeaseGeneration;
     TInstant LeaseDeadline;
-    bool LeaseExists = false;
+    bool LeaseExists = true;
 };
 
 class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActor> {

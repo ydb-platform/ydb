@@ -15,13 +15,13 @@
 
 namespace NKikimr::NDataShard {
 
-class TCheckConstraintScan final : public TActor<TCheckConstraintScan>, public NTable::IScan {
+class TValidateRowConditionScan final : public TActor<TValidateRowConditionScan>, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
-    TCheckConstraintScan(
+    TValidateRowConditionScan(
         const NKikimrTxDataShard::TEvValidateRowConditionRequest& request,
         const TActorId& sender,
         ui64 tabletId,
@@ -40,7 +40,7 @@ public:
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
     }
 
-    ~TCheckConstraintScan() final = default;
+    ~TValidateRowConditionScan() final = default;
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(static_cast<IActor*>(this));
@@ -93,7 +93,7 @@ public:
     }
 
     void Describe(IOutputStream& out) const noexcept final {
-        out << "TCheckConstraintScan";
+        out << "TValidateRowConditionScan";
     }
 
 private:
@@ -191,7 +191,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
-    auto scan = new TCheckConstraintScan(record, ev->Sender, TabletID(), userTable);
+    auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable);
     StartScan(this, scan, record.GetId(), seqNo, rowVersion, userTable.LocalTid);
 }
 

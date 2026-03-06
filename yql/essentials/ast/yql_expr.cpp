@@ -3291,10 +3291,8 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
             return ret;
         }
         default:
-            break;
+            return 0; // Validate will handle it
     }
-
-    ythrow yexception() << "unexpected underlying type" << *underlyingType;
 }
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {

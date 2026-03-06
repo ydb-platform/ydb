@@ -810,7 +810,7 @@ public:
         QueryState->TxCtx->OnBeginQuery();
 
         if (!CheckScriptExecutionState()) {
-            co_return;
+            return;
         }
 
         if (QueryState->NeedPersistentSnapshot()) {
@@ -1760,17 +1760,9 @@ public:
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
-<<<<<<< HEAD
-        request.SaveQueryPhysicalGraph = QueryState && QueryState->SaveQueryPhysicalGraph && request.Transactions.size() == 1 && !isRollback;
-        request.QueryPhysicalGraph = QueryState && !isRollback ? QueryState->QueryPhysicalGraph : nullptr;
-        LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
-=======
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
-        STLOG_D("Sending to Executer",
-            (span_id_size, request.TraceId.GetSpanIdSize()),
-            (trace_id, TraceId()));
->>>>>>> caba824d5ba (YQ-4849 supported precomputes in streaming queries (#32431))
+        LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();

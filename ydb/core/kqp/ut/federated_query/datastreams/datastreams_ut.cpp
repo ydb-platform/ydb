@@ -2679,113 +2679,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
-        constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
-        CreatePqSource(pqSourceName);
-
-        constexpr char streamLookupTableName[] = "oltpStreamLookupTable";
-        constexpr char oltpTableName[] = "oltpTable";
-        constexpr char olapTableName[] = "olapTable";
-        ExecQuery(fmt::format(R"(
-            CREATE TABLE `{oltp_streamlookup_table}` (
-                Key Int32 NOT NULL,
-                Value String NOT NULL,
-                PRIMARY KEY (Key)
-            );
-            CREATE TABLE `{oltp_table}` (
-                Key Int32 NOT NULL,
-                Value String NOT NULL,
-                PRIMARY KEY (Value)
-            );
-            CREATE TABLE `{olap_table}` (
-                Key Int32 NOT NULL,
-                Value String NOT NULL,
-                PRIMARY KEY (Key)
-            ) WITH (
-                STORE = COLUMN
-            );)",
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
-
-        ExecQuery(fmt::format(R"(
-            UPSERT INTO `{oltp_streamlookup_table}`(Key, Value)
-            VALUES (1, "oltp_slj1"), (2, "oltp_slj2");
-
-            UPSERT INTO `{oltp_table}`(Key, Value)
-            VALUES (1, "oltp1"), (2, "oltp2");
-
-            INSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap1"), (2, "olap2");)",
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
-
-        constexpr char queryName[] = "streamingQuery";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                PRAGMA ydb.HashJoinMode = "map";
-                PRAGMA ydb.DqChannelVersion = "1";
-
-                INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT
-                    Unwrap(oltp_slj.Value || "-" || oltp.Value || "-" || olap.Value)
-                FROM `{pq_source}`.`{input_topic}` WITH (
-                    FORMAT = json_each_row,
-                    SCHEMA (
-                        Key Int32 NOT NULL
-                    )
-                ) AS topic
-                LEFT JOIN `{oltp_streamlookup_table}` AS oltp_slj ON topic.Key = oltp_slj.Key
-                LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
-                LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
-        CheckScriptExecutionsCount(1, 1);
-        Sleep(TDuration::Seconds(1));
-
-        WriteTopicMessage(inputTopicName, R"({"Key": 1})");
-        ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
-        Sleep(TDuration::Seconds(1));
-
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (
-                RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
-        CheckScriptExecutionsCount(1, 0);
-
-        WriteTopicMessage(inputTopicName, R"({"Key": 2})");
-        const auto disposition = TInstant::Now();
-
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (
-                RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
-        CheckScriptExecutionsCount(2, 1);
-
-        ReadTopicMessage(outputTopicName, "oltp_slj2-oltp2-olap2", disposition);
-    }
-
     Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
@@ -2794,29 +2687,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
-        constexpr char tableName[] = "oltpTable";
-        ExecQuery(fmt::format(R"(
-            CREATE TABLE `{table_name}` (
-                Key Int32 NOT NULL,
-                Value String NOT NULL,
-                PRIMARY KEY (Key)
-            );)",
-            "table_name"_a = tableName
-        ));
-
-        ExecQuery(fmt::format(R"(
-            UPSERT INTO `{table_name}`
-                (Key, Value)
-            VALUES
-                (1, "value-1");)",
-            "table_name"_a = tableName
-        ));
+        constexpr char sourceBucket[] = "test_streaming_query_with_precompute";
+        constexpr char s3SourceName[] = "s3Source";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-1"})");
+        CreateS3Source(sourceBucket, s3SourceName);
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                $r = SELECT Value FROM `{table_name}`;
+                $r = SELECT Value FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        Key Int32,
+                        Value String
+                    )
+                );
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT
@@ -2827,7 +2713,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName,
-            "table_name"_a = tableName
+            "s3_source"_a = s3SourceName
         ));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -2844,14 +2730,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
         CheckScriptExecutionsCount(1, 0);
 
-        ExecQuery(fmt::format(R"(
-            UPSERT INTO `{table_name}`
-                (Key, Value)
-            VALUES
-                (1, "value-2");)",
-            "table_name"_a = tableName
-        ));
-
+        UploadObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-2"})");
         WriteTopicMessage(inputTopicName, "message-2");
         const auto disposition = TInstant::Now();
 
@@ -2866,7 +2745,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "message-2-value-2", disposition);
     }
 
->>>>>>> caba824d5ba (YQ-4849 supported precomputes in streaming queries (#32431))
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);

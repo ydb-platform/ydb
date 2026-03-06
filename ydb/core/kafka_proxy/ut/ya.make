@@ -9,10 +9,12 @@ FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 SIZE(medium)
-REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
     REQUIREMENTS(cpu:2)
 ENDIF()
+
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

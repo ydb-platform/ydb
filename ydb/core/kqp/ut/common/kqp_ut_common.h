@@ -66,6 +66,14 @@ private:
         if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
             AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
         }
+
+        TTestLogSettings defaultLogSettings;
+        defaultLogSettings.DefaultLogPriority = NActors::NLog::PRI_ERROR;
+        defaultLogSettings.AddLogPriority(NKikimrServices::METADATA_PROVIDER, NActors::NLog::PRI_CRIT);
+        defaultLogSettings.AddLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NActors::NLog::PRI_CRIT);
+        defaultLogSettings.AddLogPriority(NKikimrServices::NET_CLASSIFIER, NActors::NLog::PRI_CRIT);
+        defaultLogSettings.AddLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_CRIT);
+        LogSettings = defaultLogSettings;
     }
 public:
     NKikimrConfig::TAppConfig AppConfig;

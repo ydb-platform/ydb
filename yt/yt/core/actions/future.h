@@ -235,12 +235,14 @@ public:
     /*!
      *  \deprecated Use #BlockingWait instead.
      */
+    [[deprecated("Use BlockingWait() instead")]]
     bool Wait(TDuration timeout = TDuration::Max()) const;
 
     //! The same as #BlockingWait.
     /*!
      *  \deprecated Use #BlockingWait instead.
      */
+    [[deprecated("Use BlockingWait() instead")]]
     bool Wait(TInstant deadline) const;
 
     //! Gets the value; returns null if the value is not set yet.

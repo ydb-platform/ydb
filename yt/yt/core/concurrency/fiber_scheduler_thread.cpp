@@ -1149,7 +1149,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         // When called from a fiber-unfriendly context, we fallback to blocking wait.
         YT_VERIFY(invoker == GetCurrentInvoker());
         YT_VERIFY(invoker == GetSyncInvoker());
-        YT_VERIFY(future.Wait());
+        YT_VERIFY(future.BlockingWait());
         return;
     }
 

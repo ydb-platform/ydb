@@ -50,6 +50,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -82,6 +83,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -102,6 +104,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -124,6 +127,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -145,6 +149,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -172,6 +177,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -207,6 +213,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -228,6 +235,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -260,6 +268,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -292,6 +301,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -323,6 +333,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -362,6 +373,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -398,6 +410,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -433,6 +446,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -461,6 +475,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -493,6 +508,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -515,6 +531,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto client = NYdb::NQuery::TQueryClient(driver);
@@ -617,6 +634,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -641,6 +659,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken(UserName);
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -711,6 +730,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 )", NQuery::TTxControl::NoTx()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            env.GetClient().GrantConnect("databaseadmin");
+
         }
         NQuery::TQueryClient databaseAdmin(env.GetDriver(), NQuery::TClientSettings().CredentialsProviderFactory(
             CreateLoginCredentialsProviderFactory({
@@ -1215,7 +1237,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericWrite);
-        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin", 
+        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericRead);
 
         {

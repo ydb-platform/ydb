@@ -260,7 +260,9 @@ public:
                 TStringBuilder err;
                 err << "Bad watermark expression: ";
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
+                // SerializeWatermarkExpr is for more sensible error message
                 if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
+                    // SerializeWatermarkExpr unexpectedly succeed
                     err << "[unspecified error, please report to support]";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), err));

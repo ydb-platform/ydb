@@ -10,6 +10,8 @@
 #include <ydb/library/yql/providers/common/pushdown/settings.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -255,8 +257,13 @@ public:
             const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
             const auto lambdaBody = lambda.Body();
             if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
+                TStringBuilder err;
+                err << "Bad watermark expression: ";
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
+                    err << "[unspecified error, please report to support]";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), err));
                 return TStatus::Error;
             }
         }

@@ -181,7 +181,7 @@ namespace NKikimr {
             TError Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
-            bool IsSuccess;
+            bool IsSuccess = false;
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)

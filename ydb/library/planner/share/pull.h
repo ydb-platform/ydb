@@ -144,7 +144,7 @@ public:
 
         // Find retards and compute their total share
         TForce s0R = 0;
-        ApplyTo<TShareNode>(group, [=, &s0R] (TShareNode* node) {
+        ApplyTo<TShareNode>(group, [=, this, &s0R] (TShareNode* node) {
             if (TDeContext* ctx = node->CtxAs<TDeContext>()) {
                 ctx->Pull.stretch = Min(2.0, Max(0.0, p0 - node->p(Ec) - node->v() + Length) / Length);
                 ctx->Pull.retardness = Min(1.0, ctx->Pull.stretch); // To avoid s0R jumps

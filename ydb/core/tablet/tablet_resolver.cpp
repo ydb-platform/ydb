@@ -814,7 +814,7 @@ public:
         , ActorSystem(nullptr)
         , ResolvedTablets(new NCache::T2QCacheConfig())
     {
-        ResolvedTablets.SetOverflowCallback([=](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) {
+        ResolvedTablets.SetOverflowCallback([=, this](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) {
             return cache.GetUsedSize() >= Config->TabletCacheLimit;
         });
 

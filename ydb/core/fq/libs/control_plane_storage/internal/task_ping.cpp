@@ -70,8 +70,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
     );
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
-
-    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [meteringRecords, commonCounters=commonCounters, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, finalStatus=finalStatus, response=response, counters=counters, actorSystem=NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -120,7 +119,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
-            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
+            leaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
             retryLimiter.Assign(
                 parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
                 parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
@@ -129,11 +128,11 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         }
 
         // running query us locked for lease period
-        TDuration backoff = Config->TaskLeaseTtl;
-        TInstant expireAt = TInstant::Now() + Config->AutomaticQueriesTtl;
-        UpdateTaskInfo(actorSystem, request, finalStatus, query, internal, job, owner, retryLimiter, backoff, expireAt);
+        TDuration backoff = config->TaskLeaseTtl;
+        TInstant expireAt = TInstant::Now() + config->AutomaticQueriesTtl;
+        UpdateTaskInfo(actorSystem, config, request, finalStatus, query, internal, job, owner, retryLimiter, backoff, expireAt);
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "HardPingTask(write)");
         writeQueryBuilder.AddString("tenant", request.tenant());
         writeQueryBuilder.AddString("scope", request.scope());
         writeQueryBuilder.AddString("job_id", jobId);
@@ -258,7 +257,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [request=request, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, response, commonCounters=commonCounters](const std::vector<TResultSet>& resultSets) {
         TString owner;
         FederatedQuery::Internal::QueryInternal internal;
 
@@ -288,14 +287,14 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
-            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
+            leaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
         }
 
-        TInstant ttl = TInstant::Now() + Config->TaskLeaseTtl;
+        TInstant ttl = TInstant::Now() + config->TaskLeaseTtl;
         response->set_action(internal.action());
         *response->mutable_expired_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ttl.MilliSeconds());
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "SoftPingTask(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
         writeQueryBuilder.AddTimestamp("now", TInstant::Now());
         writeQueryBuilder.AddTimestamp("ttl", ttl);
         writeQueryBuilder.AddString("tenant", request.tenant());
@@ -328,9 +327,9 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
 }
 
 void TControlPlaneStorageBase::UpdateTaskInfo(
-    NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+    NActors::TActorSystem* actorSystem, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
     FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-    TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const
+    TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt)
 {
     TMaybe<FederatedQuery::QueryMeta::ComputeStatus> queryStatus;
     if (request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED) {
@@ -358,8 +357,8 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
         }
 
         TRetryPolicyItem policy(0, 0, TDuration::Seconds(1), TDuration::Zero());
-        auto it = Config->RetryPolicies.find(request.status_code());
-        auto policyFound = it != Config->RetryPolicies.end();
+        auto it = config->RetryPolicies.find(request.status_code());
+        auto policyFound = it != config->RetryPolicies.end();
         if (policyFound) {
             policy = it->second;
         }
@@ -462,7 +461,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
         }
 
         // global dumpRawStatistics will be removed with YQv1
-        if (!Config->Proto.GetDumpRawStatistics() && !request.dump_raw_statistics()) {
+        if (!config->Proto.GetDumpRawStatistics() && !request.dump_raw_statistics()) {
             try {
                 statistics = GetPrettyStatistics(statistics);
             } catch (const std::exception&) {
@@ -598,7 +597,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
         *internal.mutable_resources() = request.resources();
     }
 
-    const auto maxRequestSize = Config->Proto.GetMaxRequestSize();
+    const auto maxRequestSize = config->Proto.GetMaxRequestSize();
     if (job.ByteSizeLong() > maxRequestSize) {
         ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Job proto exceeded the size limit: " << job.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(job).ToString();
     }
@@ -622,7 +621,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
 
 void TControlPlaneStorageBase::FillQueryStatistics(
     const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-    const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const
+    const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter)
 {
     finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
     finalStatus->FinalStatistics.push_back(std::make_pair("IsAutomatic", query.content().automatic()));

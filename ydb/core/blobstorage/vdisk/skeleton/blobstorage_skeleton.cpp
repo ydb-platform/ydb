@@ -2984,7 +2984,7 @@ namespace NKikimr {
         {
             auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
             SkeletonBusyTimeUs = cpuGroup->GetCounter("skeletonBusyTimeUs");
-            ActorQueueLight.Initialize(cpuGroup, "Queue");
+            ActorQueueLight.Initialize(cpuGroup, TLightCounterConfig::WithDefaultLightSet("Queue"));
         }
 
         virtual ~TSkeleton() {

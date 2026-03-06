@@ -941,7 +941,6 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     }
 
     SqlFlags_ = currentSettings->Flags;
-    currentSettings->EmitReadsForExists = true;
     currentSettings->LangVer = LangVer_;
 
     NSQLTranslationV1::TLexers lexers;

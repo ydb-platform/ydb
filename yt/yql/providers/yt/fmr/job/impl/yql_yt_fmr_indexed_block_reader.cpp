@@ -3,24 +3,13 @@
 namespace NYql::NFmr {
 
 int TFmrIndexedBlockReader::TSourceState::CompareTo(const TSourceState& rhs) const {
-    int c = CompareKeyRowsAcrossYsonBlocks(
+    return CompareKeyRowsAcrossYsonBlocks(
         Block.Data,
         Markup(),
         rhs.Block.Data,
         rhs.Markup(),
         SortOrders.get()
     );
-    if (c != 0) {
-        return c;
-    }
-
-    if (SourceId < rhs.SourceId) {
-        return -1;
-    }
-    if (SourceId > rhs.SourceId) {
-        return 1;
-    }
-    return 0;
 }
 
 bool TFmrIndexedBlockReader::TSourceState::operator<(const TSourceState& rhs) const {
@@ -61,7 +50,6 @@ TFmrIndexedBlockReader::TFmrIndexedBlockReader(
     Sources_.reserve(inputs.size());
     for (ui32 i = 0; i < inputs.size(); ++i) {
         Sources_.push_back(TSourceState{
-            .SourceId = i,
             .SortOrders = std::cref(SortOrders_),
             .BlockIterator = inputs[i],
         });

@@ -19,7 +19,7 @@ struct TConcat {
         return EmitFunctionCall<&ConcatStrings>(
             Type::getInt128Ty(ctx.Codegen.GetContext()),
             {left, right},
-            ctx.Codegen,
+            ctx,
             block);
     }
 #endif

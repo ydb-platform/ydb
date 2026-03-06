@@ -166,13 +166,11 @@ public:
         TPosition pos,
         TSourcePtr&& source,
         bool checkExist,
-        bool withTables,
         bool isInlineScalar,
         bool isPure)
         : INode(pos)
         , Source_(std::move(source))
         , CheckExist_(checkExist)
-        , WithTables_(withTables)
         , IsInlineScalar_(isInlineScalar)
         , IsPure_(isPure)
     {
@@ -195,13 +193,16 @@ public:
         if (AsInner_) {
             Source_->UseAsInner();
         }
+
         if (!Source_->Init(ctx, src)) {
             return false;
         }
+
         Node_ = Source_->Build(ctx);
         if (!Node_) {
             return false;
         }
+
         if (src) {
             if (IsSubquery()) {
                 /// should be not used?
@@ -236,16 +237,14 @@ public:
             return false;
         }
 
-        if (Node_ && WithTables_) {
-            TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
-            if (!inputTables->Init(ctx, Source_.Get())) {
-                return false;
-            }
-
-            auto blockContent = inputTables;
-            blockContent = L(blockContent, Y("return", Node_));
-            Node_ = Y("block", Q(blockContent));
+        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+        if (!inputTables->Init(ctx, Source_.Get())) {
+            return false;
         }
+
+        auto blockContent = inputTables;
+        blockContent = L(blockContent, Y("return", Node_));
+        Node_ = Y("block", Q(blockContent));
 
         return true;
     }
@@ -268,7 +267,6 @@ public:
             Pos_,
             Source_->CloneSource(),
             CheckExist_,
-            WithTables_,
             IsInlineScalar_,
             IsPure_);
     }
@@ -286,14 +284,12 @@ TNodePtr BuildSourceNode(
     TPosition pos,
     TSourcePtr source,
     bool checkExist,
-    bool withTables,
     bool isInlineScalar,
     bool isPure) {
     return new TSourceNode(
         pos,
         std::move(source),
         /*checkExist=*/checkExist,
-        /*withTables=*/withTables,
         /*isInlineScalar=*/isInlineScalar,
         /*isPure=*/isPure);
 }

@@ -192,7 +192,7 @@ namespace orc {
   };
 
   // Thomas Wang's integer hash function
-  // http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
+  // https://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
   // Put this in header file so tests can use it as well.
   NO_SANITIZE_ATTR
   inline int64_t getLongHash(int64_t key) {

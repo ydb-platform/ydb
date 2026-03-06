@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.151.8)
+VERSION(6.151.9)
 
 LICENSE(MPL-2.0)
 
@@ -57,8 +57,6 @@ PY_SRCS(
     hypothesis/internal/conjecture/choice.py
     hypothesis/internal/conjecture/data.py
     hypothesis/internal/conjecture/datatree.py
-    hypothesis/internal/conjecture/dfa/__init__.py
-    hypothesis/internal/conjecture/dfa/lstar.py
     hypothesis/internal/conjecture/engine.py
     hypothesis/internal/conjecture/floats.py
     hypothesis/internal/conjecture/junkdrawer.py

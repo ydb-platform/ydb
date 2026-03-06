@@ -104,11 +104,11 @@ public:
         YQL_ENSURE(maybeWriteToShard);
 
         auto writeToShard = maybeWriteToShard.Cast();
-        auto* listType = writeToShard.Input().Ref().GetTypeAnn();
-        auto* itemType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto listType = writeToShard.Input().Ref().GetTypeAnn();
+        auto itemType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         NYtflow::NProto::TSolomonSinkMessage sinkSettings;
-        for (auto* structItem : itemType->GetItems()) {
+        for (auto structItem : itemType->GetItems()) {
             TString itemName(structItem->GetName());
             const TDataExprType* itemType = nullptr;
 

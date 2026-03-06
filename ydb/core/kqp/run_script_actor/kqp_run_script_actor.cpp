@@ -330,6 +330,10 @@ private:
     }
 
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
+        if (std::exchange(Terminated, true)) {
+            return;
+        }
+
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
             Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
@@ -338,6 +342,10 @@ private:
     }
 
     void RunScriptExecutionFinisher() {
+        if (Terminated) {
+            return;
+        }
+
         if (!FinalStatusIsSaved) {
             FinalStatusIsSaved = true;
             WaitFinalizationRequest = true;
@@ -381,6 +389,8 @@ private:
             LOG_E("Script execution entry was lost");
 
             FinalStatusIsSaved = true;
+            Issues.AddIssues(AddRootIssue("Script execution lease was lost", issues, true));
+
             if (RunState == ERunState::Running) {
                 CancelRunningQuery();
             }
@@ -388,9 +398,6 @@ private:
 
         if (FinishAfterLeaseUpdate) {
             RunScriptExecutionFinisher();
-        } else if (IsExecuting() && !ev->Get()->ExecutionEntryExists) {
-            Issues.AddIssues(AddRootIssue("Script execution lease was lost", issues, true));
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED);
         }
 
         if (LeaseUpdateRequired()) {
@@ -1003,6 +1010,7 @@ private:
     bool FinishAfterLeaseUpdate = false;
     bool WaitFinalizationRequest = false;
     bool SavedRunningStatus = false;
+    bool Terminated = false;
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
     ui64 CancelRequestsCount = 0;

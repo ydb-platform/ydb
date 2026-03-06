@@ -81,12 +81,22 @@ public:
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         const auto& request = *ev.Get()->Get();
+
         const TString folderId = NYdb::NFq::TScope(request.Scope).ParseFolder();
+        const TString cloudId = request.CloudId;
+        const TString baseId = GetSharedDatabaseId(request.BasePath);
+
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
         forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         if (!folderId.empty()) {
             forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
+        }
+        if (!cloudId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("cloud_id", folderId);
+        }
+        if (!baseId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("database_id", baseId);
         }
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
@@ -182,6 +192,16 @@ public:
     }
 
 private:
+    TString GetSharedDatabaseId(const TString& basePath) const {
+        size_t dbIdInd = basePath.find_last_of("/");
+        if (dbIdInd == TString::npos) {
+            return "";
+        }
+
+        dbIdInd++;
+        return basePath.substr(dbIdInd, basePath.size() - dbIdInd);
+    }
+
     NGrpcActorClient::TGrpcClientSettings Settings;
     TMap<uint64_t, std::variant<TEvYdbCompute::TEvCreateDatabaseRequest::TPtr, TEvYdbCompute::TEvListDatabasesRequest::TPtr>> Requests;
     NYdb::TCredentialsProviderPtr CredentialsProvider;

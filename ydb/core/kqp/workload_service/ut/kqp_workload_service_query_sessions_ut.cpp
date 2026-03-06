@@ -98,29 +98,34 @@ public:
             SELECT SessionId, WmPoolId, WmState
             FROM `.sys/query_sessions`
             WHERE State = 'EXECUTING'
+            ORDER By WmState
         )");
 
         UNIT_ASSERT_VALUES_EQUAL_C(Result.GetStatus(), NYdb::EStatus::SUCCESS, Result.GetIssues().ToString());
 
         auto rs = Result.GetResultSet(0);
-        Parser = std::make_unique<NYdb::TResultSetParser>(rs);
+        auto parser = std::make_unique<NYdb::TResultSetParser>(rs);
+
+        while (parser->TryNextRow()) {
+            auto wmState = parser->ColumnParser("WmState").GetOptionalUtf8();
+            auto wmPoolId = parser->ColumnParser("WmPoolId").GetOptionalUtf8();
+
+            Results.push_back(Row{.WmPoolId = wmPoolId, .WmState = wmState});
+        }
     }
 
-    size_t TotalRows() const {
-        return Result.GetResultSets().size();
+    Row operator[](size_t index) const {
+        Y_ENSURE(index < Results.size());
+        return Results[index];
     }
 
-    Row Fetch() const {
-        Parser->TryNextRow();
-        auto wmState = Parser->ColumnParser("WmState").GetOptionalUtf8();
-        auto wmPoolId = Parser->ColumnParser("WmPoolId").GetOptionalUtf8();
-
-        return Row{.WmPoolId = wmPoolId, .WmState = wmState};
+    size_t Size() const {
+        return Results.size();
     }
 
 private:
     TQueryRunnerResult Result;
-    std::unique_ptr<NYdb::TResultSetParser> Parser;
+    std::vector<Row> Results;
 };
 
 class TQuerySessionTestFixture {
@@ -168,10 +173,11 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         TSampleQueries::TSelect42::CheckResult(
             f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
 
-        auto r = f.GetReader().Fetch();
+        auto r = f.GetReader();
 
-        UNIT_ASSERT_VALUES_EQUAL(r.WmState, "NONE");
-        UNIT_ASSERT_VALUES_EQUAL(r.WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "NONE");
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
     }
 
     Y_UNIT_TEST(TestWmStatePending) {
@@ -181,32 +187,38 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         TSampleQueries::TSelect42::CheckResult(
             f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
 
-        auto r = f.GetReader().Fetch();
+        auto r = f.GetReader();
 
-        UNIT_ASSERT_VALUES_EQUAL(r.WmState, "PENDING");
-        UNIT_ASSERT_VALUES_EQUAL(r.WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "PENDING");
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
     }
 
     Y_UNIT_TEST(TestWmStateDelayed) {
-        TQuerySessionTestFixture f(IWmSessionUpdater::PENDING, "my_pool", 1);
+        TQuerySessionTestFixture f(IWmSessionUpdater::DELAYED, "my_pool", 1);
         auto myPool = TQueryRunnerSettings().PoolId("my_pool");
 
         auto hangingRequest = f.GetYdb()->ExecuteQueryAsync(
-            TSampleQueries::TSelect42::Query,
-            TQueryRunnerSettings().HangUpDuringExecution(true).PoolId("my_pool")
+            "select 121;",
+            myPool.HangUpDuringExecution(true)
         );
 
         f.GetYdb()->WaitQueryExecution(hangingRequest);
 
-        TSampleQueries::TSelect42::CheckResult(
-            f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+        auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, myPool);
 
+        f.GetYdb()->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
         f.GetYdb()->ContinueQueryExecution(hangingRequest);
+        f.GetYdb()->WaitQueryExecution(delayedRequest, TDuration::Seconds(5));
 
-        auto r = f.GetReader().Fetch();
+        auto hangingResult = hangingRequest.GetResult();
+        auto delayedResult = delayedRequest.GetResult();
 
-        UNIT_ASSERT_VALUES_EQUAL(r.WmState, "DELAYED");
-        UNIT_ASSERT_VALUES_EQUAL(r.WmPoolId, "my_pool");
+        auto r = f.GetReader();
+
+        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "DELAYED");
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
     }
 
     Y_UNIT_TEST(TestWmStateExited) {
@@ -216,10 +228,11 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         TSampleQueries::TSelect42::CheckResult(
             f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
 
-        auto r = f.GetReader().Fetch();
+        auto r = f.GetReader();
 
-        UNIT_ASSERT_VALUES_EQUAL(r.WmState, "EXITED");
-        UNIT_ASSERT_VALUES_EQUAL(r.WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "EXITED");
+        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
     }
 
 }

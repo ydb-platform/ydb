@@ -490,7 +490,7 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 {
     auto response =
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
-    response->ActorId = LoadActorAdapter.ToString();
+    response->Record.SetActorId(LoadActorAdapter.ToString());
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

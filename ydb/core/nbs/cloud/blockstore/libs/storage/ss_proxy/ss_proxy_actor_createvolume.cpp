@@ -136,20 +136,15 @@ void TCreateVolumeActor::DescribeVolumeBeforeCreate(const TActorContext& ctx)
 
     const auto& diskId = VolumeConfig.GetDiskId();
 
-    TString volumeDir, volumeName;
-    std::tie(volumeDir, volumeName) =
-        DiskIdToVolumeDirAndName(SchemeShardDir, diskId);
-    const auto volumePath = volumeDir + "/" + volumeName;
-
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_SS_PROXY,
-        "Sending describe request before create, for volume %s and path %s",
+        "Sending describe request before create, for volume %s and diskId %s",
         diskId.Quote().data(),
-        volumePath.data());
+        diskId.data());
 
     auto request =
-        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(volumePath);
+        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(diskId.data());
 
     NYdb::NBS::Send(
         ctx,
@@ -230,17 +225,15 @@ void TCreateVolumeActor::DescribeVolumeAfterCreate(const TActorContext& ctx)
 {
     Become(&TThis::StateDescribeVolumeAfterCreate);
 
-    const auto volumePath = VolumeDir + "/" + VolumeName;
-
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_SS_PROXY,
-        "Volume %s: sending describe request after create for path %s",
+        "Volume %s: sending describe request after create for volume %s",
         VolumeConfig.GetDiskId().Quote().data(),
-        volumePath.data());
+        VolumeName.data());
 
     auto request =
-        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(volumePath);
+        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(VolumeName);
 
     NYdb::NBS::Send(
         ctx,

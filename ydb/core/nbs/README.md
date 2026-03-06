@@ -69,23 +69,29 @@ code workspace/workspace.code-workspace
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
-3) Write some data:
+3) Get load actor adapter id:
+    ```
+    cd ydb_bg/ydb/apps/dstool/
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition get-load-actor-adapter-actor-id --disk-id disk1
+    ```
+
+4) Write some data:
     ```
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --start_index 0 --type write --data "vnfjkdnsfvjdfknsjknsdkjnvnjk" --id "[1:7599782149963481987:2733]"
     ```
 
-4) Read some data:
+5) Read some data:
     ```
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --type read --blocks_count 1 --start_index 0 --id "[1:7600018021929343002:2699]"
     ```
 
-3) Grep logs:
+6) Grep logs:
     ```
     cd /home/barkovbg/ydb_bg/ydb/tests/tools/local_cluster/.ydbd_working_dir/local_cluster
     cat node_*/logfile_* | grep "NBS_PARTITION" | sort
     ```
 
-4) Run FIO from QEMU
+7) Run FIO from QEMU
     ```
     sudo fio --name=randomreadwritetest --blocksize=4096 --rw=randrw --direct=1 --buffered=0 --ioengine=libaio --iodepth=32 --runtime=30 --time_based --filename=/dev/vdb
     ```

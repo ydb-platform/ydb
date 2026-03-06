@@ -104,8 +104,8 @@ public:
         DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
-        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 32767) {
-            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 32767]";
+        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 1048576) {
+            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 1048576]";
         }
         if (RangeTest.GetZeroRate() > 0) {
             ythrow NKikimr::TLoadActorException() << "ZeroRate is unsupported";

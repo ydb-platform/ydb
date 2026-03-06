@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DisableFlags, UseSink, UseBatchUpdates) {
+    Y_UNIT_TEST_TWIN(DisableFlags, UseBatchUpdates) {
         TKikimrRunner kikimr(GetTestSettings(10000, 10, UseBatchUpdates));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            if (UseSink && UseBatchUpdates) {
+            if (UseBatchUpdates) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);

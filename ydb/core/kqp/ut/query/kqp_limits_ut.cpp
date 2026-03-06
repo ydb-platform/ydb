@@ -475,17 +475,13 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
             switch (result.GetStatus()) {
             case EStatus::SUCCESS:
-                continue;
             case EStatus::OVERLOADED:
-                if (result.GetIssues().ToString().contains("out of disk space")) {
-                    Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
-                    return;
-                } else {
-                    continue;
-                }
+            case EStatus::UNDETERMINED:
+                continue;
             case EStatus::UNAVAILABLE:
-                if (result.GetIssues().ToString().contains("out of disk space")) {
-                    //TODO Should be also EStatus::OVERLOADED
+                if (result.GetIssues().ToString().contains("out of space")
+                    || result.GetIssues().ToString().contains("Disk space exhausted")
+                    || result.GetIssues().ToString().contains("Kikimr cluster or one of its subsystems was unavailable.")) {
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;
                 } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")

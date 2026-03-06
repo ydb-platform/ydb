@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-                return issue.GetMessage().contains("Duplicated keys found.");
+                return issue.GetMessage().contains("Conflict with existing key.");
             }));
         }
     }
@@ -2063,9 +2063,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             // compute phase + effect phase
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            const auto& literalPhase = stats.query_phases(0);
-            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
-
             const auto& effectPhase = stats.query_phases(0);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
@@ -2083,9 +2080,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             // compute phase + effect phase
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-
-            const auto& literalPhase = stats.query_phases(0);
-            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
 
             const auto& effectPhase = stats.query_phases(0);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);

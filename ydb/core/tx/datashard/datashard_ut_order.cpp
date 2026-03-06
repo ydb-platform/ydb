@@ -1348,10 +1348,9 @@ Y_UNIT_TEST(TestOutOfOrderLockLost) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
+Y_UNIT_TEST(TestOutOfOrderReadOnlyAllowed) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -1453,10 +1452,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, EvWrite) {
+Y_UNIT_TEST(TestOutOfOrderNonConflictingWrites) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -2019,11 +2017,10 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestPlannedHalfOverloadedSplit, UseSink) {
+Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);
@@ -2456,11 +2453,10 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
     UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
 }
 
-Y_UNIT_TEST_TWIN(TestImmediateQueueThenSplit, UseSink) {
+Y_UNIT_TEST(TestImmediateQueueThenSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);
@@ -2628,11 +2624,10 @@ Y_UNIT_TEST_TWIN(TestImmediateQueueThenSplit, UseSink) {
         << failures << " failures");
 }
 
-void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString& query) {
+void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -2753,8 +2748,8 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString
     }
 }
 
-Y_UNIT_TEST_TWIN(TestLateKqpScanAfterColumnDrop, UseSink) {
-    TestLateKqpQueryAfterColumnDrop(false, UseSink, "SELECT SUM(value2) FROM `/Root/table-1`");
+Y_UNIT_TEST(TestLateKqpScanAfterColumnDrop) {
+    TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`");
 }
 
 Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
@@ -2958,10 +2953,9 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
+Y_UNIT_TEST(TestShardRestartPlannedCommitShouldSucceed) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -3275,9 +3269,8 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, EvWrite) {
+Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4396,7 +4389,6 @@ Y_UNIT_TEST(UncommittedReads) {
 
 Y_UNIT_TEST(LocksBrokenStats) {
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(false);
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")

@@ -461,8 +461,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteNoLocksNoConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -517,8 +515,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteConflictOnUncommittedWrite) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -566,8 +562,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteConflictOnCommitWithEffects) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -623,8 +617,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteConflictOnCommitAfterAnotherCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -695,8 +687,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertTwiceThenCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -760,8 +750,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertAgainOnCommitNoConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -818,8 +806,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertAgainTwiceOnCommitNoConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -876,8 +862,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedUpsertBlockedByVolatileConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -953,8 +937,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedUpsertBlockedByVolatileNoConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1044,8 +1026,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertOnCommitBlockedByVolatileConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1122,8 +1102,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertOnCommitBlockedByVolatileNoConflict) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1203,8 +1181,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedUpsertNotBlockedByOlderVolatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1279,8 +1255,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUpsertOnCommitNotBlockedByOlderVolatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1352,8 +1326,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedInsertBlockedByOlderVolatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1427,8 +1399,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedInsertDuplicateKeyAtSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1476,8 +1446,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteUncommittedInsertMissingKeyAtSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1525,8 +1493,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteObserveOwnChanges) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1594,8 +1560,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteCommitConflictThenRead) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1657,8 +1621,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
 
     Y_UNIT_TEST(ReadWriteCommitConflictWhileReading) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)

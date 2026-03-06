@@ -385,6 +385,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     }
     Y_ENSURE(TabletCounters);
 
+    MaxTotalInFlightTracker.Init([this](i64 value) {
+        SetCounter(COUNTER_TOTAL_IN_FLIGHT_MAX, static_cast<ui64>(value));
+    });
+
     AllocCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "datashard");
 
     if (!IsFollower()) {
@@ -3978,6 +3982,7 @@ void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
+    MaxTotalInFlightTracker.Update();
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
@@ -3998,6 +4003,10 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
     Y_ENSURE(PeriodicWakeupPending, "Unexpected TEvPeriodicWakeup message");
     PeriodicWakeupPending = false;
     DoPeriodicTasks(ctx);
+}
+
+void TDataShard::CollectMaxTotalInFlight(size_t value) {
+    MaxTotalInFlightTracker.Collect(static_cast<i64>(value));
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {

@@ -11,7 +11,7 @@ namespace {
 TString GetStoragePrefix() {
     TString path = NMetadata::NProvider::TServiceOperator::GetPath();
     Y_ENSURE(path, "Service operator path must not be empty");
-    return CanonizePath("/" + AppData()->TenantName + "/" + path);
+    return "/" + AppData()->TenantName + "/" + path;
 }
 
 } // anonymous namespace

@@ -2,6 +2,7 @@
 
 #include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
+#include "flat_part_iface.h"
 #include "tablet_flat_executed.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -221,6 +222,134 @@ ui64 RestoreInFlightBytes() {
 
 } // anonymous namespace
 
+class TDryRunExecutor
+    : public NFlatExecutorSetup::IExecutor
+    , public IExecuting
+{
+    struct TDryRunPages : public NTable::IPages {
+        TResult Locate(const NTable::TMemTable*, ui64, ui32) override { Y_TABLET_ERROR("Not supported"); }
+        TResult Locate(const NTable::TPart*, ui64, NTable::ELargeObj) override { Y_TABLET_ERROR("Not supported"); }
+        const TSharedData* TryGetPage(const NTable::TPart*, TPageId, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
+    };
+
+    struct TDryRunStats : public TExecutorStats {};
+
+public:
+    explicit TDryRunExecutor(ui64 tabletId)
+        : TabletId(tabletId)
+    {}
+
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override {
+        if (Executing) {
+            PendingTx.push_back(transaction);
+            return;
+        }
+        Executing = true;
+        ExecuteImpl(transaction, ctx);
+        while (!PendingTx.empty()) {
+            auto next = std::move(PendingTx.front());
+            PendingTx.pop_front();
+            ExecuteImpl(next, ctx);
+        }
+        Executing = false;
+    }
+
+    const NTable::TScheme& Scheme() const override { return DB.GetScheme(); }
+    const TExecutorStats& GetStats() const override { return Stats; }
+    void DetachTablet() override {}
+    TExecutorCounters* GetCounters() override { return nullptr; }
+    void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) override {}
+
+    void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext&) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr& ev) override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new TEvTablet::TEvGetCountersResponse()));
+    }
+
+    void Boot(TEvTablet::TEvBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void Restored(TEvTablet::TEvRestored::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerBoot(TEvTablet::TEvFBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody>) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAuxUpdate(TString) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAttached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerDetached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerSyncComplete() override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerGcApplied(ui32, TDuration) override { Y_TABLET_ERROR("Not supported"); }
+
+    ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    TString BorrowSnapshot(ui32, const TTableSnapshotContext&, TRawVals, TRawVals, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MakeScanSnapshot(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void DropScanSnapshot(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 QueueScan(ui32, TAutoPtr<NTable::IScan>, ui64, const TScanOptions&) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelScan(ui32, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasSchemaChanges(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactBorrowed(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
+    void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    void OnYellowChannels(TVector<ui32>, TVector<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    NMetrics::TResourceMetrics* GetResourceMetrics() const override { Y_TABLET_ERROR("Not supported"); }
+    float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
+    void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    void StartVacuum(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
+    void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+
+private:
+    void ExecuteImpl(TAutoPtr<ITransaction>& transaction, const TActorContext &ctx) {
+        ++Step0;
+        NTable::TTxStamp stamp(Generation0, Step0);
+        DB.Begin(stamp, Pages);
+        NWilson::TSpan span;
+        TTransactionContext txc(TabletId, Generation0, Step0, DB, *this, Max<ui64>(), 0, span);
+        bool ready = transaction->Execute(txc, ctx);
+        DB.Commit(stamp, ready);
+        if (ready) {
+            transaction->Complete(ctx);
+        } else {
+            PendingTx.push_back(std::move(transaction));
+        }
+    }
+
+    NTable::TDatabase DB;
+    TDryRunPages Pages;
+    TDryRunStats Stats;
+    ui64 TabletId;
+    bool Executing = false;
+    TDeque<TAutoPtr<ITransaction>> PendingTx;
+};
+
 class TRecoveryShard : public TActor<TRecoveryShard>, public TTabletExecutedFlat {
 public:
     friend class TTxUploadSchema;
@@ -265,7 +394,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRestoreBackup, Handle);
             hFunc(TEvBackupReaderResult, Handle);
-            hFunc(TEvBackupInfo, Handle);
+            HFunc(TEvBackupInfo, Handle);
 
             hFunc(TEvSchemaData, Handle);
             hFunc(TEvSnapshotData, Handle);
@@ -277,7 +406,7 @@ public:
 
     void Handle(TEvRestoreBackup::TPtr& ev) {
         if (RestoreState == ERestoreState::NotStarted) {
-            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation);
+            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation, ev->Get()->DryRun);
         }
     }
 
@@ -286,12 +415,19 @@ public:
         CompleteRestore(msg->Success, msg->Error);
     }
 
-    void Handle(TEvBackupInfo::TPtr& ev) {
+    void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
         PreviousChangelogChecksum = NBackup::ComputeInitialChecksum(ev->Get()->Generation, ev->Get()->Step);
 
-        using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
-        Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        if (DryRun) {
+            DryRunExec = std::make_unique<TDryRunExecutor>(TabletID());
+            Executor0 = DryRunExec.get();
+            ITablet::ExecutorActorID = ctx.SelfID;
+            OnActivateExecutor(ctx);
+        } else {
+            using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
+            Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        }
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
@@ -306,9 +442,10 @@ public:
         Execute(CreateTxUploadChangelog(ev));
     }
 
-    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false) {
+    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
         RestoreState = ERestoreState::InProgress;
         SkipChecksumValidation = skipChecksumValidation;
+        DryRun = dryRun;
 
         BackupPath = backupPath;
         RestoreSubscriber = subscriber;
@@ -413,7 +550,8 @@ public:
         if (const auto& path = cgi.Get("restoreBackup")) {
             if (RestoreState == ERestoreState::NotStarted) {
                 bool skipChecksum = cgi.Has("skipChecksumValidation");
-                StartRestore(path, {}, skipChecksum);
+                bool dryRun = cgi.Has("dryRun");
+                StartRestore(path, {}, skipChecksum, dryRun);
             }
         }
 
@@ -434,6 +572,10 @@ public:
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<div class='checkbox'><label>"
+                                    << "<input type='checkbox' id='dryRun' name='dryRun'>"
+                                    << " Dry Run"
+                                    << "</label></div>";
                                 str << "<div class='checkbox'><label>"
                                     << "<input type='checkbox' id='skipChecksumValidation' name='skipChecksumValidation'>"
                                     << " Skip Checksum Validation"
@@ -484,7 +626,11 @@ public:
                             var btn = this;
                             var form = $(btn.form);
 
-                            if (!confirm('Are you sure you want to start restore? This will override existing data')) {
+                            var isDryRun = $('#dryRun').is(':checked');
+                            var msg = isDryRun
+                                ? 'Are you sure you want to start dry-run restore?'
+                                : 'Are you sure you want to start restore? This will override existing data';
+                            if (!confirm(msg)) {
                                 return;
                             }
 
@@ -524,6 +670,8 @@ private:
 
     TString PreviousChangelogChecksum;
     bool SkipChecksumValidation = false;
+    bool DryRun = false;
+    std::unique_ptr<TDryRunExecutor> DryRunExec;
 }; // TRecoveryShard
 
 class TUploadTxResult {

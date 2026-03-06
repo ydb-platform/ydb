@@ -80,13 +80,13 @@ public:
 
     void SetRequestState(EWmState state, TInstant timestamp) override {
         const ui64 ts = timestamp.MicroSeconds();
-        
+
         if (state == EWmState::PENDING || state == EWmState::DELAYED) {
-            EnterTimeUs.store(ts, std::memory_order_relaxed);
+            EnterTimeUs.store(ts, std::memory_order_release);
         } else if (state == EWmState::EXITED) {
-            ExitTimeUs.store(ts, std::memory_order_relaxed);
+            ExitTimeUs.store(ts, std::memory_order_release);
         }
-        
+
         State.store(state, std::memory_order_release);
     }
 
@@ -100,16 +100,26 @@ public:
     }
 
     TInstant GetEnterTime() const {
-        return TInstant::MicroSeconds(EnterTimeUs.load(std::memory_order_relaxed));
+        return TInstant::MicroSeconds(EnterTimeUs.load(std::memory_order_acquire));
     }
 
     TInstant GetExitTime() const {
-        return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_relaxed));
+        return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_acquire));
     }
 
     TString GetPoolId() const {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         return PoolId;
+    }
+
+    void Clean() {
+        EnterTimeUs.store(0, std::memory_order_release);
+        ExitTimeUs.store(0, std::memory_order_release);
+        {
+            TGuard<TAdaptiveLock> guard(PoolIdLock);
+            PoolId.clear();
+        }
+        State.store(EWmState::NONE, std::memory_order_release);
     }
 
 private:
@@ -233,6 +243,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
     void DetachQueryText(const TKqpSessionInfo* sessionInfo) {

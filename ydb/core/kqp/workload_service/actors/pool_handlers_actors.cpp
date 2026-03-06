@@ -270,11 +270,9 @@ private:
         Counters.LocalDelayedRequests->Inc();
 
         LOG_REQ_PENDING(PoolId, request);
-        
-        // Notify proxy that request entered WM queue (Pending state) via shared interface
+
         if (wmSessionUpdater) {
             wmSessionUpdater->SetPoolId(PoolId);
-            wmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TInstant::Now());
         }
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
@@ -372,6 +370,10 @@ public:
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
         this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
+        
+        if (request->WmSessionUpdater) {
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TInstant::Now());
+        }
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
@@ -719,6 +721,11 @@ protected:
             << ", queue size: " << PendingRequests.size()
         );
 
+        // Notify proxy that request entered WM pending queue via shared interface
+        if (request->WmSessionUpdater) {
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TInstant::Now());
+        }
+
         if (!PreparingFinished) {
             this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPrepareTablesRequest(DatabaseId, PoolId));
         }
@@ -869,6 +876,10 @@ private:
         TRequest* request = GetRequestSafe(sessionId);
         if (request) {
             LOG_REQ_QUEUED(PoolId, request, GlobalState.DelayedRequests);
+            // Notify proxy that request moved to Delayed state via shared interface
+            if (request->WmSessionUpdater) {
+                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TInstant::Now());
+            }
         } else {
             LOG_D("successfully delayed request, session id: " << sessionId);
         }
@@ -948,11 +959,6 @@ private:
                     GlobalState.RunningRequests++;
                     FifoCounters.GlobalInFly->Inc();
                     ReplyContinue(request);
-
-                    // Notify proxy that request exited WM queue (started running) via shared interface
-                    if (request->WmSessionUpdater) {
-                        request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TInstant::Now());
-                    }
                 } else {
                     // Request was dropped due to lease expiration
                     PendingRequests.emplace_front(request->SessionId);
@@ -1037,11 +1043,6 @@ private:
             this->Register(CreateDelayRequestActor(this->SelfId(), DatabaseId, PoolId, sessionId, request->StartTime, GetWaitDeadline(request->StartTime), LEASE_DURATION, Counters.CountersSubgroup));
             DelayedRequests.emplace_back(sessionId);
             request->CleanupRequired = true;
-
-            // Notify proxy that request moved to Delayed state via shared interface
-            if (request->WmSessionUpdater) {
-                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TInstant::Now());
-            }
         }
     }
 

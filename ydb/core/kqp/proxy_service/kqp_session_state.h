@@ -14,7 +14,7 @@ struct IWmSessionUpdater {
         NONE = 0,      // Request is not in workload manager queue
         PENDING = 1,   // Request is in local pending queue, waiting to be delayed or started
         DELAYED = 2,   // Request is in delayed_requests table, waiting for available slot
-        EXITED = 3     // Request has exited WM queue and started execution
+        EXITED = 3     // Request has exited from WM
     };
 
     virtual ~IWmSessionUpdater() = default;

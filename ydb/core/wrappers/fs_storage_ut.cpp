@@ -357,7 +357,7 @@ public:
 
         auto result = HeadObject(key);
         UNIT_ASSERT(!result.IsSuccess());
-        // UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetErrorType(), Aws::S3::S3Errors::NO_SUCH_KEY);
+        UNIT_ASSERT_VALUES_EQUAL((int)result.GetError().GetErrorType(), (int)Aws::S3::S3Errors::NO_SUCH_KEY);
     }
 
     void MultipartUploadFullCycleCreatesCorrectFile() {

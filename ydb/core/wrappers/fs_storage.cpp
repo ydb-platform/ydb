@@ -90,13 +90,7 @@ private:
     }
 
     template<typename TEvResponse>
-    void ReplyError(
-            const NActors::TActorId& sender,
-            const std::optional<TString>& key,
-            const TString& errorMessage,
-            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
-            bool retryable = false)
-    {
+    auto CreateOutcome(Aws::S3::S3Errors errorType, const TString& errorMessage, bool retryable) {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
             errorType,
             "FsStorageError",
@@ -105,14 +99,45 @@ private:
         );
         Aws::S3::S3Error error(std::move(awsError));
         Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
+        return outcome;
+    }
 
+    template<typename TEvResponse>
+    void ReplyError(
+            const NActors::TActorId& sender,
+            const TString& errorMessage,
+            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+            bool retryable = false)
+    {
         std::unique_ptr<TEvResponse> response;
-        if constexpr (HasKeyConstructor<TEvResponse>()) {
-            Y_ENSURE(key, "Key is required for this response type");
-            response = std::make_unique<TEvResponse>(*key, std::move(outcome));
-        } else {
-            response = std::make_unique<TEvResponse>(std::move(outcome));
-        }
+        response = std::make_unique<TEvResponse>(CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
+        this->Send(sender, response.release());
+    }
+
+    template<typename TEvResponse>
+    void ReplyError(
+            const NActors::TActorId& sender,
+            const TString& key,
+            const TString& errorMessage,
+            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+            bool retryable = false)
+    {
+        std::unique_ptr<TEvResponse> response;
+        response = std::make_unique<TEvResponse>(std::move(key), CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
+        this->Send(sender, response.release());
+    }
+
+    template<typename TEvResponse>
+    void ReplyError(
+            const NActors::TActorId& sender,
+            const TString& key,
+            const std::pair<ui64, ui64>& range,
+            const TString& errorMessage,
+            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+            bool retryable = false)
+    {
+        std::unique_ptr<TEvResponse> response;
+        response = std::make_unique<TEvResponse>(std::move(key), range, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
         this->Send(sender, response.release());
     }
 
@@ -266,7 +291,7 @@ public:
 
             if (!rangeStr.empty()) {
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
-                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range format");
+                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Invalid range format");
                     return;
                 }
             } else {
@@ -276,13 +301,13 @@ public:
             ui64 start = range.first;
             ui64 end = range.second;
             if (start > end) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range: start > end");
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Invalid range: start > end");
                 return;
             }
             const ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Range out of bounds");
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Range out of bounds");
                 return;
             }
 
@@ -308,7 +333,7 @@ public:
             FS_LOG_E("GetObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
-            ReplyError<TEvGetObjectResponse>(ev->Sender, key, TString("File read error: ") + ex.what());
+            ReplyError<TEvGetObjectResponse>(ev->Sender, key, std::make_pair(0, 0), TString("File read error: ") + ex.what());
         }
     }
 
@@ -367,13 +392,13 @@ public:
         FS_LOG_W("ListObjects"
             << ": prefix# " << prefix
             << ", not implemented");
-        ReplyError<TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
+        ReplyError<TEvListObjectsResponse>(ev->Sender, "Not implemented");
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         FS_LOG_W("DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
-        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
+        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, "Not implemented");
     }
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {

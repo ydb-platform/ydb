@@ -6345,6 +6345,41 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+    Y_UNIT_TEST(ExecuteQueryOnlyComments) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        // Single-line comment
+        {
+            auto result = db.ExecuteQuery(
+                "-- Only a comment",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+        }
+
+        // Multi-line comment
+        {
+            auto result = db.ExecuteQuery(
+                "/* Multi-line\n   comment */",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+        }
+
+        // Whitespace and comments
+        {
+            auto result = db.ExecuteQuery(
+                "   -- comment\n  ",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+        }
+    }
+
 }
 
 } // namespace NKqp

@@ -272,3 +272,31 @@ Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
 }
 
 } // Y_UNIT_TEST_SUITE(ColumnCompression)
+
+Y_UNIT_TEST_SUITE(CommentOnlyQuery) {
+
+Y_UNIT_TEST(SingleLineComment) {
+    UNIT_ASSERT(SqlToYql("-- This is a single-line comment").IsOk());
+}
+
+Y_UNIT_TEST(MultiLineComment) {
+    UNIT_ASSERT(SqlToYql("/* This is a\n   multi-line comment */").IsOk());
+}
+
+Y_UNIT_TEST(MultipleComments) {
+    UNIT_ASSERT(SqlToYql("-- First comment\n-- Second comment\n-- Third comment").IsOk());
+}
+
+Y_UNIT_TEST(MixedCommentTypes) {
+    UNIT_ASSERT(SqlToYql("-- Single-line\n/* Multi-line */\n-- Another single-line").IsOk());
+}
+
+Y_UNIT_TEST(WhitespaceAndComments) {
+    UNIT_ASSERT(SqlToYql("   -- comment\n  ").IsOk());
+}
+
+Y_UNIT_TEST(OnlyWhitespace) {
+    UNIT_ASSERT(SqlToYql("   \n\t  ").IsOk());
+}
+
+} // Y_UNIT_TEST_SUITE(CommentOnlyQuery)

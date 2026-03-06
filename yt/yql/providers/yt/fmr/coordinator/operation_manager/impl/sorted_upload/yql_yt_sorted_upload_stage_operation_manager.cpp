@@ -11,6 +11,11 @@ namespace {
 
 class TSortedUploadStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TSortedUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         YQL_ENSURE(context.ClusterConnections.size() == 1, "SortedUpload should have exactly one cluster connection");
 
@@ -69,8 +74,8 @@ private:
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager() {
-    return MakeIntrusive<TSortedUploadStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TSortedUploadStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

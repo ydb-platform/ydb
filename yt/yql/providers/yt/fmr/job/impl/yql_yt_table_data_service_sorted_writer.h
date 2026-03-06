@@ -8,8 +8,6 @@
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_index_serialisation.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_base_writer.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>

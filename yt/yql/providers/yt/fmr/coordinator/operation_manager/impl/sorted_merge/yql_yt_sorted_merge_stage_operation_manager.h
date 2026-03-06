@@ -5,6 +5,6 @@
 
 namespace NYql::NFmr {
 
-IFmrStageOperationManager::TPtr MakeSortedMergeStageOperationManager();
+IFmrStageOperationManager::TPtr MakeSortedMergeStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider);
 
 } // namespace NYql::NFmr

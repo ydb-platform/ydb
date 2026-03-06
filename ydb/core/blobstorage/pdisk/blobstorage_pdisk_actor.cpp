@@ -852,6 +852,12 @@ public:
         PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
+        PDisk->Mon.YardConfigureScheduler.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.YardConfigureScheduler.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         Y_VERIFY_S(PDisk, PCtx->PDiskLogPrefix);
@@ -1561,6 +1567,12 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
+<<<<<<< HEAD
+=======
+            hFunc(NPDisk::TEvYardResize, ErrorHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
+>>>>>>> 75a75329c8a (NBYDB-1681: pdisk: reply to TEvSchedulerConfigure and test (#34058))
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

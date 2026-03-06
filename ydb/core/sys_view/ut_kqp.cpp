@@ -1790,6 +1790,39 @@ ALTER TABLE `test_show_create`
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTableChangefeedTraceIDs) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H"), TRACE_IDS = TRUE
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', TRACE_IDS = TRUE, RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+)"
+        );
+    }
+
     Y_UNIT_TEST(ShowCreateTableSequences) {
         TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 

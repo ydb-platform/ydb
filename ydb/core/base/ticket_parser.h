@@ -181,18 +181,30 @@ namespace NKikimr {
             TError Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
+            bool IsSuccess;
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)
                 , Token(token)
                 , SerializedToken(token ? token->GetSerializedToken() : "")
+                , IsSuccess(true)
             {
             }
 
             TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
                 : Ticket(ticket)
                 , Error(error)
+                , IsSuccess(false)
             {}
+
+            void SetError(const TError& error) {
+                Error = error;
+                IsSuccess = false;
+            }
+
+            bool HasError() const {
+                return !IsSuccess;
+            }
         };
 
         struct TEvRefreshTicket : TEventLocal<TEvRefreshTicket, EvRefreshTicket> {

@@ -379,17 +379,15 @@ void TFDStorage::ApplyNaturalOrderings() {
 
 std::size_t TFDStorage::FindSorting(
     const TSorting& sorting,
-    TTableAliasMap* tableAliases
-) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, true, tableAliases);
+    TTableAliasMap* tableAliases) {
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::FindShuffling(
     const TShuffling& shuffling,
-    TTableAliasMap* tableAliases
-) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, shuffling.IsNatural, tableAliases);
+    TTableAliasMap* tableAliases) {
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
@@ -402,9 +400,8 @@ std::size_t TFDStorage::AddSorting(
 
 std::size_t TFDStorage::AddShuffling(
     const TShuffling& shuffling,
-    TTableAliasMap* tableAliases
-) {
-    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, shuffling.IsNatural, tableAliases);
+    TTableAliasMap* tableAliases) {
+    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, /*isNatural=*/true, tableAliases);
 }
 
 std::size_t TFDStorage::AddInterestingOrdering(

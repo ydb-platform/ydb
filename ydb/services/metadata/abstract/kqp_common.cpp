@@ -10,7 +10,7 @@ namespace {
 
 TString GetStoragePrefix() {
     TString path = NMetadata::NProvider::TServiceOperator::GetPath();
-    Y_ENSURE(path, "Service operator path must not be empty");
+    Y_ABORT_UNLESS(path);
     return "/" + AppData()->TenantName + "/" + path;
 }
 

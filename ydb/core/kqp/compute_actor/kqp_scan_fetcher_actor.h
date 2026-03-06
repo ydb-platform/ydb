@@ -89,6 +89,7 @@ public:
                 hFunc(TEvScanExchange::TEvTerminateFromCompute, HandleExecute);
                 hFunc(TEvScanExchange::TEvAckData, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
@@ -165,6 +166,8 @@ private:
 
     void ResolveShard(TShardState& state);
 
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev);
+
 private:
     void PassAway() override {
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
@@ -194,6 +197,9 @@ private:
     bool IsAggregationRequest = false;
     bool RegistrationFinished = false;
     TInstant RegistrationStartTime;
+
+    ui64 BlocksReceived = 0;
+    ui64 TotalBytesReceived = 0;
 };
 
 }   // namespace NKikimr::NKqp::NScanPrivate

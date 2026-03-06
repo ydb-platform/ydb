@@ -57,6 +57,12 @@ IF (OS_ANDROID)
     )
 ENDIF()
 
+IF (OS_EMSCRIPTEN)
+    SRCS(
+        command_notwin.go
+    )
+ENDIF()
+
 END()
 
 RECURSE(

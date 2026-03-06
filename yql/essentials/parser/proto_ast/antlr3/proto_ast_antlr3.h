@@ -3,17 +3,18 @@
 #include <yql/essentials/parser/proto_ast/common.h>
 
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
+#include <utility>
 
 namespace NProtoAST {
 using namespace NAST;
 
 template <typename TParser, typename TLexer>
 class TProtoASTBuilder3 {
-    typedef ANTLR_UINT8 TChar;
+    using TChar = ANTLR_UINT8;
 
 public:
-    explicit TProtoASTBuilder3(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
-        : QueryName_(queryName)
+    explicit TProtoASTBuilder3(TStringBuf data, TString queryName = "query", google::protobuf::Arena* arena = nullptr)
+        : QueryName_(std::move(queryName))
         , InputStream_((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName_.begin()) // Why the hell antlr needs non-const ptr??
         , Lexer_(&InputStream_, static_cast<google::protobuf::Arena*>(nullptr))
         , TokenStream_(ANTLR_SIZE_HINT, Lexer_.get_tokSource())
@@ -46,12 +47,12 @@ private:
 
 template <typename TLexer>
 class TLexerTokensCollector3 {
-    typedef ANTLR_UINT8 TChar;
+    using TChar = ANTLR_UINT8;
 
 public:
-    TLexerTokensCollector3(TStringBuf data, const char** tokenNames, const TString& queryName = "query")
+    TLexerTokensCollector3(TStringBuf data, const char** tokenNames, TString queryName = "query")
         : TokenNames_(tokenNames)
-        , QueryName_(queryName)
+        , QueryName_(std::move(queryName))
         , InputStream_((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName_.begin())
         , Lexer_(&InputStream_, static_cast<google::protobuf::Arena*>(nullptr))
     {

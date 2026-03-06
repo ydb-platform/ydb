@@ -1,7 +1,5 @@
 #pragma once
 
-#include "defs.h"
-
 #include <ydb/library/pdisk_io/buffers.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/uring_router.h>
@@ -32,19 +30,21 @@ class TUringRouterTest : public TPerfTest {
 
     struct TDeviceState;
 
-    struct TOp : NPDisk::TUringOperation {
+    struct TOp final : NPDisk::TUringOperationBase {
         TDeviceState* DevState = nullptr;
         ui32 Slot = 0;
         NHPTimer::STime Start = 0;
 
-        static void OnCompleteThunk(NPDisk::TUringOperation* op, NActors::TActorSystem*) noexcept {
-            auto* self = static_cast<TOp*>(op);
-            self->DevState->OnIoComplete(*self);
+        void OnComplete(NActors::TActorSystem*) noexcept override {
+            if (DevState) {
+                DevState->OnIoComplete(*this);
+            }
         }
 
-        static void OnDropThunk(NPDisk::TUringOperation* op) noexcept {
-            auto* self = static_cast<TOp*>(op);
-            self->DevState->OnIoDrop(*self);
+        void OnDrop() noexcept override {
+            if (DevState) {
+                DevState->OnIoDrop(*this);
+            }
         }
     };
 
@@ -90,7 +90,8 @@ class TUringRouterTest : public TPerfTest {
 
             ReturnFreeSlot(op.Slot);
             InFlight.fetch_sub(1, std::memory_order_release);
-            Y_VERIFY_S(op.Result == (i32)BuffSize, "TUringRouter write failed, res# " << op.Result);
+            const i32 result = op.GetResult();
+            Y_VERIFY_S(result == (i32)BuffSize, "TUringRouter write failed, res# " << result);
         }
 
         void OnIoDrop(TOp& op) {
@@ -111,6 +112,7 @@ class TUringRouterTest : public TPerfTest {
     const bool UseAlignedData;
     const ui32 NumberOfRandomRefills;
     const bool UseWriteFixed;
+    const bool UseSharedSQPoll;
 
     TVector<THolder<TDeviceState>> DeviceStates;
 
@@ -119,6 +121,15 @@ class TUringRouterTest : public TPerfTest {
     std::atomic<bool> GoSignal{false};
 
 public:
+    template <class TProto>
+    static bool GetUseSharedSQPollValue(const TProto& testProto) {
+        if constexpr (requires { testProto.GetUseSharedSQPoll(); }) {
+            return testProto.GetUseSharedSQPoll();
+        } else {
+            return false;
+        }
+    }
+
     TUringRouterTest(const TPerfTestConfig& cfg, const NDevicePerfTest::TUringRouterTest& testProto)
         : TPerfTest(cfg)
         , QueueDepth(testProto.GetQueueDepth() != 0 ? FastClp2(testProto.GetQueueDepth()) : 128)
@@ -127,6 +138,7 @@ public:
         , UseAlignedData(testProto.GetUseAlignedData())
         , NumberOfRandomRefills(testProto.GetNumberOfRandomRefills())
         , UseWriteFixed(testProto.GetUseWriteFixed())
+        , UseSharedSQPoll(GetUseSharedSQPollValue(testProto))
     {
     }
 
@@ -216,6 +228,7 @@ private:
         cfg.QueueDepth = QueueDepth * 2; // sq + cq
         cfg.UseSQPoll = true;
         cfg.UseIOPoll = false;
+        cfg.UseSharedSQPoll = UseSharedSQPoll;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
         Y_VERIFY_S(dev.Router->RegisterFile(), "TUringRouter::RegisterFile failed for device " << deviceIdx);
 
@@ -240,8 +253,6 @@ private:
         for (ui32 i = 0; i < QueueDepth; ++i) {
             dev.Ops[i].DevState = &dev;
             dev.Ops[i].Slot = i;
-            dev.Ops[i].OnComplete = TOp::OnCompleteThunk;
-            dev.Ops[i].OnDrop = TOp::OnDropThunk;
             Y_VERIFY_S(dev.FreeSlots.TryPush(std::move(i)), "Failed to prefill FreeSlots queue");
 
             TryFillRandom(dev, dev.Buffers[i], BuffSize);
@@ -286,7 +297,9 @@ private:
             if (UseWriteFixed) {
                 ok = dev.Router->WriteFixed(dev.Buffers[slot], BuffSize, offset, static_cast<ui16>(slot), &op);
             } else {
-                ok = dev.Router->Write(dev.Buffers[slot], BuffSize, offset, &op);
+                op.SetOperationType(NPDisk::TUringOperationBase::EWRITE);
+                op.PrepareIov(dev.Buffers[slot], BuffSize, offset);
+                ok = dev.Router->Write(&op);
             }
             Y_ABORT_UNLESS(ok, "Failed to start write");
 
@@ -343,6 +356,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
         Printer->AddResult("IOPS", ui64(iops));
         Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
@@ -377,6 +391,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", totalSpeed));
         Printer->AddResult("IOPS", ui64(totalIops));
         Printer->AddSpeedAndIops(TSpeedAndIops(totalSpeed, totalIops));

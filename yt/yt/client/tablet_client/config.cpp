@@ -10,6 +10,12 @@ void TTableMountCacheConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("reject_if_entry_is_requested_but_not_ready", &TThis::RejectIfEntryIsRequestedButNotReady)
         .Default(false);
+
+    registrar.Preprocessor([] (TThis* config) {
+        config->ExpireAfterAccessTime = TDuration::Minutes(30);
+        config->ExpireAfterSuccessfulUpdateTime = TDuration::Minutes(30);
+        config->RefreshTime = TDuration::Seconds(30);
+    });
 }
 
 TTableMountCacheConfigPtr TTableMountCacheConfig::ApplyDynamic(

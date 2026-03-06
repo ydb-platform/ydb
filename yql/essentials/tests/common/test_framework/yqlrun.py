@@ -128,11 +128,16 @@ class YQLRun(object):
         syntax_version = yql_utils.get_syntax_version(program)
         ansi_lexer = yql_utils.ansi_lexer_enabled(program)
 
+        binary = self.yqlrun_binary
+
         if run_sql and self.use_sql2yql:
+            binary = self.sql2yql_binary
+
             orig_sql = program_file + '.orig_sql'
             shutil.copy2(program_file, orig_sql)
+
             cmd = [
-                self.sql2yql_binary,
+                binary,
                 orig_sql,
                 '--yql',
                 '--output=' + program_file,
@@ -322,18 +327,50 @@ class YQLRun(object):
             yql_utils.log('GDB launch command:')
             yql_utils.log('(cd "%s" && %s ya tool gdb --args %s)' % (res_dir, env_setters, cmd.replace(udfs_dir, debug_udfs_dir)))
 
-        proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=res_dir, env=env)
+        stderr_file = res_file_path('stderr.txt')
+        with open(stderr_file, 'w') as stderr:
+            proc_result = yatest.common.process.execute(
+                command=cmd.strip().split(),
+                stderr=stderr,
+                check_exit_code=False,
+                cwd=res_dir,
+                env=env,
+            )
+
         if proc_result.exit_code != 0 and check_error:
             with open(err_file, 'r') as f:
                 err_file_text = f.read()
+
             yql_utils.skip_on_ubsan_known_failure(err_file_text)
-            assert 0, \
-                'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nerror file:\n%(err_file)s' % {
-                    'command': cmd,
-                    'code': proc_result.exit_code,
-                    'stderr': proc_result.std_err,
-                    'err_file': err_file_text
-                }
+
+            with open(stderr_file, 'r') as f:
+                stderr_file_text = f.read()
+
+            assert False, (
+                'binary %(binary)s exited with code %(code)d\n'
+                '\n'
+                'Res    File: %(results_file)s\n'
+                'Opt    File: %(opt_file)s\n'
+                'Plan   File: %(plan_file)s\n'
+                'Err    File: %(err_file)s\n'
+                'StdErr File: %(stderr_file)s\n'
+                '\n'
+                '%(stderr_file_text)s\n'
+                '\n'
+                '%(err_file_text)s\n'
+                '\n'
+                'See a full command in a Log file below:'
+            ) % {
+                'binary': os.path.basename(binary),
+                'code': proc_result.exit_code,
+                'results_file': results_file,
+                'opt_file': opt_file,
+                'plan_file': plan_file,
+                'stderr_file': stderr_file,
+                'stderr_file_text': stderr_file_text,
+                'err_file': err_file,
+                'err_file_text': err_file_text,
+            }
 
         if os.path.exists(results_file) and os.stat(results_file).st_size == 0:
             os.unlink(results_file)  # kikimr yql-exec compatibility

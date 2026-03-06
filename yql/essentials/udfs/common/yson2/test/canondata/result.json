@@ -229,6 +229,11 @@
             "uri": "file://test.test_MutView_/results.txt"
         }
     ],
+    "test.test[Mutate]": [
+        {
+            "uri": "file://test.test_Mutate_/results.txt"
+        }
+    ],
     "test.test[NegativeArrayIndex]": [
         {
             "uri": "file://test.test_NegativeArrayIndex_/results.txt"

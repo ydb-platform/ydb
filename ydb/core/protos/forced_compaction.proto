@@ -21,6 +21,8 @@ message TForcedCompaction {
     optional google.protobuf.Timestamp EndTime = 5;
     optional string UserSID = 6;
     optional Ydb.Table.CompactState.State State = 7;
+    optional uint32 ShardsTotal = 8;
+    optional uint32 ShardsDone = 9;
 }
 
 message TEvCreateRequest {

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.10.0)
+VERSION(0.11.0)
 
 LICENSE(Apache-2.0)
 
@@ -58,6 +58,7 @@ PY_SRCS(
     clickhouse_connect/datatypes/special.py
     clickhouse_connect/datatypes/string.py
     clickhouse_connect/datatypes/temporal.py
+    clickhouse_connect/datatypes/vector.py
     clickhouse_connect/dbapi/__init__.py
     clickhouse_connect/dbapi/connection.py
     clickhouse_connect/dbapi/cursor.py

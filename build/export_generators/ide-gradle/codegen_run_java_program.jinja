@@ -1,111 +1,124 @@
 {%- if current_target.runs|length -%}
 {%-     for run in current_target.runs %}
+{%-         set classpath = run.classpath -%}
+{%-         if classpath != "" and classpath|replace('.cplst') == classpath -%}
+{#-             Project in exported classpath #}
+
+val {{ varprefix }}{{ run['_object_index'] }}Classpath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+{%-         endif %}
 
 val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run java program"
 
 {#- Ignore default CWD to export_root -#}
-{%-        if run.cwd and run.cwd != export_root %}
+{%-         if run.cwd and run.cwd != export_root %}
     workingDir({{ PatchRoots(run.cwd, false, run['_object_index']) }})
-{%-        else %}
+{%-         else %}
     workingDir({{ PatchRoots(codegenBindir, false, run['_object_index']) }})
-{%-        endif -%}
+{%-         endif -%}
 
-{%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
-{%-        if classpaths|length -%}
-{%             for classpath in classpaths -%}
-{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '')|replace(output_root, '') %}
+{%-         if classpath != '' and classpath != '@.cplst' -%}
+{%-             if classpath|replace('.cplst') != classpath -%}
+{#-                 Prebuiled to jar classpath -#}
+{%-                 set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '')|replace(output_root, '') %}
 
     val classpaths = providers.fileContents(layout.projectDirectory.file("$output_root{{ rel_file_classpath }}")).asText.map { classpath ->
         classpath.trim().split(":").map { "$output_root/$it" }
     }
-    classpath = files(classpaths)
-{%-            endfor -%}
-{%-        endif -%}
+{%-             else -%}
+{#-                 Project in exported classpath #}
 
-{%-        set run_args = run.args|reject('startsWith', '-D')|reject('startsWith', '-XX:') %}
-{%-        set run_jvm_args = run.args|reject('in', run_args) + ['-Dfile.encoding=utf8'] -%}
-{%-        if run_jvm_args|length %}
+    val classpaths = configurations["{{ varprefix }}{{ run['_object_index'] }}Classpath"]
+{%-             endif %}
+    classpath = files(classpaths)
+{%-         endif -%}
+
+{%-         set run_args = run.args|reject('startsWith', '-D')|reject('startsWith', '-XX:') %}
+{%-         set run_jvm_args = run.args|reject('in', run_args) + ['-Dfile.encoding=utf8'] -%}
+{%-         if run_jvm_args|length %}
 
     jvmArgs = listOf(
-{%-            for run_jvm_arg in run_jvm_args %}
+{%-             for run_jvm_arg in run_jvm_args %}
         "{{ run_jvm_arg }}",
-{%-            endfor %}
+{%-             endfor %}
     )
-{%-        endif %}
+{%-         endif %}
 
     mainClass.set("{{ run_args[0] }}")
 
-{%-        set run_ins = [] -%}
-{%-        if run.in_dir|length -%}
-{%-            set run_ins = run_ins + run.in_dir -%}
-{%-        endif -%}
-{%-        if run.in|length -%}
-{%-            set run_ins = run_ins + run.in -%}
-{%-        endif -%}
-{%-        if run.in_noparse|length -%}
-{%-            set run_ins = run_ins + run.in_noparse -%}
-{%-        endif -%}
-{%-        if run.tool|length -%}
-{%-            set run_ins = run_ins + run.tool -%}
-{%-        endif -%}
+{%-         set run_ins = [] -%}
+{%-         if run.in_dir|length -%}
+{%-             set run_ins = run_ins + run.in_dir -%}
+{%-         endif -%}
+{%-         if run.in|length -%}
+{%-             set run_ins = run_ins + run.in -%}
+{%-         endif -%}
+{%-         if run.in_noparse|length -%}
+{%-             set run_ins = run_ins + run.in_noparse -%}
+{%-         endif -%}
+{%-         if run.tool|length -%}
+{%-             set run_ins = run_ins + run.tool -%}
+{%-         endif -%}
 
-{%-        set run_outs = [] -%}
-{%-        if run.out|length -%}
-{%-            set run_outs = run_outs + run.out -%}
-{%-        endif -%}
-{%-        if run.out_dir|length -%}
-{%-            set run_outs = run_outs + run.out_dir -%}
-{%-        endif -%}
+{%-         set run_outs = [] -%}
+{%-         if run.out|length -%}
+{%-             set run_outs = run_outs + run.out -%}
+{%-         endif -%}
+{%-         if run.out_dir|length -%}
+{%-             set run_outs = run_outs + run.out_dir -%}
+{%-         endif -%}
 
-{%-        if run_args|length > 1 %}
+{%-         if run_args|length > 1 %}
 
     args = listOf(
-{%-            for arg in run_args -%}
-{%-                if not loop.first %}
+{%-             for arg in run_args -%}
+{%-                 if not loop.first %}
         {{ PatchArg(arg, run['_object_index'], run_ins, run_outs) }},
-{%-                endif -%}
-{%-            endfor %}
+{%-                 endif -%}
+{%-             endfor %}
     )
-{%         endif -%}
+{%          endif -%}
 
-{%-        if run.in_dir|length -%}
-{%-            for in_dir in run.in_dir|unique %}
+{%-         if run.in_dir|length -%}
+{%-             for in_dir in run.in_dir|unique %}
     inputs.files(fileTree({{ PatchArg(in_dir, run['_object_index'], run_ins, run_outs, true) }}))
-{%-            endfor %}
-{%         endif -%}
+{%-             endfor %}
+{%          endif -%}
 
-{%-        if run.in|length -%}
-{%-            for in_file in run.in|unique %}
+{%-         if run.in|length -%}
+{%-             for in_file in run.in|unique %}
     inputs.files({{ PatchArg(in_file, run['_object_index'], run_ins, run_outs, true) }})
-{%-            endfor %}
-{%         endif -%}
+{%-             endfor %}
+{%          endif -%}
 
-{%-        if run.in_noparse|length -%}
-{%-            for in_file in run.in_noparse|unique %}
+{%-         if run.in_noparse|length -%}
+{%-             for in_file in run.in_noparse|unique %}
     inputs.files({{ PatchArg(in_file, run['_object_index'], run_ins, run_outs, true) }})
-{%-            endfor %}
-{%         endif -%}
-{%-        if run.out_dir|length -%}
-{%-            for out_dir in run.out_dir|unique -%}
-{%-                if proto_template %}
+{%-             endfor %}
+{%          endif -%}
+{%-         if run.out_dir|length -%}
+{%-             for out_dir in run.out_dir|unique -%}
+{%-                 if proto_template %}
     outputs.dir({{ PatchGeneratedProto(out_dir, false, run['_object_index']) }})
-{%-                else %}
+{%-                 else %}
     outputs.dir({{ PatchRoots(out_dir, false, run['_object_index']) }})
-{%-                endif -%}
-{%-            endfor %}
-{%         endif -%}
+{%-                 endif -%}
+{%-             endfor %}
+{%          endif -%}
 
-{%-        if run.out|length -%}
-{%-            for out in run.out|unique %}
-{%-                if proto_template %}
+{%-         if run.out|length -%}
+{%-             for out in run.out|unique %}
+{%-                 if proto_template %}
     outputs.files({{ PatchGeneratedProto(out, false, run['_object_index']) }})
-{%-                else %}
+{%-                 else %}
     outputs.files({{ PatchRoots(out, false, run['_object_index']) }})
-{%-                endif -%}
-{%-            endfor -%}
-{%-        endif -%}
+{%-                 endif -%}
+{%-             endfor -%}
+{%-         endif -%}
 {{ Env(run.env) }}
 }
 {%-     endfor -%}

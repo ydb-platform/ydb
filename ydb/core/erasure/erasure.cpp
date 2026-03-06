@@ -984,6 +984,7 @@ public:
     void EoMainRestorePartsWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet, ui64 readPosition,
             ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) {
         VERBOSE_COUT("Start of EoMainRestorePartsWhole" << Endl);
+        Y_ABORT_UNLESS(missingDataPartIdxB >= missingDataPartIdxA);
         ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1;
         const ui32 m = Prime;
         // Use all whole columns of all the parts

@@ -9,6 +9,7 @@
 #include <yt/yt/core/net/private.h>
 
 #include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/rpc/grpc/dispatcher.h>
@@ -91,24 +92,24 @@ TEST_F(TTlsTest, SimplePingPong)
     auto asyncFirstSide = dialer->Dial(listener->GetAddress(), context);
     auto asyncSecondSide = listener->Accept();
 
-    auto firstSide = asyncFirstSide.Get().ValueOrThrow();
-    auto secondSide = asyncSecondSide.Get().ValueOrThrow();
+    auto firstSide = WaitForFast(asyncFirstSide).ValueOrThrow();
+    auto secondSide = WaitForFast(asyncSecondSide).ValueOrThrow();
 
     auto buffer = TSharedRef::FromString(TString("ping"));
     auto outputBuffer = TSharedMutableRef::Allocate(4);
 
-    auto result = firstSide->Write(buffer).Get();
-    ASSERT_EQ(secondSide->Read(outputBuffer).Get().ValueOrThrow(), 4u);
+    auto result = WaitForFast(firstSide->Write(buffer));
+    ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 4u);
     result.ThrowOnError();
     ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
 
-    secondSide->Write(buffer).Get().ThrowOnError();
-    ASSERT_EQ(firstSide->Read(outputBuffer).Get().ValueOrThrow(), 4u);
+    WaitForFast(secondSide->Write(buffer)).ThrowOnError();
+    ASSERT_EQ(WaitForFast(firstSide->Read(outputBuffer)).ValueOrThrow(), 4u);
     ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
 
     WaitFor(firstSide->Close())
         .ThrowOnError();
-    ASSERT_EQ(secondSide->Read(outputBuffer).Get().ValueOrThrow(), 0u);
+    ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 0u);
 }
 
 TEST(TTlsTestWithoutFixtureTest, LoadCertificateChain)

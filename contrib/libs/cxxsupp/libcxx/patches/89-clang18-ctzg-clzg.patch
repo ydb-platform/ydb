@@ -1,0 +1,138 @@
+diff --git a/include/__bit/countl.h b/include/__bit/countl.h
+index 9c37749..e53b7c3 100644
+--- a/include/__bit/countl.h
++++ b/include/__bit/countl.h
+@@ -24,10 +24,46 @@ _LIBCPP_PUSH_MACROS
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_clz(unsigned __x) _NOEXCEPT {
++  return __builtin_clz(__x);
++}
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_clz(unsigned long __x) _NOEXCEPT {
++  return __builtin_clzl(__x);
++}
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_clz(unsigned long long __x) _NOEXCEPT {
++  return __builtin_clzll(__x);
++}
++
+ template <class _Tp>
+ _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 int __countl_zero(_Tp __t) _NOEXCEPT {
+   static_assert(__libcpp_is_unsigned_integer<_Tp>::value, "__countl_zero requires an unsigned integer type");
++#if __has_builtin(__builtin_clzg)
+   return __builtin_clzg(__t, numeric_limits<_Tp>::digits);
++#else  // __has_builtin(__builtin_clzg)
++  if (__t == 0)
++    return numeric_limits<_Tp>::digits;
++  if (sizeof(_Tp) <= sizeof(unsigned int))
++    return std::__libcpp_clz(static_cast<unsigned int>(__t)) -
++           (numeric_limits<unsigned int>::digits - numeric_limits<_Tp>::digits);
++  else if (sizeof(_Tp) <= sizeof(unsigned long))
++    return std::__libcpp_clz(static_cast<unsigned long>(__t)) -
++           (numeric_limits<unsigned long>::digits - numeric_limits<_Tp>::digits);
++  else if (sizeof(_Tp) <= sizeof(unsigned long long))
++    return std::__libcpp_clz(static_cast<unsigned long long>(__t)) -
++           (numeric_limits<unsigned long long>::digits - numeric_limits<_Tp>::digits);
++  else {
++    int __ret                      = 0;
++    int __iter                     = 0;
++    const unsigned int __ulldigits = numeric_limits<unsigned long long>::digits;
++    while (true) {
++      __t = std::__rotl(__t, __ulldigits);
++      if ((__iter = std::__countl_zero(static_cast<unsigned long long>(__t))) != __ulldigits)
++        break;
++      __ret += __iter;
++    }
++    return __ret + __iter;
++  }
++#endif // __has_builtin(__builtin_clzg)
+ }
+ 
+ #if _LIBCPP_STD_VER >= 20
+diff --git a/include/__bit/countr.h b/include/__bit/countr.h
+index f871759..124d3c0 100644
+--- a/include/__bit/countr.h
++++ b/include/__bit/countr.h
+@@ -24,10 +24,40 @@ _LIBCPP_PUSH_MACROS
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_ctz(unsigned __x) _NOEXCEPT {
++  return __builtin_ctz(__x);
++}
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_ctz(unsigned long __x) _NOEXCEPT {
++  return __builtin_ctzl(__x);
++}
++[[__nodiscard__]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_ctz(unsigned long long __x) _NOEXCEPT {
++  return __builtin_ctzll(__x);
++}
++
+ template <class _Tp>
+ [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __countr_zero(_Tp __t) _NOEXCEPT {
+   static_assert(is_unsigned<_Tp>::value, "__countr_zero only works with unsigned types");
++#if __has_builtin(__builtin_ctzg)
+   return __builtin_ctzg(__t, numeric_limits<_Tp>::digits);
++#else  // __has_builtin(__builtin_ctzg)
++  if (__t == 0)
++    return numeric_limits<_Tp>::digits;
++  if (sizeof(_Tp) <= sizeof(unsigned int))
++    return std::__libcpp_ctz(static_cast<unsigned int>(__t));
++  else if (sizeof(_Tp) <= sizeof(unsigned long))
++    return std::__libcpp_ctz(static_cast<unsigned long>(__t));
++  else if (sizeof(_Tp) <= sizeof(unsigned long long))
++    return std::__libcpp_ctz(static_cast<unsigned long long>(__t));
++  else {
++    int __ret                      = 0;
++    const unsigned int __ulldigits = numeric_limits<unsigned long long>::digits;
++    while (static_cast<unsigned long long>(__t) == 0uLL) {
++      __ret += __ulldigits;
++      __t >>= __ulldigits;
++    }
++    return __ret + std::__libcpp_ctz(static_cast<unsigned long long>(__t));
++  }
++#endif // __has_builtin(__builtin_ctzg)
+ }
+ 
+ #if _LIBCPP_STD_VER >= 20
+diff --git a/include/__bit/popcount.h b/include/__bit/popcount.h
+index 622c8ef..42adf04 100644
+--- a/include/__bit/popcount.h
++++ b/include/__bit/popcount.h
+@@ -24,10 +24,37 @@ _LIBCPP_PUSH_MACROS
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
++inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_popcount(unsigned __x) _NOEXCEPT {
++  return __builtin_popcount(__x);
++}
++inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_popcount(unsigned long __x) _NOEXCEPT {
++  return __builtin_popcountl(__x);
++}
++inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __libcpp_popcount(unsigned long long __x) _NOEXCEPT {
++  return __builtin_popcountll(__x);
++}
++
+ template <class _Tp>
+ [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __popcount(_Tp __t) _NOEXCEPT {
+   static_assert(is_unsigned<_Tp>::value, "__popcount only works with unsigned types");
++#  if __has_builtin(__builtin_popcountg)
+   return __builtin_popcountg(__t);
++#  else  // __has_builtin(__builtin_popcountg)
++  if (sizeof(_Tp) <= sizeof(unsigned int))
++    return std::__libcpp_popcount(static_cast<unsigned int>(__t));
++  else if (sizeof(_Tp) <= sizeof(unsigned long))
++    return std::__libcpp_popcount(static_cast<unsigned long>(__t));
++  else if (sizeof(_Tp) <= sizeof(unsigned long long))
++    return std::__libcpp_popcount(static_cast<unsigned long long>(__t));
++  else {
++    int __ret = 0;
++    while (__t != 0) {
++      __ret += std::__libcpp_popcount(static_cast<unsigned long long>(__t));
++      __t >>= numeric_limits<unsigned long long>::digits;
++    }
++    return __ret;
++  }
++#  endif // __has_builtin(__builtin_popcountg)
+ }
+ 
+ #if _LIBCPP_STD_VER >= 20

@@ -1,5 +1,5 @@
 diff --git a/include/__vector/vector.h b/include/__vector/vector.h
-index ed00117..3987f75 100644
+index fa79709..9e3fcc4 100644
 --- a/include/__vector/vector.h
 +++ b/include/__vector/vector.h
 @@ -100,7 +100,10 @@ public:
@@ -14,7 +14,7 @@ index ed00117..3987f75 100644
    // Users might provide custom allocators, and prior to C++20 we have no existing way to detect whether the allocator's
    // pointer type is contiguous (though it has to be by the Standard). Using the wrapper type ensures the iterator is
    // considered contiguous.
-@@ -654,7 +657,12 @@ private:
+@@ -663,7 +666,12 @@ private:
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
  
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator __make_iter(pointer __p) _NOEXCEPT {
@@ -28,7 +28,7 @@ index ed00117..3987f75 100644
      // Bound the iterator according to the capacity, rather than the size.
      //
      // Vector guarantees that iterators stay valid as long as no reallocation occurs even if new elements are inserted
-@@ -674,7 +682,9 @@ private:
+@@ -683,7 +691,9 @@ private:
    }
  
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI const_iterator __make_iter(const_pointer __p) const _NOEXCEPT {

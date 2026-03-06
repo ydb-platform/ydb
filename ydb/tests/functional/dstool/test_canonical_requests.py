@@ -4,7 +4,6 @@ import os
 import logging
 import pytest
 import yatest
-import time
 import yaml
 
 from io import StringIO
@@ -191,13 +190,6 @@ class Test(TestBase):
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
         ]
 
-    def test_vdisk_ready_stable_period(self):
-        return [
-            self._trace('group', 'list'),
-            time.sleep(16),  # ReadyStablePeriod + 1 for sure
-            self._trace('group', 'list'),
-        ]
-
     def test_cluster_get_set(self):
         return [
             self._trace('cluster', 'get', with_grpc_calls=True),
@@ -234,6 +226,37 @@ class Test(TestBase):
             self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
             retry_assertions(check_vdisk_state_error, timeout_seconds=20),
             self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+        ]
+
+    def test_capacity_metrics(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+
+        vdisk_columns = [
+            'VDiskId',
+            'NodeId:PDiskId',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+            'GroupSizeInUnits',
+        ]
+        group_columns = [
+            'GroupId',
+            'SizeInUnits',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+        ]
+
+        return [
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '-H', '--columns', *group_columns),
         ]
 
     def test_infer_pdisk_slot_count(self):

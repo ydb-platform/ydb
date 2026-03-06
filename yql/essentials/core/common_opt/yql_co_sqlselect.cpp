@@ -2303,8 +2303,8 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
     TExprContext& ctx, TOptimizeContext& optCtx) {
 
     bool needRemapForDistinct = false;
-    for (ui32 i = 0; i < aggs.size(); ++i) {
-        if (GetSetting(*aggs[i].first->Child(1), "distinct")) {
+    for (const auto& agg : aggs) {
+        if (GetSetting(*agg.first->Child(1), "distinct")) {
             needRemapForDistinct = true;
             break;
         }
@@ -2528,8 +2528,8 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
 
             auto arg = ctx.NewArgument(pos, "row");
             auto root = arg;
-            for (ui32 i = 0; i < nonNullDefAggs.size(); ++i) {
-                auto column = ToString("_yql_agg_") + ToString(nonNullDefAggs[i]);
+            for (ui32 nonNullDefAgg : nonNullDefAggs) {
+                auto column = ToString("_yql_agg_") + ToString(nonNullDefAgg);
                 root = ctx.Builder(pos)
                     .Callable("ReplaceMember")
                         .Add(0, root)

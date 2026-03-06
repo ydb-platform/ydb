@@ -18,6 +18,7 @@
 #include <util/system/sysstat.h>
 
 #include <functional>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -174,7 +175,7 @@ class TStringListBufferedInputStream: public IInputStream {
 public:
     TStringListBufferedInputStream(TUnboxedValue rowsStream, const TString& delimiter, size_t bufferSizeBytes,
                                    TThreadSyncData& syncData, TSourcePosition pos)
-        : RowsStream_(rowsStream)
+        : RowsStream_(std::move(rowsStream))
         , Delimiter_(delimiter)
         , SyncData_(syncData)
         , Pos_(pos)
@@ -490,8 +491,8 @@ private:
 
 class TStreamingOutputListIterator {
 public:
-    TStreamingOutputListIterator(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-        : StreamingParams_(params)
+    TStreamingOutputListIterator(TStreamingParams params, const IValueBuilder* valueBuilder, TSourcePosition pos)
+        : StreamingParams_(std::move(params))
         , ValueBuilder_(valueBuilder)
         , Pos_(pos)
     {
@@ -611,8 +612,8 @@ private:
 
 class TStreamingOutput: public TBoxedValue {
 public:
-    TStreamingOutput(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-        : StreamingParams_(params)
+    TStreamingOutput(TStreamingParams params, const IValueBuilder* valueBuilder, TSourcePosition pos)
+        : StreamingParams_(std::move(params))
         , ValueBuilder_(valueBuilder)
         , Pos_(pos)
     {

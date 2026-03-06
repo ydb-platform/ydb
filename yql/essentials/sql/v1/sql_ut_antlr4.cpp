@@ -109,7 +109,7 @@ Y_UNIT_TEST(CreateCompressedColumn) {
         );
     )sql");
 
-    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -155,7 +155,7 @@ Y_UNIT_TEST(CreateCompressedColumnEmptyAttributes) {
         );
     )sql");
 
-    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -178,7 +178,7 @@ Y_UNIT_TEST(CreateColumnDoubleCompression) {
         );
     )sql");
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:36: Error: 'COMPRESSION' option can be specified only once\n");
 }
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST(AlterColumnCompression) {
         ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(algorithm=lz4, level=1);
     )sql");
 
-    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -209,7 +209,7 @@ Y_UNIT_TEST(NoColumnCompressionAtAlterIfNotSpecified) {
         ALTER TABLE tbl ALTER COLUMN val SET NOT NULL;
     )sql");
 
-    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -228,7 +228,7 @@ Y_UNIT_TEST(AlterColumnCompressionEmptyAttributes) {
         ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION();
     )sql");
 
-    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -247,7 +247,7 @@ Y_UNIT_TEST(AlterColumnCompressionDoubleAlgorithm) {
         ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(algorithm=lz4, algorithm=zstd);
     )sql");
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:73: Error: 'algorithm' setting can be specified only once\n");
 }
 
@@ -257,7 +257,7 @@ Y_UNIT_TEST(AlterColumnCompressionDoubleLevel) {
         ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(level=1, level=2);
     )sql");
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:67: Error: 'level' setting can be specified only once\n");
 }
 
@@ -267,7 +267,7 @@ Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
         ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(level=-1);
     )sql");
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:3:63: Error: extraneous input '-' expecting");
 }
 

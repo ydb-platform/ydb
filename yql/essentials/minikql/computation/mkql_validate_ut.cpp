@@ -19,6 +19,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -139,7 +141,7 @@ struct TPersonStructWithOptList {
     TString FirstName;
     TString LastName;
     ui32 Age;
-    typedef std::vector<ui32> TTagList;
+    using TTagList = std::vector<ui32>;
     TTagList Tags;
 
     NUdf::TUnboxedValue GetByIndex(ui32 index) const {
@@ -332,13 +334,13 @@ private:
     }
 };
 
-typedef std::pair<ui32, ui32> PosPair;
+using PosPair = std::pair<ui32, ui32>;
 
 template <class TKey, class TValue>
 struct TBrokenDictIterator: public NUdf::TBoxedValue {
     TBrokenDictIterator(const std::vector<std::pair<TKey, TValue>>& dictData, PosPair holePos)
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Index_(-1)
     {
     }
@@ -374,7 +376,7 @@ struct TBrokenDictBoxedValue: public NUdf::TBoxedValue {
     TBrokenDictBoxedValue(const std::vector<std::pair<TKey, TValue>>& dictData,
                           PosPair holePos, NUdf::TUnboxedValue&& hole = NUdf::TUnboxedValuePod())
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Hole_(std::move(hole))
     {
     }
@@ -489,7 +491,7 @@ SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptio
 
 static const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny"));
 
-typedef NUdf::TTuple<ui8, char*, ui64, char*> NUdfTuple;
+using NUdfTuple = NUdf::TTuple<ui8, char*, ui64, char*>;
 
 SIMPLE_UDF(TTuple, NUdfTuple(ui32)) {
     Y_UNUSED(valueBuilder);
@@ -505,7 +507,7 @@ static const std::vector<std::pair<ui32, ui64>> DICT_DIGIT2DIGIT = {
     {777, 777777777777},
 };
 
-typedef NUdf::TDict<ui32, ui64> NUdfDictDigDig;
+using NUdfDictDigDig = NUdf::TDict<ui32, ui64>;
 
 SIMPLE_UDF_RUN(TDictDigDig, NUdfDictDigDig(ui32, ui32), NUdf::TOptional<void>) {
     Y_UNUSED(valueBuilder);
@@ -541,7 +543,7 @@ SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) 
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-typedef NUdf::TTuple<NUdf::TPersonStructWithOptList, NUdf::TPersonStruct, NUdf::TPersonStructWithOptList, NUdf::TPersonStruct> NUdfPersonTuple;
+using NUdfPersonTuple = NUdf::TTuple<NUdf::TPersonStructWithOptList, NUdf::TPersonStruct, NUdf::TPersonStructWithOptList, NUdf::TPersonStruct>;
 static const auto TUPLE_OF_PERSON = std::make_tuple(
     STRUCT_PERSON_HITHCOCK_LIST,
     STRUCT_PERSON_JONNIE,
@@ -572,7 +574,7 @@ static const std::vector<NUdf::TPersonStructWithOptList> LIST_OF_STRUCT_PERSON =
     STRUCT_PERSON_LOVECRAFT_LIST,
     STRUCT_PERSON_KING_LIST};
 
-typedef NUdf::TDict<ui64, NUdf::TPersonStructWithOptList> TIndexDictFromPersonList;
+using TIndexDictFromPersonList = NUdf::TDict<ui64, NUdf::TPersonStructWithOptList>;
 SIMPLE_UDF(TListOfPersonStructToIndexDict, TIndexDictFromPersonList(ui32)) {
     Y_UNUSED(valueBuilder);
     Y_UNUSED(args);
@@ -610,7 +612,7 @@ const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBro
     return DICT_DIGIT2PERSON_BROKEN;
 }
 
-typedef NUdf::TDict<ui32, NUdf::TPersonStruct> NUdfDictDigPerson;
+using NUdfDictDigPerson = NUdf::TDict<ui32, NUdf::TPersonStruct>;
 
 std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2Person() {
     const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON = {
@@ -668,9 +670,9 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistryWithUDFs() {
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
-typedef std::function<std::vector<TRuntimeNode>(TProgramBuilder&)> BuildArgsFunc;
-typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*)> ValidateValueFunc;
-typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*, const TType* type)> FullValidateValueFunc;
+using BuildArgsFunc = std::function<std::vector<TRuntimeNode>(TProgramBuilder&)>;
+using ValidateValueFunc = std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*)>;
+using FullValidateValueFunc = std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*, const TType* type)>;
 
 void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = BuildArgsFunc(),
                           ValidateValueFunc validateFunc = ValidateValueFunc(),

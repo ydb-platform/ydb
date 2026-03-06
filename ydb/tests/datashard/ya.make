@@ -11,6 +11,7 @@ RECURSE(
     select
     secondary_index
     s3
-    vector_index
+    truncate
     ttl
+    vector_index
 )

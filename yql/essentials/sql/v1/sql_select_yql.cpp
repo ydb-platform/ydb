@@ -6,6 +6,8 @@
 #include "select_yql.h"
 #include "sql_select.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+
 #include <util/generic/overloaded.h>
 
 namespace NSQLTranslationV1 {
@@ -14,9 +16,10 @@ using namespace NSQLv1Generated;
 
 class TYqlSelect final: public TSqlTranslation {
 public:
-    TYqlSelect(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlTranslation(ctx, mode)
+    explicit TYqlSelect(const TSqlTranslation& that)
+        : TSqlTranslation(that)
     {
+        SetYqlSelectProduced(true);
     }
 
     TNodeResult Build(const TRule_select_stmt& rule) {
@@ -50,18 +53,22 @@ public:
         return TNonNull(BuildYqlValues(Ctx_.Pos(), std::move(values)));
     }
 
-    TNodeResult Build(const TRule_select_subexpr& rule, EColumnRefState state) {
-        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
-        if (!rule.GetBlock2().empty()) {
-            return Unsupported("(union_op select_subexpr_intersect)*");
+    TNodeResult Build(
+        const TRule_select_subexpr& rule,
+        EColumnRefState state,
+        ESmartParenthesis smartParenthesis)
+    {
+        if (!IsOnlySubExpr(rule)) {
+            return Finalize(BuildUnion(rule, TYqlSelectArgs()));
         }
+
+        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
+        YQL_ENSURE(rule.GetBlock2().empty(), "Unexpected (union_op select_subexpr_intersect)*");
 
         const auto& select_or_expr = intersect.GetRule_select_or_expr1();
-        if (!intersect.GetBlock2().empty()) {
-            return Unsupported("(intersect_op select_or_expr)*");
-        }
+        YQL_ENSURE(intersect.GetBlock2().empty(), "Unexpected (intersect_op select_or_expr)*");
 
-        return Build(select_or_expr, state);
+        return Build(select_or_expr, state, smartParenthesis);
     }
 
     TNodeResult Build(const TRule_exists_expr& rule) {
@@ -82,6 +89,10 @@ private:
             return rule.GetRule_select_unparenthesized_stmt_intersect1();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect>) {
             return rule.GetRule_select_kind_partial1();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr>) {
+            return rule.GetRule_select_subexpr_intersect1();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect>) {
+            return rule.GetRule_select_or_expr1();
         } else {
             static_assert(false);
         }
@@ -98,6 +109,10 @@ private:
             return block.GetRule_select_stmt_intersect2();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect::TBlock2>) {
             return block.GetRule_select_kind_parenthesis2();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr::TBlock2>) {
+            return block.GetRule_select_subexpr_intersect2();
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect::TBlock2>) {
+            return block.GetRule_select_or_expr2();
         } else {
             static_assert(false);
         }
@@ -105,7 +120,8 @@ private:
 
     template <class TRule>
         requires std::is_same_v<TRule, TRule_select_stmt> ||
-                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt>
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt> ||
+                 std::is_same_v<TRule, TRule_select_subexpr>
     TSQLResult<TYqlSelectArgs>
     BuildUnion(const TRule& rule, TYqlSelectArgs&& select) {
         {
@@ -134,7 +150,8 @@ private:
 
     template <class TRule>
         requires std::is_same_v<TRule, TRule_select_stmt_intersect> ||
-                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect>
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect> ||
+                 std::is_same_v<TRule, TRule_select_subexpr_intersect>
     TSQLResult<TYqlSelectArgs>
     BuildIntersection(const TRule& rule, TYqlSelectArgs&& select) {
         {
@@ -233,6 +250,22 @@ private:
         return select;
     }
 
+    TSQLResult<TYqlSelectArgs> Build(
+        const TRule_select_or_expr& rule,
+        TYqlSelectArgs&& select)
+    {
+        switch (rule.GetAltCase()) {
+            case TRule_select_or_expr::kAltSelectOrExpr1: {
+                const auto& alt = rule.GetAlt_select_or_expr1();
+                return Build(alt.GetRule_select_kind_partial1(), std::move(select));
+            }
+            case TRule_select_or_expr::kAltSelectOrExpr2:
+                return Unsupported("tuple_or_expr at UNION/EXCEPT/INTERSECT context");
+            case TRule_select_or_expr::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
+    }
+
     TNodeResult Build(const TRule_exists_expr::TBlock3& block) {
         switch (block.GetAltCase()) {
             case TRule_exists_expr_TBlock3::kAlt1:
@@ -244,12 +277,20 @@ private:
         }
     }
 
-    TNodeResult Build(const TRule_select_or_expr& rule, EColumnRefState state) {
+    TNodeResult Build(
+        const TRule_select_or_expr& rule,
+        EColumnRefState state,
+        ESmartParenthesis smartParenthesis)
+    {
         switch (rule.GetAltCase()) {
-            case TRule_select_or_expr::kAltSelectOrExpr1:
-                return Build(rule.GetAlt_select_or_expr1().GetRule_select_kind_partial1());
-            case TRule_select_or_expr::kAltSelectOrExpr2:
-                return Build(rule.GetAlt_select_or_expr2().GetRule_tuple_or_expr1(), state);
+            case TRule_select_or_expr::kAltSelectOrExpr1: {
+                const auto& alt = rule.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
+                return TYqlSelect(*this).Build(alt);
+            }
+            case TRule_select_or_expr::kAltSelectOrExpr2: {
+                const auto& alt = rule.GetAlt_select_or_expr2().GetRule_tuple_or_expr1();
+                return Build(alt, state, smartParenthesis);
+            }
             case TRule_select_or_expr::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }
@@ -835,7 +876,7 @@ private:
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
         TVector<TNodePtr> columns;
 
-        TSqlExpression sqlExpr(Ctx_, Mode_);
+        TSqlExpression sqlExpr(*this);
         if (!Unwrap(ExprList(sqlExpr, columns, rule.GetRule_expr_list2()))) {
             return std::unexpected(ESQLError::Basic);
         }
@@ -844,7 +885,7 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
-        TGroupByClause legacy(Ctx_, Mode_);
+        TGroupByClause legacy(*this);
         legacy.SetYqlSelectProduced(true);
         if (!legacy.Build(rule)) {
             return std::unexpected(ESQLError::Basic);
@@ -926,11 +967,16 @@ private:
     template <class TRule>
         requires std::same_as<TRule, TRule_expr> ||
                  std::same_as<TRule, TRule_tuple_or_expr>
-    TNodeResult Build(const TRule& rule, EColumnRefState state) {
-        TColumnRefScope scope(Ctx_, state);
-        TSqlExpression sqlExpr(Ctx_, Mode_);
-        sqlExpr.SetYqlSelectProduced(true);
+    TNodeResult Build(
+        const TRule& rule,
+        EColumnRefState state,
+        ESmartParenthesis smartParenthesis = ESmartParenthesis::Default)
+    {
+        YQL_ENSURE(smartParenthesis != ESmartParenthesis::GroupBy);
 
+        TColumnRefScope scope(Ctx_, state);
+        TSqlExpression sqlExpr(*this);
+        sqlExpr.SetSmartParenthesisMode(smartParenthesis);
         return sqlExpr.Build(rule);
     }
 
@@ -955,17 +1001,6 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
-        }
-    }
-
-    const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& parenthesis) {
-        switch (parenthesis.GetAltCase()) {
-            case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
-                return parenthesis.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
-            case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
-                return parenthesis.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
-            case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }
     }
@@ -1130,11 +1165,10 @@ std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf messag
 }
 
 TNodeResult BuildYqlSelectStatement(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
+    TSqlTranslation& that,
     const NSQLv1Generated::TRule_select_stmt& rule)
 {
-    return TYqlSelect(ctx, mode)
+    return TYqlSelect(that)
         .Build(rule)
         .transform([](auto x) {
             return TNonNull(BuildYqlStatement(std::move(x)));
@@ -1142,11 +1176,10 @@ TNodeResult BuildYqlSelectStatement(
 }
 
 TNodeResult BuildYqlSelectStatement(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
+    TSqlTranslation& that,
     const NSQLv1Generated::TRule_values_stmt& rule)
 {
-    return TYqlSelect(ctx, mode)
+    return TYqlSelect(that)
         .Build(rule)
         .transform([](auto x) {
             return TNonNull(BuildYqlStatement(std::move(x)));
@@ -1154,24 +1187,23 @@ TNodeResult BuildYqlSelectStatement(
 }
 
 TNodeResult BuildYqlSelectSubExpr(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
+    TSqlTranslation& that,
     const NSQLv1Generated::TRule_select_subexpr& rule,
-    EColumnRefState state)
+    EColumnRefState state,
+    ESmartParenthesis smartParenthesis)
 {
-    return TYqlSelect(ctx, mode)
-        .Build(rule, state)
+    return TYqlSelect(that)
+        .Build(rule, state, smartParenthesis)
         .transform([](auto x) {
             return TNonNull(WrapYqlSelectSubExpr(std::move(x)));
         });
 }
 
 TNodeResult BuildYqlSelectSubExpr(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
+    TSqlTranslation& that,
     const NSQLv1Generated::TRule_select_unparenthesized_stmt& rule)
 {
-    return TYqlSelect(ctx, mode)
+    return TYqlSelect(that)
         .Build(rule)
         .transform([](auto x) {
             return TNonNull(WrapYqlSelectSubExpr(std::move(x)));
@@ -1179,11 +1211,10 @@ TNodeResult BuildYqlSelectSubExpr(
 }
 
 TNodeResult BuildYqlExists(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
+    TSqlTranslation& that,
     const NSQLv1Generated::TRule_exists_expr& rule)
 {
-    return TYqlSelect(ctx, mode).Build(rule);
+    return TYqlSelect(that).Build(rule);
 }
 
 } // namespace NSQLTranslationV1

@@ -10,6 +10,7 @@
 #include <util/datetime/base.h>
 
 #include <concepts>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -142,7 +143,7 @@ template <
     ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -383,7 +384,7 @@ template <const char* TFuncName, typename TFieldStorage,
           TFieldStorage (*WAccessor)(const TUnboxedValuePod&),
           ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
 struct TGetTimeComponent {
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
@@ -1283,7 +1284,7 @@ template <const char* TUdfName,
           typename TResultWType, TResultWType (*WAccessor)(const TUnboxedValuePod&)>
 class TGetDateComponent: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -1394,7 +1395,8 @@ private:
 template <const char* TUdfName, auto Accessor, auto WAccessor>
 class TGetDateComponentName: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
+
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
@@ -1617,7 +1619,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
 
 class TUpdate: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Update");
@@ -1852,7 +1854,7 @@ DATETIME_FROM_CONVERTER_UDF(Interval64FromMicroseconds, TInterval64, i64, 1);
 template <const char* TUdfName, typename TResult, typename TWResult, i64 ScaleSeconds>
 class TToConverter: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -1976,7 +1978,7 @@ TUnboxedValue SimpleDatetimeToDatetimeUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOf: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2306,7 +2308,7 @@ TUnboxedValue SimpleDatetimeToIntervalUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOfInterval: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2429,7 +2431,7 @@ struct TTimeOfDayKernelExec: TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTrait
 
 class TTimeOfDay: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef::Of("TimeOfDay");
@@ -2556,7 +2558,7 @@ struct TAddKernelExec: TBinaryKernelExec<TAddKernelExec<Core>> {
 template <const char* TUdfName, auto Shifter, auto WShifter>
 class TShift: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2731,6 +2733,8 @@ static size_t PrintTzOffset(char* out, i32 offset) {
 
 class TFormat: public TBoxedValue {
 public:
+    using TTypeAwareMarker = bool;
+
     explicit TFormat(TSourcePosition pos, size_t optionalArgs)
         : Pos_(pos)
         , OptionalArgs_(optionalArgs)
@@ -2753,7 +2757,7 @@ public:
         }
 
         size_t optionalArgs = 0;
-        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(25, 5)) {
+        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(2025, 5)) {
             optionalArgs = 2;
             builder.OptionalArgs(optionalArgs).Args()->Add<char*>().Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds").Add<TOptional<bool>>().Name("WriteOffsetWithColon");
         } else {
@@ -2833,7 +2837,7 @@ private:
 
         TImpl(TSourcePosition pos, TUnboxedValue format, bool alwaysWriteFractionalSeconds, bool writeOffsetWithColon)
             : Pos_(pos)
-            , Format_(format)
+            , Format_(std::move(format))
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();

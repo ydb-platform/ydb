@@ -23,6 +23,7 @@
 #include <openssl/sha.h>
 
 #include <map>
+#include <ranges>
 #include <unordered_set>
 
 namespace NYql {
@@ -172,9 +173,9 @@ struct TContext {
     }
 
     TExprNode::TListType FindBinding(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Bindings.find(name);
-            if (it->Bindings.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Bindings.find(name);
+            if (frame.Bindings.cend() != r) {
                 return r->second;
             }
         }
@@ -183,9 +184,9 @@ struct TContext {
     }
 
     TString FindImport(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Imports.find(name);
-            if (it->Imports.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Imports.find(name);
+            if (frame.Imports.cend() != r) {
                 return r->second;
             }
         }
@@ -2097,9 +2098,9 @@ bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, cons
     }
 }
 
-typedef std::pair<const TExprNode*, const TExprNode*> TPairOfNodePotinters;
-typedef std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>> TNodesPairSet;
-typedef TNodeMap<std::pair<ui32, ui32>> TArgumentsMap;
+using TPairOfNodePotinters = std::pair<const TExprNode*, const TExprNode*>;
+using TNodesPairSet = std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>>;
+using TArgumentsMap = TNodeMap<std::pair<ui32, ui32>>;
 
 bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArgumentsMap& argumentsMap, ui32 level, TNodesPairSet& visited) {
     const auto ins = visited.emplace(one, two);
@@ -2257,7 +2258,7 @@ TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& 
     return result;
 }
 
-typedef TNodeMap<long> TRefCountsMap;
+using TRefCountsMap = TNodeMap<long>;
 
 void CalculateReferences(const TExprNode& node, TRefCountsMap& refCounts) {
     if (!refCounts[&node]++) {

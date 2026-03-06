@@ -52,6 +52,8 @@ extern "C" {
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
 
+#include <ranges>
+
 constexpr auto PREPARED_PARAM_PREFIX = "$p";
 constexpr auto AUTO_PARAM_PREFIX = "a";
 constexpr auto DEFAULT_PARAM_TYPE = "unknown";
@@ -556,10 +558,10 @@ public:
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
                     "timezone",                            // mediawiki
-                    NULL,
+                    nullptr,
                 };
 
-                for (int i = 0; skip_statements[i] != NULL; i++) {
+                for (int i = 0; skip_statements[i] != nullptr; i++) {
                     const char* skip_name = skip_statements[i];
                     if (stricmp(node_name, skip_name) == 0) {
                         return true;
@@ -963,7 +965,7 @@ public:
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
-                if (linitial(x->distinctClause) == NULL) {
+                if (linitial(x->distinctClause) == nullptr) {
                     hasDistinctAll = true;
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {
@@ -3199,9 +3201,9 @@ public:
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
-            for (auto rit = State_.CTE.rbegin(); rit != State_.CTE.rend(); ++rit) {
-                auto cteIt = rit->find(value->relname);
-                if (cteIt != rit->end()) {
+            for (auto& rit : std::ranges::reverse_view(State_.CTE)) {
+                auto cteIt = rit.find(value->relname);
+                if (cteIt != rit.end()) {
                     view = &cteIt->second;
                     break;
                 }

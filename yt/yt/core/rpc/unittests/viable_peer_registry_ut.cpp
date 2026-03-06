@@ -3,6 +3,8 @@
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/server.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/rpc/channel.h>
@@ -482,14 +484,14 @@ TEST_P(TParametrizedViablePeerRegistryTest, PeersAvailablePromise)
 
     viablePeerRegistry->SetError(TError("error"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_FALSE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("f"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     viablePeerRegistry->SetError(TError("another error"));
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("f"));
     EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().IsSet());

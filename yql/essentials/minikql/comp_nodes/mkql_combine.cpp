@@ -455,14 +455,14 @@ public:
             block = pull;
 
             if constexpr (StateContainerOpt) {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueFetch(current, ctx, block, valuePtr);
 
                 result->addIncoming(GetYield(context), block);
                 const auto choise = SwitchInst::Create(status, good, 2U, block);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), over);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), next);
             } else {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueNext(current, ctx, block, valuePtr);
                 BranchInst::Create(good, next, status, block);
             }
 
@@ -760,7 +760,7 @@ private:
 
             block = pull;
 
-            const auto status = StateContainerOpt ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, codegen, block, valuePtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, codegen, block, valuePtr);
+            const auto status = StateContainerOpt ? CallBoxedValueFetch(current, ctx, block, valuePtr) : CallBoxedValueNext(current, ctx, block, valuePtr);
 
             const auto icmp = StateContainerOpt ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Finish)), "cond", block) : status;
 
@@ -819,7 +819,7 @@ private:
 
             block = loop;
 
-            const auto fetch = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, stream, codegen, block, onePtr);
+            const auto fetch = CallBoxedValueFetch(stream, ctx, block, onePtr);
 
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetch, ConstantInt::get(fetch->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
             new StoreInst(fetch, statusPtr, block);

@@ -577,6 +577,10 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user_sids = TRUE)\n;\n"},
         {"alter table user add changefeed user with (user_sids = FaLsE)",
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user_sids = FALSE)\n;\n"},
+        {"alter table user add changefeed user with (trace_ids = tRUe)",
+         "ALTER TABLE user\n\tADD CHANGEFEED user WITH (trace_ids = TRUE)\n;\n"},
+        {"alter table user add changefeed user with (trace_ids = FaLsE)",
+         "ALTER TABLE user\n\tADD CHANGEFEED user WITH (trace_ids = FALSE)\n;\n"},
         {"alter table user add changefeed user with (retention_period = Interval(\"P1D\"))",
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval('P1D'))\n;\n"},
         {"alter table user add changefeed user with (virtual_timestamps = TruE)",
@@ -2035,39 +2039,113 @@ Y_UNIT_TEST(DropStreamingQuery) {
 }
 
 Y_UNIT_TEST(NamedNodeNewLine) {
-    TString input = TrimIndent(R"sql(
-        DEFINE SUBQUERY $x() AS
-            $a = SELECT 1;
-            $b = SELECT $a;
-            SELECT $b;
-        END DEFINE;
-    )sql");
-
-    TString expected = TrimIndent(R"sql(
-        DEFINE SUBQUERY $x() AS
-            $a = (
-                SELECT
-                    1
-            );
-
-            $b = (
-                SELECT
-                    $a
-            );
-
-            SELECT
-                $b
-            ;
-        END DEFINE;
-
-    )sql");
-
     TCases cases = {
-        {input, expected},
+        {
+            TrimIndent(R"sql(
+                DEFINE SUBQUERY $x() AS
+                    $a = SELECT 1;
+                    $b = SELECT $a;
+                    SELECT $b;
+                END DEFINE;
+            )sql"),
+            TrimIndent(R"sql(
+                DEFINE SUBQUERY $x() AS
+                    $a = (
+                        SELECT
+                            1
+                    );
+
+                    $b = (
+                        SELECT
+                            $a
+                    );
+
+                    SELECT
+                        $b
+                    ;
+                END DEFINE;
+
+            )sql"),
+        },
     };
 
     TSetup setup;
     setup.Run(cases);
+}
+
+Y_UNIT_TEST(NamedNodeCommentAndBraces) {
+    TSetup().Run(TCases{
+        {
+            TrimIndent(R"sql(
+                $x = -- a
+                    SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                $x = -- a
+                (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=-- a
+                (SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = -- a
+                (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x = /*a*/ (
+                    SELECT
+                        1
+                );
+            )sql"),
+            TrimIndent(R"sql(
+                $x = /*a*/ (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=/*a
+                */(SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = /*a
+                */ (
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x=(-- a
+                SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = ( -- a
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+    });
 }
 
 Y_UNIT_TEST(InlineSubquery) {
@@ -2116,4 +2194,5 @@ Y_UNIT_TEST(InlineSubquery) {
     TSetup setup;
     setup.Run(cases);
 }
+
 // NOLINTEND(misc-definitions-in-headers)

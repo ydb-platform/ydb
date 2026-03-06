@@ -11,6 +11,8 @@ from clickhouse_connect.driver.exceptions import ProgrammingError
 from clickhouse_connect.driver.httpclient import HttpClient
 from clickhouse_connect.driver.asyncclient import AsyncClient, DefaultThreadPoolExecutor, NEW_THREAD_POOL_EXECUTOR
 
+__all__ = ['Client', 'AsyncClient', 'create_client', 'create_async_client']
+
 
 # pylint: disable=too-many-arguments,too-many-locals,too-many-branches
 def create_client(*,

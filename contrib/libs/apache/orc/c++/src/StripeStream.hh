@@ -81,6 +81,8 @@ namespace orc {
     int32_t getForcedScaleOnHive11Decimal() const override;
 
     const SchemaEvolution* getSchemaEvolution() const override;
+    
+    std::shared_ptr<StringDictionary> getSharedDictionary(uint64_t columnId) const override;
   };
 
   /**

@@ -76,12 +76,10 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
         std::atomic<ui32> InFlightCount{0};
-        static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
+        static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
-        struct TDirectIoOpBase;
-        struct TSingleDirectIoOp;
-        struct TPersistentBufferPartIoOp;
-        struct TDDiskIoOp;
+        class TDirectIoOpBase;
+        class TPersistentBufferPartIoOp;
 #endif
 
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
@@ -135,6 +133,9 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
                 NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+                NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
             } DirectIO;
         };
 
@@ -416,10 +417,9 @@ namespace NKikimr::NDDisk {
         void Handle(TEvRead::TPtr ev);
 
 #if defined(__linux__)
-        void DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector, const TWriteInstruction& instr,
-            TChunkRef& chunkRef, NWilson::TSpan span);
-        void DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector, TChunkRef& chunkRef,
-            NWilson::TSpan span);
+        // note: releases the op on success (returns true)
+        bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+
         void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
 #endif
 

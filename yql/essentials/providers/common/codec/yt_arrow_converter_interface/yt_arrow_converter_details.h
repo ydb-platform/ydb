@@ -13,7 +13,7 @@ using namespace NYson::NDetail;
 
 class TYsonBuffer {
 public:
-    TYsonBuffer(const std::string_view& s)
+    explicit TYsonBuffer(const std::string_view& s)
         : Data_(s.data())
         , Available_(s.size())
     {

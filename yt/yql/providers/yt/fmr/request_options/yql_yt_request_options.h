@@ -32,6 +32,17 @@ enum class ETaskStatus {
     Completed
 };
 
+enum EOperationType {
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6,
+    Sort = 7
+};
+
 enum class ETaskType {
     Unknown = 0,
     Download = 1,
@@ -39,13 +50,15 @@ enum class ETaskType {
     Merge = 3,
     Map = 4,
     SortedUpload = 5,
-    SortedMerge = 6
+    SortedMerge = 6,
+    LocalSort = 7
 };
 
 enum class EFmrComponent {
     Unknown,
     Coordinator,
     Worker,
+    Gateway,
     Job
 };
 
@@ -53,6 +66,7 @@ enum class EFmrErrorReason {
     Unknown,
     RestartOperation,
     RestartQuery,
+    FallbackOperation,
     UdfTerminate
 };
 
@@ -404,10 +418,20 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
+struct TSortOperationParams {
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
+struct TLocalSortTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;
+};
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.
@@ -474,5 +498,10 @@ struct TTaskState: public TThrRefBase {
 TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const std::vector<TFileInfo>& files = {}, const std::vector<TYtResourceInfo>& ytResources = {}, const std::vector<TFmrResourceTaskInfo>& fmrResources = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
+
+struct TPartitionResult {
+    std::vector<TTaskTableInputRef> TaskInputs;
+    TMaybe<TFmrError> Error;
+};
 
 } // namespace NYql::NFmr

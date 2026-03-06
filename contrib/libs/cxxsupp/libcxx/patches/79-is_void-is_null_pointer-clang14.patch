@@ -1,5 +1,5 @@
 diff --git a/include/__type_traits/is_null_pointer.h b/include/__type_traits/is_null_pointer.h
-index fc6c6a6..cc2420f 100644
+index 63bfb7d..2b1e058 100644
 --- a/include/__type_traits/is_null_pointer.h
 +++ b/include/__type_traits/is_null_pointer.h
 @@ -12,6 +12,7 @@
@@ -23,7 +23,7 @@ index fc6c6a6..cc2420f 100644
  #if _LIBCPP_STD_VER >= 14
  template <class _Tp>
 diff --git a/include/__type_traits/is_void.h b/include/__type_traits/is_void.h
-index 48d73ce..c583db2 100644
+index f3af756..5f72ffa 100644
 --- a/include/__type_traits/is_void.h
 +++ b/include/__type_traits/is_void.h
 @@ -11,6 +11,7 @@
@@ -39,9 +39,9 @@ index 48d73ce..c583db2 100644
  
  template <class _Tp>
 +#if __has_builtin(__remove_cv)
- struct _LIBCPP_TEMPLATE_VIS _LIBCPP_NO_SPECIALIZATIONS is_void : _BoolConstant<__is_same(__remove_cv(_Tp), void)> {};
+ struct _LIBCPP_NO_SPECIALIZATIONS is_void : _BoolConstant<__is_same(__remove_cv(_Tp), void)> {};
 +#else
-+struct _LIBCPP_TEMPLATE_VIS _LIBCPP_NO_SPECIALIZATIONS is_void : _BoolConstant<__is_same(__remove_cv_t<_Tp>, void)> {};
++struct _LIBCPP_NO_SPECIALIZATIONS is_void : _BoolConstant<__is_same(__remove_cv_t<_Tp>, void)> {};
 +#endif
  
  #if _LIBCPP_STD_VER >= 17

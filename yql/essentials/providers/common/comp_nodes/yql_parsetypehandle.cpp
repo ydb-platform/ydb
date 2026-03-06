@@ -10,17 +10,19 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 class TParseTypeHandleWrapper: public TMutableComputationNode<TParseTypeHandleWrapper> {
-    typedef TMutableComputationNode<TParseTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TParseTypeHandleWrapper>;
 
 public:
     TParseTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* str, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Str_(str)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

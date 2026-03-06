@@ -4,23 +4,43 @@
 
 namespace NYql::NFmr {
 
-TPermutation TSortHelper::BuildPermutation(const TVector<TRowIndexMarkup>& rows) const {
-    if (rows.empty()) {
-        return {};
+TSortHelper::TSortHelper(
+    const std::vector<TIndexedBlock>& blocks,
+    const std::vector<ESortOrder>& sortOrders
+)
+    : Blocks_(blocks)
+    , SortOrders_(sortOrders)
+{
+}
+
+TSortedRowOrdering TSortHelper::GetSortedRowOrdering() const {
+
+    std::vector<TRowPosition> rowPositions;
+    for (ui64 blockIndex = 0; blockIndex < Blocks_.size(); ++blockIndex) {
+        for (ui64 rowIndex = 0; rowIndex < Blocks_[blockIndex].Rows.size(); ++rowIndex) {
+            rowPositions.emplace_back(TRowPosition(blockIndex, rowIndex));
+        }
     }
 
-    TPermutation permutation(rows.size());
-    std::iota(permutation.begin(), permutation.end(), 0);
+    std::sort(rowPositions.begin(), rowPositions.end(),
+        [this](const TRowPosition& lhs, const TRowPosition& rhs) {
+            auto& lhsBlock = Blocks_[lhs.BlockIndex];
+            auto& lhsRow = lhsBlock.Rows[lhs.RowIndex];
+            auto& rhsBlock = Blocks_[rhs.BlockIndex];
+            auto& rhsRow = rhsBlock.Rows[rhs.RowIndex];
 
-    TBinaryYsonComparator comparator(BlobData_, SortOrders_);
-
-    std::stable_sort(permutation.begin(), permutation.end(),
-        [&rows, &comparator](ui64 idxA, ui64 idxB) {
-            return comparator.CompareRows(rows[idxA], rows[idxB]) < 0;
+            int c = CompareKeyRowsAcrossYsonBlocks(
+                lhsBlock.Data,
+                lhsRow,
+                rhsBlock.Data,
+                rhsRow,
+                SortOrders_
+            );
+            return c < 0;
         }
     );
 
-    return permutation;
+    return rowPositions;
 }
 
 } // namespace NYql::NFmr

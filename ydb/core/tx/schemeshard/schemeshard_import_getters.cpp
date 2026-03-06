@@ -50,7 +50,7 @@ struct TGetterSettings {
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
         std::visit([&settings, &iv](const auto& s) {
-            settings.ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig,s);
+            settings.ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, s);
             settings.Retries = s.number_of_retries();
             if (s.has_encryption_settings()) {
                 settings.Key = NBackup::TEncryptionKey(s.encryption_settings().symmetric_key().key());

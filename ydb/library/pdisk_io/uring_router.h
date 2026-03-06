@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
 #include <sys/uio.h>
@@ -17,32 +18,142 @@ namespace NActors {
 
 namespace NKikimr::NPDisk {
 
+enum class EUringFavor {
+    Uring,
+    IOPoll,
+    SQPoll,
+    IOPollSQPoll,
+    SharedSQPoll,
+    FallbackPDisk,
+};
+
 struct TUringRouterConfig {
-    ui32 QueueDepth = 128;          // max inflight I/O operations (SQ/CQ ring size)
-    ui32 SqThreadIdleMs = 5000;     // submission kernel thread idle timeout before sleeping (only when UseSQPoll)
-    bool UseSQPoll = true;          // kernel thread polls submissions (IORING_SETUP_SQPOLL)
-    bool UseIOPoll = true;          // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL)
+    // Target maximum number of in-flight I/O operations (SQ ring size).
+    // Typical devices have hardware queue depth around 128; using 256 entries
+    // gives additional headroom to reduce the risk of SQ exhaustion under load.
+    ui32 QueueDepth = 256;
+
+    // Submission kernel thread idle timeout before sleeping (only when UseSQPoll)
+    ui32 SqThreadIdleMs = 1000;
+
+    // Kernel thread polls submissions (IORING_SETUP_SQPOLL)
+    bool UseSQPoll = true;
+
+    // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL).
+    // It requires support from both device and driver,
+    // according to our measurements the latency win is negligible.
+    bool UseIOPoll = false;
+
+    // Share kernel poller and backend between uring instances (IORING_SETUP_ATTACH_WQ)
+    // On Linux kernel 5.15 this option showed very poor performance in our benchmarks,
+    // so it is disabled by default.
+    bool UseSharedSQPoll = false;
+
+    EUringFavor GetUringFavor() const {
+        if (UseSQPoll && UseSharedSQPoll) {
+            return EUringFavor::SharedSQPoll;
+        }
+        if (UseSQPoll && UseIOPoll) {
+            return EUringFavor::IOPollSQPoll;
+        }
+        if (UseSQPoll) {
+            return EUringFavor::SQPoll;
+        }
+        if (UseIOPoll) {
+            return EUringFavor::IOPoll;
+        }
+        return EUringFavor::Uring;
+    }
+
+    TString ToString() const;
 };
 
 // Our cookie passed through io_uring user_data.
 // Callers derive from this and add their own context fields.
 // Should be allocated from a pool to avoid dynamic allocation in the hot path.
-struct TUringOperation {
-    // Filled by TUringRouter on completion
-    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
+class TUringOperationBase {
+    friend class TUringRouter;
+
+public:
+    enum EOperationType {
+        ENOT_SET = 0,
+        EREAD,
+        EWRITE,
+    };
+
+    virtual ~TUringOperationBase() = default;
+
+    // Callbacks
 
     // Called from the dedicated completion polling thread outside actor system,
     // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
-    // After OnComplete returns, the caller is free to return this object to its pool.
-    void (*OnComplete)(TUringOperation* op, NActors::TActorSystem* actorSystem) noexcept = nullptr;
+    // After OnComplete() returns, TUringRouter will not access object anymore.
+    virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept = 0;
 
-    // Optional cleanup callback called by TUringRouter::Stop() for CQEs drained
+    // A cleanup callback called by TUringRouter::Stop() for CQEs drained
     // after shutdown without invoking OnComplete. Use this to release operation-
     // owned memory/resources for in-flight requests that are no longer delivered.
-    void (*OnDrop)(TUringOperation* op) noexcept = nullptr;
+    // After OnDrop() returns, TUringRouter will not access object anymore.
+    virtual void OnDrop() noexcept = 0;
+
+    // note, that buf should be valid until operation is finished:
+    // normally only tests should use this "externally", while
+    // derived classes keep the buf and use this to prepare I/O
+    void PrepareIov(void* buf, size_t size, ui64 offset) {
+        // additional calls are normally from AdvanceIov()
+        if (TotalSize == 0) {
+            TotalSize = size;
+        }
+
+        DiskOffset = offset;
+
+        Iov.iov_base = buf;
+        Iov.iov_len = size;
+    }
+
+    void AdvanceIov(size_t bytesProcessed) {
+        auto* nextBuffer = static_cast<char*>(Iov.iov_base) + bytesProcessed;
+        const size_t nextSize = Iov.iov_len - bytesProcessed;
+        const ui64 nextOffset = DiskOffset + bytesProcessed;
+        PrepareIov(nextBuffer, nextSize, nextOffset);
+    }
+
+    void SetOperationType(EOperationType opType) {
+        OperationType = opType;
+    }
+
+    EOperationType GetOperationType() const {
+        return OperationType;
+    }
+
+    size_t GetOperationBytes() const {
+        return Iov.iov_len;
+    }
+
+    i32 GetResult() const {
+        return Result;
+    }
+
+    ui64 GetTotalSize() const {
+        return TotalSize;
+    }
+
+private:
+    // Filled by TUringRouter on completion
+    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
+
+    // Submission metadata for non-fixed Read/Write operations.
+
+    EOperationType OperationType = ENOT_SET;
+
+    // never changes after set: needed in case of short read/write to have
+    // initially requested size
+    ui64 TotalSize = 0;
+
+    ui64 DiskOffset = 0;
 
     // Scratch space for the iovec used by readv/writev submissions.
-    // Populated by TUringRouter and must remain valid until OnComplete is called.
+    // Populated by TUringRouter user and must remain valid until OnComplete is called.
     struct iovec Iov = {};
 };
 
@@ -55,6 +166,10 @@ class TUringRouter {
 public:
     TUringRouter(FHANDLE fd, NActors::TActorSystem* actorSystem, TUringRouterConfig config = {});
     ~TUringRouter();
+
+    const TUringRouterConfig& GetConfig() const {
+        return Config;
+    }
 
     // --- Setup (call before Start) ---
     //
@@ -79,16 +194,16 @@ public:
 
     // --- Submission (call from a single thread, e.g., DDisk actor) ---
 
-    // Submit a read. Buffer must be aligned and large enough.
+    // Submit a read operation. op->Iov and op->DiskOffset must be initialized.
     // op must remain alive until op->OnComplete is called.
     // Returns true if SQE was written to the ring, false if SQ is full.
-    bool Read(void* buf, ui64 size, ui64 offset, TUringOperation* op);
-    bool Write(const void* buf, ui64 size, ui64 offset, TUringOperation* op);
+    bool Read(TUringOperationBase* op);
+    bool Write(TUringOperationBase* op);
 
     // Fixed-buffer variants (requires prior RegisterBuffers).
     // bufIndex is the index into the registered iovec array.
-    bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op);
-    bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op);
+    bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
+    bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
 
     // Flush the SQ ring tail and submit prepared SQEs to the kernel.
     // Calls io_uring_submit() which advances the kernel-visible SQ tail
@@ -98,23 +213,23 @@ public:
     // --- Lifecycle ---
 
     // Stop the completion thread and tear down the io_uring instance.
-    // Outstanding operations OnComplete will NOT be called. If TUringOperation::OnDrop
-    // is set, it is called for CQEs drained during shutdown.
+    // Outstanding operations OnComplete() will NOT be called.
+    // OnDrop() is called for CQEs drained during shutdown.
     void Stop();
 
     // Returns the number of SQEs still available in the ring.
     ui32 SubmitItemsLeft() const;
 
     bool IsFileRegistered() const;
+    EUringFavor GetUringFavor() const;
 
-    // Returns true if an io_uring instance can be created on this system with the given config.
+    // Returns true if an io_uring instance can be created on this system with either the given config or fallback config.
     // Always use in tests to skip when running in restricted environments (seccomp, containers, etc.).
     static bool Probe(TUringRouterConfig config = {});
 
 private:
     struct io_uring_sqe* GetSqe();
-    void PrepareSqe(struct io_uring_sqe* sqe, bool isRead, void* buf, ui64 size,
-                    ui64 offset, TUringOperation* op);
+    void PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op);
 
     // Submit a NOP to wake the completion poller blocked in io_uring_wait_cqe.
     void WakePoller();

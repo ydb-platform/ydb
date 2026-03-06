@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_sorted_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_sorted_partitioner.h>
 #include <yt/yql/providers/yt/fmr/test_tools/sorted_partitioner/yql_yt_sorted_partitioner_test_tools.h>
 
 #include <util/string/builder.h>
@@ -151,8 +151,8 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-        auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted({r1, r2});
-        UNIT_ASSERT(ok);
+        auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted({r1, r2});
+        UNIT_ASSERT(!error);
         UNIT_ASSERT(!tasks.empty());
 
         const auto& task0 = tasks[0];
@@ -235,8 +235,8 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             TSortingColumns sortingColumns{.Columns = keyColumns, .SortOrders = {ESortOrder::Ascending}};
 
             TSortedPartitioner partitioner(partIdsForTables, partIdStats, sortingColumns, settings);
-            auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted({refTable1, refTable2});
-            UNIT_ASSERT_C(ok, "Partitioner returned non-ok");
+            auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted({refTable1, refTable2});
+            UNIT_ASSERT_C(!error, "Partitioner returned non-ok");
             UNIT_ASSERT_C(!tasks.empty(), "Partitioner returned no tasks");
 
             const auto dstFingerprints = NTestTools::CountTaskFingerprintsFromFiles(tasks, tables, keyColumns);
@@ -408,8 +408,8 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
             TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-            auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted(inputTables);
-            UNIT_ASSERT_C(ok, "Partitioner returned non-ok");
+            auto [tasks, error] = partitioner.PartitionTablesIntoTasksSorted(inputTables);
+            UNIT_ASSERT_C(!error, "Partitioner returned non-ok");
 
             const auto actual = NormalizeTasksAsProtoStrings(tasks, c.Input.size());
             UNIT_ASSERT_VALUES_EQUAL_C(

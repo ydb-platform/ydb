@@ -18,7 +18,7 @@ public:
 
     TCallableVisitFunc operator()(TInternName name) {
         if (SpillingSettings.IsGraceJoinSpillingEnabled() && (name == "GraceJoin" || name == "GraceSelfJoin")) {
-            return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",
                     callable.GetType()->GetReturnType(), false);

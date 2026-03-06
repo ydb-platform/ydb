@@ -41,8 +41,10 @@ void TFmrUserJobLauncher::InitializeJobEnvironment(
 
     for (auto& [localPath, alias]: filePaths) {
         YQL_ENSURE(!localPath.empty());
+        auto jobFilePath = TFsPath(jobEnvironmentDir) / alias;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Setting hardlink from local path " << localPath << " to new path " << jobFilePath.GetPath();
         NFs::SetExecutable(localPath, true);
-        NFs::SymLink(localPath, TFsPath(jobEnvironmentDir) / alias);
+        NFs::HardLink(localPath, jobFilePath);
     }
 }
 

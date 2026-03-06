@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NYPath {

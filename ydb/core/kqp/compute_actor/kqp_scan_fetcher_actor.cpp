@@ -2,6 +2,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -532,6 +533,10 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
+    ++BlocksReceived;
+    if (msg.ArrowBatch) {
+        TotalBytesReceived += NArrow::GetTableDataSize(msg.ArrowBatch);
+    }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)(
         "generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
@@ -704,6 +709,102 @@ void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
         return;
     }
     Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
+}
+
+void TKqpScanFetcherActor::OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+    TStringStream str;
+    const auto elapsed = TInstant::Now() - RegistrationStartTime;
+    const double elapsedSec = elapsed.SecondsFloat();
+
+    HTML(str) {
+        PRE() {
+            str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
+            str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
+            str << "Elapsed: " << elapsed << Endl;
+            str << "PendingScanData: " << PendingScanData.size()
+                << ", PendingShards: " << PendingShards.size()
+                << ", PendingResolveShards: " << PendingResolveShards.size() << Endl;
+            str << "InFlightShards(Scans/Shards): " << InFlightShards.GetScansCount()
+                << "/" << InFlightShards.GetShardsCount()
+                << ", PacksToSendCount: " << InFlightComputes.GetPacksToSendCount() << Endl;
+            str << "BlocksReceived: " << BlocksReceived
+                << ", TotalBytesReceived: " << TotalBytesReceived << Endl;
+            if (BlocksReceived > 0) {
+                str << "AvgBlockSize: " << (TotalBytesReceived / BlocksReceived) << " bytes" << Endl;
+            }
+            if (elapsedSec > 0) {
+                str << "Throughput: " << (ui64)(TotalBytesReceived / elapsedSec) << " bytes/sec" << Endl;
+            }
+
+            str << Endl << "Compute Actor(s):" << Endl;
+            TABLE_SORTABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH_ATTRS({{"title", "Compute actor receiving data from this fetcher"}}) { str << "ActorId"; }
+                        TABLEH_ATTRS({{"title", "Last FreeSpace value reported by compute actor"}}) { str << "FreeSpace"; }
+                        TABLEH_ATTRS({{"title", "Total chunks sent to compute actor"}}) { str << "DataChunksSent"; }
+                        TABLEH_ATTRS({{"title", "Accepted acks (only when compute was not free)"}}) { str << "AcksReceived"; }
+                        TABLEH_ATTRS({{"title", "DataChunksSent minus AcksReceived: events stuck in compute mailbox"}}) { str << "Sent-Acked"; }
+                        TABLEH_ATTRS({{"title", "All acks from compute including ones ignored because compute was already free"}}) { str << "TotalAcksFromCompute"; }
+                        TABLEH_ATTRS({{"title", "Packs queued locally, waiting for ack before sending"}}) { str << "DataQueue"; }
+                    }
+                }
+                TABLEBODY() {
+                    InFlightComputes.ForEachCompute([&](const TActorId& actorId, const TInFlightComputes::TComputeActorInfo& info) {
+                        TABLER() {
+                            TABLED() {
+                                HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(actorId)}, {"sf", ""}})) {
+                                    str << actorId;
+                                }
+                            }
+                            TABLED() { str << info.GetFreeSpace(); }
+                            TABLED() { str << info.GetDataChunksSent(); }
+                            TABLED() { str << info.GetAcksReceived(); }
+                            TABLED() { str << (i64)info.GetDataChunksSent() - (i64)info.GetAcksReceived(); }
+                            TABLED() { str << info.GetTotalAcksFromCompute(); }
+                            TABLED() { str << info.GetPacksToSendCount(); }
+                        }
+                    });
+                }
+            }
+
+    // i64 DataChunksInFlightCount = 0;
+    // ui64 PendingMessageCount = 0;
+
+            str << Endl << "Shard Scanner(s):" << Endl;
+            TABLE_SORTABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH_ATTRS({{"title", "DataShard tablet serving this key range"}}) { str << "TabletId"; }
+                        TABLEH_ATTRS({{"title", "Scan actor on the shard side"}}) { str << "ActorId"; }
+                        TABLEH() { str << "ScanId"; }
+                        TABLEH_ATTRS({{"title", "DataChunksInFlightCount"}}) { str << "Inflight"; }
+                        TABLEH_ATTRS({{"title", "Cumulative time chunks waited in queue for a free compute actor"}}) { str << "WaitOutputTime"; }
+                        TABLEH_ATTRS({{"title", "NeedAck"}}) { str << "Ack"; }
+                        TABLEH_ATTRS({{"title", "Finished"}}) { str << "F"; }
+                    }
+                }
+                TABLEBODY() {
+                    InFlightShards.ForEachScanner([&](ui64 tabletId, const TShardScannerInfo& scanner) {
+                        TABLER() {
+                            TABLED() {
+                                HREF(NActors::NMon::BuildActorsLink("../tablets", ev->Get()->Request.GetParams(), {{"TabletID", ToString(tabletId)}, {"ca", ""}, {"sf", ""}})) {
+                                    str << tabletId;
+                                }
+                            }
+                            TABLED() { str << scanner.GetActorIdStr(); }
+                            TABLED() { str << scanner.ScanId; }
+                            TABLED() { str << scanner.DataChunksInFlightCount; }
+                            TABLED() { str << scanner.GetWaitOutputTime(); }
+                            TABLED() { str << scanner.NeedAck; }
+                            TABLED() { str << scanner.IsFinished(); }
+                        }
+                    });
+                }
+            }
+        }
+    }
+    this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
 }
 
 }   // namespace NKikimr::NKqp::NScanPrivate

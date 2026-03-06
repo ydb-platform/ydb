@@ -8,6 +8,10 @@ namespace NSQLTranslationV1 {
 using namespace NYql;
 using namespace NSQLv1Generated;
 
+class TSqlTranslation;
+
+// Do not use it to get a positon for a SQL hint.
+// Use TContext::TokenPosition instead.
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -107,7 +111,7 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
-TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
@@ -121,6 +125,21 @@ struct TSymbolNameWithPos {
     TPosition Pos;
 };
 
+enum class ESmartParenthesis {
+    Default,
+    GroupBy,
+    InStatement,
+    SqlLambdaParams,
+};
+
+enum class EExpr {
+    Regular,
+    GroupBy,
+    SqlLambdaParams,
+};
+
+ESmartParenthesis ToSmartParenthesis(EExpr mode);
+
 class TSqlTranslation: public TTranslation {
 protected:
     TSqlTranslation(TContext& ctx, NSQLTranslation::ESqlMode mode)
@@ -130,6 +149,8 @@ protected:
         /// \todo remove NSQLTranslation::ESqlMode params
         YQL_ENSURE(ctx.Settings.Mode == mode);
     }
+
+    TSqlTranslation(const TSqlTranslation&) = default;
 
 public:
     void SetYqlSelectProduced(bool value) noexcept {
@@ -141,12 +162,6 @@ public:
     }
 
 protected:
-    enum class EExpr {
-        Regular,
-        GroupBy,
-        SqlLambdaParams,
-    };
-
     TNodeResult NamedExpr(
         const TRule_expr& exprTree,
         const TRule_an_id_or_type* nameTree,
@@ -311,7 +326,8 @@ protected:
 
     TNodePtr YqlSelectOrLegacy(
         std::function<TNodeResult()> yqlSelect,
-        std::function<TNodePtr()> legacy);
+        std::function<TNodePtr()> legacy,
+        TMaybe<TPosition> position = Nothing());
 
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);

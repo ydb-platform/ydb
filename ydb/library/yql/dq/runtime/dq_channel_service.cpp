@@ -1979,12 +1979,12 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             TABLER() {
                                 TABLED() {str << sharedBuffer->Info.ChannelId;}
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << sharedBuffer->Info.OutputActorId.NodeId() << "/actors/kqp_node?ca=" << sharedBuffer->Info.OutputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.OutputActorId)}}))  {
                                         str << sharedBuffer->Info.OutputActorId;
                                     }
                                 }
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << sharedBuffer->Info.InputActorId.NodeId() << "/actors/kqp_node?ca=" << sharedBuffer->Info.InputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.InputActorId)}}))  {
                                         str << sharedBuffer->Info.InputActorId;
                                     }
                                 }
@@ -2119,12 +2119,12 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->HeadBlobId;}
                                 TABLED() {str << descriptor->TailBlobId;}
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << info.OutputActorId.NodeId() << "/actors/kqp_node?ca=" << info.OutputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
                                         str << info.OutputActorId;
                                     }
                                 }
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << info.InputActorId.NodeId() << "/actors/kqp_node?ca=" << info.InputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
                                         str << info.InputActorId;
                                     }
                                 }
@@ -2172,12 +2172,12 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->Finished.load();}
                                 TABLED() {str << descriptor->IsBound;}
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << info.OutputActorId.NodeId() << "/actors/kqp_node?ca=" << info.OutputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
                                         str << info.OutputActorId;
                                     }
                                 }
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << info.InputActorId.NodeId() << "/actors/kqp_node?ca=" << info.InputActorId)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
                                         str << info.InputActorId;
                                     }
                                 }

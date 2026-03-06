@@ -1278,6 +1278,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(CanonizedJoinOrderReuseShuffleWithWrongOrderBug) {
+        CanonizedJoinOrderTest(
+            "queries/reuse_shuffle_with_wrong_order_bug.sql",
+            "stats/tpcc.json",
+            "join_order/reuse_shuffle_with_wrong_order_bug.json", false, true
+        );
+    }
+
 }
 }
 }

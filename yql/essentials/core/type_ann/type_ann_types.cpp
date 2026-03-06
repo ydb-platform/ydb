@@ -2040,6 +2040,11 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!EnsureCodeResourceType(*input->Child(0), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/metadata/initializer)
+UNITTEST_FOR(ydb/services/metadata/ds_table)
 
 FORK_SUBTESTS()
 

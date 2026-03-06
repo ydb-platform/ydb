@@ -88,7 +88,7 @@ void SetServicePath(const TString& path) {
 
 std::unique_ptr<NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>> 
 CreateYQLResponse(ui32 resultSetsCount = 1) {
-    typename NRequest::TDialogYQLRequest::TResponse response;
+    NRequest::TDialogYQLRequest::TResponse response;
     
     Ydb::Table::ExecuteQueryResult qResult;
     for (ui32 i = 0; i < resultSetsCount; ++i) {
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
         // Messages sent to a non-existent service (e.g., MakeSchemeCacheID()) 
         // are dropped by the runtime and won't reach the ObserverFunc.
         // We must register the service ID to ensure TEvTxProxySchemeCache events 
-        // are intercepted correctly. Jut use dummy actor.
+        // are intercepted correctly. Just use a dummy actor.
         TActorId s = runtime.AllocateEdgeActor();
         runtime.RegisterService(MakeSchemeCacheID(), s);
 

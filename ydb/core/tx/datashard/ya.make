@@ -28,7 +28,6 @@ SRCS(
     change_sender_incr_restore.cpp
     change_sender_table_base.cpp
     check_commit_writes_tx_unit.cpp
-    check_constraint.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
     check_read_unit.cpp
@@ -219,6 +218,7 @@ SRCS(
     truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
+    validate_row_condition.cpp
     volatile_tx.cpp
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
@@ -356,6 +356,7 @@ RECURSE_FOR_TESTS(
     ut_truncate
     ut_upload_rows
     ut_vacuum
+    ut_validate_row_condition
     ut_volatile
     ut_write
 )

@@ -169,9 +169,12 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
-    MetaSettings.ClusterLinkSources.clear();
-    MetaSettings.DatabaseLinkSources.clear();
+void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig) {
+    if (!appConfig.HasMeta()) {
+        ythrow yexception() << "Check that `meta` section exists and is on the same indentation as `generic` section";
+    }
+
+    const auto& config = appConfig.GetMeta();
 
     MetaApiEndpoint = config.GetMetaApiEndpoint();
     MetaDatabase = config.GetMetaDatabase();
@@ -180,14 +183,11 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     DbUserTokenSource = config.GetDbUserTokenAccess();
     MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
     MetaSettings.MetaDatabase = MetaDatabase;
-    if (StartupOptions.AccessServiceType != NMvp::nebius_v1) {
-        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
-    }
     if (MetaSettings.MetaApiEndpoint.empty()) {
-        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
     }
     if (MetaSettings.MetaDatabase.empty()) {
-        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
     }
 
     if (config.HasGrafana()) {
@@ -219,17 +219,7 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
         NMvp::NMeta::TMetaAppConfig appConfig;
         MergeYamlNodeToProto(config, appConfig);
-        if (appConfig.HasMeta()) {
-            TryGetMetaOptionsFromConfig(appConfig.GetMeta());
-        }
-        if (config["meta"]) {
-            if (MetaApiEndpoint.empty()) {
-                ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified in meta config.";
-            }
-            if (MetaDatabase.empty()) {
-                ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified in meta config.";
-            }
-        }
+        TryGetMetaOptionsFromConfig(appConfig);
     } catch (const YAML::Exception& e) {
         ythrow yexception() << "Error parsing YAML configuration file: " << e.what();
     }

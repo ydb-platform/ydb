@@ -54,7 +54,7 @@ public:
         , Request(sender, request)
     {}
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
+    void Bootstrap() {
         Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
 
         if (!InitEntityType()) {
@@ -62,7 +62,7 @@ public:
             return;
         }
 
-        RequestClusterInfo(ctx);
+        RequestClusterInfo();
     }
 
     bool InitEntityType() {
@@ -77,9 +77,9 @@ public:
         return true;
     }
 
-    virtual void RequestClusterInfo(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
-        NActors::TActorId actorId = ctx.SelfID;
+    virtual void RequestClusterInfo() {
+        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+        NActors::TActorId actorId = SelfId();
         Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))
             .CreateSession()
             .Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
@@ -88,7 +88,7 @@ public:
             });
     }
 
-    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event) {
         const NYdb::NTable::TCreateSessionResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
             Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
@@ -101,8 +101,8 @@ public:
         NYdb::TParamsBuilder params;
         params.AddParam("$name", NYdb::TValueBuilder().Utf8(Request.Parameters["cluster"]).Build());
 
-        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
-        NActors::TActorId actorId = ctx.SelfID;
+        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+        NActors::TActorId actorId = SelfId();
         Session->ExecuteDataQuery(
             query,
             NYdb::NTable::TTxControl::BeginTx(
@@ -115,7 +115,7 @@ public:
             });
     }
 
-    void Handle(TEvPrivate::TEvDataQueryResult::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvPrivate::TEvDataQueryResult::TPtr event) {
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
             Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
@@ -240,8 +240,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvCreateSessionResult, Handle);
-            HFunc(TEvPrivate::TEvDataQueryResult, Handle);
+            hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
+            hFunc(TEvPrivate::TEvDataQueryResult, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }

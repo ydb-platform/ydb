@@ -3,6 +3,7 @@
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/signals.h>
 #include <ydb/mvp/meta/meta_settings.h>
 
@@ -49,7 +50,7 @@ public:
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig();
-    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
+    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;

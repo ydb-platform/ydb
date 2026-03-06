@@ -65,13 +65,17 @@ meta:
         UNIT_ASSERT_NO_EXCEPTION(new NMVP::TMVP(3, argv));
     }
 
-    Y_UNIT_TEST(YandexWithoutMetaBlockAllowsEmptyValues) {
+    Y_UNIT_TEST(WithoutMetaBlockThrows) {
         TTempFileHandle tmpYaml = MakeTestFile(R"(
 generic:
   access_service_type: "yandex_v2"
 )", "mvp_meta_yandex_without_meta_block", ".yaml");
         const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
-        UNIT_ASSERT_NO_EXCEPTION(new NMVP::TMVP(3, argv));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            new NMVP::TMVP(3, argv),
+            yexception,
+            "Check that `meta` section exists and is on the same indentation as `generic` section"
+        );
     }
 }
 

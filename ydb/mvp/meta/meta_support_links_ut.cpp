@@ -46,8 +46,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             , Result(std::move(result))
         {}
 
-        void RequestClusterInfo(const NActors::TActorContext& ctx) override {
-            ctx.Send(ctx.SelfID, new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
+        void RequestClusterInfo() override {
+            Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
         }
 
         std::unique_ptr<NMVP::TSupportLinksResolver> CreateSupportLinksResolver() override {

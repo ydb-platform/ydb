@@ -272,12 +272,15 @@ namespace NKikimr {
 
                 // limit bandwidth
                 const auto& quoter = ReplCtx->VCtx->ReplNodeRequestQuoter;
+                const TInstant now = TActivationContext::Now();
                 const TDuration duration = quoter
-                    ? quoter->Take(TActivationContext::Now(), actualBytes)
+                    ? quoter->Take(now, actualBytes)
                     : TDuration::Zero();
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> event(ev->Release().Release());
                 if (duration != TDuration::Zero()) {
                     Schedule(duration, new TEvProcessDelayedEvent(std::move(event)));
+                    auto deltaMicrosec = quoter->MergeThrottledIntervalAndGetDeltaMicrosec(now, duration);
+                    ReplCtx->MonGroup.ReplNodeRequestThrottledMicroseconds() += deltaMicrosec;
                 } else {
                     ProcessScheduledResult(event);
                 }

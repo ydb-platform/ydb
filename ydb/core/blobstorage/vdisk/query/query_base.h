@@ -40,7 +40,7 @@ namespace NKikimr {
             , ParentId(parentId)
             , LogoBlobsSnapshot(std::move(logoBlobsSnapshot))
             , BarriersSnapshot(std::move(barrierSnapshot))
-            , BatcherCtx(new TReadBatcherCtx(QueryCtx->HullCtx->VCtx, QueryCtx->PDiskCtx, ev))
+            , BatcherCtx(new TReadBatcherCtx(QueryCtx->HullCtx->VCtx, QueryCtx->PDiskCtx, ev, QueryCtx->ReplMonGroup))
             , Record(BatcherCtx->OrigEv->Get()->Record)
             , ShowInternals(Record.GetShowInternals())
             , Result(std::move(result))

@@ -4,7 +4,12 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
+SPLIT_FACTOR(10)
+FORK_SUBTESTS()
+
 SIZE(medium)
+REQUIREMENTS(cpu:2)
+
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

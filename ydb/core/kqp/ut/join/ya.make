@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
+
 SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
@@ -8,9 +9,10 @@ IF (WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
-IF(SANITIZER_TYPE == "memory")
+IF(SANITIZER_TYPE)
     # Increase MSan memory limit due to YQL-19940.
     # Just double default memory requirements since we run MSan without origin tracking by default.
     REQUIREMENTS(

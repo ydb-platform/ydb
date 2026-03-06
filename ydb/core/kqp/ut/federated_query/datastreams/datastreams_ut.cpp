@@ -2679,6 +2679,72 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_streaming_query_with_precompute";
+        constexpr char s3SourceName[] = "s3Source";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-1"})");
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $r = SELECT Value FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        Key Int32,
+                        Value String
+                    )
+                );
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(Data || "-" || $r)
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "s3_source"_a = s3SourceName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "message-1");
+        ReadTopicMessage(outputTopicName, "message-1-value-1");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        UploadObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-2"})");
+        WriteTopicMessage(inputTopicName, "message-2");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "message-2-value-2", disposition);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);

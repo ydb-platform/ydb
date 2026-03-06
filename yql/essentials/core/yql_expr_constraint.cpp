@@ -2134,7 +2134,12 @@ private:
     }
 
     TStatus DynamicVariantWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        if (auto underlyingType = RemoveOptionalType(input->GetTypeAnn())->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto type = RemoveOptionalType(input->GetTypeAnn());
+        if (type->GetKind() == ETypeAnnotationKind::Universal) {
+            return TStatus::Ok;
+        }
+
+        if (auto underlyingType = type->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
             TConstraintSet target;
             CopyExcept(target, input->Head().GetConstraintSet(), TVarIndexConstraintNode::Name());
             TMultiConstraintNode::TMapType items;

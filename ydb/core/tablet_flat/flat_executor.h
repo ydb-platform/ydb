@@ -16,6 +16,7 @@
 #include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_vacuum_logic.h"
+#include "flat_executor_backup.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
 #include "flat_fwd_sieve.h"
@@ -501,8 +502,6 @@ class TExecutor
     TControlWrapper MaxCommitRedoMB;
     TControlWrapper MaxTxInFly;
 
-    TActorId BackupWriter;
-
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
@@ -549,7 +548,7 @@ class TExecutor
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
-    void StartBackup();
+    void StartNewBackup();
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -603,6 +602,8 @@ class TExecutor
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
+    void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

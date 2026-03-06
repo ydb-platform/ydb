@@ -2,6 +2,7 @@
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_borrowlogic.h"
+#include "flat_backup.h"
 #include "flat_bio_actor.h"
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
@@ -18,7 +19,6 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
-#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -205,6 +205,10 @@ void TExecutor::PassAway() {
         CompactionLogic->Stop();
     }
 
+    if (CommitManager) {
+        CommitManager->Stop();
+    }
+
     if (Broker || Scans || Memory) {
         Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvNotifyActorDied);
     }
@@ -213,8 +217,6 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
-
-    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -538,7 +540,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     PlanTransactionActivation();
 
-    StartBackup();
+    StartNewBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -4349,6 +4351,9 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
+        hFunc(NBackup::TEvSnapshotCompleted, Handle);
+        hFunc(NBackup::TEvChangelogFailed, Handle);
+        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
     default:
         break;
     }
@@ -5113,17 +5118,61 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-void TExecutor::StartBackup() {
+void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
     }
 
-    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
-    TTabletTypes::EType tabletType = Owner->TabletType();
-    ui64 tabletId = Owner->TabletID();
-    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
-        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    if (!CommitManager || !LogicRedo) {
+        return;
     }
+
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+    const auto& excludeTabletIds = backupConfig.GetExcludeTabletIds();
+    ui64 tabletId = Owner->TabletID();
+
+    if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        return;
+    }
+
+    // Ensure that pending commits are flushed to the old backup changelog
+    LogicRedo->FlushBatchedLog();
+
+    TTabletTypes::EType tabletType = Owner->TabletType();
+    const auto& scheme = Database->GetScheme();
+    const auto& tables = scheme.Tables;
+    auto exclusion = Owner->BackupExclusion();
+
+    auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
+        tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
+    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
+        tabletId, Generation0, Step0, scheme, exclusion);
+
+    if (snapshotWriter && changelogWriter) {
+        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        for (const auto& [tableId, table] : tables) {
+            if (exclusion && exclusion->HasTable(tableId)) {
+                continue;
+            }
+
+            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
+        }
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
+    Owner->BackupSnapshotComplete(OwnerCtx());
+
+    if (CommitManager) {
+        Forward(ev, CommitManager->GetBackupWriter());
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
+    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
 }
 
 }

@@ -1,4 +1,5 @@
 #include "tablet_flat_executor.h"
+#include "flat_backup.h"
 #include "flat_executor.h"
 #include "util_fmt_abort.h"
 
@@ -27,6 +28,10 @@ namespace NFlatExecutorSetup {
     }
 
     void ITablet::CompletedLoansChanged(const TActorContext &ctx) {
+        Y_UNUSED(ctx);
+    }
+
+    void ITablet::BackupSnapshotComplete(const TActorContext &ctx) {
         Y_UNUSED(ctx);
     }
 
@@ -84,6 +89,10 @@ namespace NFlatExecutorSetup {
     }
 
     bool ITablet::NeedBackup() const {
+        if (TabletInfo->BootType != ETabletBootType::Normal) {
+            return false;
+        }
+
         if (TabletInfo->TenantPathId != TPathId()) {
             return false;
         }
@@ -102,6 +111,10 @@ namespace NFlatExecutorSetup {
             default:
                 return false;
         }
+    }
+
+    TIntrusiveConstPtr<NTable::TBackupExclusion> ITablet::BackupExclusion() const {
+        return nullptr; // everything is included in backup
     }
 }
 

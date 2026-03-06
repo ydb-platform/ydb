@@ -12,9 +12,6 @@ PY_SRCS(
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
 
 DEPENDS(
     ydb/tests/tools/kqprun

@@ -11,7 +11,7 @@
 ```yql
 CREATE TABLE table_name (
     ...
-    INDEX <index_name> GLOBAL [UNIQUE] [SYNC|ASYNC] [USING <тип_индекса>] ON ( <index_columns> ) COVER ( <cover_columns> ),
+    INDEX <index_name> GLOBAL [SYNC|ASYNC] [USING <тип_индекса>] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
 )
 ```
@@ -21,7 +21,6 @@ CREATE TABLE table_name (
 * **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
 * **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
 * **тип_индекса** - тип индекса, в настоящее время поддерживается только `secondary`.
-* **UNIQUE** — создаёт индекс с гарантией уникальности для вставляемых значений.
 * **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
@@ -41,7 +40,6 @@ CREATE TABLE table_name (
       d Date,
       INDEX idx_d GLOBAL ON (d),
       INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
-      INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
       PRIMARY KEY (a)
   )
   ```

@@ -5,6 +5,7 @@
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -20,16 +21,45 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
 
+    struct TEvPrivate {
+        enum EEv {
+            EvAnalyzeScanResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvRetryTableDistributionRequest,
+            EvEnd,
+        };
+
+        static_assert(
+            EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE),
+            "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+        struct TEvAnalyzeScanResult : public TEventLocal<
+            TEvAnalyzeScanResult, EvAnalyzeScanResult>
+        {
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+            TVector<NYdb::TValue> AggColumns;
+
+            explicit TEvAnalyzeScanResult(TVector<NYdb::TValue> aggColumns)
+            : Status(Ydb::StatusIds::SUCCESS)
+            , AggColumns(std::move(aggColumns))
+            {}
+
+            TEvAnalyzeScanResult(
+                Ydb::StatusIds::StatusCode status,
+                NYql::TIssues&& issues)
+            : Status(status)
+            , Issues(std::move(issues))
+            {}
+        };
+
+        struct TEvRequestTableDistribution : public TEventLocal<
+            TEvRequestTableDistribution, EvRetryTableDistributionRequest>
+        {};
+    };
+
     void FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus, NYql::TIssue);
 
     // StateNavigate
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-
-    // StateResolve
-
-    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
-    void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
 
     struct TColumnDesc {
         ui32 Tag;
@@ -53,8 +83,25 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ui64 HiveId = 0;
 
-    TVector<ui64> TabletIds;
-    THashMap<ui32, TVector<ui64>> NodeId2Tablets;
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+
+    // StateLocateTablets
+
+    // In this stage tablet -> node correspondence is resolved. Currently this is only needed
+    // to avoid scheduling too many queries that scan tablets on one node.
+
+    THashSet<ui64> TabletIdsToLocate;
+    THashMap<ui64, ui32> TabletId2NodeId;
+
+    size_t HiveRetryCount = 0;
+    static constexpr size_t MaxHiveRetryCount = 3;
+    static constexpr TDuration HiveRetryInterval = TDuration::Seconds(5);
+
+    void Handle(TEvPrivate::TEvRequestTableDistribution::TPtr& ev);
+    void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void TryScheduleHiveRetry(const TStringBuf& issue);
 
     // StateScan
 
@@ -96,6 +143,8 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
         ui32 Id = 0;
         i64 TabletsInFlight = 0;
         TVector<ui64> PendingTablets;
+
+        explicit TNodeState(ui32 id) : Id(id) {}
     };
     THashMap<ui32, TNodeState> NodeId2State;
 
@@ -105,37 +154,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     THashMap<TActorId, TScanActorInfo> ScanActorsInFlight;
 
     std::optional<ui64> RowCount;
-
-    struct TEvPrivate {
-        enum EEv {
-            EvAnalyzeScanResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvEnd,
-        };
-
-        static_assert(
-            EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE),
-            "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-        struct TEvAnalyzeScanResult : public TEventLocal<
-            TEvAnalyzeScanResult, EvAnalyzeScanResult>
-        {
-            Ydb::StatusIds::StatusCode Status;
-            NYql::TIssues Issues;
-            TVector<NYdb::TValue> AggColumns;
-
-            explicit TEvAnalyzeScanResult(TVector<NYdb::TValue> aggColumns)
-            : Status(Ydb::StatusIds::SUCCESS)
-            , AggColumns(std::move(aggColumns))
-            {}
-
-            TEvAnalyzeScanResult(
-                Ydb::StatusIds::StatusCode status,
-                NYql::TIssues&& issues)
-            : Status(status)
-            , Issues(std::move(issues))
-            {}
-        };
-    };
 
     class TScanActor;
 
@@ -161,18 +179,21 @@ public:
     {}
 
     void Bootstrap();
+    void PassAway() final;
 
     STFUNC(StateNavigate) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
     }
 
-    STFUNC(StateResolve) {
+    STFUNC(StateLocateTablets) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            hFunc(TEvPrivate::TEvRequestTableDistribution, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
     }

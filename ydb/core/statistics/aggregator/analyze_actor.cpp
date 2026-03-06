@@ -1,7 +1,5 @@
 #include "analyze_actor.h"
 
-#include <ydb/core/base/hive.h>
-#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
@@ -149,7 +147,12 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     if (!HiveId) {
         HiveId = AppData()->DomainsInfo->GetHive();
     }
-    // TODO: return error if can't determine hive id
+    if (!HiveId) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("Could not determine Hive ID."));
+        return;
+    }
 
     // TODO: escape table path
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
@@ -202,19 +205,22 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
-    // Resolve table shards
-    TVector<TCell> minusInf(KeyColumnTypes.size());
-    TVector<TCell> plusInf;
-    TTableRange range(minusInf, true, plusInf, true, false);
-    auto keyDesc = MakeHolder<TKeyDesc>(
-        PathId, range, TKeyDesc::ERowOperation::Unknown,TVector<NScheme::TTypeInfo>{}, TVector<TKeyDesc::TColumnOp>{});
+    if (IsColumnTable) {
+        // Resolve table shard ids.
+        TVector<TCell> minusInf(KeyColumnTypes.size());
+        TVector<TCell> plusInf;
+        TTableRange range(minusInf, true, plusInf, true, false);
+        auto keyDesc = MakeHolder<TKeyDesc>(
+            PathId, range, TKeyDesc::ERowOperation::Unknown,TVector<NScheme::TTypeInfo>{}, TVector<TKeyDesc::TColumnOp>{});
 
-    auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
-    resolveRequest->DatabaseName = DatabaseName;
-    resolveRequest->ResultSet.emplace_back(std::move(keyDesc));
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolveRequest.release()));
-
-    Become(&TThis::StateResolve);
+        auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+        resolveRequest->DatabaseName = DatabaseName;
+        resolveRequest->ResultSet.emplace_back(std::move(keyDesc));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolveRequest.release()));
+    } else {
+        StartColumnStatEvalTasks();
+        Become(&TThis::StateScan);
+    }
 }
 
 void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -237,42 +243,57 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
     }
 
     for (const auto& part : entry.KeyDescription->GetPartitions()) {
-        TabletIds.push_back(part.ShardId);
+        TabletIdsToLocate.insert(part.ShardId);
     }
 
-    if (IsColumnTable) {
-        auto reqDistribution = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
-        reqDistribution->Record.MutableTabletIds()->Add(
-            TabletIds.begin(), TabletIds.end());
-        Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(reqDistribution.release(), HiveId, true));
-        return;
-        // TODO: retries, unsubscribe, etc.
-    } else {
-        StartColumnStatEvalTasks();
-        Become(&TThis::StateScan);
-    }
+    Send(SelfId(), new TEvPrivate::TEvRequestTableDistribution);
+    Become(&TThis::StateLocateTablets);
+}
+
+void TAnalyzeActor::Handle(TEvPrivate::TEvRequestTableDistribution::TPtr&) {
+    auto req = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
+    req->Record.MutableTabletIds()->Add(TabletIdsToLocate.begin(), TabletIdsToLocate.end());
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
+        new TEvPipeCache::TEvForward(req.release(), HiveId, true));
 }
 
 void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     const auto& msg = ev->Get()->Record;
     for (const auto& node : msg.GetNodes()) {
-        if (!node.GetNodeId()) {
-            FinishWithFailure(
-                TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
-                NYql::TIssue("Resolving tablet node ids failed."));
-            return;
-            // TODO: retries
-        }
-
-        if (!node.GetTabletIds().empty()) {
-            auto& tablets = NodeId2Tablets[node.GetNodeId()];
-            tablets.insert(tablets.end(), node.GetTabletIds().begin(), node.GetTabletIds().end());
+        if (node.GetNodeId()) {
+            for (auto tabletId : node.GetTabletIds()) {
+                TabletId2NodeId[tabletId] = node.GetNodeId();
+                TabletIdsToLocate.erase(tabletId);
+            }
         }
     }
 
+    if (!TabletIdsToLocate.empty()) {
+        SA_LOG_W("[" << SelfId() << "]: unable to locate " << TabletIdsToLocate.size() << " tablets");
+        TryScheduleHiveRetry("Unable to locate some tablets.");
+        return;
+    }
+
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
     StartColumnStatEvalTasks();
     Become(&TThis::StateScan);
+}
+
+void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    SA_LOG_W("[" << SelfId() << "]: got TEvDeliveryProblem");
+    TryScheduleHiveRetry("Problem connecting to Hive");
+}
+
+void TAnalyzeActor::TryScheduleHiveRetry(const TStringBuf& issue) {
+    if (HiveRetryCount > MaxHiveRetryCount) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(issue));
+        return;
+    }
+
+    ++HiveRetryCount;
+    Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestTableDistribution);
 }
 
 void TAnalyzeActor::StartColumnStatEvalTasks() {
@@ -282,12 +303,8 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(!PendingTasks.empty());
 
     if (IsColumnTable) {
-        for (const auto& [id, tabletIds] : NodeId2Tablets) {
-            NodeId2State[id] = TNodeState {
-                .Id = id,
-                .TabletsInFlight = 0,
-                .PendingTablets = tabletIds,
-            };
+        for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
+            NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingTablets.push_back(tabletId);
         }
     }
 
@@ -504,6 +521,11 @@ void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
     }
 
     PassAway();
+}
+
+void TAnalyzeActor::PassAway() {
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+    TActorBootstrapped::PassAway();
 }
 
 } // NKikimr::NStat

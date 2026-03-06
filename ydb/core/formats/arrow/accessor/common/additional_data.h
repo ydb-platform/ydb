@@ -1,38 +1,30 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <util/system/types.h>
 
 #include <memory>
 
-namespace NKikimr::NArrow::NAccessor {
+namespace NKikimrTxColumnShard {
+class TIndexColumnMeta;
+}
 
-// Visitor for accessor-specific metadata. Used when serializing to proto or when a consumer needs a concrete type.
-struct IAdditionalAccessorDataVisitor {
-    virtual ~IAdditionalAccessorDataVisitor() = default;
-    virtual void VisitDictionary(ui32 variantsBlobSize, ui32 recordsBlobSize) = 0;
-};
+namespace NKikimr::NArrow::NAccessor {
 
 // Opaque accessor-specific metadata. Stored in portion index and passed through to the accessor at read/assembly.
 // Callers that only pass data through do not need to know the concrete type.
+// Each implementation adds its data to the chunk meta proto via AddToProto (only call when HasDataToSerialize()).
 struct IAdditionalAccessorData {
     virtual ~IAdditionalAccessorData() = default;
-    virtual void Accept(IAdditionalAccessorDataVisitor& visitor) const = 0;
+    virtual bool HasDataToSerialize() const { return true; }
+    virtual void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const = 0;
 };
 
-// Dictionary accessor metadata (Variants+Records blob layout).
-struct TDictionaryAccessorData : IAdditionalAccessorData {
-    ui32 VariantsBlobSize = 0;
-    ui32 RecordsBlobSize = 0;
-
-    TDictionaryAccessorData() = default;
-    TDictionaryAccessorData(ui32 variantsBlobSize, ui32 recordsBlobSize)
-        : VariantsBlobSize(variantsBlobSize)
-        , RecordsBlobSize(recordsBlobSize) {
-    }
-
-    void Accept(IAdditionalAccessorDataVisitor& visitor) const override {
-        visitor.VisitDictionary(VariantsBlobSize, RecordsBlobSize);
-    }
+// Blob bytes plus optional accessor metadata. Used instead of std::pair<concrete_meta, TString> so
+// callers can pass meta without knowing the concrete type (e.g. TDictionaryAccessorData).
+struct TBlobWithAccessorMeta {
+    TString Blob;
+    std::shared_ptr<IAdditionalAccessorData> Meta;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

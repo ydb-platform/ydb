@@ -160,11 +160,11 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
     IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
         NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
     auto accContext = Context.GetLoader()->BuildAccessorContext(dictArr->GetRecordsCount());
-    auto [dictMeta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(dictArr, accContext);
-    col.AddPreparedChunk(std::make_shared<NChunks::TChunkPreparation>(std::move(blob), dictArr,
+    auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(dictArr, accContext);
+    col.AddPreparedChunk(std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), dictArr,
         TChunkAddress(Context.GetColumnId(), 0),
         Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()),
-        std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(dictMeta.VariantsBlobSize, dictMeta.RecordsBlobSize)));
+        std::move(blobAndMeta.Meta)));
     return col;
 }
 

@@ -76,10 +76,10 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
             if (targetIsDictionary) {
-                auto [dictMeta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(newArray, loadContext);
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(newArray, loadContext);
                 result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blob), newArray, TChunkAddress(ColumnId, idx), *this,
-                    std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(dictMeta.VariantsBlobSize, dictMeta.RecordsBlobSize)));
+                    std::move(blobAndMeta.Blob), newArray, TChunkAddress(ColumnId, idx), *this,
+                    std::move(blobAndMeta.Meta)));
             } else {
                 data = DataAccessorConstructor.SerializeToString(newArray, loadContext);
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));

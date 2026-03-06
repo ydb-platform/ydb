@@ -163,6 +163,95 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     Y_UNIT_TEST_STRING_VARIATOR(SimpleStringVariants, scriptSimpleStringVariants) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
+
+    // Loop 10 times: insert, wait compaction, insert, change schema, insert, set actualization, insert, wait actualization
+    // lc-buckets with 2 layers: Zero (portions_live_duration 1s) + OneLayer.
+    TString scriptDictCompactionAndActualization = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
+        ------
+        %s
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[["a"];1u];[["b"];2u];[["a"];3u]]
+    )";
+    Y_UNIT_TEST(DictCompactionAndActualization) {
+        constexpr int cycles = 10;
+        constexpr int replacesPerBlock = 12;
+        const char* rows[] = {"(1u, 'a')", "(2u, 'b')", "(3u, 'a')"};
+        TString dataBlock;
+        for (int r = 0; r < replacesPerBlock; ++r) {
+            dataBlock += "DATA:\nREPLACE INTO `/Root/ColumnTable` (pk, field) VALUES ";
+            dataBlock += rows[r % 3];
+            dataBlock += ";\n------\n";
+        }
+        const char* readCheck = "READ: SELECT * FROM `/Root/ColumnTable` ORDER BY pk;\nEXPECTED: [[[\"a\"];1u];[[\"b\"];2u];[[\"a\"];3u]]\n------\n";
+        TString cycleBlocks;
+        for (int i = 0; i < cycles; ++i) {
+            cycleBlocks += dataBlock;
+            cycleBlocks += readCheck;
+            cycleBlocks += "ONE_COMPACTION\n------\n";
+            cycleBlocks += readCheck;
+            cycleBlocks += dataBlock;
+            cycleBlocks += readCheck;
+            if (i % 2 == 0) {
+                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)\n------\n";
+            } else {
+                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)\n------\n";
+            }
+            cycleBlocks += readCheck;
+            cycleBlocks += dataBlock;
+            cycleBlocks += readCheck;
+            cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)\n------\n";
+            cycleBlocks += readCheck;
+            cycleBlocks += dataBlock;
+            cycleBlocks += readCheck;
+            cycleBlocks += "ONE_ACTUALIZATION\n------\n";
+            cycleBlocks += readCheck;
+        }
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute();
+    }
+
+    // ChunkDetails in .sys/primary_index_stats for dictionary column: check deterministic output for 1 row.
+    TString scriptChunkDetailsDictionary = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8 COMPRESSION(algorithm=off),
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
+        ------
+        ONE_ACTUALIZATION
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName = 'field' ORDER BY ChunkIdx;
+        EXPECTED: [[["{\"records_blob_size\":152,\"variants_blob_size\":176}"]]]
+    )";
+    Y_UNIT_TEST(ChunkDetailsDictionary) {
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();
+    }
 }
 
 }   // namespace NKikimr::NKqp

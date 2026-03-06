@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
+#include <library/cpp/json/writer/json_value.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
@@ -46,6 +47,8 @@ protected:
         }
         return false;
     }
+
+    virtual NJson::TJsonValue DoDebugJson() const override;
 
 public:
     static EType GetTypeStatic() {

@@ -22,7 +22,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
 
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
         if (isDictionary) {
-            return NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())).second;
+            return NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())).Blob;
         }
         return ColumnInfo.GetLoader()->GetAccessorConstructor().SerializeToString(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount()));
     };
@@ -32,11 +32,11 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     const ui16 baseChunkIdx = GetChunkIdxOptional().value_or(0);
     for (size_t i = 0; i < chunks.size(); ++i) {
         if (isDictionary) {
-            auto [meta, blob] = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
+            auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
                 chunks[i].GetArray(), ColumnInfo.GetLoader()->BuildAccessorContext(chunks[i].GetArray()->GetRecordsCount()));
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-                std::move(blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo,
-                std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(meta.VariantsBlobSize, meta.RecordsBlobSize)));
+                std::move(blobAndMeta.Blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo,
+                std::move(blobAndMeta.Meta)));
         } else {
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
                 chunks[i].GetSerializedData(), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo));

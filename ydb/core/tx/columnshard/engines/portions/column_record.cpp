@@ -1,6 +1,7 @@
 #include "column_record.h"
 
 #include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
@@ -44,19 +45,8 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
     meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
-    if (AdditionalAccessorData) {
-        struct TVisitor : NArrow::NAccessor::IAdditionalAccessorDataVisitor {
-            NKikimrTxColumnShard::TAdditionalAccessorData* Proto = nullptr;
-            void VisitDictionary(ui32 variantsBlobSize, ui32 recordsBlobSize) override {
-                if (Proto) {
-                    auto* acc = Proto->MutableDictionaryAccessorData();
-                    acc->SetVariantsBlobSize(variantsBlobSize);
-                    acc->SetRecordsBlobSize(recordsBlobSize);
-                }
-            }
-        } visitor;
-        visitor.Proto = meta.MutableAdditionalAccessorData();
-        AdditionalAccessorData->Accept(visitor);
+    if (AdditionalAccessorData && AdditionalAccessorData->HasDataToSerialize()) {
+        AdditionalAccessorData->AddToProto(&meta);
     }
     return meta;
 }

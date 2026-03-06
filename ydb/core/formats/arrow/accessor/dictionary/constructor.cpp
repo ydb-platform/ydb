@@ -1,7 +1,7 @@
 #include "accessor.h"
 #include "constructor.h"
 
-#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
@@ -15,23 +15,17 @@ namespace NKikimr::NArrow::NAccessor::NDictionary {
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
-    ui32 variantsBlobSize = 0;
-    ui32 recordsBlobSize = 0;
-    if (externalInfo.HasAdditionalAccessorData()) {
-        struct TVisitor : IAdditionalAccessorDataVisitor {
-            ui32 Variants = 0;
-            ui32 Records = 0;
-            void VisitDictionary(ui32 v, ui32 r) override {
-                Variants = v;
-                Records = r;
-            }
-        } visitor;
-        externalInfo.GetAdditionalAccessorData()->Accept(visitor);
-        variantsBlobSize = visitor.Variants;
-        recordsBlobSize = visitor.Records;
+    if (!externalInfo.HasAdditionalAccessorData()) {
+        return TConclusionStatus::Fail("dictionary blob requires additional accessor data in chunk metadata");
     }
+    const TDictionaryAccessorData* dictData = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
+    if (!dictData) {
+        return TConclusionStatus::Fail("dictionary blob requires TDictionaryAccessorData in chunk metadata");
+    }
+    const ui32 variantsBlobSize = dictData->VariantsBlobSize;
+    const ui32 recordsBlobSize = dictData->RecordsBlobSize;
     if (!variantsBlobSize && !recordsBlobSize) {
-        return TConclusionStatus::Fail("dictionary blob requires additional accessor data (VariantsBlobSize, RecordsBlobSize) in chunk metadata");
+        return TConclusionStatus::Fail("dictionary blob requires non-zero VariantsBlobSize and RecordsBlobSize in chunk metadata");
     }
     TStringBuf sbOriginal(originalData.data(), originalData.size());
 
@@ -93,7 +87,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-std::pair<TDictionaryAccessorData, TString> TConstructor::SerializeToBlobAndMeta(
+TBlobWithAccessorMeta TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrVariants = arr->GetVariants();
@@ -105,18 +99,16 @@ std::pair<TDictionaryAccessorData, TString> TConstructor::SerializeToBlobAndMeta
     const TString blobRecords =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
 
-    TDictionaryAccessorData meta;
-    meta.VariantsBlobSize = blobVariants.size();
-    meta.RecordsBlobSize = blobRecords.size();
+    auto meta = std::make_shared<TDictionaryAccessorData>(blobVariants.size(), blobRecords.size());
     TString blob;
     blob.reserve(blobVariants.size() + blobRecords.size());
     blob.append(blobVariants);
     blob.append(blobRecords);
-    return {meta, std::move(blob)};
+    return {std::move(blob), std::move(meta)};
 }
 
 TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    return SerializeToBlobAndMeta(columnData, externalInfo).second;
+    return SerializeToBlobAndMeta(columnData, externalInfo).Blob;
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

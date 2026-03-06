@@ -36,8 +36,8 @@ private:
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
 
-    // Returns (meta for LocalDB, blob = Variants+Records only). Used by write path.
-    static std::pair<TDictionaryAccessorData, TString> SerializeToBlobAndMeta(
+    // Returns blob and optional accessor meta for LocalDB. Used by write path.
+    static TBlobWithAccessorMeta SerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo);
 
     TConstructor()

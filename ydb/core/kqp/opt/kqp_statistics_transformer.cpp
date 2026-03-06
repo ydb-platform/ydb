@@ -208,7 +208,7 @@ void InferStatisticsForKqpTable(
         for (auto& column: shuffledBy) {
             column.RelName = alias;
         }
-        auto shuffling = TShuffling(shuffledBy).SetNatural();
+        auto shuffling = TShuffling(shuffledBy);
         std::int64_t orderingIdx = orderingsFSM->FDStorage.FindShuffling(shuffling, nullptr);
         stats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
     }
@@ -1014,7 +1014,7 @@ private:
                     for (auto& column: shuffledBy) {
                         column.RelName = *stats->Aliases->begin();
                     }
-                    auto shuffling = TShuffling(shuffledBy).SetNatural();
+                    auto shuffling = TShuffling(shuffledBy);
                     TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
                     shufflingOrderingIdxes.push_back(std::move(idx));
                 }
@@ -1027,7 +1027,7 @@ private:
                 }
             } else {
                 if (stats->ShuffledByColumns) {
-                    auto shuffling = TShuffling(stats->ShuffledByColumns->Data).SetNatural();
+                    auto shuffling = TShuffling(stats->ShuffledByColumns->Data);
                     TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
                     shufflingOrderingIdxes.push_back(std::move(idx));
                 }

@@ -379,7 +379,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
     }
 }
 
-void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     auto actorIt = ScanActorsInFlight.find(ev->Sender);
     Y_ENSURE(actorIt != ScanActorsInFlight.end());
     const ui32 tabletNodeId = actorIt->second.TabletNodeId;
@@ -482,6 +482,18 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         PassAway();
     } else {
         StartColumnStatEvalTasks();
+    }
+}
+
+void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    try {
+        HandleImpl(ev);
+    } catch (const std::exception& ex) {
+        NYql::TIssue error(TStringBuilder()
+            << "Processing statistics scan results failed with " << ex.what());
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            std::move(error));
     }
 }
 

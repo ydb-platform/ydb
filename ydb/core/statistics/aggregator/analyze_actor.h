@@ -142,6 +142,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     void StartColumnStatEvalTasks();
     void DispatchSomeScanActors();
 
+    void HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvents::TEvPoison::TPtr& ev);
 

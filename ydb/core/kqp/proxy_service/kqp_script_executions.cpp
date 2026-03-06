@@ -819,7 +819,7 @@ private:
     const TDuration LeaseDuration;
     const i64 LeaseGeneration;
     TInstant LeaseDeadline;
-    bool LeaseExists = true;
+    bool LeaseExists = false;
 };
 
 class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActor> {

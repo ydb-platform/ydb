@@ -36,10 +36,10 @@ using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFrom
 using TEvImportFromFsRequest = TGrpcRequestOperationCall<Ydb::Import::ImportFromFsRequest,
     Ydb::Import::ImportFromFsResponse>;
 
-template<typename TEvRequest>
+template <typename TEvRequest>
 struct TImportTraits;
 
-template<>
+template <>
 struct TImportTraits<TEvImportFromS3Request> {
     using TSettings = Ydb::Import::ImportFromS3Settings;
     using TItem = Ydb::Import::ImportFromS3Settings::Item;
@@ -57,7 +57,7 @@ struct TImportTraits<TEvImportFromS3Request> {
     }
 };
 
-template<>
+template <>
 struct TImportTraits<TEvImportFromFsRequest> {
     using TSettings = Ydb::Import::ImportFromFsSettings;
     using TItem = Ydb::Import::ImportFromFsSettings::Item;

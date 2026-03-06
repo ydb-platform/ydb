@@ -172,6 +172,8 @@ public:
     void HandleTimeout() {
         if (SupportLinksResolver) {
             SupportLinksResolver->HandleTimeout();
+        } else {
+            AddCommonError("Timeout while querying cluster info from MasterClusterExt.db");
         }
         ReplyOkAndDie();
     }

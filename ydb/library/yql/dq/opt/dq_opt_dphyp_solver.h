@@ -784,15 +784,15 @@ template <typename TNodeSet> std::shared_ptr<IBaseOptimizerNode> TDPHypSolverShu
 ) {
     auto bestJoin = PickBestJoin(left, right, edge, false, false, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
 
+    // NOTE: Seems like there should be no difference between starting with left ordering and inducing right FDs
+    // or doing it the other way around in either case, so we just do it like in LeftSideShuffled
     if (!bestJoin.IsReversed) {
-        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, bestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
-        tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, bestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         return tree;
     } else {
-        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
-        tree->Stats.LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
-        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         return tree;
     }
 }
@@ -828,14 +828,12 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {
         if (!shuffleLeftSideBestJoin.IsReversed) {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
-            tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.LeftAny, edge.RightAny, right->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
-            tree->Stats.LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         }
     }
@@ -875,14 +873,12 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
     } else {
         if (!shuffleRightSideBestJoin.IsReversed) {
-            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
-            tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
-            tree->Stats.LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         }
     }

@@ -621,7 +621,7 @@ public:
 
         ErrorSet_.Wait();
 
-        YT_ASSERT(!CancelationError_.IsOK());
+        YT_VERIFY(!CancelationError_.IsOK());
         awaitable.Cancel(CancelationError_);
     }
 

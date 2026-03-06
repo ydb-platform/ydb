@@ -14,9 +14,6 @@ TEST_SRCS(
     test_workload_manager.py
 )
 
-SPLIT_FACTOR(40)
-FORK_SUBTESTS()
-
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)

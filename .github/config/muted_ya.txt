@@ -5,7 +5,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
@@ -14,7 +13,6 @@ ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ScalarF
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.SysViewColumnsValues
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut unittest.[*/*] chunk
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.OrderOfChildrenPartitions_Topic
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
@@ -38,7 +36,6 @@ ydb/core/tx/schemeshard/ut_olap_reboots TOlapReboots.DropMultipleStandaloneTable
 ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
@@ -49,7 +46,6 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket3]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket1]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
@@ -158,6 +154,7 @@ ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_json_errors[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query_by_rescaling[False]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
@@ -177,7 +174,6 @@ ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite

@@ -3313,7 +3313,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             KqpSimpleExec(runtime, Q_(R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 13), (2, 23)
                 )")),
-            UseSink ? "ERROR: INTERNAL_ERROR" : "ERROR: GENERIC_ERROR");
+            "ERROR: INTERNAL_ERROR");
         observer.Inject = {};
 
         // Abort tx 234, this would allow adding one more change to key 2

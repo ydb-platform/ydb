@@ -269,10 +269,12 @@ void TSessionPool::Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&
                 break;
         }
         if (close) {
-            // Collect pending waiters to reply with error outside the lock.
+            // Collect all pending waiters to reply with error outside the lock.
             // When the pool is permanently closed, all pending session requests
             // must be rejected to avoid them waiting indefinitely.
-            WaitersQueue_.GetOld(TDeadline::Max(), waitersToReplyError);
+            while (auto waiter = WaitersQueue_.TryGet()) {
+                waitersToReplyError.push_back(std::move(waiter));
+            }
         }
         UpdateStats();
     }

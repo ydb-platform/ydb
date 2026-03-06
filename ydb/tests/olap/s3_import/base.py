@@ -26,6 +26,7 @@ class S3ImportTestBase(object):
     @classmethod
     def _get_ydb_config(cls):
         config = KikimrConfigGenerator(
+            port_allocator=KikimrPortManagerPortAllocator(port_manager=cls.s3_mock.port_manager),
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_move_column_table": True,

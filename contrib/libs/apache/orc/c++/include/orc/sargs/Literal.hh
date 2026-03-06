@@ -22,6 +22,8 @@
 #include "orc/Int128.hh"
 #include "orc/Vector.hh"
 
+#include <string_view>
+
 namespace orc {
 
   /**
@@ -123,6 +125,7 @@ namespace orc {
     Timestamp getTimestamp() const;
     double getFloat() const;
     std::string getString() const;
+    std::string_view getStringView() const;
     bool getBool() const;
     Decimal getDecimal() const;
 

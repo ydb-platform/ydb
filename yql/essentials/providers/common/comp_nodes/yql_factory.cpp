@@ -13,8 +13,8 @@
 
 namespace NKikimr::NMiniKQL {
 
-typedef IComputationNode* (*TYqlCallableComputationNodeBuilderFunc)(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
-typedef THashMap<TString, TYqlCallableComputationNodeBuilderFunc> TYqlCallableComputationNodeBuilderFuncMap;
+using TYqlCallableComputationNodeBuilderFunc = IComputationNode* (*)(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+using TYqlCallableComputationNodeBuilderFuncMap = THashMap<TString, TYqlCallableComputationNodeBuilderFunc>;
 
 struct TYqlCallableComputationNodeBuilderFuncMapFiller {
     TYqlCallableComputationNodeBuilderFuncMap Map;

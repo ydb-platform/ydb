@@ -128,6 +128,8 @@ void ToOperation(const NKikimrForcedCompaction::TForcedCompaction& compaction, Y
     metadata.set_max_shards_in_flight(compaction.GetSettings().max_shards_in_flight());
     metadata.set_progress(compaction.GetProgress());
     metadata.set_state(compaction.GetState());
+    metadata.set_shards_total(compaction.GetShardsTotal());
+    metadata.set_shards_done(compaction.GetShardsDone());
 
     auto data = operation->mutable_metadata();
     data->PackFrom(metadata);

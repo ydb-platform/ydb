@@ -43,6 +43,7 @@ private:
     void TypeAnnotate(TExprNode::TPtr& input);
     TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     TKqpPhyTxSettings GetPhysicalTxSettings() const;
+    TExprNode::TPtr GetFinalStage(const TExprNode::TPtr& stage) const;
 
     TOpRoot& Root;
     TStageGraph Graph;

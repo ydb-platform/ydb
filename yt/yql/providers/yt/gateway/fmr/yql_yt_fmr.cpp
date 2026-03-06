@@ -307,6 +307,8 @@ public:
             future = DoMerge(execCtx);
         } else if (auto op = opBase.Maybe<TYtMap>()) {
             future = DoMap(op.Cast(), execCtx, ctx);
+        } else if (auto op = opBase.Maybe<TYtSort>()) {
+            future = DoSort(execCtx);
         } else {
             // We don't support this operation
             return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
@@ -1060,7 +1062,7 @@ private:
     {
         auto promise = NewPromise<TFmrOperationResult>();
         auto future = promise.GetFuture();
-        YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.TaskType << " operation";
+        YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.OperationType << " operation";
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
 
         startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession] (const auto& startOperationFuture) mutable {
@@ -1093,7 +1095,7 @@ private:
     {
         auto promise = NewPromise<TFmrOperationResult>();
         auto future = promise.GetFuture();
-        YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.TaskType << " operation";
+        YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.OperationType << " operation";
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
 
         startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, &startOperationRequest] (const auto& startOperationFuture) mutable {
@@ -1112,7 +1114,7 @@ private:
             YQL_ENSURE(!operationStatuses.contains(operationId));
             operationStatuses[operationId] = promise;
 
-            if (startOperationRequest.TaskType == ETaskType::SortedUpload) {
+            if (startOperationRequest.OperationType == EOperationType::SortedUpload) {
                 auto params = std::get<TSortedUploadOperationParams>(startOperationRequest.OperationParams);
                 TString session = params.SessionId;
                 operationStates.SortedUploadOperations.emplace(operationId, session);
@@ -1269,6 +1271,7 @@ private:
         };
 
         TPrepareOperationRequest PrepareOperationRequest{
+            .OperationType = EOperationType::SortedUpload,
             .OperationParams = SortedUploadOperationParams,
             .ClusterConnections = std::unordered_map<TFmrTableId, TClusterConnection>{{fmrTableRef.FmrTableId, clusterConnection}},
             .FmrOperationSpec = config->FmrOperationSpec.Get(outputCluster)
@@ -1305,7 +1308,7 @@ private:
                 auto fmrTableId = SortedUploadOperationParams.Input.FmrTableId;
 
                 TStartOperationRequest SortedUploadRequest{
-                    .TaskType = ETaskType::SortedUpload,
+                    .OperationType = EOperationType::SortedUpload,
                     .OperationParams = SortedUploadOperationParams,
                     .SessionId = sessionId,
                     .IdempotencyKey = GenerateId(),
@@ -1369,7 +1372,7 @@ private:
         TUploadOperationParams uploadOperationParams{.Input = fmrTableRef, .Output = TYtTableRef(richPath, filePath)};
         auto clusterConnection = GetTableClusterConnection(outputCluster, sessionId, config);
         TStartOperationRequest uploadRequest{
-            .TaskType = ETaskType::Upload,
+            .OperationType = EOperationType::Upload,
             .OperationParams = uploadOperationParams,
             .SessionId = sessionId,
             .IdempotencyKey = GenerateId(),
@@ -1434,6 +1437,36 @@ private:
         attrs[YqlRowSpecAttribute] = outputTable.Spec[YqlRowSpecAttribute];
         PrepareAttributes(attrs, outputTable, execCtx, outputCluster, true, {});
         YtJobService_->Create(TYtTableRef(outputCluster, outputPath, filePath), clusterConnection, attrs);
+    }
+
+    std::vector<TFmrTableRef> GetOutputTables(const TExecContextSimple<TRunOptions>::TPtr& execCtx) {
+        TString sessionId = execCtx->GetSessionId();
+        std::vector<TFmrTableRef> fmrOutputTables;
+        auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
+        auto outputTables = execCtx->OutTables_;
+        YQL_ENSURE(outputTables.size() == outputTableColumnGroups.size());
+
+        for (ui64 i = 0; i < outputTables.size(); ++i) {
+
+            auto& outputTable = outputTables[i];
+            TFmrTableId outputTableFmrId(execCtx->Cluster_, outputTable.Path);
+            auto columnGroupSpec = outputTableColumnGroups[i];
+            SetColumnGroupSpec(outputTableFmrId, columnGroupSpec, sessionId);
+
+            TFmrTableRef fmrOutputTable{
+                .FmrTableId = outputTableFmrId,
+                .SerializedColumnGroups = columnGroupSpec
+            };
+            if (GetIsSorted(outputTable)) {
+                fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
+                fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
+                SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
+            } else {
+                SetTableSortingSpec(outputTableFmrId, {}, {}, sessionId);
+            }
+            fmrOutputTables.emplace_back(fmrOutputTable);
+        }
+        return fmrOutputTables;
     }
 
     TFuture<TFmrOperationResult> DoMerge(TExecContextSimple<TRunOptions>::TPtr& execCtx) {
@@ -1508,7 +1541,7 @@ private:
 
         TMergeOperationParams mergeOperationParams{.Input = mergeInputTables, .Output = fmrOutputTable};
         TStartOperationRequest mergeOperationRequest{
-            .TaskType = ETaskType::Merge,
+            .OperationType = EOperationType::Merge,
             .OperationParams = mergeOperationParams,
             .SessionId = sessionId,
             .IdempotencyKey = GenerateId(),
@@ -1537,7 +1570,7 @@ private:
 
         TSortedMergeOperationParams sortedMergeOperationParams{.Input = mergeInputTables, .Output = fmrOutputTable};
         TStartOperationRequest sortedMergeOperationRequest{
-            .TaskType = ETaskType::SortedMerge,
+            .OperationType = EOperationType::SortedMerge,
             .OperationParams = sortedMergeOperationParams,
             .SessionId = sessionId,
             .IdempotencyKey = GenerateId(),
@@ -1565,30 +1598,7 @@ private:
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
 
-        std::vector<TFmrTableRef> fmrOutputTables;
-        auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
-        auto outputTables = execCtx->OutTables_;
-        YQL_ENSURE(outputTables.size() == outputTableColumnGroups.size());
-
-        for (ui64 i = 0; i < outputTables.size(); ++i) {
-            auto& outputTable = outputTables[i];
-            TFmrTableId outputTableFmrId(execCtx->Cluster_, outputTable.Path);
-            auto columnGroupSpec = outputTableColumnGroups[i];
-            SetColumnGroupSpec(outputTableFmrId, columnGroupSpec, sessionId);
-
-            TFmrTableRef fmrOutputTable{
-                .FmrTableId = outputTableFmrId,
-                .SerializedColumnGroups = columnGroupSpec
-            };
-            if (GetIsSorted(outputTable)) {
-                fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
-                fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
-                SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
-            } else {
-                SetTableSortingSpec(outputTableFmrId, {}, {}, sessionId);
-            }
-            fmrOutputTables.emplace_back(fmrOutputTable);
-        }
+        auto fmrOutputTables = GetOutputTables(execCtx);
 
         auto [mapInputTables, clusterConnections] = GetInputTablesAndConnections(execCtx->InputTables_, sessionId, execCtx->Options_.Config());
 
@@ -1697,7 +1707,7 @@ private:
 
             TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .SerializedMapJobState = jobStateStream.Str(), .IsOrdered = ordered};
             TStartOperationRequest mapOperationRequest{
-                .TaskType = ETaskType::Map,
+                .OperationType = EOperationType::Map,
                 .OperationParams = mapOperationParams,
                 .SessionId = sessionId,
                 .IdempotencyKey = GenerateId(),
@@ -1720,6 +1730,38 @@ private:
             YQL_CLOG(INFO, FastMapReduce) << "Starting map from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
             return GetRunningOperationFuture(mapOperationRequest, sessionId);
         });
+    }
+
+    TFuture<TFmrOperationResult> DoSort(const TExecContextSimple<TRunOptions>::TPtr& execCtx) {
+        TString sessionId = execCtx->GetSessionId();
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        auto [sortInputTables, clusterConnections] = GetInputTablesAndConnections(execCtx->InputTables_, sessionId, execCtx->Options_.Config());
+
+        auto fmrOutputTables = GetOutputTables(execCtx);
+        YQL_ENSURE(fmrOutputTables.size() == 1, "Sort operation output should only have one table");
+        auto fmrOutputTable = fmrOutputTables[0];
+        auto config = execCtx->Options_.Config();
+
+        TSortOperationParams sortOperationParams{.Input = sortInputTables, .Output = fmrOutputTable};
+        TStartOperationRequest sortOperationRequest{
+            .OperationType = EOperationType::Sort,
+            .OperationParams = sortOperationParams,
+            .SessionId = sessionId,
+            .IdempotencyKey = GenerateId(),
+            .NumRetries = 1,
+            .ClusterConnections = clusterConnections,
+            .FmrOperationSpec = config->FmrOperationSpec.Get(execCtx->Cluster_)
+        };
+
+        std::vector<TString> inputPaths;
+        std::transform(execCtx->InputTables_.begin(), execCtx->InputTables_.end(), std::back_inserter(inputPaths), [](const auto& table) {
+            return table.Cluster + "." + table.Name;}
+        );
+
+        YQL_CLOG(INFO, FastMapReduce) << "Starting sort from tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to fmr table " << fmrOutputTable.FmrTableId;
+        return GetRunningOperationFuture(sortOperationRequest, sessionId);
     }
 
     TFuture<TFmrOperationResult> GetSuccessfulFmrOperationResult() {

@@ -489,10 +489,11 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
 
 class TTranslation {
 protected:
-    typedef TSet<ui32> TSetType;
+    using TSetType = TSet<ui32>;
 
 protected:
     explicit TTranslation(TContext& ctx);
+    TTranslation(const TTranslation&) = default;
 
 public:
     TContext& Context();

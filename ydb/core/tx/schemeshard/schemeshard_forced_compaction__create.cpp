@@ -13,6 +13,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         , Request(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_CREATE_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
         const auto& settings = request.GetSettings();
@@ -121,7 +125,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxCreate DoComplete");
+        LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
         Self->ProcessForcedCompactionQueues();
         SideEffects.ApplyOnComplete(Self, ctx);
     }

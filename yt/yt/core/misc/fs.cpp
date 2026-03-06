@@ -7,6 +7,7 @@
 
 #include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/pollable_detail.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/exit.h>
@@ -400,6 +401,15 @@ TPathStatistics GetPathStatistics(const std::string& path)
 
 i64 GetDirectorySize(const std::string& path, bool ignoreUnavailableFiles, bool deduplicateByINodes, bool checkDeviceId)
 {
+    return GetDirectoriesSize({path}, ignoreUnavailableFiles, deduplicateByINodes, checkDeviceId);
+}
+
+i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavailableFiles, bool deduplicateByINodes, bool checkDeviceId)
+{
+    if (paths.empty()) {
+        return 0;
+    }
+
     auto wrapNoEntryError = [&] (std::function<void()> func) {
         try {
             func();
@@ -418,19 +428,29 @@ i64 GetDirectorySize(const std::string& path, bool ignoreUnavailableFiles, bool 
         }
     };
 
+    std::optional<TDeviceId> deviceId;
     std::queue<std::string> directories;
-    directories.push(path);
-
-    TPathStatistics rootDirStatistics;
-    wrapNoEntryError([&] {
-        rootDirStatistics = GetPathStatistics(path);
-    });
+    for (const auto& path: paths) {
+        if (checkDeviceId) {
+            // Make sure that seed directories reside on the same device.
+            wrapNoEntryError([&] {
+                if (!deviceId) {
+                    deviceId = GetPathStatistics(path).DeviceId;
+                } else if (*deviceId != GetPathStatistics(path).DeviceId) {
+                    THROW_ERROR_EXCEPTION("Seed directories reside on different devices")
+                        << TErrorAttribute("path", path)
+                        << TErrorAttribute("device_id", ToString(GetPathStatistics(path).DeviceId))
+                        << TErrorAttribute("other_path", paths.front())
+                        << TErrorAttribute("other_device_id", ToString(*deviceId));
+                }
+            });
+        }
+        directories.push(path);
+    }
 
     THashSet<ui64> visitedInodes;
 
     i64 size = 0;
-
-
     while (!directories.empty()) {
         const auto& directory = directories.front();
 
@@ -455,7 +475,7 @@ i64 GetDirectorySize(const std::string& path, bool ignoreUnavailableFiles, bool 
                         return;
                     }
                 }
-                if (checkDeviceId && fileStatistics.DeviceId != rootDirStatistics.DeviceId) {
+                if (deviceId && fileStatistics.DeviceId != *deviceId) {
                     return;
                 }
                 if (fileStatistics.Size > 0) {
@@ -1135,6 +1155,103 @@ void Splice(
     }
 #else
     Y_UNUSED(source, destination, chunkSize);
+    ThrowNotSupported();
+#endif
+}
+
+TFuture<void> SpliceAsync(
+    const TFile& src,
+    const TFile& dst,
+    bool pipeIsSrc,
+    const IInvokerPtr& ioInvoker,
+    const NConcurrency::IPollerPtr& poller,
+    i64 chunkSize)
+{
+#ifdef _linux_
+    YT_VERIFY(src.GetHandle() >= 0 && dst.GetHandle() >= 0);
+    YT_VERIFY(chunkSize > 0);
+
+    static constexpr auto isPipe = [] (int fd) -> bool {
+        struct stat statBuf;
+        YT_VERIFY(::fstat(fd, &statBuf) != -1);
+        return (statBuf.st_mode & S_IFMT) == S_IFIFO;
+    };
+
+    static constexpr auto isNonblocking = [] (int fd) -> bool {
+        int flags = ::fcntl(fd, F_GETFL);
+        YT_VERIFY(flags != -1);
+        return flags & O_NONBLOCK;
+    };
+
+    auto fdPipe = (pipeIsSrc ? src : dst).GetHandle();
+    YT_ASSERT(isPipe(fdPipe));
+
+    auto fdOther = (pipeIsSrc ? dst : src).GetHandle();
+    YT_ASSERT(!isNonblocking(fdOther));
+    YT_ASSERT(!isPipe(fdOther));
+
+    auto control = NConcurrency::EPollControl::EdgeTriggered | (
+        pipeIsSrc
+            ? NConcurrency::EPollControl::Read
+            : NConcurrency::EPollControl::Write);
+
+    auto completionPromise = NewPromise<void>();
+
+    // NB: it is important that src and dst are captured by value here (instead of,
+    // say, simply their handles) so that they don't get destroyed prematurely.
+    auto doSplice = [=] () {
+        while (true) {
+            if (completionPromise.IsCanceled()) {
+                return;
+            }
+
+            auto result = ::splice(
+                src.GetHandle(),
+                nullptr,
+                dst.GetHandle(),
+                nullptr,
+                chunkSize,
+                SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+
+            if (result > 0) {
+                continue;
+            } else if (result == 0) {
+                completionPromise.TrySet();
+            } else if (errno != EAGAIN) {
+                completionPromise.TrySet(
+                    TError("Error while doing splice")
+                        << TErrorAttribute("source_path", src.GetName())
+                        << TErrorAttribute("destination_path", dst.GetName())
+                        << TError::FromSystem());
+            }
+            return;
+        }
+    };
+
+    auto pollable = NConcurrency::MakeSimplePollable(
+        [=] (NConcurrency::IPollable&, NConcurrency::EPollControl) {
+            NConcurrency::WaitFor(
+                BIND(doSplice)
+                    .AsyncVia(ioInvoker)
+                    .Run())
+                .ThrowOnError();
+        },
+        "SimplePollable");
+
+    bool registered = poller->TryRegister(pollable);
+    THROW_ERROR_EXCEPTION_UNLESS(registered, "Failed to register pollable");
+
+    poller->Arm(fdPipe, pollable, control);
+
+    return completionPromise.ToFuture().Apply(BIND([=] (const TError& result) {
+        poller->Unarm(fdPipe, pollable);
+        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([result](const TError& inner) {
+            YT_VERIFY(inner.IsOK());
+            return result;
+        }));
+    }));
+#else
+    Y_UNUSED(src, dst, pipeIsSrc, ioInvoker, poller, chunkSize);
     ThrowNotSupported();
 #endif
 }

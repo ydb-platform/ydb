@@ -51,9 +51,14 @@ TEvPQ::TEvMLPPurgeResponse* MakeOkResponse<TEvPQ::TEvMLPPurgeResponse>(ui32 part
 }
 
 template<typename R, typename T>
+void ReplyOk(const TActorIdentity selfActorId, ui32 partitionId, T& ev) {
+    selfActorId.Send(ev.Sender, MakeOkResponse<R>(partitionId), 0, ev.Cookie);
+}
+
+template<typename R, typename T>
 void ReplyOk(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& queue) {
     for (auto& ev : queue) {
-        selfActorId.Send(ev.Sender, MakeOkResponse<R>(partitionId), 0, ev.Cookie);
+        ReplyOk<R>(selfActorId, partitionId, ev);
     }
     queue.clear();
 }
@@ -543,7 +548,11 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->Commit(offset);
         }
 
-        PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
+        if (Storage->IsBatchEmpty()) {
+            ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
+        }
     }
     CommitRequestsQueue.clear();
 
@@ -552,7 +561,11 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->Unlock(offset);
         }
 
-        PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
+        if (Storage->IsBatchEmpty()) {
+            ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
+        }
     }
     UnlockRequestsQueue.clear();
 
@@ -561,7 +574,11 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
         }
 
-        PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
+        if (Storage->IsBatchEmpty()) {
+            ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, *ev);
+        } else {
+            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
+        }
     }
     ChangeMessageDeadlineRequestsQueue.clear();
 
@@ -571,10 +588,8 @@ void TConsumerActor::ProcessEventQueue() {
     }
     PurgeRequestsQueue.clear();
 
-    if (!ReadRequestsQueue.empty()) {
-        Storage->ProccessDeadlines();
-        LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
-    }
+    Storage->ProccessDeadlines();
+    LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
 
     auto now = TInstant::Now();
 
@@ -617,7 +632,7 @@ void TConsumerActor::Persist() {
 
     Storage->Compact();
 
-    auto batch = Storage->GetBatch();
+    auto batch = Storage->ExtractBatch();
     if (batch.Empty()) {
         LOG_D("Batch is empty");
         MoveToDLQIfPossible();
@@ -841,6 +856,16 @@ void TConsumerActor::MoveToDLQIfPossible() {
     if (DLQMoverActorId) {
         return;
     }
+
+    auto destinationTopic = [&]() -> TString {
+        auto databasePrefix = TStringBuilder() << Database << "/";
+        if (Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
+            return Config.GetDeadLetterQueue();
+        } else {
+            return databasePrefix << Config.GetDeadLetterQueue();
+        }
+    };
+
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
         LOG_D("Move to DLQ: " << JoinRange(", ", messages.begin(), messages.end()));
@@ -851,7 +876,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = Config.GetDeadLetterQueue(),
+            .DestinationTopic = destinationTopic(),
             .Messages = std::move(messages)
         }));
     }

@@ -12,6 +12,10 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
         , Request(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_GET_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
         LOG_N("TForcedCompaction::TTxGet DoExecute " << request.ShortDebugString());
@@ -53,7 +57,7 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxGet DoComplete");
+        LOG_N("TForcedCompaction::TTxGet DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

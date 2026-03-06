@@ -1,5 +1,7 @@
 #pragma once
 
+#include "uring_operation.h"
+
 #include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
@@ -68,28 +70,6 @@ struct TUringRouterConfig {
     TString ToString() const;
 };
 
-// Our cookie passed through io_uring user_data.
-// Callers derive from this and add their own context fields.
-// Should be allocated from a pool to avoid dynamic allocation in the hot path.
-struct TUringOperation {
-    // Filled by TUringRouter on completion
-    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
-
-    // Called from the dedicated completion polling thread outside actor system,
-    // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
-    // After OnComplete returns, the caller is free to return this object to its pool.
-    void (*OnComplete)(TUringOperation* op, NActors::TActorSystem* actorSystem) noexcept = nullptr;
-
-    // Optional cleanup callback called by TUringRouter::Stop() for CQEs drained
-    // after shutdown without invoking OnComplete. Use this to release operation-
-    // owned memory/resources for in-flight requests that are no longer delivered.
-    void (*OnDrop)(TUringOperation* op) noexcept = nullptr;
-
-    // Scratch space for the iovec used by readv/writev submissions.
-    // Populated by TUringRouter and must remain valid until OnComplete is called.
-    struct iovec Iov = {};
-};
-
 // TUringRouter is NOT thread-safe.  All public methods (Register*, Start,
 // Read, Write, Flush, Stop, SubmitItemsLeft, etc.) must be called from a
 // single thread (e.g. the DDisk actor). The only internal concurrency is the
@@ -127,16 +107,16 @@ public:
 
     // --- Submission (call from a single thread, e.g., DDisk actor) ---
 
-    // Submit a read. Buffer must be aligned and large enough.
+    // Submit a read operation. op->Iov and op->DiskOffset must be initialized.
     // op must remain alive until op->OnComplete is called.
     // Returns true if SQE was written to the ring, false if SQ is full.
-    bool Read(void* buf, ui64 size, ui64 offset, TUringOperation* op);
-    bool Write(const void* buf, ui64 size, ui64 offset, TUringOperation* op);
+    bool Read(TUringOperationBase* op);
+    bool Write(TUringOperationBase* op);
 
     // Fixed-buffer variants (requires prior RegisterBuffers).
     // bufIndex is the index into the registered iovec array.
-    bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op);
-    bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op);
+    bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
+    bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
 
     // Flush the SQ ring tail and submit prepared SQEs to the kernel.
     // Calls io_uring_submit() which advances the kernel-visible SQ tail
@@ -146,8 +126,8 @@ public:
     // --- Lifecycle ---
 
     // Stop the completion thread and tear down the io_uring instance.
-    // Outstanding operations OnComplete will NOT be called. If TUringOperation::OnDrop
-    // is set, it is called for CQEs drained during shutdown.
+    // Outstanding operations OnComplete() will NOT be called.
+    // OnDrop() is called for CQEs drained during shutdown.
     void Stop();
 
     // Returns the number of SQEs still available in the ring.
@@ -162,8 +142,7 @@ public:
 
 private:
     struct io_uring_sqe* GetSqe();
-    void PrepareSqe(struct io_uring_sqe* sqe, bool isRead, void* buf, ui64 size,
-                    ui64 offset, TUringOperation* op);
+    void PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op);
 
     // Submit a NOP to wake the completion poller blocked in io_uring_wait_cqe.
     void WakePoller();

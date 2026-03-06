@@ -460,7 +460,9 @@ int Main(int argc, const char** argv)
             });
     } else {
         auto inputGenSpec = TPickleInputSpec(inputGenSchema);
-        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()});
+        // XXX: Untrack the datums, produced by "gen sql", so they can be
+        // preserved for later multiply usage in "test sql".
+        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()}, true);
         // XXX: <RunGenSql> cannot be used for this case, since all buffers
         // from the Datums in the obtained batches are owned by the worker's
         // allocator. Hence, the program (i.e. worker) object should be created

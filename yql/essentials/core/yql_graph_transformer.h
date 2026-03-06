@@ -337,8 +337,8 @@ THolder<IGraphTransformer> CreateSinglePassFunctorTransformer(TFunctor functor) 
     return MakeHolder<TSinglePassFunctorTransformer<TFunctor>>(std::move(functor));
 }
 
-typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback;
-typedef NThreading::TFuture<TAsyncTransformCallback> TAsyncTransformCallbackFuture;
+using TAsyncTransformCallback = std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
+using TAsyncTransformCallbackFuture = NThreading::TFuture<TAsyncTransformCallback>;
 
 template <typename TDerived>
 class TAsyncCallbackTransformer : public TGraphTransformerBase {
@@ -460,7 +460,7 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
     return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
 }
 
-typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
+using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;
 }
 
 template<>

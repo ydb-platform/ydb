@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ddisk_actor.h"
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
@@ -6,119 +8,131 @@
 #include <ydb/core/util/stlog.h>
 
 #include <cerrno>
+#include <optional>
 
 namespace NKikimr::NDDisk {
 
-#if defined(__linux__)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TDirectIoOpBase
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Direct I/O operation context passed through io_uring.
-    // Allocated on the actor thread (new), freed in OnComplete callback (delete).
-    struct TDDiskActor::TDirectIoOpBase : NPDisk::TUringOperation {
+// Direct I/O operation context passed through io_uring.
+// Allocated on the actor thread (new), freed in OnComplete callback (delete).
+class TDDiskActor::TDirectIoOpBase : public NPDisk::TUringOperationBase {
+public:
+    TDirectIoOpBase(const TActorId& ddiskId,
+                    std::atomic<ui32>& inFlightCount,
+                    TCounters& counters,
+                    const IEventHandle* ev = nullptr);
 
-        TActorId DDiskId;
-        ui64 Cookie = 0;                    // original event cookie
-        bool IsRead = false;
-        ui32 Size = 0;
-        ui64 DiskOffset = 0;
-        ui32 BufferOffset = 0;
-        TRcBuf AlignedDataHolder;
+    virtual ~TDirectIoOpBase();
 
-        // shared with DDisk actor
-        std::atomic<ui32>& InFlightCount;
-        TCounters& Counters;
+    // IO uring callbacks
+    virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
+    virtual void OnDrop() noexcept override final;
 
-        TDirectIoOpBase(std::atomic<ui32>& inFlightCount, TCounters& counters);
+    // reply should not access raw uring result field – use just status and data if status OK
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept;
 
-        virtual ~TDirectIoOpBase();
+    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
+    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
 
-        // a poor error mapping
-        static NKikimrBlobStorage::NDDisk::TReplyStatus::E UringErrorToStatus(i32 result, bool isRead) {
-            const int err = -result;
-            switch (err) {
-                case EAGAIN:
-#if EAGAIN != EWOULDBLOCK
-                case EWOULDBLOCK:
-#endif
-                case ENOSPC:
-                case ENOMEM:
-                    return NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED;
-                case EINVAL:
-                    return NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
-                case EIO:
-                    return isRead
-                        ? NKikimrBlobStorage::NDDisk::TReplyStatus::LOST_DATA
-                        : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                default:
-                    return NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            }
-        }
+    void SetSpan(NWilson::TSpan&& span) { Span = std::move(span); }
+    NWilson::TSpan& GetSpan() { return Span; }
 
-        static void OnDirectIoComplete(NPDisk::TUringOperation* baseOp, NActors::TActorSystem* actorSystem) noexcept {
-            auto* op = static_cast<TDirectIoOpBase*>(baseOp);
-            std::unique_ptr<TDirectIoOpBase> guard(op);
+    void SetCookie(ui64 cookie) { Cookie = cookie; }
+    ui64 GetCookie() const { return Cookie; }
 
-            const ui32 remaining = op->Size - op->BufferOffset;
-            if (Y_UNLIKELY(op->Result > 0 && static_cast<ui32>(op->Result) < remaining)) {
-                // this should be a very rare case
-                op->BufferOffset += op->Result;
-                op->DiskOffset += op->Result;
-                if (op->IsRead) {
-                    op->Counters.DirectIO.ShortReads->Inc();
-                } else {
-                    op->Counters.DirectIO.ShortWrites->Inc();
-                }
-                auto ddiskId = op->DDiskId;
-                auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
-                actorSystem->Send(new IEventHandle(ddiskId, {}, ev.release()));
-                return;
-            }
+    const TActorId& GetDDiskId() const { return DDiskId; }
 
-            if (Y_UNLIKELY(op->Result == 0 && remaining > 0)) {
-                op->Result = -EIO;
-            }
+    TRope ExtractData();
 
-            op->Reply(actorSystem, false);
-        }
+public:
+    // methods to use when we fallback to PDisk instead of direct I/O
 
-        static void OnDirectIoDrop(NPDisk::TUringOperation* baseOp) noexcept {
-            auto* op = static_cast<TDirectIoOpBase*>(baseOp);
-            std::unique_ptr<TDirectIoOpBase> guard(op);
-        }
+    TChunkIdx GetChunkIdx() const { return ChunkIdx; }
+    ui32 GetChunkOffset() const { return ChunkOffsetInBytes; }
 
-        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) = 0;
+    using NPDisk::TUringOperationBase::SetResult;
 
-        void SetData(TRope&& data);
-    };
+    void SetResult(i32 result, TRope&& data);
 
-    struct TDDiskActor::TSingleDirectIoOp : TDDiskActor::TDirectIoOpBase {
-        TActorId Sender;                    // original requester
-        TActorId InterconnectSession;
+private:
+    TActorId DDiskId;
 
-        TSingleDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
-            : TDirectIoOpBase(inFlightCount, counters)
-        {}
-    };
+    TActorId OriginalRequester;
+    TActorId InterconnectSession;
 
-    struct TDDiskActor::TDDiskIoOp : TDDiskActor::TSingleDirectIoOp {
-        NWilson::TSpan Span;
+    ui64 Cookie = 0;
 
-        TDDiskIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
-            : TSingleDirectIoOp(inFlightCount, counters)
-        {}
+    // PDisk fallback data
+    TChunkIdx ChunkIdx = 0;
+    ui32 ChunkOffsetInBytes = 0;
 
-        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;
-    };
+    NWilson::TSpan Span;
 
-    struct TDDiskActor::TPersistentBufferPartIoOp : TDDiskActor::TDirectIoOpBase {
-        ui64 PartCookie;
-        bool IsErase = false;
+    TRcBuf AlignedDataHolder;
+    std::optional<TRope> Data;
 
-        TPersistentBufferPartIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
-            : TDirectIoOpBase(inFlightCount, counters)
-        {}
+    // shared with DDisk actor
+    std::atomic<ui32>& InFlightCount;
+    TCounters& Counters;
+};
 
-        virtual void Reply(NActors::TActorSystem* actorSystem, bool shortIoError) override;
-    };
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TPersistentBufferPartIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#endif
-}
+class TDDiskActor::TPersistentBufferPartIoOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    TPersistentBufferPartIoOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    {}
+
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+
+    void SetPartCookie(ui64 partCookie) {
+        PartCookie = partCookie;
+    }
+
+    void SetIsErase(bool isErase) {
+        IsErase = isErase;
+    }
+
+private:
+    ui64 PartCookie = 0;
+    bool IsErase = false;
+};
+
+class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    TInternalSyncWriteOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    {}
+
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+
+    void SetRequestId(ui64 requestId) {
+        RequestId = requestId;
+    }
+
+    void SetSegment(ui64 begin, ui64 end) {
+        SegmentBegin = begin;
+        SegmentEnd = end;
+    }
+
+    void SetSyncId(ui64 syncId) {
+        SyncId = syncId;
+    }
+
+private:
+    ui64 SyncId = 0;
+    ui64 RequestId = 0;
+    ui64 SegmentBegin = 0;
+    ui64 SegmentEnd = 0;
+};
+
+} // namespace NKikimr::NDDisk

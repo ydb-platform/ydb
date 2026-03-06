@@ -3822,6 +3822,9 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TA
     }
 
     PipeServers.erase(it);
+
+    // Note: awaiter queue size may change when Cancel is called
+    UpdateProposeQueueSize();
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {

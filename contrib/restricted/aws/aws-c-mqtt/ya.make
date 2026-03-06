@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.13.5)
+VERSION(0.14.0)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.13.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.14.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-common
@@ -50,6 +50,7 @@ SRCS(
     source/mqtt.c
     source/mqtt311_decoder.c
     source/mqtt311_listener.c
+    source/mqtt_iot_metrics.c
     source/mqtt_subscription_set.c
     source/packets.c
     source/request-response/protocol_adapter.c

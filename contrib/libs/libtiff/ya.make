@@ -3,7 +3,6 @@
 LIBRARY()
 
 LICENSE(
-    BSD-3-Clause AND
     BSLA AND
     MIT AND
     libtiff

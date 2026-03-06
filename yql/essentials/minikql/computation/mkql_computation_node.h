@@ -21,6 +21,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -161,12 +162,13 @@ private:
 
 class IArrowKernelComputationNode;
 class IComputationExternalNode;
+class TComputationExternalNodeInvalidator;
 using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
 public:
-    typedef TIntrusivePtr<IComputationNode> TPtr;
-    typedef std::map<ui32, EValueRepresentation> TIndexesMap;
+    using TPtr = TIntrusivePtr<IComputationNode>;
+    using TIndexesMap = std::map<ui32, EValueRepresentation>;
 
     virtual ~IComputationNode() {
     }
@@ -232,6 +234,10 @@ public:
     using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>;
     virtual void SetGetter(TGetter&& getter) = 0;
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
+
+private:
+    friend class TComputationExternalNodeInvalidator;
+    virtual void CollectInvalidationIndexes(std::set<ui32>& out) const = 0;
 };
 
 enum class EFetchResult: i32 {
@@ -339,8 +345,8 @@ public:
 };
 
 class TNodeFactory;
-typedef std::function<IComputationNode*(TNode* node, bool pop)> TNodeLocator;
-typedef std::function<void(IComputationNode*)> TNodePushBack;
+using TNodeLocator = std::function<IComputationNode*(TNode* node, bool pop)>;
+using TNodePushBack = std::function<void(IComputationNode*)>;
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
@@ -492,7 +498,7 @@ struct TComputationPatternOpts {
 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
-    typedef TIntrusivePtr<IComputationPattern> TPtr;
+    using TPtr = TIntrusivePtr<IComputationPattern>;
 
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;

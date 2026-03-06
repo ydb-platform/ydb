@@ -15,11 +15,12 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
-        }
+        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg.DiskFormat);
+        Y_ABORT_UNLESS(msg.PersistentBufferFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
+        DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
         DiskFd = std::move(msg.DiskFd);
         if (!DiskFd.IsOpen()) {
@@ -27,9 +28,9 @@ namespace NKikimr::NDDisk {
                 "TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
                 (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         }
-        DiskFormat = std::move(msg.DiskFormat);
-        Y_ABORT_UNLESS(msg.PersistentBufferFormat);
+
         InitPersistentBuffer(std::move(msg.PersistentBufferFormat));
+
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             ChunkMapSnapshotLsn = record.Lsn;

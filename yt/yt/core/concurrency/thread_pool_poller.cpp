@@ -21,6 +21,8 @@
 
 #include <util/network/pollerimpl.h>
 
+#include <absl/container/flat_hash_set.h>
+
 #include <array>
 
 namespace NYT::NConcurrency {
@@ -142,6 +144,11 @@ struct TPollableCookie
         auto* cookie = TryFromPollable(pollable);
         YT_VERIFY(cookie);
         return cookie;
+    }
+
+    ~TPollableCookie()
+    {
+        Invoker.Reset();
     }
 };
 
@@ -378,7 +385,9 @@ private:
     TNotificationHandle WakeupHandle_;
     TMpscStack<IPollablePtr> RegisterQueue_;
     TMpscStack<IPollablePtr> UnregisterQueue_;
-    THashMap<IPollable*, IPollablePtr> Pollables_;
+
+    // NB: Both THash and TEqualTo must be supplied here to enable heterogeneous lookup.
+    absl::flat_hash_set<IPollablePtr, THash<IPollablePtr>, TEqualTo<IPollablePtr>> Pollables_;
 
     std::array<TPollerImpl::TEvent, MaxEventsPerPoll> PooledImplEvents_;
 
@@ -483,13 +492,13 @@ private:
                 });
 
                 RegisterQueue_.DequeueAll(false, [&] (auto& pollable) {
-                    EmplaceOrCrash(Pollables_, pollable.Get(), pollable);
+                    InsertOrCrash(Pollables_, std::move(pollable));
                 });
 
                 HandleEvents(eventCount);
 
                 for (const auto& pollable : unregisterItems) {
-                    EraseOrCrash(Pollables_, pollable.Get());
+                    EraseOrCrash(Pollables_, pollable);
                 }
 
                 unregisterItems.clear();
@@ -499,7 +508,7 @@ private:
                         break;
                     }
                     // Need to unregister pollables when stopping to break reference cycles between pollables and poller.
-                    for (const auto& [rawPollable, pollable] : Pollables_) {
+                    for (const auto& pollable : Pollables_) {
                         DoUnregister(pollable);
                     }
                 }

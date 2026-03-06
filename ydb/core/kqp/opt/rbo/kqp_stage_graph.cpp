@@ -100,13 +100,12 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPos
     return BuildConnectionImpl<TDqCnMap>(inputStage, pos, newStage, ctx);
 }
 
-TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                     TExprContext &ctx) {
-    return BuildConnectionImpl<TDqCnUnionAll>(inputStage, pos, newStage, ctx);
+TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
+    return Parallel ? BuildConnectionImpl<TDqCnParallelUnionAll>(inputStage, pos, newStage, ctx)
+                    : BuildConnectionImpl<TDqCnUnionAll>(inputStage, pos, newStage, ctx);
 }
 
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                                    TExprContext& ctx) {
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
     if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;

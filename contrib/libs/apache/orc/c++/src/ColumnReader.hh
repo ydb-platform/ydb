@@ -97,6 +97,13 @@ namespace orc {
      * @return the number of scale digits
      */
     virtual int32_t getForcedScaleOnHive11Decimal() const = 0;
+    
+    /**
+     * Get a shared dictionary for the given column if available.
+     * @param columnId the id of the column
+     * @return shared pointer to the StringDictionary or nullptr if not available
+     */
+    virtual std::shared_ptr<StringDictionary> getSharedDictionary(uint64_t columnId) const = 0;
 
     /**
      * Whether decimals that have precision <=18 are encoded as fixed scale and values

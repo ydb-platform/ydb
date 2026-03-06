@@ -234,6 +234,10 @@ struct TDataEvents {
     struct TEvLockRowsCancel : public NActors::TEventPB<TEvLockRowsCancel, NKikimrDataEvents::TEvLockRowsCancel, TDataEvents::EvLockRowsCancel> {
     public:
         TEvLockRowsCancel() = default;
+
+        explicit TEvLockRowsCancel(ui64 requestId) {
+            Record.SetRequestId(requestId);
+        }
     };
 
     struct TEvLockRowsResult : public NActors::TEventPB<TEvLockRowsResult, NKikimrDataEvents::TEvLockRowsResult, TDataEvents::EvLockRowsResult> {

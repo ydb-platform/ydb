@@ -597,7 +597,15 @@ public:
 
 public:
     class TRuntimeLockHolder;
-    using TRuntimeLockHolderList = TIntrusiveList<TRuntimeLockHolder>;
+    class TRuntimeLockHolderList : public TIntrusiveList<TRuntimeLockHolder> {
+        friend TTableLocks;
+
+    public:
+        ~TRuntimeLockHolderList();
+
+    private:
+        THashMap<TLockInfo::TPtr, TRuntimeLockHolder*> LockTails;
+    };
 
 private:
     class TRuntimeLockKeyComparator {
@@ -653,6 +661,9 @@ public:
             rhs.Unlink();
             rhs.Self = nullptr;
             rhs.Lock = nullptr;
+            if (Self) {
+                Self->MovedRuntimeLock(Key, this, &rhs);
+            }
         }
 
         TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
@@ -665,6 +676,9 @@ public:
                 rhs.Unlink();
                 rhs.Self = nullptr;
                 rhs.Lock = nullptr;
+                if (Self) {
+                    Self->MovedRuntimeLock(Key, this, &rhs);
+                }
             }
             return *this;
         }
@@ -718,6 +732,7 @@ public:
     TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock);
 
 private:
+    void MovedRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder, TRuntimeLockHolder* was);
     void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
 
 private:

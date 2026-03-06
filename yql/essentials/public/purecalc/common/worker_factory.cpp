@@ -237,7 +237,6 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.EmitReadsForExists = true;
         settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;

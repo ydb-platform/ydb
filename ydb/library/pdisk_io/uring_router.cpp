@@ -183,7 +183,7 @@ public:
             struct io_uring_cqe* cqe;
 
             io_uring_for_each_cqe(Owner.Ring, head, cqe) {
-                auto* op = reinterpret_cast<TUringOperation*>(io_uring_cqe_get_data(cqe));
+                auto* op = reinterpret_cast<TUringOperationBase*>(io_uring_cqe_get_data(cqe));
                 if (op) {
                     // The synchronization between the submitter and this poller
                     // goes through io_uring's kernel-mediated SQ/CQ rings, which
@@ -191,9 +191,7 @@ public:
                     // PrepareSqe/ReadFixed/WriteFixed.
                     NSan::Acquire(op);
                     op->Result = cqe->res;
-                    if (op->OnComplete) {
-                        op->OnComplete(op, Owner.ActorSystem);
-                    }
+                    op->OnComplete(Owner.ActorSystem);
                 }
                 ++count;
             }
@@ -235,14 +233,12 @@ public:
         unsigned count = 0;
         struct io_uring_cqe* cqe;
         io_uring_for_each_cqe(Owner.Ring, head, cqe) {
-            auto* op = reinterpret_cast<TUringOperation*>(io_uring_cqe_get_data(cqe));
+            auto* op = reinterpret_cast<TUringOperationBase*>(io_uring_cqe_get_data(cqe));
             if (op) {
                 // Same rationale as above: synchronization flows through io_uring
                 // rings and is invisible to TSAN.
                 NSan::Acquire(op);
-                if (op->OnDrop) {
-                    op->OnDrop(op);
-                }
+                op->OnDrop();
             }
             ++count;
         }
@@ -306,48 +302,55 @@ struct io_uring_sqe* TUringRouter::GetSqe() {
     return io_uring_get_sqe(Ring);
 }
 
-void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, bool isRead, void* buf,
-                              ui64 size, ui64 offset, TUringOperation* op) {
+void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op) {
     // Use readv/writev (IORING_OP_READV/WRITEV) instead of read/write
     // (IORING_OP_READ/WRITE) for kernel 5.4 compatibility.
     // IORING_OP_READ/WRITE were added in 5.6; readv/writev exist since 5.1.
-    op->Iov.iov_base = buf;
-    op->Iov.iov_len = size;
-
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
-    if (isRead) {
-        io_uring_prep_readv(sqe, fd, &op->Iov, 1, offset);
-    } else {
-        io_uring_prep_writev(sqe, fd, &op->Iov, 1, offset);
+    switch (op->OperationType) {
+    case TUringOperationBase::EREAD:
+        io_uring_prep_readv(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        break;
+    case TUringOperationBase::EWRITE:
+        io_uring_prep_writev(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        break;
+    default:
+        Y_ABORT("Unknown OperationType");
     }
+
     if (FixedFdIndex >= 0) {
         sqe->flags |= IOSQE_FIXED_FILE;
     }
+
     io_uring_sqe_set_data(sqe, op);
     NSan::Release(op);
 }
 
-bool TUringRouter::Read(void* buf, ui64 size, ui64 offset, TUringOperation* op) {
+bool TUringRouter::Read(TUringOperationBase* op) {
     Y_DEBUG_ABORT_UNLESS(!IsStopping.load(std::memory_order_relaxed), "Read() called after Stop()");
+    Y_ABORT_UNLESS(op->OperationType == TUringOperationBase::EREAD);
+
     struct io_uring_sqe* sqe = GetSqe();
     if (!sqe) {
         return false;
     }
-    PrepareSqe(sqe, /*isRead=*/true, buf, size, offset, op);
+    PrepareSqe(sqe, op);
     return true;
 }
 
-bool TUringRouter::Write(const void* buf, ui64 size, ui64 offset, TUringOperation* op) {
+bool TUringRouter::Write(TUringOperationBase* op) {
     Y_DEBUG_ABORT_UNLESS(!IsStopping.load(std::memory_order_relaxed), "Write() called after Stop()");
+    Y_ABORT_UNLESS(op->OperationType == TUringOperationBase::EWRITE);
+
     struct io_uring_sqe* sqe = GetSqe();
     if (!sqe) {
         return false;
     }
-    PrepareSqe(sqe, /*isRead=*/false, const_cast<void*>(buf), size, offset, op);
+    PrepareSqe(sqe, op);
     return true;
 }
 
-bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op) {
+bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op) {
     Y_DEBUG_ABORT_UNLESS(!IsStopping.load(std::memory_order_relaxed), "ReadFixed() called after Stop()");
     Y_ABORT_UNLESS(BuffersRegistered, "RegisterBuffers must be called before ReadFixed");
     struct io_uring_sqe* sqe = GetSqe();
@@ -364,7 +367,7 @@ bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, T
     return true;
 }
 
-bool TUringRouter::WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperation* op) {
+bool TUringRouter::WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op) {
     Y_DEBUG_ABORT_UNLESS(!IsStopping.load(std::memory_order_relaxed), "WriteFixed() called after Stop()");
     Y_ABORT_UNLESS(BuffersRegistered, "RegisterBuffers must be called before WriteFixed");
     struct io_uring_sqe* sqe = GetSqe();

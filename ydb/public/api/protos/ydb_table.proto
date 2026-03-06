@@ -979,6 +979,8 @@ message CompactMetadata {
     optional uint32 max_shards_in_flight = 3;
     optional CompactState.State state = 4;
     optional float progress = 5;
+    optional uint32 shards_total = 6;
+    optional uint32 shards_done = 7;
 }
 
 // Alter table with given path

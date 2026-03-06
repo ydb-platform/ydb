@@ -255,14 +255,14 @@ void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
     if (!BackgroundCompactionQueue)
         return;
 
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE].Set(BackgroundCompactionQueue->Size());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_RUNNING].Set(BackgroundCompactionQueue->RunningSize());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_WAITING_REPEAT].Set(BackgroundCompactionQueue->WaitingSize());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE].Set(BackgroundCompactionQueue->Size());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_RUNNING].Set(BackgroundCompactionQueue->RunningSize());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_WAITING_REPEAT].Set(BackgroundCompactionQueue->WaitingSize());
 
     const auto& queue = BackgroundCompactionQueue->GetReadyQueue();
 
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_SH].Set(queue.SizeBySearchHeight());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_SH].Set(queue.SizeBySearchHeight());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
 }
 
 }

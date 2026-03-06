@@ -23,6 +23,7 @@ RECURSE_FOR_TESTS(
     service
     runtime
     sysview
+    tli
     tx
     view
     yql

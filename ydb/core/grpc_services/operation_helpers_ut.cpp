@@ -99,6 +99,8 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
     }
     Progress: 50
     State: STATE_IN_PROGRESS
+    ShardsTotal: 10
+    ShardsDone: 5
 )";
         NKikimrForcedCompaction::TForcedCompaction compactionProto;
         google::protobuf::TextFormat::ParseFromString(compaction, &compactionProto);
@@ -117,6 +119,8 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
         UNIT_ASSERT_VALUES_EQUAL(metadata.max_shards_in_flight(), 3);
         UNIT_ASSERT_VALUES_EQUAL(metadata.state(), Ydb::Table::CompactState::STATE_IN_PROGRESS);
         UNIT_ASSERT_DOUBLES_EQUAL(metadata.progress(), 50., 1e-5);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_total(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_done(), 5);
     }
 
     Y_UNIT_TEST(CompactionCanceled) {
@@ -126,8 +130,10 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
         cascade: true
         max_shards_in_flight: 2
     }
-    Progress: 0
+    Progress: 70
     State: STATE_CANCELLED
+    ShardsTotal: 10
+    ShardsDone: 7
 )";
         NKikimrForcedCompaction::TForcedCompaction compactionProto;
         google::protobuf::TextFormat::ParseFromString(compaction, &compactionProto);
@@ -145,7 +151,9 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
         UNIT_ASSERT_VALUES_EQUAL(metadata.cascade(), true);
         UNIT_ASSERT_VALUES_EQUAL(metadata.max_shards_in_flight(), 2);
         UNIT_ASSERT_VALUES_EQUAL(metadata.state(), Ydb::Table::CompactState::STATE_CANCELLED);
-        UNIT_ASSERT_DOUBLES_EQUAL(metadata.progress(), 0., 1e-5);
+        UNIT_ASSERT_DOUBLES_EQUAL(metadata.progress(), 70., 1e-5);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_total(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_done(), 7);
     }
 
     Y_UNIT_TEST(CompactionDone) {
@@ -157,6 +165,8 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
     }
     Progress: 100
     State: STATE_DONE
+    ShardsTotal: 10
+    ShardsDone: 10
 )";
         NKikimrForcedCompaction::TForcedCompaction compactionProto;
         google::protobuf::TextFormat::ParseFromString(compaction, &compactionProto);
@@ -175,6 +185,8 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
         UNIT_ASSERT_VALUES_EQUAL(metadata.max_shards_in_flight(), 1);
         UNIT_ASSERT_VALUES_EQUAL(metadata.state(), Ydb::Table::CompactState::STATE_DONE);
         UNIT_ASSERT_DOUBLES_EQUAL(metadata.progress(), 100., 1e-5);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_total(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.shards_done(), 10);
     }
 }
 

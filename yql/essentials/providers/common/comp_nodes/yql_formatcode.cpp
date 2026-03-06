@@ -7,7 +7,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TFormatCodeWrapper: public TMutableComputationNode<TFormatCodeWrapper> {
-    typedef TMutableComputationNode<TFormatCodeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFormatCodeWrapper>;
 
 public:
     TFormatCodeWrapper(TComputationMutables& mutables, IComputationNode* code, bool annotatePosition, ui32 exprCtxMutableIndex)
@@ -42,7 +42,7 @@ private:
 };
 
 class TSerializeCodeWrapper: public TMutableComputationNode<TSerializeCodeWrapper> {
-    typedef TMutableComputationNode<TSerializeCodeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSerializeCodeWrapper>;
 
 public:
     TSerializeCodeWrapper(TComputationMutables& mutables, IComputationNode* code, ui32 exprCtxMutableIndex)

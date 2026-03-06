@@ -108,7 +108,7 @@ class StreamingTestBase(TestYdsBase):
             completed = self.get_completed_checkpoints(kikimr, path)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:

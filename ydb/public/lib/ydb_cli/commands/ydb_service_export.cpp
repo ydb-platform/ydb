@@ -243,6 +243,10 @@ int TCommandExportToYt::Run(TConfig& config) {
 TCommandExportBase::TCommandExportBase(const TString& name, const TString& description)
     : TYdbOperationCommand(name, {}, description)
 {
+    TItem::DefineFields({
+        {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Destination path", true}},
+    });
 }
 
 void TCommandExportBase::Config(TConfig& config) {

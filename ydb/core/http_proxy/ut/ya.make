@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/core/http_proxy)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 FORK_SUBTESTS()
 

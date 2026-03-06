@@ -437,9 +437,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
         const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
         const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
-        NDDisk::TQueryCredentials creds;
-        creds.TabletId = 40;
-        creds.Generation = 1;
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);
         const NDDisk::TBlockSelector selector{3, 0, BlockSize};
@@ -461,6 +459,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             AssertStatus(writeResult, TReplyStatus::OK);
         }
         for (auto disk : {disk1, disk2, disk3}) {
+            creds = Connect(ctx, disk.ServiceId, 40, 1);
             auto readResult = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
                 ctx, disk.ServiceId, new NDDisk::TEvReadPersistentBuffer(creds, selector, lsn, {true}));
             AssertStatus(readResult, TReplyStatus::OK);

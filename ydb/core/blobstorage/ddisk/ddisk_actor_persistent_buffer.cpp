@@ -208,7 +208,11 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
+        TQueryCredentials creds;
+        auto recordCreds = record.GetCredentials();
+        creds.TabletId = recordCreds.GetTabletId();
+        creds.Generation = recordCreds.GetGeneration();
+        creds.FromPersistentBuffer = true;
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());

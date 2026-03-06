@@ -290,6 +290,10 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplTotalBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPhantomBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplMadeNoProgress, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskWriteThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeRequestThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskReadThrottledMicroseconds, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -315,6 +319,10 @@ public:                                                                         
             COUNTER_DEF(ReplTotalBlobsWithProblems);
             COUNTER_DEF(ReplPhantomBlobsWithProblems);
             COUNTER_DEF(ReplMadeNoProgress);
+            COUNTER_DEF(ReplPDiskWriteThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeRequestThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeResponseThrottledMicroseconds);
+            COUNTER_DEF(ReplPDiskReadThrottledMicroseconds);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

@@ -455,6 +455,7 @@ public:
     void CreateDatabase(const TString& databaseName);
     Tests::TServer& GetServer() const;
     Tests::TClient& GetClient() const;
+    const TString& GetEndpoint() const;
 
 private:
     TPortManager PortManager;

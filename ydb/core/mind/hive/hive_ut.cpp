@@ -9004,6 +9004,45 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         BalanceTablets(runtime, hiveTablet);
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
+
+    Y_UNIT_TEST(LoadEverythingNoUpdateNodeSegmentsAfterDelete) {
+        static constexpr int NodeCount = 1;
+        static constexpr auto NodeDeletePeriod = TDuration::Seconds(5);
+
+        TTestBasicRuntime runtime(NodeCount, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetNodeDeletePeriod(NodeDeletePeriod.Seconds());
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NodeCount);
+            runtime.DispatchEvents(options);
+        }
+
+        // kill node
+        SendKillLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::TEvCommit::EventType);
+            runtime.DispatchEvents(options);
+        }
+
+        runtime.AdvanceCurrentTime(NodeDeletePeriod + TDuration::Seconds(1));
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBootTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        // trigger balancer
+        BalanceTablets(runtime, hiveTablet);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {

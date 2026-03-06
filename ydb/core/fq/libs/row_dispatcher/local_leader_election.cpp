@@ -5,6 +5,8 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+
 #include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
 #include <ydb/core/grpc_services/rpc_calls.h>

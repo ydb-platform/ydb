@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include "direct_io_op.h"
 
 #include <ydb/core/util/stlog.h>
 
@@ -244,6 +245,7 @@ namespace NKikimr::NDDisk {
         ui64 cuttedFromData = request.Selector.OffsetInBytes;
         request.SegmentsInFlight = segments.size();
 
+        // TODO: don't flush each time, write as a single op?
         for (auto& [begin, end] : segments) {
             if (cuttedFromData < begin) {
                 data.EraseFront(begin - cuttedFromData);
@@ -252,53 +254,26 @@ namespace NKikimr::NDDisk {
             data.ExtractFront(end - begin, &segmentData);
             cuttedFromData = end;
 
-            auto callback = [
-                this,
-                begin = begin,
-                end = end,
-                syncId = syncId,
-                requestId = ev->Cookie
-            ] (NPDisk::TEvChunkWriteRawResult& evResult, NWilson::TSpan&& /*span*/) {
-                if (auto it = SyncsInFlight.find(syncId); it != SyncsInFlight.end()) {
-                    auto &sync = it->second;
-                    auto &request = sync.Requests[requestId - sync.FirstRequestId];
+            auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TInternalSyncWriteOp>(SelfId(), InFlightCount, Counters);
+            auto* syncWriteOp = static_cast<TInternalSyncWriteOp*>(op.get());
+            syncWriteOp->SetSyncId(syncId);
+            syncWriteOp->SetRequestId(ev->Cookie);
+            syncWriteOp->SetSegment(begin, end);
+            syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, begin);
 
-                    if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                        return;
-                    }
-
-                    if (evResult.Status != NKikimrProto::EReplyStatus::OK) {
-                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                        request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << evResult.ErrorReason << "; ";
-                        sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "]" << "failed to write; ";
-                        if (--sync.RequestsInFlight == 0) {
-                            ReplySync(it);
-                        }
-                        return;
-                    }
-
-                    if (--request.SegmentsInFlight == 0) {
-                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
-
-                        if (--sync.RequestsInFlight == 0) {
-                            ReplySync(it);
-                        }
+            const bool submitted = DirectUringOp(op);
+            if (!submitted) {
+                if (request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+                    request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                    request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: io_uring SQ ring full (short I/O retry); ";
+                    sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to write; ";
+                    if (--sync.RequestsInFlight == 0) {
+                        ReplySync(it);
                     }
                 }
-            };
-
-            // TODO: use io_uring
-            // TODO: common span before the loop?
-
-            TBlockSelector segmentSelector(sync.VChunkIndex, begin, end - begin);
-            auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, ev->TraceId.Clone(), "DDisk.InternalSyncWrite",
-                    NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-                .Attribute("tablet_id", static_cast<long>(sync.Creds.TabletId))
-                .Attribute("vchunk_index", static_cast<long>(segmentSelector.VChunkIndex))
-                .Attribute("offset_in_bytes", segmentSelector.OffsetInBytes)
-                .Attribute("size", segmentSelector.Size));
-
-            SendInternalWrite(chunkRef, segmentSelector, std::move(span), std::move(segmentData), std::move(callback));
+                break;
+            }
         }
     }
 
@@ -308,6 +283,43 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvReadResult::TPtr ev) {
         InternalSyncReadResult(ev);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev) {
+        auto it = SyncsInFlight.find(ev->Get()->SyncId);
+        if (it == SyncsInFlight.end()) {
+            return;
+        }
+        auto& sync = it->second;
+
+        const ui64 requestId = ev->Get()->RequestId;
+        if (requestId < sync.FirstRequestId || requestId >= sync.FirstRequestId + sync.Requests.size()) {
+            return;
+        }
+        auto& request = sync.Requests[requestId - sync.FirstRequestId];
+
+        if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+            return;
+        }
+
+        const ui64 begin = ev->Get()->SegmentBegin;
+        const ui64 end = ev->Get()->SegmentEnd;
+        if (ev->Get()->Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+            request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << ev->Get()->ErrorMessage << "; ";
+            sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "] failed to write; ";
+            if (--sync.RequestsInFlight == 0) {
+                ReplySync(it);
+            }
+            return;
+        }
+
+        if (--request.SegmentsInFlight == 0) {
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            if (--sync.RequestsInFlight == 0) {
+                ReplySync(it);
+            }
+        }
     }
 
     template <typename TResultEvent, typename TCounters>

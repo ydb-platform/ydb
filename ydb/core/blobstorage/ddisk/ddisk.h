@@ -26,7 +26,6 @@ namespace NKikimr::NDDisk {
             EvSyncWithDDiskResult,
             EvWritePersistentBuffer,
             EvWritePersistentBufferResult,
-            EvWritePersistentBuffers,
             EvReadPersistentBuffer,
             EvReadPersistentBufferResult,
             EvErasePersistentBuffer,
@@ -34,6 +33,7 @@ namespace NKikimr::NDDisk {
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
+            EvWritePersistentBuffers,
         };
     };
 

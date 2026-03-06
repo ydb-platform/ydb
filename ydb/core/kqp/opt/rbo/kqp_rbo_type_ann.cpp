@@ -143,7 +143,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
 
     } while (status == IGraphTransformer::TStatus::Repeat);
 
-    auto lambdaType = lambda->GetTypeAnn();
+    const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
         YQL_CLOG(TRACE, CoreDq) << "Could not infer lambda types, status = " << status;
         return IGraphTransformer::TStatus::Error;
@@ -206,7 +206,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
             return status;
         }
 
-        auto lambdaType = lambda->GetTypeAnn();
+        const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);

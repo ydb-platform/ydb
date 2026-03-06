@@ -386,7 +386,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
 
         TVector<const TTypeAnnotationNode*> argsType;
         for (const auto& arg : stageArgs) {
-            const auto* argTypeAnn = arg->GetTypeAnn();
+            const TTypeAnnotationNode* argTypeAnn = arg->GetTypeAnn();
             Y_ENSURE(argTypeAnn);
             argsType.push_back(argTypeAnn);
         }
@@ -453,7 +453,7 @@ TVector<const TTypeAnnotationNode*> TPhysicalQueryBuilder::GetArgsType(TExprNode
 
     TVector<const TTypeAnnotationNode*> argsTypes;
     for (const auto& arg : lambda.Args()) {
-        const auto* argTypeAnn = arg.Ptr()->GetTypeAnn();
+        const TTypeAnnotationNode* argTypeAnn = arg.Ptr()->GetTypeAnn();
         Y_ENSURE(argTypeAnn);
         argsTypes.push_back(argTypeAnn);
     }

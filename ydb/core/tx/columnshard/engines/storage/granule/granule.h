@@ -167,6 +167,7 @@ private:
     bool DataAccessorConstructed = false;
 
 public:
+    ~TGranuleMeta();
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
@@ -195,7 +196,7 @@ public:
         IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
-        auto copy = innerPortion->MakeCopy();
+        auto copy = innerPortion->MakeCopy(false);
         modifier(*copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
             auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));

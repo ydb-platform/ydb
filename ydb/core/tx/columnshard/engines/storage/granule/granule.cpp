@@ -13,6 +13,14 @@
 
 namespace NKikimr::NOlap {
 
+TGranuleMeta::~TGranuleMeta() {
+    for (const auto& [_, portion] : Portions) {
+        if (IntervalTree) {
+            IntervalTree->RemoveRanges(portion);
+        }
+    }
+}
+
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));

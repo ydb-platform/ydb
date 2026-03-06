@@ -158,14 +158,14 @@ public:
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
     }
 
-    virtual std::shared_ptr<TPortionInfo> MakeCopy() const = 0;
+    virtual std::shared_ptr<TPortionInfo> MakeCopy(const bool copyIntersectionCount) const = 0;
 
     ui64 GetDataSize() const {
         return sizeof(TPortionInfo) + Meta.GetDataSize() - sizeof(TPortionMeta);
     }
 
     virtual ~TPortionInfo() {
-        AFL_VERIFY(0 == IntersectionsCount);
+        AFL_VERIFY(0 == IntersectionsCount)("IntersectionsCount", IntersectionsCount)("PortionId", PortionId);
     }
 
     TPortionInfo(TPortionMeta&& meta)

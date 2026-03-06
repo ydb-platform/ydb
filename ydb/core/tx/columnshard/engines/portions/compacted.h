@@ -18,8 +18,12 @@ private:
         return EPortionType::Compacted;
     }
 
-    virtual std::shared_ptr<TPortionInfo> MakeCopy() const override {
-        return std::make_shared<TCompactedPortionInfo>(*this);
+    virtual std::shared_ptr<TPortionInfo> MakeCopy(const bool copyIntersectionCount) const override {
+        auto copy = std::make_shared<TCompactedPortionInfo>(*this);
+        if (!copyIntersectionCount) {
+            copy->IntersectionsCount = 0;
+        }
+        return copy;
     }
 
     virtual bool IsCommitted() const override {

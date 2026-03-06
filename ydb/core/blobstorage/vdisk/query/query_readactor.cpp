@@ -30,8 +30,10 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
 
             TReplQuoter::TPtr quoter;
+            NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter;
             if (IsRepl) {
                 quoter = Ctx->VCtx->ReplPDiskReadQuoter;
+                quoterThrottledCounter = Ctx->ReplMonGroup.ReplPDiskReadThrottledMicrosecondsPtr();
             }
 
             // make read requests
@@ -51,7 +53,7 @@ namespace NKikimr {
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
+                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size, 0, quoterThrottledCounter);
 
                 Counter++;
             }

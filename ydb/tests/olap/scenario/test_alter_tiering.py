@@ -23,6 +23,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 
 from ydb import PrimitiveType, StatusCode
 import yatest.common
@@ -53,11 +54,13 @@ class TestLoop:
 
 
 class S3:
-    def __init__(self):
+    def __init__(self, self.port_manager):
+        self.port_manager = port_manager
         self._server = None
 
     def start_server(self) -> str:
-        port = yatest.common.network.PortManager().get_port()
+        port = self.port_manager.get_port()
+
         self._server = ThreadedMotoServer(port=port)
         self._server.start()
         return f'http://localhost:{port}'
@@ -98,6 +101,7 @@ class TieringTestBase(BaseTestSet):
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
+            port_allocator=KikimrPortManagerPortAllocator(port_manager=cls.port_manager),
             extra_feature_flags=[
                 'enable_external_data_sources',
                 'enable_tiering_in_column_shard',
@@ -125,6 +129,8 @@ class TieringTestBase(BaseTestSet):
         random.seed(0)
 
         LOGGER.info('Initializing test parameters')
+        if self.port_manager is None:
+            self.port_manager = yatest.common.network.PortManager()
         self.s3_endpoint = get_external_param('s3-endpoint', '')
         self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
         self.s3_access_key = os.getenv('S3_ACCESS_KEY', 'access_key')
@@ -132,7 +138,7 @@ class TieringTestBase(BaseTestSet):
 
         assert len(self.s3_buckets) == 2, len(self.s3_buckets)
 
-        self.s3 = S3()
+        self.s3 = S3(self.port_manager)
         if not self.s3_endpoint:
             LOGGER.info('Starting S3 server')
             self.s3_endpoint = self.s3.start_server()

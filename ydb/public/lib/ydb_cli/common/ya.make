@@ -45,6 +45,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/future
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     contrib/libs/ftxui
     contrib/libs/openssl

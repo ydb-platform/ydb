@@ -30,9 +30,13 @@ TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, 
     SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Table"));
 }
 
+// Max time to wait for session close RPCs in destructor. Each Close has 2s timeout and runs in parallel.
+// This cap prevents infinite hang if e.g. completion queue thread is blocked or driver is stopping.
+constexpr TDuration DRAIN_ON_DESTRUCTOR_TIMEOUT = TDuration::Seconds(10);
+
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        Drain().Wait();
+        Drain().Wait(DRAIN_ON_DESTRUCTOR_TIMEOUT);
     }
 }
 

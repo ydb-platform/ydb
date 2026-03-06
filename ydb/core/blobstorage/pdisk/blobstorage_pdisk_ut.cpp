@@ -1660,10 +1660,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_C(assertion_disarmed, "No appropriate TEvPDiskStateUpdate received");
     };
 
-    void CheckPDiskSlotSizeBytesCounter(TActorTestContext& testCtx, ui64 expectedSlotSizeBytes) {
-        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), expectedSlotSizeBytes);
-    }
-
     Y_UNIT_TEST(PDiskSlotSizeInUnits) {
         TActorTestContext testCtx({});
         const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
@@ -1672,7 +1668,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
         testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 0);
-        CheckPDiskSlotSizeBytesCounter(testCtx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), 0);
 
         // Setup 2 vdisks
         TVDiskMock vdisk1(&testCtx);
@@ -1701,7 +1697,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse1->NumActiveSlots, 5);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
-        CheckPDiskSlotSizeBytesCounter(testCtx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), 0);
 
         // Graceful restart with same config
         testCtx.GracefulPDiskRestart();
@@ -1714,7 +1710,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse2->NumActiveSlots, 5);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
-        CheckPDiskSlotSizeBytesCounter(testCtx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), 0);
 
         // Check YardResize handler validates Owner and OwnerRound
         testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
@@ -1746,7 +1742,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse3->NumActiveSlots, 6);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 6);
-        CheckPDiskSlotSizeBytesCounter(testCtx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), 0);
 
         // Graceful restart with SlotSizeInUnits=2
         auto cfg = testCtx.GetPDiskConfig();
@@ -1766,7 +1762,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse4->NumActiveSlots, 4);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 4);
-        CheckPDiskSlotSizeBytesCounter(testCtx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), 0);
 
         // State 4:
         // PDisk.ExpectedSlotCount: 8
@@ -1782,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 4);
         const ui64 expectedSlotSizeBytes = testCtx.GetPDisk()->Mon.TotalSpaceBytes->Val() / 8;
         UNIT_ASSERT_GT(expectedSlotSizeBytes, 0u);
-        CheckPDiskSlotSizeBytesCounter(testCtx, expectedSlotSizeBytes);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk()->Mon.SlotSizeBytes->Val(), expectedSlotSizeBytes);
     }
 
     THolder<NPDisk::TEvCheckSpaceResult> CheckEvCheckSpace(

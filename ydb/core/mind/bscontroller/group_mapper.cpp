@@ -952,7 +952,6 @@ namespace NKikimr::NBsController {
 
             auto keyName = [](TNodeLocation::TKeys::E k) -> TString {
                 switch (k) {
-                    case TNodeLocation::TKeys::BridgePileName: return "BridgePileName";
                     case TNodeLocation::TKeys::DataCenter:     return "DataCenter";
                     case TNodeLocation::TKeys::Module:         return "Module";
                     case TNodeLocation::TKeys::Rack:           return "Rack";
@@ -963,7 +962,6 @@ namespace NKikimr::NBsController {
 
             auto levelToKey = [](int v) {
                 constexpr TNodeLocation::TKeys::E Keys[] = {
-                    TNodeLocation::TKeys::BridgePileName,
                     TNodeLocation::TKeys::DataCenter,
                     TNodeLocation::TKeys::Module,
                     TNodeLocation::TKeys::Rack,

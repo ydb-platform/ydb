@@ -170,7 +170,7 @@ public:
 
     void AllocateGroupCatchingError(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, TGroupMapperError& error) {
         ui32 groupId = NextGroupId++;
-        bool success = mapper.AllocateGroup(groupId, group, {}, {}, 0, 0, false, TBridgePileId(), error);
+        bool success = mapper.AllocateGroup(groupId, group, {}, {}, 0, false, error);
         UNIT_ASSERT_C(!success, "Allocation should have failed");
     }
 

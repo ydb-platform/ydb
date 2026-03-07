@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
@@ -106,10 +107,11 @@ protected:
             Canceling   // after TEvCancelRequest
         };
 
-        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "")
+        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
             , SplittedRequestText(GetChunks(requestText))
+            , WmSessionUpdater(wmSessionUpdater)
         {}
 
         std::vector<TString> GetChunks(const TString& requestText, size_t chunkSize = SQL_TEXT_MAX_SIZE) const {
@@ -171,6 +173,7 @@ protected:
         const std::vector<TString> SplittedRequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
+        std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -244,6 +247,7 @@ private:
         auto event = std::move(ev->Get()->Event);
         const TString& sessionId = event->Get()->SessionId;
         const TString& requestText = event->Get()->RequestText;
+        auto wmSessionUpdater = event->Get()->WmSessionUpdater;
         this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(DatabaseId, PoolId, sessionId));
 
         const TActorId& workerActorId = event->Sender;
@@ -262,10 +266,16 @@ private:
             this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
 
-        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText)}).first->second;
+        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText, wmSessionUpdater)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
         LOG_REQ_PENDING(PoolId, request);
+        
+        // Notify proxy that request entered WM queue (Pending state) via shared interface
+        if (wmSessionUpdater) {
+            wmSessionUpdater->SetPoolId(PoolId);
+            wmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TInstant::Now());
+        }
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
@@ -938,8 +948,13 @@ private:
                     GlobalState.RunningRequests++;
                     FifoCounters.GlobalInFly->Inc();
                     ReplyContinue(request);
+
+                    // Notify proxy that request exited WM queue (started running) via shared interface
+                    if (request->WmSessionUpdater) {
+                        request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TInstant::Now());
+                    }
                 } else {
-                    // Request was dropped due to lease expiration 
+                    // Request was dropped due to lease expiration
                     PendingRequests.emplace_front(request->SessionId);
                     FifoCounters.PendingRequestsCount->Inc();
                 }
@@ -1022,6 +1037,11 @@ private:
             this->Register(CreateDelayRequestActor(this->SelfId(), DatabaseId, PoolId, sessionId, request->StartTime, GetWaitDeadline(request->StartTime), LEASE_DURATION, Counters.CountersSubgroup));
             DelayedRequests.emplace_back(sessionId);
             request->CleanupRequired = true;
+
+            // Notify proxy that request moved to Delayed state via shared interface
+            if (request->WmSessionUpdater) {
+                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TInstant::Now());
+            }
         }
     }
 

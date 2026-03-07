@@ -12,6 +12,8 @@ SRCS(
     meta_clusters.h
     meta_cp_databases.h
     meta_cp_databases_verbose.h
+    meta_settings.h
+    meta_support_links.h
     meta_db_clusters.h
     meta_versions.cpp
     mvp.cpp
@@ -19,6 +21,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/meta/support_links
     ydb/mvp/meta/protos
     ydb/public/api/client/yc_private/resourcemanager
     yql/essentials/public/udf

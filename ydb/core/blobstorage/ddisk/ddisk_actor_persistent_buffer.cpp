@@ -206,6 +206,30 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    void TDDiskActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
+        const auto& record = ev->Get()->Record;
+        TQueryCredentials creds;
+        auto recordCreds = record.GetCredentials();
+        creds.TabletId = recordCreds.GetTabletId();
+        creds.Generation = recordCreds.GetGeneration();
+        creds.FromPersistentBuffer = true;
+        const TBlockSelector selector(record.GetSelector());
+        const ui64 lsn = record.GetLsn();
+        const TWriteInstruction instr(record.GetInstruction());
+        TRope payload;
+        if (instr.PayloadId) {
+            payload = ev->Get()->GetPayload(*instr.PayloadId);
+        }
+
+        for (auto& pbId : record.GetPersistentBufferIds()) {
+            auto msg = std::make_unique<TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            msg->AddPayload(TRope(payload));
+            auto pbServiceId = MakeBlobStorageDDiskId(pbId.GetNodeId(), pbId.GetPDiskId(), pbId.GetDDiskSlotId());
+            auto h = std::make_unique<IEventHandle>(pbServiceId, ev->Sender, msg.release(), 0, ev->Cookie);
+            TActivationContext::Send(h.release());
+        }
+    }
+
     void TDDiskActor::Handle(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr /*ev*/) {
     }
 

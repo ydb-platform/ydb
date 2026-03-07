@@ -5,6 +5,8 @@ ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(15)
 
 TEST_SRCS(
     base.py
@@ -16,7 +18,12 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

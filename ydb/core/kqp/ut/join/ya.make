@@ -1,13 +1,18 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(200)
+FORK_TEST_FILES()
+SPLIT_FACTOR(250)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:4)
+    ENDIF()
 ENDIF()
 
 IF(SANITIZER_TYPE == "memory")
@@ -15,6 +20,7 @@ IF(SANITIZER_TYPE == "memory")
     # Just double default memory requirements since we run MSan without origin tracking by default.
     REQUIREMENTS(
         ram:16
+        cpu:4
     )
 ENDIF()
 

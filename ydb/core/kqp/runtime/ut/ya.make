@@ -3,6 +3,10 @@ UNITTEST_FOR(ydb/core/kqp/runtime)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 SRCS(
     kqp_scan_data_ut.cpp

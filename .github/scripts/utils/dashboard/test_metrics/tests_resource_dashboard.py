@@ -177,7 +177,7 @@ def extract_suite_group_chunk_from_run_name(arg_name: str) -> tuple[Optional[str
 
 
 def _status_bucket() -> dict[str, int]:
-    return {"errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0}
+    return {"errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
 
 
 def _classify_failure(status: str, error_type: str, is_muted: bool) -> tuple[bool, bool, bool]:
@@ -225,6 +225,7 @@ def parse_report_chunks(
         suite = normalize_suite_path(suite)
 
         status = str(item.get("status", ""))
+        status_u = status.upper()
         error_type = str(item.get("error_type", "") or "")
         is_muted = bool(item.get("is_muted") or item.get("muted"))
         timeout, muted, failedish = _classify_failure(status, error_type, is_muted)
@@ -241,6 +242,8 @@ def parse_report_chunks(
                 bucket["muted_timeouts"] += 1
             if failedish and not timeout and not muted:
                 bucket["errors"] += 1
+            if status_u in {"SKIP", "SKIPPED"}:
+                bucket["skipped"] += 1
         if bucket_key == "tests" and not is_suite_row:
             chunk_hid = item.get("chunk_hid")
             if chunk_hid is not None:

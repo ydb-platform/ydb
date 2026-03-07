@@ -276,6 +276,24 @@ class TJsonNodes : public TViewerPipeClient {
             return SystemState.GetLocation().GetBridgePileName();
         }
 
+        void FillLocationFromInterconnect() {
+            for (const auto& [key, value] : NodeInfo.Location.GetItems()) {
+                switch (key) {
+                    case TNodeLocation::TKeys::DataCenter:
+                        SystemState.MutableLocation()->SetDataCenter(value);
+                        break;
+                    case TNodeLocation::TKeys::Rack:
+                        SystemState.MutableLocation()->SetRack(value);
+                        break;
+                    case TNodeLocation::TKeys::Unit:
+                        SystemState.MutableLocation()->SetUnit(value);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
         void Cleanup() {
             if (SystemState.HasSystemLocation()) {
                 SystemState.ClearSystemLocation();
@@ -1888,6 +1906,7 @@ public:
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }
+                        node.FillLocationFromInterconnect();
                         if (ni.Location.GetDataCenterId() != 0) {
                             seenDC = true;
                         }

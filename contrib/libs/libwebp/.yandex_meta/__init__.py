@@ -1,6 +1,5 @@
 from devtools.yamaker.project import GNUMakeNixProject
 
-
 SHARPYUV_SUBLIBS = [
     "libsharpyuv_neon",
     "libsharpyuv_sse2",

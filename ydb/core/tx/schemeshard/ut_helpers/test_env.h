@@ -88,6 +88,10 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableConditionalEraseResponseBatching, false);
         OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
         OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
+        OPTION(bool, EnableDataShardSplitHistogramSorting, false);
+        OPTION(bool, EnableDataShardSplitKeySelection, false);
+        OPTION(bool, EnableSchemeShardSplitHistogramSorting, false);
+        OPTION(bool, EnableSchemeShardSplitKeySelection, false);
 
         #undef OPTION
     };

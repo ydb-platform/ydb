@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 using namespace NKikimr;
@@ -29,7 +30,8 @@ void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t r
             return;
     }
 }
-}
+
+}  // namespace anonymous
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     Y_UNIT_TEST(Test) {
@@ -494,6 +496,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AutoMergeInOne, 2, 1, false) {
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
+        t.EnvOpts.EnableBackgroundCompaction(false);
+        t.EnvOpts.DataShardStatsReportIntervalSeconds(0);
+        t.EnvOpts.EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -509,6 +516,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", ""})});
+
+                TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinUptimeSec);
+                TControlBoard::SetValue(10, runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
             }
 
             TVector<THolder<IEventHandle>> suppressed;
@@ -696,6 +706,8 @@ struct TLoadAndSplitSimulator {
     bool ShouldSendReadRequests;
     ESendDuplicateTableStatsStrategy SendDuplicateTableStats;
     std::map<ui64, std::unique_ptr<IEventHandle>> DuplicateTableStatsByDatashardId;
+    ui32 SplitProtocolVersion = 0;
+
     TTestActorRuntime* TestRuntime;
     TActorId SenderActorId;
 
@@ -750,7 +762,7 @@ struct TLoadAndSplitSimulator {
         }
 
         // NOTE: histogram must have at least 3 buckets with different keys to be able to produce split key
-        // (see ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp, DoFindSplitKey() and ChooseSplitKeyByKeySample())
+        // (see ydb/core/split/key_access.cpp, FindSplitKeyPrefix() and SelectShortestMedianKeyPrefix())
         HistogramAddBucket(KeyAccessHistogramPatch, 999998, 1000);
         HistogramAddBucket(KeyAccessHistogramPatch, 999999, 1000);
         HistogramAddBucket(KeyAccessHistogramPatch, 1000000, 1000);
@@ -997,6 +1009,10 @@ struct TLoadAndSplitSimulator {
                     msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
                     msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
 
+                    if (msg->Record.MutableTableStats()->GetSplitProtocolVersion() > 0) {
+                        msg->Record.MutableTableStats()->SetSplitByAccessSuggestedKey(ToSerialized(splitPoint));
+                    }
+
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                         << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
                         << ", from followerId " << msg->Record.GetFollowerId()
@@ -1153,8 +1169,7 @@ struct TLoadAndSplitSimulator {
     };
 };
 
-TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
-    TTestEnvOptions opts;
+TTestEnv SetupEnv(TTestBasicRuntime &runtime, TTestEnvOptions& opts) {
     opts.EnableBackgroundCompaction(false);
     opts.DataShardStatsReportIntervalSeconds(0);
 
@@ -1181,6 +1196,10 @@ TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
     GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
     return env;
+}
+TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
+    TTestEnvOptions opts;
+    return SetupEnv(runtime, opts);
 }
 
 }  // anonymous namespace
@@ -1239,7 +1258,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
         if (expectTableToBeSplitted) {
             runtime.WaitFor(
-                "the table to be slitted",
+                "the table to be splitted",
                 [&simulator, &runtime]() -> bool {
                     auto now = runtime.GetCurrentTime();
                     return (simulator.SplitAckCount > 0) && ((now - simulator.LastSplitAckTime) > TDuration::Seconds(15));
@@ -1305,9 +1324,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
     }
 
-    Y_UNIT_TEST(TableSplitsUpToMaxPartitionsCount) {
+    Y_UNIT_TEST_FLAGS_N(TableSplitsUpToMaxPartitionsCount,
+        bool DataShardSplitHistogramSorting,
+        bool DataShardSplitKeySelection,
+        bool SchemeShardSplitHistogramSorting,
+        bool SchemeShardSplitKeySelection
+    ) {
         TTestBasicRuntime runtime;
-        auto env = SetupEnv(runtime);
+        auto env = SetupEnv(runtime, TTestEnvOptions()
+            .EnableDataShardSplitHistogramSorting(DataShardSplitHistogramSorting)
+            .EnableDataShardSplitKeySelection(DataShardSplitKeySelection)
+            .EnableSchemeShardSplitHistogramSorting(SchemeShardSplitHistogramSorting)
+            .EnableSchemeShardSplitKeySelection(SchemeShardSplitKeySelection)
+        );
 
         const ui32 expectedPartitionCount = 5;
         const ui32 cpuLoadThreshold = 1;    // percents
@@ -1573,9 +1602,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
      * Verify that a shard is split automatically, when some of the followers
      * become overloaded with requests.
      */
-    Y_UNIT_TEST(TableSplitsByFollowerLoad) {
+    Y_UNIT_TEST_FLAGS_N(TableSplitsByFollowerLoad,
+        bool DataShardSplitHistogramSorting,
+        bool DataShardSplitKeySelection,
+        bool SchemeShardSplitHistogramSorting,
+        bool SchemeShardSplitKeySelection
+    ) {
         TTestBasicRuntime runtime;
-        auto env = SetupEnv(runtime);
+        auto env = SetupEnv(runtime, TTestEnvOptions()
+            .EnableDataShardSplitHistogramSorting(DataShardSplitHistogramSorting)
+            .EnableDataShardSplitKeySelection(DataShardSplitKeySelection)
+            .EnableSchemeShardSplitHistogramSorting(SchemeShardSplitHistogramSorting)
+            .EnableSchemeShardSplitKeySelection(SchemeShardSplitKeySelection)
+        );
 
         const ui32 expectedPartitionCount = 5;
         const ui64 cpuLoadSimulated = 100;  // percents
@@ -1973,7 +2012,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
 
         // Wait for the table to be fully splitted
         runtime.WaitFor(
-            "the table to be slitted",
+            "the table to be splitted",
             [&simulatorSplit, &runtime]() -> bool {
                 auto now = runtime.GetCurrentTime();
                 return (simulatorSplit.SplitAckCount > 0)

@@ -25,6 +25,7 @@ RE_REQUIREMENTS_LINE = re.compile(r"^\s*REQUIREMENTS\s*\((.*)\)\s*$")
 RE_REQ_RAM = re.compile(r"\bram\s*:\s*(\d+)\b", re.IGNORECASE)
 RE_REQ_CPU = re.compile(r"\bcpu\s*:\s*(\w+)\b", re.IGNORECASE)
 RE_SIZE = re.compile(r"^\s*SIZE\s*\(\s*(\w+)\s*\)\s*$")
+RE_SPLIT_FACTOR = re.compile(r"^\s*SPLIT_FACTOR\s*\(\s*(\d+)\s*\)\s*$")
 RE_IF = re.compile(r"^\s*IF\s*\((.*)\)\s*$")
 RE_ELSE = re.compile(r"^\s*ELSE\s*\(\s*\)\s*$")
 RE_ENDIF = re.compile(r"^\s*ENDIF\s*\(\s*\)\s*$")
@@ -156,14 +157,19 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
             attrs["size"] = m_size.group(1).upper()
             continue
 
+        m_split = RE_SPLIT_FACTOR.match(line)
+        if m_split:
+            attrs["split_factor"] = int(m_split.group(1))
+            continue
+
     return attrs
 
 
 def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Optional[str] = None) -> Optional[dict[str, Any]]:
     """
-    Read active REQUIREMENTS/SIZE from repo_root/suite_path/ya.make, optionally
+    Read active REQUIREMENTS/SIZE/SPLIT_FACTOR from repo_root/suite_path/ya.make, optionally
     selecting SANITIZER_TYPE branch. Returns subset of:
-      {"ram_gb": int, "cpu_cores": int, "size": str}
+      {"ram_gb": int, "cpu_cores": int, "size": str, "split_factor": int}
     or None if file doesn't exist or nothing relevant found.
     """
     suite_path = normalize_suite_path(suite_path)
@@ -181,7 +187,7 @@ def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Opti
 def build_requirements_cache(repo_root: Path, suite_paths: list[str], sanitizer: Optional[str] = None) -> dict[str, dict[str, Any]]:
     """
     Build a mapping suite_path (normalized) -> attrs from active ya.make branch:
-      {"ram_gb": int?, "cpu_cores": int?, "size": str?}
+      {"ram_gb": int?, "cpu_cores": int?, "size": str?, "split_factor": int?}
     """
     cache: dict[str, dict[str, Any]] = {}
     for suite_path in suite_paths:

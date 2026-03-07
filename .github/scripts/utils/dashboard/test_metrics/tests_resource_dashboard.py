@@ -1071,6 +1071,13 @@ def main() -> None:
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
 
+    # Per-suite chunk count from report (declared chunks; may differ from evlog run count).
+    report_chunks_by_suite: dict[str, int] = defaultdict(int)
+    for (suite, _group, _idx), meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
+        report_chunks_by_suite[suite] += 1
+
     resources_overlay = None
     if args.resources_jsonl and args.resources_jsonl.exists():
         resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs)
@@ -1079,6 +1086,7 @@ def main() -> None:
         enriched_runs,
         requirements_cache=requirements_cache,
         report_status_by_suite=report_status_by_suite,
+        report_chunks_by_suite=dict(report_chunks_by_suite),
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
     )
     suite_test_event_times = build_test_event_times_direct(

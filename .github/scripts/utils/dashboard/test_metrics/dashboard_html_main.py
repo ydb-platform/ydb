@@ -651,7 +651,7 @@ def build_html_dashboard(
       }}
 
       // Default: show suites with the highest non-chunk failures first.
-      let suggestionsSortCol = 17;  // test_fails_total
+      let suggestionsSortCol = 18;  // test_fails_total
       let suggestionsSortAsc = false;
 
       function getSuggestionsForScript() {{
@@ -1045,7 +1045,7 @@ def build_html_dashboard(
       }}
 
       const suggestionsColumns = [
-        'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size',
+        'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size', 'ya_split_factor',
         'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
         'total_ram_gb', 'total_dur_sec', 'recommended_cpu', 'cpu_action',
         'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_fails_total',
@@ -1080,9 +1080,15 @@ def build_html_dashboard(
                 : 'p95 exceeds MEDIUM limit (max cpu:4) — consider increasing SIZE to LARGE')
             : '';
           const sizeCell = sizeCapped
-            ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:3px;color:#991b1b;font-weight:600;">'
-              + (s.ya_size || '') + ' <span style="font-size:11px;background:#fee2e2;border:1px solid #fca5a5;border-radius:4px;padding:0 4px;">cap!</span></span>'
+            ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:2px;color:#991b1b;font-weight:600;">'
+              + (s.ya_size || '') + ' <span style="color:#dc2626;font-size:1em;" aria-label="cap">↑</span></span>'
             : String(s.ya_size ?? '');
+          const yaChunksCell = s.ya_split_factor != null ? String(s.ya_split_factor) : '';
+          const realChunks = s.chunks_count ?? 0;
+          const chunksMismatch = s.chunks_count_mismatch;
+          const chunksCell = chunksMismatch
+            ? '<span title="Runtime chunks (evlog): ' + realChunks + ', ya.make SPLIT_FACTOR: ' + (s.ya_split_factor ?? '') + '" style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;">' + realChunks + '</span>'
+            : String(realChunks);
           return [
             String(i + 1),
             '<label style="display:inline-flex;align-items:center;gap:5px;max-width:420px;">' +
@@ -1092,7 +1098,8 @@ def build_html_dashboard(
             String(s.ya_ram_gb ?? ''),
             String(s.ya_cpu_cores ?? ''),
             sizeCell,
-            String(s.chunks_count || 0),
+            yaChunksCell,
+            chunksCell,
             (s.median_cores != null ? Number(s.median_cores).toFixed(3) : ''),
             (s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : ''),
             (s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : ''),
@@ -1134,7 +1141,7 @@ def build_html_dashboard(
           '<tr>' +
           '<th data-col="0" rowspan="2" style="cursor:pointer;user-select:none;">#' + marker(0) + '</th>' +
           '<th data-col="1" rowspan="2" style="cursor:pointer;user-select:none;">suite_path' + marker(1) + '</th>' +
-          '<th colspan="3">ya.make</th>' +
+          '<th colspan="4">ya.make</th>' +
           '<th colspan="1">runtime</th>' +
           '<th colspan="3">cpu usage</th>' +
           '<th colspan="1">ram usage</th>' +
@@ -1151,36 +1158,37 @@ def build_html_dashboard(
           '<tr>' +
           '<th data-col="2" style="cursor:pointer;user-select:none;">ya_ram_gb' + marker(2) + '</th>' +
           '<th data-col="3" style="cursor:pointer;user-select:none;">ya_cpu' + marker(3) + '</th>' +
-          '<th data-col="4" class="group-end" style="cursor:pointer;user-select:none;">ya_size' + marker(4) + '</th>' +
-          '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;">chunks' + marker(5) + '</th>' +
-          '<th data-col="6" style="cursor:pointer;user-select:none;">median_cores' + marker(6) + '</th>' +
-          '<th data-col="7" style="cursor:pointer;user-select:none;">p95_cores' + marker(7) + '</th>' +
-          '<th data-col="8" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(8) + '</th>' +
-          '<th data-col="9" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(9) + '</th>' +
-          '<th data-col="10" class="group-end" style="cursor:pointer;user-select:none;">total_dur_sec' + marker(10) + '</th>' +
-          '<th data-col="11" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(11) + '</th>' +
-          '<th data-col="12" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(12) + '</th>' +
-          '<th data-col="13" style="cursor:pointer;user-select:none;">errors' + marker(13) + '</th>' +
-          '<th data-col="14" style="cursor:pointer;user-select:none;">timeouts' + marker(14) + '</th>' +
-          '<th data-col="15" style="cursor:pointer;user-select:none;">muted' + marker(15) + '</th>' +
-          '<th data-col="16" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(16) + '</th>' +
-          '<th data-col="17" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(17) + '</th>' +
-          '<th data-col="18" style="cursor:pointer;user-select:none;">errors' + marker(18) + '</th>' +
-          '<th data-col="19" style="cursor:pointer;user-select:none;">timeouts' + marker(19) + '</th>' +
-          '<th data-col="20" style="cursor:pointer;user-select:none;">muted' + marker(20) + '</th>' +
-          '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
-          '<th data-col="22" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(22) + '</th>' +
-          '<th data-col="23" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(23) + '</th>' +
-          '<th data-col="24" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(24) + '</th>' +
-          '<th data-col="25" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(25) + '</th>' +
-          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(26) + '</th>' +
-          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(27) + '</th>' +
-          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(28) + '</th>' +
-          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(29) + '</th>' +
-          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(30) + '</th>' +
+          '<th data-col="4" style="cursor:pointer;user-select:none;">ya_size' + marker(4) + '</th>' +
+          '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;" title="SPLIT_FACTOR(N) from ya.make">ya_split_factor' + marker(5) + '</th>' +
+          '<th data-col="6" class="group-end" style="cursor:pointer;user-select:none;" title="Chunk runs (evlog). Highlighted if ≠ ya.make SPLIT_FACTOR">chunks' + marker(6) + '</th>' +
+          '<th data-col="7" style="cursor:pointer;user-select:none;">median_cores' + marker(7) + '</th>' +
+          '<th data-col="8" style="cursor:pointer;user-select:none;">p95_cores' + marker(8) + '</th>' +
+          '<th data-col="9" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(9) + '</th>' +
+          '<th data-col="10" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(10) + '</th>' +
+          '<th data-col="11" class="group-end" style="cursor:pointer;user-select:none;">total_dur_sec' + marker(11) + '</th>' +
+          '<th data-col="12" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(12) + '</th>' +
+          '<th data-col="13" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(13) + '</th>' +
+          '<th data-col="14" style="cursor:pointer;user-select:none;">errors' + marker(14) + '</th>' +
+          '<th data-col="15" style="cursor:pointer;user-select:none;">timeouts' + marker(15) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;">muted' + marker(16) + '</th>' +
+          '<th data-col="17" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(17) + '</th>' +
+          '<th data-col="18" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;">errors' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;">timeouts' + marker(20) + '</th>' +
+          '<th data-col="21" style="cursor:pointer;user-select:none;">muted' + marker(21) + '</th>' +
+          '<th data-col="22" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(22) + '</th>' +
+          '<th data-col="23" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(23) + '</th>' +
+          '<th data-col="24" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(24) + '</th>' +
+          '<th data-col="25" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(25) + '</th>' +
+          '<th data-col="26" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(26) + '</th>' +
+          '<th data-col="27" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(27) + '</th>' +
+          '<th data-col="28" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(28) + '</th>' +
+          '<th data-col="29" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(29) + '</th>' +
+          '<th data-col="30" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(30) + '</th>' +
+          '<th data-col="31" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(31) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([4, 5, 8, 9, 10, 12, 17, 22, 24, 26, 28, 30]);
+        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 18, 23, 25, 27, 29, 31]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');

@@ -158,6 +158,7 @@ def build_cpu_recommendations(
     runs: list[dict[str, Any]],
     requirements_cache: Optional[dict[str, dict[str, Any]]] = None,
     report_status_by_suite: Optional[dict[str, dict[str, dict[str, int]]]] = None,
+    report_chunks_by_suite: Optional[dict[str, int]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
 ) -> list[dict[str, Any]]:
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
@@ -264,6 +265,7 @@ def build_cpu_recommendations(
         ya_cpu = req.get("cpu_cores")
         ya_ram = req.get("ram_gb")
         ya_size = req.get("size")
+        ya_split_factor = req.get("split_factor")
         if not ya_size:
             ya_size = "SMALL"
         size_u_cap = str(ya_size or "").upper()
@@ -317,9 +319,16 @@ def build_cpu_recommendations(
                     cpu_action = "lower"
                 else:
                     cpu_action = "ok"
+        chunks_real = by_suite_runs[suite]
+        chunks_report = (report_chunks_by_suite or {}).get(suite)
+        # Mismatch: real runtime chunks vs ya.make SPLIT_FACTOR(N) when set
+        chunks_mismatch = ya_split_factor is not None and chunks_real != ya_split_factor
         out.append({
             "suite_path": suite,
-            "chunks_count": by_suite_runs[suite],
+            "chunks_count": chunks_real,
+            "chunks_count_report": chunks_report,
+            "chunks_count_mismatch": chunks_mismatch,
+            "ya_split_factor": ya_split_factor,
             "median_cores": round(median_c, 3),
             "p95_cores": round(p95_c, 3),
             "recommended_cpu": recommended_req,

@@ -198,9 +198,6 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
-                COUNTER_INIT(NormalizedOccupancyPerMille, false);
-                COUNTER_INIT(VDiskSlotUsagePerMille, false);
-                COUNTER_INIT(VDiskRawUsagePerMille, false);
                 COUNTER_INIT(CapacityAlertGreen, false);
                 COUNTER_INIT(CapacityAlertCyan, false);
                 COUNTER_INIT(CapacityAlertLightYellow, false);
@@ -220,9 +217,6 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
-            COUNTER_DEF(NormalizedOccupancyPerMille);
-            COUNTER_DEF(VDiskSlotUsagePerMille);
-            COUNTER_DEF(VDiskRawUsagePerMille);
             COUNTER_DEF(CapacityAlertGreen);
             COUNTER_DEF(CapacityAlertCyan);
             COUNTER_DEF(CapacityAlertLightYellow);

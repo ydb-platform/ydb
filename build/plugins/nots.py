@@ -15,7 +15,6 @@ from _common import (
 )
 from _dart_fields import create_dart_record
 
-
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
     from lib.nots.package_manager import PackageManager

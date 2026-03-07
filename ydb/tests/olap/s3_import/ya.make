@@ -4,6 +4,10 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
+FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(30)
+
 TEST_SRCS(
     test_tpch_import.py
     test_types_and_formats.py

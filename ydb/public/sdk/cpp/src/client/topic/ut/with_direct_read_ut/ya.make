@@ -9,7 +9,9 @@ ELSE()
 ENDIF()
 
 FORK_SUBTESTS()
+FORK_TESTS()
 FORK_TEST_FILES()
+SPLIT_FACTOR(60)
 
 PEERDIR(
     ydb/core/testlib/default

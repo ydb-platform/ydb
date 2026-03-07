@@ -10,6 +10,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -78,6 +79,10 @@ public:
 
             insert({TSchema::IsTruncated::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 11
                 return TCell::Make<bool>(info.GetIsTruncated());
+            }});
+
+            insert({TSchema::QueryType::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 12
+                return TCell(info.GetQueryType());
             }});
         }
     };
@@ -173,13 +178,13 @@ private:
         if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             PendingNodesInitialized = true;
             ui32 selfNodeId = SelfId().NodeId();
-            
+
             // Check if self node matches the NodeId filter
-            bool matchFrom = !HasNodeIdFrom || 
+            bool matchFrom = !HasNodeIdFrom ||
                 (NodeIdFromInclusive ? selfNodeId >= NodeIdFrom : selfNodeId > NodeIdFrom);
-            bool matchTo = !HasNodeIdTo || 
+            bool matchTo = !HasNodeIdTo ||
                 (NodeIdToInclusive ? selfNodeId <= NodeIdTo : selfNodeId < NodeIdTo);
-            
+
             if (matchFrom && matchTo) {
                 PendingNodes.emplace_back(selfNodeId);
             }
@@ -193,6 +198,13 @@ private:
     void StartScan() {
         if (IsEmptyRange) {
             ReplyEmptyAndDie();
+            return;
+        }
+
+        // Check if database is serverless: for serverless databases, TenantName != AppData()->TenantName
+        // This is a simple heuristic - serverless databases use shared compute resources
+        if (TenantName != AppData()->TenantName) {
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache is not available for this database");
             return;
         }
 
@@ -243,11 +255,11 @@ private:
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
-            
+
             for (ui32 nodeId : proxies) {
-                bool matchFrom = !HasNodeIdFrom || 
+                bool matchFrom = !HasNodeIdFrom ||
                     (NodeIdFromInclusive ? nodeId >= NodeIdFrom : nodeId > NodeIdFrom);
-                bool matchTo = !HasNodeIdTo || 
+                bool matchTo = !HasNodeIdTo ||
                     (NodeIdToInclusive ? nodeId <= NodeIdTo : nodeId < NodeIdTo);
                 if (matchFrom && matchTo) {
                     PendingNodes.push_back(nodeId);
@@ -266,6 +278,15 @@ private:
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         LastResponse = std::move(record);
+
+        // Check for error status (e.g., tenant mismatch for serverless)
+        if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            ReplyErrorAndDie(record.GetStatus(), issues);
+            return;
+        }
+
         ProcessRows();
     }
 

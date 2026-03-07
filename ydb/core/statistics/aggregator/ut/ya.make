@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/statistics/aggregator)
 
 FORK_SUBTESTS()
+FORK_TEST_FILES()
 
 SPLIT_FACTOR(60)
 
@@ -9,6 +10,9 @@ IF (WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:2)
+    ENDIF()
 ENDIF()
 
 YQL_LAST_ABI_VERSION()

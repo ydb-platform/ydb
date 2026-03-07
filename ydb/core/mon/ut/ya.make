@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/mon)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/core/mon

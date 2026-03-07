@@ -8,10 +8,10 @@ TEST_SRCS(
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(ram:8)
+    REQUIREMENTS(ram:8 cpu:2)
 ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

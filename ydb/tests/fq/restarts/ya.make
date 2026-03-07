@@ -30,6 +30,7 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
+    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

@@ -12,6 +12,7 @@ IF (WITH_VALGRIND)
     )
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 SRCS(

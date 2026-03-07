@@ -14,8 +14,12 @@ TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev)
 {
     TLocalMiniKQLProgram program(*ev->Get());
 
-    auto userSID = ev->Get()->Record.GetUserSID();
-    return new TFlatLocalMiniKQL(ev->Sender, program, this, userSID);
+    auto& record = ev->Get()->Record;
+    auto userCtx = NACLib::TUserContextBuilder()
+        .WithUserSID(record.GetUserSID())
+        .WithUserTraceId(record.GetUserTraceId())
+        .Build();
+    return new TFlatLocalMiniKQL(ev->Sender, program, this, userCtx);
 }
 
 TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &ev)

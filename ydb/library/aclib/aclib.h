@@ -188,9 +188,53 @@ protected:
     bool IsContainer;
 };
 
+class TUserContext : public TThrRefBase
+{
+public:
+    using TPtr = TIntrusivePtr<TUserContext>;
 
+    TUserContext(const TString& userSID, const TString& userTraceId):
+        UserSID(userSID),
+        UserTraceId(userTraceId)
+    {}
 
+    const TString& GetUserSID() const {
+        return UserSID;
+    }
 
+    const TString& GetUserTraceId() const {
+        return UserTraceId;
+    }
+
+protected:
+    TString UserSID;
+    TString UserTraceId;
+};
+
+class TUserContextBuilder
+{
+public:
+    using TPtr = TIntrusivePtr<TUserContext>;
+
+    TString UserSID{BUILTIN_ACL_NO_USER_SID};
+    TString UserTraceId;
+
+    TUserContextBuilder() {}
+
+    TUserContextBuilder WithUserSID(const TString& userSID) {
+        UserSID = userSID;
+        return *this;
+    }
+
+    TUserContextBuilder WithUserTraceId(const TString& userTraceId) {
+        UserTraceId = userTraceId;
+        return *this;
+    }
+
+    TUserContext::TPtr Build() {
+        return MakeIntrusive<TUserContext>(UserSID, UserTraceId);
+    }
+};
 
 
 }

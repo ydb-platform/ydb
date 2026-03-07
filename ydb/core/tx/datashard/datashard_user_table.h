@@ -336,6 +336,7 @@ struct TUserTable : public TThrRefBase {
         bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
         bool UserSIDs = false;
+        bool TraceIds = false;
 
         TCdcStream() = default;
 
@@ -348,6 +349,7 @@ struct TUserTable : public TThrRefBase {
             , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
             , SchemaChanges(streamDesc.GetSchemaChanges())
             , UserSIDs(streamDesc.GetUserSIDs())
+            , TraceIds(streamDesc.GetTraceIds())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;

@@ -900,11 +900,24 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+
+        TString userSID;
+        TString userTraceId;
+
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            userSID = userCtx->GetUserSID();
+            userTraceId = userCtx->GetUserTraceId();
+        } else {
+            userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        }
+
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(record.GetUserSID()));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(userSID),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserTraceId>(userTraceId));
 
         auto res = ChangesQueue.emplace(record.GetOrder(), record);
         Y_ENSURE(res.second, "Duplicate change record: " << record.GetOrder());
@@ -976,6 +989,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .LockOffset = record.GetLockOffset(),
         });
 
+        auto userCtx = record.GetUserCtx();
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
@@ -987,8 +1001,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(record.GetUserSID())
-        );
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx != nullptr ? userCtx->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx != nullptr? userCtx->GetUserTraceId() : ""));
     }
 }
 
@@ -3370,7 +3384,11 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }
 
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), ev->Get()->Record.GetUserSID()), 
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID(ev->Get()->Record.GetUserSID())
+            .WithUserTraceId(ev->Get()->Record.GetUserTraceId())
+            .Build();
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx),
             ctx );
     }
 }
@@ -3464,8 +3482,11 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
-                        event->Get()->Record.GetUserSID()), ctx);
+                    auto userCtx = NACLib::TUserContextBuilder()
+                        .WithUserSID(event->Get()->Record.GetUserSID())
+                        .WithUserTraceId(event->Get()->Record.GetUserTraceId())
+                        .Build();
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {

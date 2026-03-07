@@ -56,13 +56,14 @@ public:
 
     bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TRowVersion& writeVersion, const TString& userSID) override
+        const TRowVersion& writeVersion, const NACLib::TUserContext::TPtr userCtx) override
     {
         Y_UNUSED(localTid);
+
         WriteVersion = writeVersion;
         WriteTxId = 0;
         for (auto& collector : Underlying) {
-            if (!collector->Collect(tableId, rop, key, updates, userSID)) {
+            if (!collector->Collect(tableId, rop, key, updates, userCtx)) {
                 return false;
             }
         }
@@ -72,12 +73,12 @@ public:
 
     bool OnUpdateTx(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        ui64 writeTxId, const TString& userSID) override
+        ui64 writeTxId, const NACLib::TUserContext::TPtr userCtx) override
     {
         Y_UNUSED(localTid);
         WriteTxId = writeTxId;
         for (auto& collector : Underlying) {
-            if (!collector->Collect(tableId, rop, key, updates, userSID)) {
+            if (!collector->Collect(tableId, rop, key, updates, userCtx)) {
                 return false;
             }
         }
@@ -116,7 +117,7 @@ public:
         const TPathId& pathId,
         TChangeRecord::EKind kind,
         const TDataChange& body,
-        const TString& userSID) override 
+        const NACLib::TUserContext::TPtr userCtx) override
     {
         NIceDb::TNiceDb db(Db);
 
@@ -139,13 +140,14 @@ public:
                 .WithLockOffset(lockOffset);
         }
 
+        Y_UNUSED(userCtx);
         auto recordPtr = builder
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
             .WithSchema(userTable) // used for debugging purposes
             .WithBody(body.SerializeAsString())
-            .WithUserSID(userSID)
+            .WithUserCtx(userCtx)
             .Build();
 
         const auto& record = *recordPtr;

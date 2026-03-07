@@ -133,8 +133,9 @@ public:
         }
     }
 
-    TString GetUserSID() const {
-        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+    NACLib::TUserContext::TPtr GetUserCtx() const {
+        const TString userSID = (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        return NACLib::TUserContextBuilder().WithUserSID(userSID).Build();
     }
 
     bool CheckExecutionComplete() {
@@ -1817,6 +1818,7 @@ private:
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
+            auto userCtx = GetUserCtx();
             if (GetSnapshot().IsValid()
                     && (ReadOnlyTx
                         || Request.UseImmediateEffects
@@ -1830,7 +1832,6 @@ private:
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
                     flags));
-                evData->Record.SetUserSID(GetUserSID());
             } else {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
@@ -1838,7 +1839,10 @@ private:
                     TxId,
                     dataTransaction.SerializeAsString(),
                     flags));
-                evData->Record.SetUserSID(GetUserSID());
+            }
+            if (userCtx != nullptr) {
+                evData->Record.SetUserSID(userCtx->GetUserSID());
+                evData->Record.SetUserTraceId(userCtx->GetUserTraceId());
             }
 
             NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(),
@@ -1870,7 +1874,12 @@ private:
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-        evWriteTransaction->Record.SetUserSID(GetUserSID());
+
+        auto userCtx = GetUserCtx();
+        if (userCtx != nullptr) {
+            evWriteTransaction->Record.SetUserSID(userCtx->GetUserSID());
+            evWriteTransaction->Record.SetUserTraceId(userCtx->GetUserTraceId());
+        }
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
@@ -2398,7 +2407,11 @@ private:
                     locks = it->second->MutableLocks();
                 } else {
                     auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
-                    ev->SetUserSID(GetUserSID());
+                    auto userCtx = GetUserCtx();
+                    if (userCtx != nullptr) {
+                        ev->SetUserSID(userCtx->GetUserSID());
+                        ev->SetUserTraceId(userCtx->GetUserTraceId());
+                    }
                     auto [eIt, success] = evWriteTxs.emplace(shardId, ev);
                     locks = eIt->second->MutableLocks();
                 }

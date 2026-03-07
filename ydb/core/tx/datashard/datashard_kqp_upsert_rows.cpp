@@ -94,7 +94,7 @@ public:
             ui64 nUpdateRow = dsApplyCtx.ShardTableStats->NUpdateRow;
             ui64 updateRowBytes = dsApplyCtx.ShardTableStats->UpdateRowBytes;
 
-            dsApplyCtx.Host->UpdateRow(Owner.TableId, keyTuple, commands, Owner.UserSID);
+            dsApplyCtx.Host->UpdateRow(Owner.TableId, keyTuple, commands, Owner.UserCtx);
 
             if (i64 delta = dsApplyCtx.ShardTableStats->NUpdateRow - nUpdateRow; delta > 0) {
                 dsApplyCtx.TaskTableStats->NUpdateRow += delta;
@@ -140,7 +140,7 @@ public:
 public:
     TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
             TVector<NScheme::TTypeInfo>&& rowTypes, TVector<i32>&& rowTypeMods,
-            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const TString& userSID)
+            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const NACLib::TUserContext::TPtr userCtx)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
@@ -148,7 +148,7 @@ public:
         , RowTypeMods(std::move(rowTypeMods))
         , KeyIndices(std::move(keyIndices))
         , UpsertColumns(std::move(upsertColumns))
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {}
 
 private:
@@ -163,13 +163,13 @@ private:
     TVector<i32> RowTypeMods;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace
 
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const TString& userSID)
+    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr userCtx)
 {
     MKQL_ENSURE_S(callable.GetInputsCount() >= 3);
 
@@ -266,7 +266,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     return new TKqpUpsertRowsWrapper(ctx.Mutables, tableId,
         LocateNode(ctx.NodeLocator, *rowsNode.GetNode()),
         std::move(rowTypes), std::move(rowTypeMods),
-        std::move(keyIndices), std::move(upsertColumns), userSID);
+        std::move(keyIndices), std::move(upsertColumns), userCtx);
 }
 
 } // namespace NMiniKQL

@@ -76,7 +76,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -251,7 +251,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 IEngineFlat::EProtocol::V1,
                 functionRegistry,
                 *TAppData::RandomProvider, *TAppData::TimeProvider,
-                UserSID,
+                UserCtx,
                 nullptr, poolCounters
             );
             proxySettings.EvaluateResultType = true;
@@ -299,7 +299,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     IEngineFlat::EProtocol::V1,
                     functionRegistry,
                     *TAppData::RandomProvider, *TAppData::TimeProvider,
-                    UserSID,
+                    UserCtx,
                     &host, poolCounters
                 );
                 TAutoPtr<IEngineFlat> engine = CreateEngineFlat(engineSettings);
@@ -367,11 +367,11 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            const TString& userSID)
+            const NACLib::TUserContext::TPtr userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {}
 };
 

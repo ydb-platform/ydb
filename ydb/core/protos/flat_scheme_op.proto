@@ -1071,6 +1071,7 @@ message TCdcStreamDescription {
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
+    optional bool TraceIds = 14;
 }
 
 message TCreateCdcStream {

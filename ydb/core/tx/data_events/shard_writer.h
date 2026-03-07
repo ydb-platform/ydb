@@ -188,7 +188,7 @@ private:
     const std::optional<TDuration> Timeout;
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
@@ -204,7 +204,7 @@ public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
         const std::optional<TDuration> timeout = std::nullopt,
-        const TString& userSID = TString());
+        const NACLib::TUserContext::TPtr userCtx = nullptr);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {

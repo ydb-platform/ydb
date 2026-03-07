@@ -16,11 +16,11 @@ class TCdcStreamChangeCollector: public TBaseChangeCollector {
 
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TUpdateOp> updates,
-        const TString& userSID);
+        const NACLib::TUserContext::TPtr userCtx);
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags,
-        const TString& userSID);
+        const NACLib::TUserContext::TPtr userCtx);
 
 public:
     using TBaseChangeCollector::TBaseChangeCollector;
@@ -30,7 +30,7 @@ public:
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TString& userSID) override;
+        const NACLib::TUserContext::TPtr userCtx) override;
 
 private:
     mutable TMaybe<bool> CachedNeedToReadKeys;

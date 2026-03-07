@@ -85,10 +85,10 @@ private:
 } // namespace
 
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const TString& userSID)
+    TKqpDatashardComputeContext& computeCtx, const NACLib::TUserContext::TPtr userCtx)
 {
     Y_UNUSED(computeCtx);
-    Y_UNUSED(userSID);
+    Y_UNUSED(userCtx);
 
     TComputationNodePtrVector effectNodes;
     effectNodes.reserve(callable.GetInputsCount());

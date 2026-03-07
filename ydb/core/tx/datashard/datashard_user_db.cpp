@@ -118,7 +118,7 @@ void TDataShardUserDb::UpsertRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     const ui32 DefaultFilledColumnCount,
-    const TString& userSID
+    const NACLib::TUserContext::TPtr userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -126,14 +126,14 @@ void TDataShardUserDb::UpsertRow(
 
     auto opsWithoutNoNeedDefault = RemoveDefaultColumnsIfNeeded(tableId, key, ops, DefaultFilledColumnCount);
 
-    UpsertRow(tableId, key, opsWithoutNoNeedDefault, userSID);
+    UpsertRow(tableId, key, opsWithoutNoNeedDefault, userCtx);
 }
 
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TString& userSID
+    const NACLib::TUserContext::TPtr userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -177,10 +177,10 @@ void TDataShardUserDb::UpsertRow(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, userSID);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, userCtx);
         IncreaseUpdateCounters(key, extendedOps);
     } else {
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userSID);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
         IncreaseUpdateCounters(key, ops);
     }
 }
@@ -189,12 +189,12 @@ void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
-    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops, userSID);
+    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -203,7 +203,7 @@ void TDataShardUserDb::InsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
@@ -215,7 +215,7 @@ void TDataShardUserDb::InsertRow(
         throw TUniqueConstrainException();
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userSID);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -224,7 +224,7 @@ void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -242,7 +242,7 @@ void TDataShardUserDb::UpdateRow(
         return;
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userSID);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
 
     IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
@@ -253,7 +253,7 @@ void TDataShardUserDb::IncrementRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     bool insertMissing,
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
@@ -268,7 +268,7 @@ void TDataShardUserDb::IncrementRow(
 
     if (currentRow.Size() == 0) {
         if (insertMissing) {
-            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userSID);
+            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
             IncreaseUpdateCounters(key, ops);
         }
         return;
@@ -294,7 +294,7 @@ void TDataShardUserDb::IncrementRow(
         newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps, userSID);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -302,7 +302,7 @@ void TDataShardUserDb::IncrementRow(
 void TDataShardUserDb::EraseRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -316,7 +316,7 @@ void TDataShardUserDb::EraseRow(
         }
     }
 
-    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {}, userSID);
+    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {}, userCtx);
 
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -361,7 +361,7 @@ void TDataShardUserDb::UpsertRowInt(
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops, 
-    const TString& userSID)
+    const NACLib::TUserContext::TPtr userCtx)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
@@ -378,12 +378,12 @@ void TDataShardUserDb::UpsertRowInt(
 
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
-        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion, userSID))
+        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion, userCtx))
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userSID))
+        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);

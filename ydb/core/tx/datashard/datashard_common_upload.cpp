@@ -223,17 +223,20 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (ChangeCollector) {
                 Y_ENSURE(CollectChanges);
 
-                TString userSID = Ev->Get()->GetUserSID();
+                auto userCtx = NACLib::TUserContextBuilder()
+                    .WithUserSID(Ev->Get()->GetUserSID())
+                    .WithUserTraceId(Ev->Get()->GetUserTraceId())
+                    .Build();
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {
                         throw TNeedGlobalTxId();
                     }
 
-                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId, userSID)) {
+                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId, userCtx)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion, userSID)) {
+                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion, userCtx)) {
                         pageFault = true;
                     }
                 }

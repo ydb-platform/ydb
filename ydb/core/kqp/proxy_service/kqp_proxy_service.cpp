@@ -1465,7 +1465,8 @@ private:
 
         IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
-            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService, clientSid);
+            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService,
+            NACLib::TUserContextBuilder().WithUserSID(clientSid).Build());
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);

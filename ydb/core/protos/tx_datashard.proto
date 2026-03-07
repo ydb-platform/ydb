@@ -635,6 +635,7 @@ message TEvProposeTransaction {
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
     optional bool MvccSnapshotRepeatable = 11 [default = true];
     optional string UserSID = 12;
+    optional string UserTraceId = 13;
 }
 
 message TEvCancelTransactionProposal {
@@ -973,6 +974,7 @@ message TEvUploadRowsRequest {
     optional bool UpsertIfExists = 8 [ default = false ];
     optional uint64 SchemaVersion = 9;
     optional string UserSID = 10;
+    optional string UserTraceId = 11;
 }
 
 message TEvUploadRowsResponse {

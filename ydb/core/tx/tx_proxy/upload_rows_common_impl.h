@@ -108,7 +108,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    const TString& userSID);
+    const NACLib::TUserContext::TPtr userCtx);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -133,7 +133,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -213,12 +213,12 @@ public:
     }
 
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
-                             const TString& userSID,
+                             const NACLib::TUserContext::TPtr userCtx,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
                              NWilson::TSpan span = {})
         : TBase()
-        , UserSID(userSID)
+        , UserCtx(userCtx)
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
@@ -950,7 +950,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserSID);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -1127,7 +1127,10 @@ private:
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
-        ev->Record.SetUserSID(UserSID);
+        if (UserCtx!=nullptr) {
+            ev->Record.SetUserSID(UserCtx->GetUserSID());
+            ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+        }
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
             row->SetKeyColumns(pr.first.GetBuffer());
@@ -1175,7 +1178,8 @@ private:
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
-                ev->Record.SetUserSID(UserSID);
+                ev->Record.SetUserSID(UserCtx->GetUserSID());
+                ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 if (keyRange->TableId.SchemaVersion) {

@@ -165,7 +165,7 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
-A special type of **secondary index** is singled out separately - [vector index](#vector-index).
+Special types of **secondary index** are singled out separately: [vector index](#vector-index) and [local Bloom skip index](#local-bloom-skip-index).
 
 #### Vector Index {#vector-index}
 
@@ -174,6 +174,9 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 **Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
 
+#### Local Bloom skip index {#local-bloom-skip-index}
+
+A **local Bloom skip index** is a compact per-granule filter used on [column-oriented tables](#column-oriented-table) to speed up selective queries by skipping data granules that do not contain the required values. Unlike global [secondary indexes](#secondary-index), it is stored locally within each table shard and does not support multi-column keys or cover columns. {{ ydb-short-name }} supports `bloom_filter` and `bloom_ngram_filter` index types; creation and parameters are described in [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom-column).
 
 #### Column family {#column-family}
 

@@ -21,6 +21,8 @@ CREATE TABLE `<table_name>` (
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+**Ограничения по типам таблиц.** Глобальные вторичные индексы (`GLOBAL`) и векторные индексы поддерживаются только для [строковых таблиц](../../../../concepts/datamodel/table.md#row-oriented-tables). Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) общая функциональность вторичных индексов (включая GLOBAL) пока в разработке; при этом в `CREATE TABLE` уже можно задавать **локальные Bloom skip индексы**: `INDEX ... LOCAL USING bloom_filter` или `INDEX ... LOCAL USING bloom_ngram_filter`. Параметры и типы индексов см. в [ALTER TABLE ADD INDEX — Локальные Bloom skip индексы](../alter_table/indexes.md#local-bloom-column).
+
 ## Пример
 
 ```yql
@@ -33,4 +35,20 @@ CREATE TABLE my_table (
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
     PRIMARY KEY (a)
 )
+```
+
+### Колоночная таблица с локальным Bloom skip индексом
+
+```yql
+CREATE TABLE events (
+    ts Timestamp NOT NULL,
+    user_id Uint64 NOT NULL,
+    resource_id Utf8,
+    PRIMARY KEY (ts, user_id),
+    INDEX idx_bloom LOCAL USING bloom_filter
+        ON (resource_id)
+        WITH (false_positive_probability = 0.01)
+)
+WITH (STORE = COLUMN)
+PARTITION BY HASH(ts, user_id);
 ```

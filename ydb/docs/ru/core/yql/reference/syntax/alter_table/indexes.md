@@ -31,6 +31,8 @@ ALTER TABLE `<table_name>`
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
+Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) добавление **глобальных вторичных** и **векторных** индексов пока не поддерживается (см. примечание выше). При этом добавление **локальных Bloom skip индексов** поддерживается; см. [Локальные Bloom skip индексы для колоночных таблиц](#local-bloom-column).
+
 ### Примеры
 
 Вторичный индекс:
@@ -53,6 +55,51 @@ ALTER TABLE `series`
     vector_dimension=512,
     clusters=128,
     levels=2
+  );
+```
+
+### Локальные Bloom skip индексы для колоночных таблиц {#local-bloom-column}
+
+Локальные Bloom skip индексы поддерживаются **только для колоночных таблиц** (`STORE = COLUMN`). Они позволяют пропускать гранулы данных, не содержащие искомых значений, и ускоряют селективные запросы.
+
+Для локальных Bloom skip индексов действуют дополнительные ограничения реализации:
+
+* выражение `ON (...)` должно содержать **ровно одну** колонку;
+* секция `COVER (...)` и data columns для таких индексов **не поддерживаются**.
+
+**Типы индексов:**
+
+* `bloom_filter` — фильтр Блума по значениям колонки. Параметр:
+  * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`).
+
+* `bloom_ngram_filter` — N-граммный фильтр Блума для строковых колонок. Параметры:
+  * `ngram_size` — размер n-граммы (например, `3`);
+  * `hashes_count` — количество хеш-функций;
+  * `filter_size_bytes` — размер фильтра в байтах;
+  * `records_count` — ожидаемое число различных значений в грануле;
+  * `case_sensitive` — необязательный, `true` или `false` (по умолчанию `true`).
+
+**Пример: добавление индекса Bloom filter**
+
+```yql
+ALTER TABLE `/Root/olapTable`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+**Пример: добавление индекса N-gram Bloom filter**
+
+```yql
+ALTER TABLE `/Root/olapTable`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (resource_id)
+  WITH (
+    ngram_size = 3,
+    hashes_count = 2,
+    filter_size_bytes = 512,
+    records_count = 1024,
+    case_sensitive = true
   );
 ```
 

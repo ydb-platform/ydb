@@ -21,7 +21,7 @@ where:
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+**Table type limitations.** Regular global secondary indexes (`GLOBAL`) and vector indexes are currently supported only on [row-oriented tables](../../../../concepts/datamodel/table.md#row-oriented-tables). For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), general secondary index functionality (including GLOBAL indexes) is still under development. However, you can already define **local Bloom skip indexes** in `CREATE TABLE` using `INDEX ... LOCAL USING bloom_filter` or `INDEX ... LOCAL USING bloom_ngram_filter`. See [ALTER TABLE ADD INDEX — Local Bloom skip indexes](../alter_table/indexes.md#local-bloom-column) for parameters and index types.
 
 ## Example
 
@@ -36,4 +36,20 @@ CREATE TABLE my_table (
     INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
     PRIMARY KEY (a)
 )
+```
+
+### Column-oriented table with local Bloom skip index
+
+```yql
+CREATE TABLE events (
+    ts Timestamp NOT NULL,
+    user_id Uint64 NOT NULL,
+    resource_id Utf8,
+    PRIMARY KEY (ts, user_id),
+    INDEX idx_bloom LOCAL USING bloom_filter
+        ON (resource_id)
+        WITH (false_positive_probability = 0.01)
+)
+WITH (STORE = COLUMN)
+PARTITION BY HASH(ts, user_id);
 ```

@@ -164,11 +164,11 @@ Y_UNIT_TEST(SinleLineString) {
     Check("\" \"", "STRING_VALUE(\" \") EOF");
     Check("\"test\"", "STRING_VALUE(\"test\") EOF");
 
-    Check("\"\\\"\"", "STRING_VALUE(\"\\\"\") EOF", /* ansi = */ false);
-    Check("\"\\\"\"", "[INVALID] STRING_VALUE(\"\\\") EOF", /* ansi = */ true);
+    Check(R"("\"")", R"(STRING_VALUE("\"") EOF)", /* ansi = */ false);
+    Check(R"("\"")", R"([INVALID] STRING_VALUE("\") EOF)", /* ansi = */ true);
 
-    Check("\"\"\"\"", "STRING_VALUE(\"\") STRING_VALUE(\"\") EOF", /* ansi = */ false);
-    Check("\"\"\"\"", "STRING_VALUE(\"\"\"\") EOF", /* ansi = */ true);
+    Check(R"("""")", R"(STRING_VALUE("") STRING_VALUE("") EOF)", /* ansi = */ false);
+    Check(R"("""")", R"(STRING_VALUE("""") EOF)", /* ansi = */ true);
 }
 
 Y_UNIT_TEST(MultiLineString) {

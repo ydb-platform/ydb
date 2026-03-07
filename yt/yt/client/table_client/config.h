@@ -129,6 +129,15 @@ DEFINE_REFCOUNTED_TYPE(TSlimVersionedWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCompactionHintWriterConfig
+{
+    // Both being overwritten by mount config, not registered in TChunkWriterConfig.
+    TTDigestConfigPtr RowDigest;
+    TMinHashDigestConfigPtr MinHashDigest;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkWriterConfig
     : public NChunkClient::TEncodingWriterConfig
 {
@@ -159,10 +168,8 @@ struct TChunkWriterConfig
 
     TSlimVersionedWriterConfigPtr Slim;
 
-    TVersionedRowDigestConfigPtr VersionedRowDigest;
-
     // Being overwritten by mount config, not registered in TChunkWriterConfig.
-    TMinHashDigestConfigPtr MinHashDigest;
+    TCompactionHintWriterConfig CompactionHintWriter;
 
     TChunkWriterTestingOptionsPtr TestingOptions;
 
@@ -445,21 +452,6 @@ struct TChunkWriterOptions
 };
 
 DEFINE_REFCOUNTED_TYPE(TChunkWriterOptions)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TVersionedRowDigestConfig
-    : public NYTree::TYsonStruct
-{
-    bool Enable;
-    TTDigestConfigPtr TDigest;
-
-    REGISTER_YSON_STRUCT(TVersionedRowDigestConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

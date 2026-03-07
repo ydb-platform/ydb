@@ -91,7 +91,7 @@ public:
             {"1", "\"  space  another space  \"", {"\"  space  another space  \""}},
             {"1", "\"привет\"", {"\"привет\""}},
             // NOTE: escaping is added by library/cpp/json
-            {"1", "\"\r\n\t\"", {"\"\\r\\n\\t\""}},
+            {"1", "\"\r\n\t\"", {R"("\r\n\t")"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -108,7 +108,7 @@ public:
             {R"({"key": 123, "another_key": 456})", "           $.another_key    ", {"456"}},
 
             {R"({"key": 123, "another_key": 456})", "$.key", {"123"}},
-            {R"({"k\"ey": 123, "another_key": 456})", "$.\"k\\\"ey\"", {"123"}},
+            {R"({"k\"ey": 123, "another_key": 456})", R"($."k\"ey")", {"123"}},
             {R"({"k\"ey": 123, "another_key": 456})", "$.'k\\\"ey'", {"123"}},
 
             {R"({"key": 123, "another_key": 456})", "$.'key'", {"123"}},

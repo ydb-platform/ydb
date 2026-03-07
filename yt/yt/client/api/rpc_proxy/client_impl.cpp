@@ -309,6 +309,27 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
     }));
 }
 
+TFuture<void> TClient::SetUserBanned(
+    const std::string&,
+    bool,
+    const TSetUserBannedOptions&)
+{
+    ThrowUnimplemented("SetUserBanned");
+}
+
+TFuture<bool> TClient::GetUserBanned(
+    const std::string&,
+    const TGetUserBannedOptions&)
+{
+    ThrowUnimplemented("GetUserBanned");
+}
+
+TFuture<std::vector<std::string>> TClient::ListBannedUsers(
+    const TListBannedUsersOptions&)
+{
+    ThrowUnimplemented("ListBannedUsers");
+}
+
 IPrerequisitePtr TClient::AttachPrerequisite(
     NPrerequisiteClient::TPrerequisiteId prerequisiteId,
     const TPrerequisiteAttachOptions& options)

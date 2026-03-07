@@ -49,12 +49,12 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 
     while (RowsFuture_ &&
         RowsFuture_.IsSet() &&
-        RowsFuture_.BlockingGet().IsOK() &&
+        RowsFuture_.GetOrCrash().IsOK() &&
         !Finished_ &&
         std::ssize(rows) < options.MaxRowsPerRead &&
         dataWeight < options.MaxDataWeightPerRead)
     {
-        const auto& currentRows = RowsFuture_.BlockingGet().Value();
+        const auto& currentRows = RowsFuture_.GetOrCrash().Value();
 
         if (currentRows.Empty()) {
             ReadyEvent_.Set();

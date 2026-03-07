@@ -7,6 +7,11 @@
 
 namespace NYql::NFmr {
 
+TFmrStageOperationManagerBase::TFmrStageOperationManagerBase(TIntrusivePtr<IRandomProvider> randomProvider)
+    : RandomProvider_(randomProvider)
+{
+}
+
 TPrepareStageResult TFmrStageOperationManagerBase::PrepareOperationStage(
     const TPrepareOperationStageContext& context
 ) {
@@ -51,9 +56,13 @@ TGenerateTasksResult TFmrStageOperationManagerBase::GenerateTasksForCurrentStage
     return generateResult;
 }
 
-TAdvanceStageResult TFmrStageOperationManagerBase::AdvanceToNextStage(const TAdvanceStageContext& /* context */) {
+TAdvanceStageResult TFmrStageOperationManagerBase::AdvanceToNextStage() {
     Finished_ = true;
     return TAdvanceStageResult{.HasNextStage = false};
+}
+
+TString TFmrStageOperationManagerBase::GenerateId() {
+    return GetGuidAsString(RandomProvider_->GenGuid());
 }
 
 } // namespace NYql::NFmr

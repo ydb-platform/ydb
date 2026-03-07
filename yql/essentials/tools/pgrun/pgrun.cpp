@@ -992,7 +992,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
 
         columnOrder.AddColumn(TString(colName));
 
-        ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
+        ysonType << fmt::format(R"(["{0}";["{1}";"{2}";];];)",
                                 colName, colTypeNode->Content(),
                                 colTypeNode->Child(0)->Content());
     }

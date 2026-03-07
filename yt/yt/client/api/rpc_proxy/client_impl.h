@@ -146,6 +146,18 @@ public:
     TFuture<NApi::IPrerequisitePtr> StartChaosLease(
         const TChaosLeaseStartOptions& options = {}) override;
 
+    TFuture<void> SetUserBanned(
+        const std::string& user,
+        bool isBanned,
+        const TSetUserBannedOptions& options = {}) override;
+
+    TFuture<bool> GetUserBanned(
+        const std::string& user,
+        const TGetUserBannedOptions& options = {}) override;
+
+    TFuture<std::vector<std::string>> ListBannedUsers(
+        const TListBannedUsersOptions& options = {}) override;
+
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
         const TSignedWriteFragmentCookiePtr& cookie,

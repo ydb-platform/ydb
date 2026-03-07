@@ -21,7 +21,7 @@ size_t GetByteSize(const TVersionedValue& value)
     return EstimateRowValueSize(static_cast<TUnversionedValue>(value)) + MaxVarInt64Size;
 }
 
-size_t GetDataWeight(const TVersionedValue& value)
+i64 GetDataWeight(const TVersionedValue& value)
 {
     return GetDataWeight(static_cast<TUnversionedValue>(value)) + sizeof(TTimestamp);
 }
@@ -68,13 +68,13 @@ size_t GetVersionedRowByteSize(
         sizeof(TTimestamp) * deleteTimestampCount;
 }
 
-size_t GetDataWeight(TVersionedRow row)
+i64 GetDataWeight(TVersionedRow row)
 {
     if (!row) {
         return 0;
     }
 
-    size_t result = 0;
+    i64 result = 0;
     result += std::accumulate(
         row.BeginValues(),
         row.EndValues(),

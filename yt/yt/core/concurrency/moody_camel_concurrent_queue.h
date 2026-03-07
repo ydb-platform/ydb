@@ -2468,7 +2468,8 @@ private:
         }
 
         template <AllocationMode allocMode, typename U>
-        inline bool enqueue(U&& element)
+        // TODO(YT-27514): Describe exact reason of a false positive tsan warning.
+        MOODYCAMEL_NO_TSAN inline bool enqueue(U&& element)
         {
             index_t currentTailIndex = this->tailIndex.load(std::memory_order::relaxed);
             index_t newTailIndex = 1 + currentTailIndex;

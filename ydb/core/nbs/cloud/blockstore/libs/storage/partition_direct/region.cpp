@@ -5,10 +5,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
-    TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr> directBlockGroups)
+    TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr> directBlockGroups,
+    ui32 syncRequestsBatchSize)
 {
     for (size_t i = 0; i < directBlockGroups.size(); i++) {
-        VChunks.emplace_back(i, std::move(directBlockGroups[i]));
+        auto vChunk = std::make_shared<TVChunk>(
+            i,
+            std::move(directBlockGroups[i]),
+            syncRequestsBatchSize);
+        vChunk->Start();
+        VChunks.push_back(std::move(vChunk));
     }
 }
 
@@ -22,7 +28,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
         GetVChunkOffset(request->Range.Start),
         request->Range.Size());
 
-    return VChunks[vChunkIndex].ReadBlocksLocal(
+    return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -38,7 +44,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         GetVChunkOffset(request->Range.Start),
         request->Range.Size());
 
-    return VChunks[vChunkIndex].WriteBlocksLocal(
+    return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));

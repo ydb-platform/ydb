@@ -83,12 +83,12 @@ TWriteRequestHandler::TWriteRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId)
+    ui64 tabletId,
+    NThreading::TPromise<TWriteBlocksLocalResponse> promise)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
+    , Promise(std::move(promise))
 {
-    Future = NThreading::NewPromise<TWriteBlocksLocalResponse>();
-
     Span = NWilson::TSpan(
         TWilsonNbs::NbsTopLevel,
         std::move(traceId),
@@ -148,8 +148,7 @@ void TWriteRequestHandler::OnWriteRequested(
         TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
 }
 
-TVector<TWriteRequestHandler::TPersistentBufferWriteMeta>
-TWriteRequestHandler::GetWritesMeta() const
+TVector<TPersistentBufferWriteMeta> TWriteRequestHandler::GetWritesMeta() const
 {
     TVector<TPersistentBufferWriteMeta> result;
     for (const auto& [_, writeMeta]: WriteMetaByRequestId) {
@@ -157,12 +156,6 @@ TWriteRequestHandler::GetWritesMeta() const
     }
 
     return result;
-}
-
-NThreading::TFuture<TWriteBlocksLocalResponse>
-TWriteRequestHandler::GetFuture() const
-{
-    return Future.GetFuture();
 }
 
 TGuardedSgList TWriteRequestHandler::GetData()
@@ -174,7 +167,7 @@ void TWriteRequestHandler::SetResponse(NProto::TError error)
 {
     TWriteBlocksLocalResponse response;
     response.Error = std::move(error);
-    Future.SetValue(std::move(response));
+    Promise.SetValue(std::move(response));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,9 +177,11 @@ TSyncRequestHandler::TSyncRequestHandler(
     ui32 vChunkIndex,
     ui8 persistentBufferIndex,
     NWilson::TTraceId traceId,
-    ui64 tabletId)
+    ui64 tabletId,
+    TVector<TSyncRequest> syncRequests)
     : TBaseRequestHandler(actorSystem, vChunkIndex)
     , PersistentBufferIndex(persistentBufferIndex)
+    , SyncRequests(std::move(syncRequests))
 {
     Span = NWilson::TSpan(
         TWilsonNbs::NbsBasic,
@@ -241,8 +236,7 @@ ui64 TSyncRequestHandler::OnSyncRequested(ui64 startIndex, ui64 lsn)
     return SyncRequests.size();
 }
 
-const TVector<TSyncRequestHandler::TSyncRequest>&
-TSyncRequestHandler::GetSyncRequests() const
+const TVector<TSyncRequest>& TSyncRequestHandler::GetSyncRequests() const
 {
     return SyncRequests;
 }
@@ -340,13 +334,14 @@ TReadRequestHandler::TReadRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId)
+    ui64 tabletId,
+    NThreading::TPromise<TReadBlocksLocalResponse> promise)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
+    , Promise(std::move(promise))
 {
     Y_UNUSED(traceId);
     Y_UNUSED(tabletId);
-    Future = NThreading::NewPromise<TReadBlocksLocalResponse>();
 
     Span = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsTopLevel,
@@ -390,12 +385,6 @@ bool TReadRequestHandler::IsCompleted(ui64 requestId)
     return true;
 }
 
-NThreading::TFuture<TReadBlocksLocalResponse>
-TReadRequestHandler::GetFuture() const
-{
-    return Future.GetFuture();
-}
-
 TGuardedSgList TReadRequestHandler::GetData()
 {
     return Request->Sglist;
@@ -405,7 +394,7 @@ void TReadRequestHandler::SetResponse(NProto::TError error)
 {
     TReadBlocksLocalResponse response;
     response.Error = std::move(error);
-    Future.SetValue(std::move(response));
+    Promise.SetValue(std::move(response));
 }
 
 TOverallAckRequestHandler::TOverallAckRequestHandler(
@@ -418,6 +407,7 @@ TOverallAckRequestHandler::TOverallAckRequestHandler(
     : TBaseRequestHandler(actorSystem, vChunkIndex)
     , RequiredAckCount(requiredAckCount)
     , Name(std::move(name))
+    , Promise(NThreading::NewPromise<void>())
 {
     Span = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsTopLevel,

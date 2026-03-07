@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
+#include <algorithm>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
@@ -82,6 +83,56 @@ public:
         , Processor(processor) {
         AFL_VERIFY(Request);
         AFL_VERIFY(Processor);
+    }
+};
+
+class TSnapshotHolders {
+    const TSnapshot minReadSnapshot;
+    // sorted from older to younger
+    const std::vector<TSnapshot> txInFlight;
+
+    public:
+    TSnapshotHolders(TSnapshot minReadSnapshot, std::vector<TSnapshot> txInFlight)
+        : minReadSnapshot(std::move(minReadSnapshot))
+        , txInFlight(std::move(txInFlight)) {
+        AFL_VERIFY(std::is_sorted(this->txInFlight.begin(), this->txInFlight.end()));
+        if (!txInFlight.empty()) {
+            AFL_VERIFY(txInFlight.back() < minReadSnapshot);
+        }
+    }
+
+    const TSnapshot GetMinReadSnapshot() const {
+        return minReadSnapshot;
+    }
+
+    bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
+        return CouldUse(
+            [&portion](const TSnapshot& snapshot) { return portion->IsRemovedFor(snapshot); },
+            [&portion](const TSnapshot& snapshot) { return portion->IsVisible(snapshot, true); }
+        );
+    }
+
+    template <class TIsRemovedFor, class TIsVisible>
+    bool CouldUse(const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const {
+        // the portion can be used by new scans
+        if (!isRemovedFor(minReadSnapshot)) {
+            return true;
+        }
+
+        // loop invariant: all txs older than curTx couldn't use the portion
+        for (const auto& txSnapshot : txInFlight) {
+            // this and all younger txs cannot see the portion
+            if (isRemovedFor(txSnapshot)) {
+                return false;
+            }
+            // the tx could use this portion
+            if (isVisible(txSnapshot)) {
+                return true;
+            }
+            // cur tx could not use the portion, but maybe the next tx could
+        }
+        // we have not found any txs that could use the portion
+        return false;
     }
 };
 
@@ -164,7 +215,7 @@ public:
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept = 0;
-    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
+    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,

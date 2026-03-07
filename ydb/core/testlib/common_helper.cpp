@@ -53,7 +53,7 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 }
 
 void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+    NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
@@ -109,7 +109,7 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
 }
 
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+    NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
@@ -144,7 +144,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
 }
 
 void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+    NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
@@ -171,7 +171,7 @@ void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const b
 }
 
 void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
-    NYdb::NQuery::TQueryClient qClient(Server.GetDriver(),
+    NYdb::NQuery::TQueryClient qClient(*Driver,
         NYdb::NQuery::TClientSettings().AuthToken(AuthToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);

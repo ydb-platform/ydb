@@ -1178,6 +1178,12 @@ private:
                     return TStatus::Error;
                 }
                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+            } else if (type == "globalJson") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
@@ -1280,6 +1286,7 @@ private:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
+                case TIndexDescription::EType::GlobalJson:
                     // no specialized index description
                     // no settings validation
                     break;

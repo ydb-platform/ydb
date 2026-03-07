@@ -1329,6 +1329,12 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+            FillGlobalIndexSettings(
+                *index->mutable_global_json_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
 
@@ -1410,6 +1416,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson);
             break;
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:

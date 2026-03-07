@@ -800,6 +800,14 @@ void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexTyp
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, dataColumns, indexSettings);
 }
 
+void TTableDescription::AddJsonIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalJson, indexColumns);
+}
+
+void TTableDescription::AddJsonIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalJson, indexColumns, dataColumns);
+}
+
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
     AddSyncSecondaryIndex(indexName, indexColumns);
 }
@@ -2796,6 +2804,10 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
     }
+    case TProto::kGlobalJsonIndex:
+        type = EIndexType::GlobalJson;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_json_index().settings()));
+        break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
@@ -2886,6 +2898,13 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::GlobalJson: {
+        auto& settings = *proto.mutable_global_json_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
+        }
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -2911,6 +2930,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalSync:
     case EIndexType::GlobalAsync:
     case EIndexType::GlobalUnique:
+    case EIndexType::GlobalJson:
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:

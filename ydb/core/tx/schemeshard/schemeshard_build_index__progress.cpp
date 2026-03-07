@@ -1114,13 +1114,22 @@ private:
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetIndexName(buildInfo.TargetName);
         ev->Record.SetDocsTableName(GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::DocsTable).PathString());
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings();
+        if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson) {
+            auto *settings = ev->Record.MutableSettings();
+            for (auto& column: buildInfo.IndexColumns) {
+                settings->add_columns()->set_column(column);
+            }
+        } else {
+            *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
+                buildInfo.SpecializedIndexDescription).GetSettings();
+        }
         *ev->Record.MutableDataColumns() = {
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
             ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+        } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson) {
+            ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::Json);
         }
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);

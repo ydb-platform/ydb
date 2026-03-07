@@ -1,8 +1,10 @@
+#include "flat_executor_backup.h"
+
 #include "flat_backup.h"
 #include "flat_boot_cookie.h"
 #include "flat_dbase_apply.h"
 #include "flat_dbase_scheme.h"
-#include "flat_executor_backup.h"
+#include "flat_executor_backup_common.h"
 #include "flat_redo_player.h"
 #include "flat_row_state.h"
 #include "flat_sausage_slicer.h"
@@ -26,7 +28,6 @@
 
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
 
@@ -306,15 +307,10 @@ public:
         }
     }
 
-    static TString FinalizeDigest(NOpenSsl::NSha256::TCalcer& calcer) {
-        auto digest = calcer.Final();
-        return to_lower(HexEncode(digest.data(), digest.size()));
-    }
-
     static NJson::TJsonValue MakeFileEntry(const TString& name, NOpenSsl::NSha256::TCalcer& calcer) {
         NJson::TJsonValue entry;
         entry["name"] = name;
-        entry["sha256"] = FinalizeDigest(calcer);
+        entry["sha256"] = FormatChecksumDigest(calcer.Final());
         return entry;
     }
 
@@ -356,8 +352,7 @@ public:
             manifestFile.Write(manifestStr.data(), manifestStr.size());
             manifestFile.Flush();
 
-            const auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            const TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            const TString manifestChecksum = ComputeChecksum(manifestStr);
 
             auto checksumPath = SnapshotPath.Child("manifest.json.sha256");
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
@@ -691,11 +686,12 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
     };
 public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
-                     TIntrusiveConstPtr<TBackupExclusion> exclusion)
+                     TIntrusiveConstPtr<TBackupExclusion> exclusion, ui32 generation, ui32 step)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
         , Schema(schema)
         , Exclusion(exclusion)
+        , PreviousChecksum(ComputeInitialChecksum(generation, step))
     {}
 
     void Bootstrap() {
@@ -725,6 +721,7 @@ public:
     void Handle(TEvWriteChangelog::TPtr& ev) {
         LOG_D("Handle " << ev->ToString());
 
+        auto bufferStart = Buffer.Size();
         TBufferOutput out(Buffer);
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
@@ -818,6 +815,12 @@ public:
         }
 
         if (hasCommit) {
+            TStringBuf commit(Buffer.data() + bufferStart, Buffer.Size() - bufferStart);
+            // previous commit checksum & current commit without sha256 field
+            PreviousChecksum = ComputeChecksum(commit, ",", "}", PreviousChecksum);
+
+            b.WriteKey("sha256");
+            b.WriteString(PreviousChecksum);
             b.EndObject();
             out << '\n';
         }
@@ -901,6 +904,8 @@ private:
     bool Dying = false;
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
+
+    TString PreviousChecksum;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
@@ -930,7 +935,7 @@ IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTablet
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TChangelogWriter(owner, path, schema, exclusion);
+        return new TChangelogWriter(owner, path, schema, exclusion, generation, step);
     } else {
         return nullptr;
     }

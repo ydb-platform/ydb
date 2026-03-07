@@ -7,10 +7,10 @@ To connect to an external {{ ydb-short-name }} database from another {{ ydb-shor
 1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
 
     ```yql
-    CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../datamodel/external_data_source.md) describing the external {{ ydb-short-name }} database. The `LOCATION` parameter contains the network address of the {{ ydb-short-name }} instance to which the network connection is made. The `DATABASE_NAME` specifies the name of the database (e.g., `local`). For authentication to the external database, the `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used. Encryption of connections to the external database can be enabled using the `USE_TLS="TRUE"` parameter. If encryption is enabled, the `<port>` field in the `LOCATION` parameter should specify the gRPCs port of the external {{ ydb-short-name }}; otherwise, the gRPC port should be specified.
+2. Create an [external data source](../datamodel/external_data_source.md) describing the external {{ ydb-short-name }} database. The `LOCATION` parameter contains the network address of the {{ ydb-short-name }} instance to which the network connection is made. The `DATABASE_NAME` specifies the name of the database (e.g., `local`). For authentication to the external database, the `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used. Encryption of connections to the external database can be enabled using the `USE_TLS="TRUE"` parameter. If encryption is enabled, the `<port>` field in the `LOCATION` parameter should specify the gRPCs port of the external {{ ydb-short-name }}; otherwise, the gRPC port should be specified.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
@@ -19,7 +19,7 @@ To connect to an external {{ ydb-short-name }} database from another {{ ydb-shor
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="ydb_datasource_user_password",
+        PASSWORD_SECRET_PATH="ydb_datasource_user_password",
         USE_TLS="TRUE"
     );
     ```

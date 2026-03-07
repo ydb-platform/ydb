@@ -12,7 +12,7 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   AUTH_METHOD="BASIC",
   USE_TLS="TRUE",
   LOGIN="login",
-  PASSWORD_SECRET_NAME="test_password_name",
+  PASSWORD_SECRET_PATH="test_password_path",
   PROTOCOL="NATIVE"
 );
 ```

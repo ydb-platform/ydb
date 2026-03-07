@@ -1,29 +1,29 @@
-# Векторный поиск
+# Vector search
 
-В данном разделе содержатся рецепты кода на разных языках программирования для решения задач [векторного поиска](../../concepts/query_execution/vector_search.md) с использованием {{ ydb-short-name }} SDK.
+This section contains code recipes in various programming languages for solving vector search tasks using the {{ ydb-short-name }} SDK.
 
-Подробно будут разобраны операции:
+The following operations are covered in detail:
 
-* [Подключение к YDB](#connect-ydb)
-* [Создание таблицы для хранения векторов](#create-table)
-* [Вставка векторов в таблицу](#insert-vectors)
-* [Добавление векторного индекса](#add-vector-index)
-* [Поиск ближайших векторов](#search-by-vector)
+* [Connecting to YDB](#connect-ydb)
+* [Creating a table for storing vectors](#create-table)
+* [Inserting vectors into the table](#insert-vectors)
+* [Adding a vector index](#add-vector-index)
+* [Searching for the nearest vectors](#search-by-vector)
 
-В данном рецепте будет создано хранилище текстов со следующей структурой:
+This recipe creates a text store with the following structure:
 
-|Поле|Пояснение|
+|Field|Description|
 |---|---|
-|`id`|Идентификатор текста|
-|`document`|Текст|
-|`embedding`|Векторное представление текста|
+|`id`|Text identifier|
+|`document`|Text|
+|`embedding`|Vector representation of the text|
 
-В рецепте предполагается, что `embedding` уже имеется.
+The recipe assumes that `embedding` is already available.
 
-## Подключение к {{ ydb-short-name }} {#connect-ydb}
+## Connecting to {{ ydb-short-name }} {#connect-ydb}
 
-В данной секции описаны минимально необходимые действия для выполнения запросов в {{ ydb-short-name }}.
-Для получения более подробной информации о подключении к {{ ydb-short-name }} обратитесь к статье [{#T}](./init.md).
+This section describes the minimum steps required to execute queries in {{ ydb-short-name }}.
+For more details on connecting to {{ ydb-short-name }}, refer to [{#T}](./init.md).
 
 {% list tabs %}
 
@@ -33,7 +33,7 @@
 
     - Native SDK
 
-      Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
+      To execute queries, create a `ydb.QuerySessionPool`.
 
       ```python
       driver = ydb.Driver(
@@ -47,7 +47,7 @@
 
     - Native SDK (Asyncio)
 
-      Для выполнения запросов необходимо создать `ydb.aio.QuerySessionPool`:
+      To execute queries, create a `ydb.aio.QuerySessionPool`:
 
       ```python
       import asyncio
@@ -61,7 +61,7 @@
           ) as driver:
               await driver.wait(5, fail_fast=True)
               pool = ydb.aio.QuerySessionPool(driver)
-              # ... используйте pool ...
+              # ... use pool ...
 
       asyncio.run(main())
       ```
@@ -79,21 +79,21 @@
 {% endlist %}
 
 
-## Создание таблицы {#create-table}
+## Creating a table {#create-table}
 
-Сначала необходимо создать таблицу для хранения документов и их векторных представлений.
+First, create a table for storing documents and their vector representations.
 
-Структура таблицы:
+Table structure:
 
-|Название столбца|Тип данных|Пояснение|
+|Column name|Data type|Description|
 |---|----|------|
-|`id`|`Utf8`|идентификатор документа|
-|`document`|`Utf8`|текст документа|
-|`embedding`|`String`|векторное представление документа|
+|`id`|`Utf8`|document identifier|
+|`document`|`Utf8`|document text|
+|`embedding`|`String`|vector representation of the document|
 
 {% note warning %}
 
-Для хранения вектора используется тип `String`. Подробнее смотрите в документации по [точному векторному поиску](../../yql/reference/udf/list/knn.md#data-types).
+The `String` type is used to store the vector. For more details, see the documentation on [exact vector search](../../yql/reference/udf/list/knn.md#data-types).
 
 {% endnote %}
 
@@ -166,21 +166,21 @@
 {% endlist %}
 
 
-## Вставка векторов {#insert-vectors}
+## Inserting vectors {#insert-vectors}
 
-Для вставки векторов необходимо подготовить и выполнить правильный YQL-запрос. Для унификации вставки разных данных он параметризован.
+To insert vectors, prepare and execute the appropriate YQL query. It is parameterized to allow uniform insertion of different data.
 
-Запрос оперирует контейнерным типом данных `List<Struct<...>>` (список структур), что позволяет передавать через параметры произвольное количество объектов за один раз.
+The query uses the `List<Struct<...>>` container type (a list of structs), which lets you pass an arbitrary number of objects at once through parameters.
 
-В {{ ydb-short-name }} таблицах же вектора хранятся в виде сериализованной последовательности байт. Конвертацию в такое представление **рекомендуется выполнять на клиенте**. Альтернативный способ — делегировать конвертацию на сервер с помощью функции преобразования [Knn UDF](../../yql/reference/udf/list/knn.md#functions-convert). Ниже будут приведены примеры, демонстрирующие оба подхода.
+In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence. Converting to this representation **is recommended to be done on the client side**. An alternative approach is to delegate the conversion to the server using the [Knn UDF](../../yql/reference/udf/list/knn.md#functions-convert) conversion function. Both approaches are demonstrated in the examples below.
 
 {% list tabs %}
 
 - Python
 
-    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
+    The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` — identifier, `document` — text, `embedding` — the vector representation of the text, pre-serialized into a byte sequence.
 
-    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+    To use the struct in the example below, create `items_struct_type = ydb.StructType()` and define the types of all fields. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     {% cut "asyncio" %}
 
@@ -342,15 +342,15 @@
 
     {% note info %}
 
-    В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
+    The `ConvertVectorToBytes` function assumes that the client processor uses [little-endian byte order](https://en.wikipedia.org/wiki/Endianness), such as x86\_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted accordingly.
 
     {% endnote %}
 
-- Python (альтернативный)
+- Python (alternative)
 
-    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
+    The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` — identifier, `document` — text, `embedding` — the vector representation of the text.
 
-    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+    To use the struct in the example below, create `items_struct_type = ydb.StructType()` and define the types of all fields. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     {% cut "asyncio" %}
 
@@ -434,7 +434,7 @@
         print(f"{len(items)} items inserted")
     ```
 
-- C++ (альтернативный)
+- C++ (alternative)
 
     ```cpp
     void InsertItemsAsFloatList(
@@ -491,18 +491,18 @@
 {% endlist %}
 
 
-## Добавление индекса {#add-vector-index}
+## Adding an index {#add-vector-index}
 
-Использование векторного индекса позволяет эффективно решать задачу приближённого поиска ближайших векторов. Подробнее о преимуществах и особенностях использования описано в документации по [векторному индексу](../../dev/vector-indexes.md).
+Using a vector index enables efficient approximate nearest vector search. For more details on the benefits and usage characteristics, see the [vector index](../../dev/vector-indexes.md) documentation.
 
-Для добавления индекса необходимо выполнить две операции:
+Adding an index requires two operations:
 
-1. Создать временный индекс;
-2. Сохранить временный индекс как постоянный.
+1. Create a temporary index;
+2. Rename the temporary index to make it permanent.
 
-Такой подход позволяет создавать индекс как при его первоначальном создании, так и при перестроении (если индекс уже существует).
+This approach supports both initial index creation and rebuilding (if the index already exists).
 
-Доступные стратегии:
+Available strategies:
 
 * `similarity=cosine`;
 * `similarity=inner_product`;
@@ -510,9 +510,9 @@
 * `distance=euclidean`;
 * `distance=manhattan`.
 
-Каждая стратегия определяет функцию, которая будет использоваться для последующего поиска. Более подробно функции описаны в документации по [функциям расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Each strategy defines the function used for subsequent searches. The functions are described in detail in the [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance) documentation.
 
-Параметры, применяемые при создании индекса типа `vector_kmeans_tree`, описаны в документации [векторного индекса](../../dev/vector-indexes.md#kmeans-tree-type).
+The parameters used when creating a `vector_kmeans_tree` index are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type) documentation.
 
 
 {% list tabs %}
@@ -659,10 +659,10 @@
 
 {% endlist %}
 
-## Поиск по вектору {#search-by-vector}
+## Searching by vector {#search-by-vector}
 
-Для поиска документов по вектору используется специальный YQL‑запрос, в котором необходимо определить функцию сходства или расстояния.
-Доступные значения:
+To search for documents by vector, use a special YQL query in which you define the similarity or distance function.
+Available values:
 
 * `CosineSimilarity`;
 * `InnerProductSimilarity`;
@@ -670,11 +670,11 @@
 * `ManhattanDistance`;
 * `EuclideanDistance`.
 
-Подробнее функции описаны в документации по [функциям расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
+The functions are described in detail in the [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance) documentation.
 
-Метод позволяет указать имя индекса. Если оно задано, в запрос будет добавлено выражение `VIEW index_name`, что позволит использовать векторный индекс при поиске.
+The method allows specifying an index name. If provided, a `VIEW index_name` expression will be added to the query, enabling the vector index to be used during the search.
 
-Метод возвращает список, состоящий из словарей с полями `id`, `document`, а также `score` — числом, отражающим степень сходства (или расстояния) с искомым вектором.
+The method returns a list of dictionaries with fields `id`, `document`, and `score` — a number reflecting the degree of similarity (or distance) to the search vector.
 
 {% list tabs %}
 
@@ -1014,22 +1014,22 @@
 
 {% endlist %}
 
-## Итоговый пример {#full-example}
+## Complete example {#full-example}
 
-Объединим все вышеописанные методы в один пример, который включает следующие шаги:
+Combining all the methods described above into a single example with the following steps:
 
-1. Удаление существующей таблицы
-2. Создание новой таблицы
-3. Вставка объектов
-4. Поиск ближайших векторов без использования индекса
-5. Добавление векторного индекса
-6. Поиск ближайших векторов с использованем индекса
+1. Drop the existing table
+2. Create a new table
+3. Insert items
+4. Search for nearest vectors without an index
+5. Add a vector index
+6. Search for nearest vectors using the index
 
 {% list tabs %}
 
 - Python
 
-    Пример использования
+    Example usage
 
     {% cut "asyncio" %}
 
@@ -1221,7 +1221,7 @@
         )
     ```
 
-    Вывод программы:
+    Program output:
 
     ```bash
     Vector table dropped
@@ -1236,9 +1236,9 @@
     [score=0.9878783822059631] 3: vector 3
     ```
 
-    В результате видно, что таблица была создана, добавлено 9 документов и успешно выполнен поиск по близости векторов — как до, так и после добавления векторного индекса.
+    The output shows that the table was created, 9 documents were added, and vector similarity search was successfully performed both before and after adding the vector index.
 
-    Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
+    The full source code is available at [this link](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
 
 - C++
 
@@ -1291,6 +1291,6 @@
     }
     ```
 
-    Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+    The full source code is available at [this link](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
 {% endlist %}

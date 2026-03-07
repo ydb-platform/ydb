@@ -10,3 +10,4 @@
 | [Linq To DB](https://linq2db.github.io/)                        | [Instruction](../linq2db.md)          |
 | [SQLAlchemy](https://www.sqlalchemy.org/)                       | [Instruction](../sqlalchemy.md)       |
 | [Django](https://www.djangoproject.com/)                        | [Instruction](../django.md)           |
+| [ent](https://entgo.io/)                                        | [Instruction](../ent.md)              |

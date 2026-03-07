@@ -49,8 +49,7 @@ public:
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
         TDqComputeActorWatermarks* watermarksTracker,
-        const THashMap<TString, TString>& secureParams,
-        size_t fullscanRowLimit = 5000)
+        const THashMap<TString, TString>& secureParams)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -62,7 +61,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
-        , FullscanRowLimit(Min(fullscanRowLimit, (size_t)Settings.GetCacheLimit()))
+        , FullscanRowLimit(Settings.HasFullscanLimit() ? Min(Settings.GetFullscanLimit(), (size_t)Settings.GetCacheLimit()) : Settings.GetCacheLimit())
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)
@@ -396,14 +395,12 @@ private:
 #if 0 // TODO
             // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
 #endif
-#if 0 // TODO
             // Opportunistially populate LRU cache with partial fullscan results
             // (again, in case of MultiMatches, we cannot use partial results)
             for (auto& [k, v]: *lookupResult) {
                 Y_DEBUG_ABORT_UNLESS(v);
                 LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
             }
-#endif
         }
         if (fullscan) {
             Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
@@ -415,9 +412,7 @@ private:
             } else {
                 FullscanExpireTime = now + CacheTtl;
                 FullscanReady = true;
-#if 0 // TODO
                 LruCache->Clear(); // Erase now-useless LRU cache
-#endif
             }
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);

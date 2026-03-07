@@ -529,6 +529,9 @@ namespace NYql::NDqs {
         if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
             settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
         }
+        if (auto maybeFullscanLimit = streamLookup.FullscanLimit()) {
+            settings.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
+        }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

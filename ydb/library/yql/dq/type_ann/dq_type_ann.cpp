@@ -557,7 +557,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                     }
                     continue;
                 }
-                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                    if (!EnsureConvertibleTo<ui64>(value, name.Content(), ctx)) {
                        return nullptr;
                    }
@@ -684,7 +684,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 13, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 14, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -755,6 +755,11 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     const auto rightInputType = rightInput.Raw()->GetTypeAnn();
     const auto& rightRowType = GetSeqItemType(*rightInputType);
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
+        return TStatus::Error;
+    }
+    if (input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget &&
+        (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_FullscanLimit), ctx) ||
+         !EnsureConvertibleTo<ui64>(cnStreamLookup.FullscanLimit().Ref(), "FullscanLimit", ctx))) {
         return TStatus::Error;
     }
     bool isMultiget = input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget

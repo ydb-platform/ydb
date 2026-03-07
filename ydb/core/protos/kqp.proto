@@ -318,6 +318,13 @@ message TEvCloseSessionRequest {
 message TCloseSessionResponse {
     optional bytes SessionId = 1;
     optional bool Closed = 2;
+
+    enum EShutdownHint {
+        UNSPECIFIED = 0;
+        SESSION = 1;
+        NODE = 2;
+    }
+    optional EShutdownHint ShutdownHint = 3 [default = UNSPECIFIED];
 }
 
 message TEvCloseSessionResponse {

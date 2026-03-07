@@ -13,5 +13,6 @@ NYdbGrpc::IStreamRequestCtrl::TPtr CheckAttach(NYdbGrpc::TGRpcClientLow& clientL
 void CheckAttach(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void CheckDelete(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
+void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expectedStatus, int expectedHint, bool& allDone);
 
 }

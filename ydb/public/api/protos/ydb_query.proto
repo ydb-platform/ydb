@@ -48,6 +48,13 @@ message AttachSessionRequest {
 message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    enum ShutdownHint {
+        SHUTDOWN_HINT_UNSPECIFIED = 0;
+        SHUTDOWN_HINT_SESSION = 1;
+        SHUTDOWN_HINT_NODE = 2;
+    }
+    ShutdownHint shutdown_hint = 3;
 }
 
 message SerializableModeSettings {

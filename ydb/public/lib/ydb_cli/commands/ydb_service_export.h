@@ -45,9 +45,43 @@ private:
     bool UseTypeV3 = false;
 };
 
-class TCommandExportToS3 : public TYdbOperationCommand,
-                           public TCommandWithAwsCredentials,
+class TCommandExportBase : public TYdbOperationCommand,
                            public TCommandWithOutput {
+public:
+    TCommandExportBase(const TString& name, const TString& description);
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+
+    template <typename TSettings, typename TResponse>
+    int Run(TConfig& config, TSettings& settings);
+
+protected:
+    void ParseItems(TConfig& config, const TString& optionName);
+
+    struct TItemFields {
+        TString Source;
+        TString Destination;
+    };
+    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
+
+    TVector<TItem> Items;
+    TVector<TRegExMatch> ExclusionPatterns;
+    TString Description;
+    ui32 NumberOfRetries = 10;
+    TString Compression;
+    bool IncludeIndexData = false;
+    TString CommonSourcePath;
+    TString CommonDestinationPrefix;
+
+    // Encryption params
+    TString EncryptionAlgorithm;
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
+};
+
+class TCommandExportToS3 : public TCommandExportBase,
+                           public TCommandWithAwsCredentials {
     using EStorageClass = NExport::TExportToS3Settings::EStorageClass;
 
 public:
@@ -58,30 +92,25 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    struct TItemFields {
-        TString Source;
-        TString Destination;
-    };
-    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
+    DEFINE_PARSEABLE_STRUCT(TItemS3, TItemFields, Source, Destination);
 
     TString AwsEndpoint;
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     EStorageClass AwsStorageClass = EStorageClass::NOT_SET;
     TString AwsBucket;
-    TVector<TItem> Items;
-    TVector<TRegExMatch> ExclusionPatterns;
-    TString Description;
-    ui32 NumberOfRetries = 10;
-    TString Compression;
     bool UseVirtualAddressing = true;
-    bool IncludeIndexData = false;
-    TString CommonSourcePath;
-    TString CommonDestinationPrefix;
+};
 
-    // Encryption params
-    TString EncryptionAlgorithm;
-    TString EncryptionKey;
-    TString EncryptionKeyFile;
+class TCommandExportToFs : public TCommandExportBase {
+public:
+    TCommandExportToFs();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemFs, TItemFields, Source, Destination);
 };
 
 }

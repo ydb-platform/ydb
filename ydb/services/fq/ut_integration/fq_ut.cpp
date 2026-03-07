@@ -118,9 +118,13 @@ namespace {
 Y_UNIT_TEST_SUITE(Yq_1) {
     Y_UNIT_TEST(Basic) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc        = server.GetPort();
+        ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
         const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);
@@ -206,7 +210,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         auto expectedStatus = FederatedQuery::QueryMeta::COMPLETED;
@@ -217,7 +225,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         auto expectedStatus = FederatedQuery::QueryMeta::COMPLETED;
@@ -228,7 +240,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         auto expectedStatus = FederatedQuery::QueryMeta::COMPLETED;
@@ -239,7 +255,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
 
@@ -252,7 +272,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         Warmup(folderId, client);
@@ -288,7 +312,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const size_t conns = 3;
         const auto folderId = TString(__func__) + "folder_id";
@@ -350,7 +378,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         Warmup(folderId, client);
@@ -371,7 +403,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
         TString userId = "root";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
         Warmup(folderId, client);
@@ -423,7 +459,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
         Warmup(folderId, client);
@@ -457,7 +497,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
@@ -492,7 +536,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
@@ -527,7 +575,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
         Warmup(folderId, client);
@@ -566,7 +618,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
@@ -620,7 +676,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const TString yqlText  = "select count(*) from testdbWTF.connections";
@@ -633,7 +693,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
@@ -669,7 +733,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken(userToken);
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
@@ -707,9 +775,13 @@ Y_UNIT_TEST_SUITE(Yq_1) {
 
     Y_UNIT_TEST(DescribeJob) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc        = server.GetPort();
+        ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
         const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);
@@ -746,9 +818,13 @@ Y_UNIT_TEST_SUITE(Yq_1) {
 
     Y_UNIT_TEST(DescribeQuery) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
-        ui16 grpc        = server.GetPort();
+        ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin");
+        auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
         const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);

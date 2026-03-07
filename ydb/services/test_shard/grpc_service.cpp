@@ -31,7 +31,7 @@ void TTestShardGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_TESTSHARD_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshard, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshard, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_TESTSHARD_METHOD(CreateTestShard, DoCreateTestShard, RLMODE(Rps), TESTSHARD_CREATETESTSHARD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_TESTSHARD_METHOD(DeleteTestShard, DoDeleteTestShard, RLMODE(Rps), TESTSHARD_DELETETESTSHARD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

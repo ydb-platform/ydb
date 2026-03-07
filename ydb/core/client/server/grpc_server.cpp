@@ -126,6 +126,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                       \
         YDB_API_DEFAULT_COUNTER_BLOCK(legacy, methodName), \
         auditMode,                                         \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,          \
         COMMON,                                            \
         TGrpcRequestLegacyCall,                            \
         GRpcRequestProxyId_,                               \

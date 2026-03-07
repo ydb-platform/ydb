@@ -2,6 +2,9 @@ PY3TEST()
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
     FORK_SUBTESTS()
+    FORK_TESTS()
+    FORK_TEST_FILES()
+    SPLIT_FACTOR(10)
 
     TEST_SRCS(
         base.py

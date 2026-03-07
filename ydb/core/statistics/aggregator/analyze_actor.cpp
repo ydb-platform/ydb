@@ -1,5 +1,4 @@
 #include "analyze_actor.h"
-#include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
@@ -78,7 +77,7 @@ private:
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        SA_LOG_D("Got TEvPoison");
+        SA_LOG_D("[" << SelfId() << "]: Got TEvPoison");
         Finish(Ydb::StatusIds::ABORTED, "Query aborted");
     }
 
@@ -131,7 +130,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-        SA_LOG_W("Navigate request failed with " << entry.Status
+        SA_LOG_W("[" << SelfId() << "]: Navigate request failed with " << entry.Status
             << ", operationId: " << OperationId.Quote()
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
@@ -144,12 +143,29 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
+    HiveId = entry.DomainInfo->ExtractHive();
+    if (!HiveId) {
+        HiveId = AppData()->DomainsInfo->GetHive();
+    }
+    if (!HiveId) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("Could not determine Hive ID."));
+        return;
+    }
+
     // TODO: escape table path
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
+    IsColumnTable = !!entry.ColumnTableInfo;
 
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
         tag2Column[col.second.Id] = col.second;
+
+        if (col.second.KeyOrder >= 0) {
+            KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
+            KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+        }
     }
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
@@ -173,7 +189,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     // Add tasks to calculate simple column statistics.
     for (size_t i = 0; i < Columns.size(); ++i) {
         const auto& col = Columns[i];
-        PendingTasks.push(TEvalTask{
+        PendingTasks.push(TColumnStatEvalTask{
             .ColumnIdx = i,
             .SimpleStatEval = std::make_unique<TSimpleColumnStatisticEval>(
                 col.Type, col.PgTypeMod),
@@ -189,21 +205,115 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
-    Become(&TThis::StateQuery);
-    DispatchScanActor();
+    if (IsColumnTable) {
+        // Resolve table shard ids.
+        TVector<TCell> minusInf(KeyColumnTypes.size());
+        TVector<TCell> plusInf;
+        TTableRange range(minusInf, true, plusInf, true, false);
+        auto keyDesc = MakeHolder<TKeyDesc>(
+            PathId, range, TKeyDesc::ERowOperation::Unknown,TVector<NScheme::TTypeInfo>{}, TVector<TKeyDesc::TColumnOp>{});
+
+        auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+        resolveRequest->DatabaseName = DatabaseName;
+        resolveRequest->ResultSet.emplace_back(std::move(keyDesc));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolveRequest.release()));
+    } else {
+        StartColumnStatEvalTasks();
+        Become(&TThis::StateScan);
+    }
 }
 
-void TAnalyzeActor::DispatchScanActor() {
-    Y_ENSURE(!ScanActorId);
+void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+    const auto& request = *ev->Get()->Request;
+    Y_ABORT_UNLESS(request.ResultSet.size() == 1);
+    const NSchemeCache::TSchemeCacheRequest::TEntry& entry = request.ResultSet.front();
+
+    if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+        SA_LOG_W("[" << SelfId() << "]: Resolve request failed with " << entry.Status
+            << ", operationId: " << OperationId.Quote()
+            << ", PathId: " << PathId
+            << ", DatabaseName: " << DatabaseName);
+
+        FinishWithFailure(
+            entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist
+            ? TEvStatistics::TEvAnalyzeActorResult::EStatus::TableNotFound
+            : TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(TStringBuilder() << "Resolve request failed with " << entry.Status));
+        return;
+    }
+
+    for (const auto& part : entry.KeyDescription->GetPartitions()) {
+        TabletIdsToLocate.insert(part.ShardId);
+    }
+
+    Send(SelfId(), new TEvPrivate::TEvRequestTableDistribution);
+    Become(&TThis::StateLocateTablets);
+}
+
+void TAnalyzeActor::Handle(TEvPrivate::TEvRequestTableDistribution::TPtr&) {
+    auto req = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
+    req->Record.MutableTabletIds()->Add(TabletIdsToLocate.begin(), TabletIdsToLocate.end());
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
+        new TEvPipeCache::TEvForward(req.release(), HiveId, true));
+}
+
+void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
+    const auto& msg = ev->Get()->Record;
+    for (const auto& node : msg.GetNodes()) {
+        if (node.GetNodeId()) {
+            for (auto tabletId : node.GetTabletIds()) {
+                TabletId2NodeId[tabletId] = node.GetNodeId();
+                TabletIdsToLocate.erase(tabletId);
+            }
+        }
+    }
+
+    if (!TabletIdsToLocate.empty()) {
+        SA_LOG_W("[" << SelfId() << "]: unable to locate " << TabletIdsToLocate.size() << " tablets");
+        TryScheduleHiveRetry("Unable to locate some tablets.");
+        return;
+    }
+
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+    StartColumnStatEvalTasks();
+    Become(&TThis::StateScan);
+}
+
+void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    SA_LOG_W("[" << SelfId() << "]: got TEvDeliveryProblem");
+    TryScheduleHiveRetry("Problem connecting to Hive");
+}
+
+void TAnalyzeActor::TryScheduleHiveRetry(const TStringBuf& issue) {
+    if (HiveRetryCount > MaxHiveRetryCount) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(issue));
+        return;
+    }
+
+    ++HiveRetryCount;
+    Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestTableDistribution);
+}
+
+void TAnalyzeActor::StartColumnStatEvalTasks() {
+    Y_ENSURE(ScanActorsInFlight.empty());
+    Y_ENSURE(NodeId2State.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
 
-    TSelectBuilder selectBuilder;
+    if (IsColumnTable) {
+        for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
+            NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingTablets.push_back(tabletId);
+        }
+    }
+
+    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsColumnTable);
     size_t totalSize = 0;
 
-    if (!CountSeq) {
+    if (!CountSeq && !RowCount) {
         // Calculate total row count in the first scan we dispatch
-        CountSeq = selectBuilder.AddBuiltinAggregation({}, "count");
+        CountSeq = SelectBuilder->AddBuiltinAggregation({}, "count");
     }
 
     while (!PendingTasks.empty()) {
@@ -219,21 +329,80 @@ void TAnalyzeActor::DispatchScanActor() {
         const auto& col = Columns.at(task.ColumnIdx);
         totalSize += resultSize;
         if (task.SimpleStatEval) {
-            task.SimpleStatEval->AddAggregations(col.Name, selectBuilder);
+            task.SimpleStatEval->AddAggregations(col.Name, *SelectBuilder);
         } else if (task.Stage2StatEval) {
-            task.Stage2StatEval->AddAggregations(col.Name, selectBuilder);
+            task.Stage2StatEval->AddAggregations(col.Name, *SelectBuilder);
         }
         InProgressTasks.push_back(std::move(task));
         PendingTasks.pop();
     }
 
-    auto actor = std::make_unique<TScanActor>(
-        SelfId(), DatabaseName, selectBuilder.Build(TableName), selectBuilder.ColumnCount());
-    ScanActorId = Register(actor.release());
+    DispatchSomeScanActors();
 }
 
-void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
-    ScanActorId = {};
+void TAnalyzeActor::DispatchSomeScanActors() {
+    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId) {
+        auto actor = std::make_unique<TScanActor>(
+            SelfId(), DatabaseName,
+            SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
+        ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+            .TabletNodeId = nodeId,
+        };
+    };
+
+    if (!IsColumnTable) {
+        Y_ENSURE(ScanActorsInFlight.empty());
+        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor for the whole table");
+        dispatchActor(0, std::nullopt);
+        return;
+    }
+
+    // Run a simple scheduling algorithm, dispatching scans fairly among nodes hosting tablets,
+    // and for nodes with the same number of in-flight scans, favoring nodes with the
+    // longer tablet ids queue.
+
+    auto isSchedulable = [](const TNodeState& node) {
+        return !node.PendingTablets.empty()
+            && node.TabletsInFlight < MaxPerNodeScanActorsInFlight;
+    };
+
+    auto nodeCmp = [](TNodeState* left, TNodeState* right) {
+        return std::tuple(-left->TabletsInFlight, left->PendingTablets.size())
+            < std::tuple(-right->TabletsInFlight, right->PendingTablets.size());
+    };
+
+    std::priority_queue<TNodeState*, std::vector<TNodeState*>, decltype(nodeCmp)> schedulableQueue;
+    for (auto& [id, node] : NodeId2State) {
+        if (isSchedulable(node)) {
+            schedulableQueue.emplace(&node);
+        }
+    }
+
+    while (!schedulableQueue.empty()
+            && ScanActorsInFlight.size() < MaxTotalScanActorsInFlight) {
+        auto* node = schedulableQueue.top();
+        schedulableQueue.pop();
+        Y_ENSURE(!node->PendingTablets.empty());
+        ui64 tabletId = node->PendingTablets.back();
+
+        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor"
+            << ", tabletId: " << tabletId << ", nodeId: " << node->Id);
+        dispatchActor(node->Id, tabletId);
+        node->PendingTablets.pop_back();
+        ++node->TabletsInFlight;
+
+        if (isSchedulable(*node)) {
+            schedulableQueue.push(node);
+        }
+    }
+}
+
+void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    auto actorIt = ScanActorsInFlight.find(ev->Sender);
+    Y_ENSURE(actorIt != ScanActorsInFlight.end());
+    const ui32 tabletNodeId = actorIt->second.TabletNodeId;
+    ScanActorsInFlight.erase(actorIt);
+
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
@@ -243,16 +412,47 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         return;
     }
 
+    if (tabletNodeId) {
+        auto nodeIt = NodeId2State.find(tabletNodeId);
+        Y_ENSURE(nodeIt != NodeId2State.end());
+        --nodeIt->second.TabletsInFlight;
+        if (!nodeIt->second.TabletsInFlight && nodeIt->second.PendingTablets.empty()) {
+            NodeId2State.erase(nodeIt);
+        }
+
+        DispatchSomeScanActors();
+    }
+
+    if (CountSeq) {
+        NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
+        ui64 count = val.GetUint64();
+        RowCount = count + RowCount.value_or(0);
+    }
+
+    if (!ScanActorsInFlight.empty()) {
+        // More scan results coming for the current column tasks batch, merge the current one
+        // and wait for more.
+        for (const auto& task : InProgressTasks) {
+            Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
+            if (task.SimpleStatEval) {
+                task.SimpleStatEval->Merge(result.AggColumns);
+            } else {
+                task.Stage2StatEval->Merge(result.AggColumns);
+            }
+        }
+        return;
+    }
+
+    // This is the last scan result for the current column tasks batch, finalize the result.
+
     std::vector<TStatisticsItem> resultItems;
 
-    if (!RowCount) {
-        NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
-        RowCount = val.GetUint64();
-
+    if (CountSeq) {
         NKikimrStat::TTableSummaryStatistics tableSummary;
         tableSummary.SetRowCount(*RowCount);
         resultItems.emplace_back(
             std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
+        CountSeq.reset();
     }
 
     auto supportedStatTypes = IStage2ColumnStatisticEval::SupportedTypes();
@@ -262,7 +462,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
 
         if (task.SimpleStatEval) {
-            auto simpleStats = task.SimpleStatEval->Extract(*RowCount, result.AggColumns);
+            auto simpleStats = task.SimpleStatEval->Extract(RowCount.value(), result.AggColumns);
             resultItems.emplace_back(
                 col.Tag,
                 task.SimpleStatEval->GetType(),
@@ -276,7 +476,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
                     continue;
                 }
-                PendingTasks.push(TEvalTask{
+                PendingTasks.push(TColumnStatEvalTask{
                     .ColumnIdx = task.ColumnIdx,
                     .Stage2StatEval = std::move(statEval),
                 });
@@ -288,6 +488,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 task.Stage2StatEval->ExtractData(result.AggColumns));
         }
     }
+
     InProgressTasks.clear();
 
     const bool isFinalResult = PendingTasks.empty();
@@ -298,16 +499,33 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     if (isFinalResult) {
         PassAway();
     } else {
-        DispatchScanActor();
+        StartColumnStatEvalTasks();
+    }
+}
+
+void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    try {
+        HandleImpl(ev);
+    } catch (const std::exception& ex) {
+        NYql::TIssue error(TStringBuilder()
+            << "Processing statistics scan results failed with " << ex.what());
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            std::move(error));
     }
 }
 
 void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
-    if (ScanActorId) {
-        Send(ScanActorId, new TEvents::TEvPoison());
+    for (const auto& [id, info] : ScanActorsInFlight){
+        Send(id, new TEvents::TEvPoison());
     }
 
     PassAway();
+}
+
+void TAnalyzeActor::PassAway() {
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+    TActorBootstrapped::PassAway();
 }
 
 } // NKikimr::NStat

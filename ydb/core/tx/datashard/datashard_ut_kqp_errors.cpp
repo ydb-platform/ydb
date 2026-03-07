@@ -30,10 +30,6 @@ bool HasIssueImpl(const TIssues& issues, ui32 code, TStringBuf message, std::fun
     return hasIssue;
 }
 
-bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::function<bool(const TIssue& issue)> predicate = {}) {
-    return HasIssueImpl(issues, code, message, predicate, false);
-}
-
 bool HasIssueContains(const TIssues& issues, ui32 code, TStringBuf message, std::function<bool(const TIssue& issue)> predicate = {}) {
     return HasIssueImpl(issues, code, message, predicate, true);
 }
@@ -42,13 +38,10 @@ bool HasIssueContains(const TIssues& issues, ui32 code, TStringBuf message, std:
 
 class TLocalFixture {
 public:
-    TLocalFixture(bool enableResourcePools = true, std::optional<bool> enableOltpSink = std::nullopt) {
+    TLocalFixture(bool enableResourcePools = true) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableFeatureFlags()->SetEnableResourcePools(enableResourcePools);
-        if (enableOltpSink) {
-            app.MutableTableServiceConfig()->SetEnableOltpSink(*enableOltpSink);
-        }
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
@@ -122,124 +115,8 @@ Y_UNIT_TEST(ResolveTableError) {
     UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE));
 }
 
-Y_UNIT_TEST(ProposeError) {
-    TLocalFixture fixture(true, false);
-    THashSet<TActorId> knownExecuters;
-
-    using TMod = std::function<void(NKikimrTxDataShard::TEvProposeTransactionResult&)>;
-
-    auto test = [&](auto proposeStatus, auto ydbStatus, auto issue, auto issueMessage, TMod mod = {}) {
-        auto client = fixture.Runtime->AllocateEdgeActor();
-
-        bool done = false;
-        auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
-            if (!done && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType &&
-                !knownExecuters.contains(ev->Recipient))
-            {
-                auto event = ev.Get()->Get<TEvDataShard::TEvProposeTransactionResult>();
-                event->Record.SetStatus(proposeStatus);
-                if (mod) {
-                    mod(event->Record);
-                }
-                knownExecuters.insert(ev->Recipient);
-                done = true;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        fixture.Runtime->SetObserverFunc(mitm);
-
-        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("upsert into `/Root/table-1` (key, value) values (5, 5);")));
-
-        auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
-        auto& record = ev->Get()->Record;
-        UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), ydbStatus, record.DebugString());
-
-        // Cerr << record.DebugString() << Endl;
-
-        TIssues issues;
-        IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        UNIT_ASSERT_C(HasIssue(issues, issue, issueMessage), "issue not found, issue: " << (int) issue
-            << ", message: " << issueMessage << ", response: " << record.GetResponse().DebugString());
-    };
-
-    test(TEvProposeTransactionResult::OVERLOADED,                    // propose error
-         Ydb::StatusIds::OVERLOADED,                                 // ydb status
-         NYql::TIssuesIds::KIKIMR_OVERLOADED,                        // issue status
-         "Kikimr cluster or one of its subsystems is overloaded.");  // main issue message (more detailed info can be in subissues)
-
-    test(TEvProposeTransactionResult::ABORTED,
-         Ydb::StatusIds::ABORTED,
-         NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-         "Operation aborted.");
-
-    test(TEvProposeTransactionResult::TRY_LATER,
-         Ydb::StatusIds::UNAVAILABLE,
-         NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-         "Kikimr cluster or one of its subsystems was unavailable.");
-
-    test(TEvProposeTransactionResult::RESULT_UNAVAILABLE,
-         Ydb::StatusIds::UNDETERMINED,
-         NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE,
-         "Result of Kikimr query didn't meet requirements and isn't available");
-
-    test(TEvProposeTransactionResult::CANCELLED,
-         Ydb::StatusIds::CANCELLED,
-         NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED,
-         "Operation cancelled.");
-
-    test(TEvProposeTransactionResult::BAD_REQUEST,
-         Ydb::StatusIds::BAD_REQUEST,
-         NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-         "Bad request.");
-
-    test(TEvProposeTransactionResult::ERROR,
-         Ydb::StatusIds::UNAVAILABLE,
-         NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-         "Kikimr cluster or one of its subsystems was unavailable.");
-
-    test(TEvProposeTransactionResult::ERROR,
-         Ydb::StatusIds::ABORTED,
-         NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-         "blah-blah-blah",
-         [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
-             auto* error = x.MutableError()->Add();
-             error->SetKind(NKikimrTxDataShard::TError::SCHEME_CHANGED);
-             error->SetReason("blah-blah-blah");
-         });
-
-    test(TEvProposeTransactionResult::ERROR,
-        Ydb::StatusIds::ABORTED,
-        NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-        "blah-blah-blah",
-        [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
-            auto* error = x.MutableError()->Add();
-            error->SetKind(NKikimrTxDataShard::TError::SCHEME_ERROR);
-            error->SetReason("blah-blah-blah");
-        });
-
-    test(TEvProposeTransactionResult::EXEC_ERROR,
-         Ydb::StatusIds::GENERIC_ERROR,
-         NYql::TIssuesIds::DEFAULT_ERROR,
-         "Error executing transaction (ExecError): Execution failed");
-
-    test(TEvProposeTransactionResult::EXEC_ERROR,
-             Ydb::StatusIds::PRECONDITION_FAILED,
-             NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-             "Kikimr precondition failed",
-             [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
-                 auto* error = x.MutableError()->Add();
-                 error->SetKind(NKikimrTxDataShard::TError::PROGRAM_ERROR);
-                 error->SetReason("blah-blah-blah");
-             });
-
-    test(TEvProposeTransactionResult::RESPONSE_DATA,
-            Ydb::StatusIds::GENERIC_ERROR,
-            NYql::TIssuesIds::DEFAULT_ERROR,
-            "Error executing transaction: transaction failed.");
-}
-
 Y_UNIT_TEST(ProposeErrorEvWrite) {
-    TLocalFixture fixture(true, true);
+    TLocalFixture fixture(true);
     THashSet<TActorId> knownExecuters;
 
     using TMod = std::function<void(NKikimrDataEvents::TEvWriteResult&)>;
@@ -396,8 +273,8 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     runtime.SetObserverFunc(prev);
 }
 
-Y_UNIT_TEST_TWIN(ProposeResultLost_RwTx, UseSink) {
-    TLocalFixture fixture(true, UseSink);
+Y_UNIT_TEST(ProposeResultLost_RwTx) {
+    TLocalFixture fixture(true);
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_(R"(
             upsert into `/Root/table-1` (key, value) VALUES

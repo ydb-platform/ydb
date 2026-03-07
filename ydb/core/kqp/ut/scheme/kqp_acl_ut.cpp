@@ -499,9 +499,8 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclDml, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
@@ -625,9 +624,8 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclRevoke, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
@@ -770,7 +768,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporary, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1113,7 +1110,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporaryInterruptInheritance, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1207,7 +1203,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(AclInterruptInheritance) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1298,7 +1293,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = NKqp::TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(settings);

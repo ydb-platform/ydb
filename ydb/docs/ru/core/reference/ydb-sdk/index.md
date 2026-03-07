@@ -24,6 +24,7 @@
 - [{#T}](error_handling.md)
 - [Сравнение возможностей SDK](feature-parity.md)
 - [Параметризованные запросы](parameterized_queries.md)
+- [Формат данных в результате запроса](result-formats.md)
 - [Работа с топиками](topic.md)
 - [Работа с узлами координации](coordination.md)
 

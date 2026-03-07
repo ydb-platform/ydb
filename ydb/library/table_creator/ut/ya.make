@@ -3,6 +3,10 @@ UNITTEST_FOR(ydb/library/table_creator)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:1)
+ENDIF()
 
 SRCS(
     table_creator_ut.cpp

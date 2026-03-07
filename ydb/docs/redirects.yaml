@@ -65,6 +65,8 @@ common:
     to: /reference/observability/metrics/grafana-dashboards.md
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
+  - from: /administration/state-storage-reconfiguration.md
+    to: /devops/manual/state-storage-reconfiguration.md
   - from: /administration/state-storage-move.md
     to: /devops/manual/state-storage-move.md
   - from: /deploy/manual/static-group-move.md
@@ -101,6 +103,8 @@ common:
     to: /devops/observability/system-views.md
   - from: /devops/manual/logging.md
     to: /devops/observability/logging.md
+  - from: /devops/manual/state-storage-reconfiguration.md
+    to: /devops/configuration-management/configuration-v1/state-storage-reconfiguration.md
   - from: /devops/manual/state-storage-move.md
     to: /devops/configuration-management/configuration-v1/state-storage-move.md
   - from: /maintenance/manual/change_actorsystem_configs.md
@@ -486,7 +490,7 @@ ru:
   - from: /maintenance/manual/cluster_expansion.md
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
-    to: /concepts/datamodel/topic.md 
+    to: /concepts/datamodel/topic.md
 
 en:
   - from: /cluster/system-requirements.md

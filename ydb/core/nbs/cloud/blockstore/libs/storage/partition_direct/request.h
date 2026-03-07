@@ -12,6 +12,27 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TPersistentBufferWriteMeta
+{
+    ui8 Index = 0;
+    ui64 Lsn = 0;
+};
+
+struct TSyncRequest
+{
+    ui64 StartIndex;
+    ui64 Lsn;
+};
+
+struct TRestoreMeta
+{
+    ui64 BlockIndex = 0;
+    ui64 PersistBufferIndex = 0;
+    ui64 Lsn = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TBaseRequestHandler
 {
 private:
@@ -55,26 +76,18 @@ public:
     [[nodiscard]] ui64 GetSize() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TWriteRequestHandler: public TIORequestsHandler
 {
 public:
-    struct TPersistentBufferWriteMeta
-    {
-        ui8 Index;
-        ui64 Lsn;
-
-        TPersistentBufferWriteMeta(ui8 index, ui64 lsn)
-            : Index(index)
-            , Lsn(lsn)
-        {}
-    };
-
     TWriteRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        ui64 tabletId);
+        ui64 tabletId,
+        NThreading::TPromise<TWriteBlocksLocalResponse> promise);
 
     ~TWriteRequestHandler() override = default;
 
@@ -86,16 +99,13 @@ public:
 
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
-    [[nodiscard]] NThreading::TFuture<TWriteBlocksLocalResponse>
-    GetFuture() const;
-
     [[nodiscard]] TGuardedSgList GetData();
 
     void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    NThreading::TPromise<TWriteBlocksLocalResponse> Future;
+    NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
     ui8 AcksMask = 0;
@@ -105,18 +115,20 @@ private:
 class TSyncRequestHandler: public TBaseRequestHandler
 {
 public:
-    struct TSyncRequest
-    {
-        ui64 StartIndex;
-        ui64 Lsn;
-    };
-
     TSyncRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         NWilson::TTraceId traceId,
         ui64 tabletId);
+
+    TSyncRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
+        ui8 persistentBufferIndex,
+        NWilson::TTraceId traceId,
+        ui64 tabletId,
+        TVector<TSyncRequest> syncRequests);
 
     ~TSyncRequestHandler() override = default;
 
@@ -174,7 +186,8 @@ public:
         ui32 vChunkIndex,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        ui64 tabletId);
+        ui64 tabletId,
+        NThreading::TPromise<TReadBlocksLocalResponse> promise);
 
     ~TReadRequestHandler() override = default;
 
@@ -182,16 +195,13 @@ public:
 
     bool IsCompleted(ui64 requestId) override;
 
-    [[nodiscard]] NThreading::TFuture<TReadBlocksLocalResponse>
-    GetFuture() const;
-
     [[nodiscard]] TGuardedSgList GetData();
 
     void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;
-    NThreading::TPromise<TReadBlocksLocalResponse> Future;
+    NThreading::TPromise<TReadBlocksLocalResponse> Promise;
 };
 
 class TOverallAckRequestHandler: public TBaseRequestHandler
@@ -222,10 +232,21 @@ public:
         return RequiredAckCount;
     }
 
+    [[nodiscard]] NThreading::TFuture<void> GetFuture() const
+    {
+        return Promise.GetFuture();
+    }
+
+    void SetResponse()
+    {
+        Promise.SetValue();
+    }
+
 private:
     const ui8 RequiredAckCount;
     ui8 AckCount = 0;
     TString Name;
+    NThreading::TPromise<void> Promise;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

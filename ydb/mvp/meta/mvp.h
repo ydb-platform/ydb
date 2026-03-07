@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/signals.h>
+#include <ydb/mvp/meta/meta_settings.h>
 #include <ydb/mvp/meta/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -12,6 +13,11 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/generic/vector.h>
+
+namespace YAML {
+class Node;
+}
 
 namespace NMVP {
 
@@ -32,6 +38,7 @@ public:
     TString MetaApiEndpoint = "";
     TString MetaDatabase = "";
     bool MetaCache = false;
+    TMetaSettings MetaSettings;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;
 
@@ -57,6 +64,8 @@ public:
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
+
+    TGrafanaSupportConfig GrafanaSupportConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/support_links/source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -174,6 +175,34 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
+
+    if (config.HasGrafana()) {
+        const auto& grafana = config.GetGrafana();
+        MetaSettings.GrafanaConfig.Endpoint = grafana.GetEndpoint();
+        MetaSettings.GrafanaConfig.SecretName = grafana.GetSecretName();
+
+        if (MetaSettings.GrafanaConfig.Endpoint.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.grafana.endpoint must be specified if meta.grafana is set.";
+        }
+
+        if (MetaSettings.GrafanaConfig.SecretName.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.grafana.secret_name must be specified if meta.grafana is set.";
+        }
+    }
+
+    if (config.HasSupportLinks()) {
+        const auto& supportLinks = config.GetSupportLinks();
+
+        const auto& clusterLinks = supportLinks.GetCluster();
+        for (int i = 0; i < clusterLinks.size(); ++i) {
+            MetaSettings.ClusterLinkSources.emplace_back(MakeLinkSource(i, clusterLinks[i], MetaSettings));
+        }
+
+        const auto& databaseLinks = supportLinks.GetDatabase();
+        for (int i = 0; i < databaseLinks.size(); ++i) {
+            MetaSettings.DatabaseLinkSources.emplace_back(MakeLinkSource(i, databaseLinks[i], MetaSettings));
+        }
+    }
 }
 
 void TMVP::TryGetMetaOptionsFromConfig() {
@@ -187,18 +216,22 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         if (appConfig.HasMeta()) {
             TryGetMetaOptionsFromConfig(appConfig.GetMeta());
         }
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
     } catch (const YAML::Exception& e) {
         std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
     }
 }
 
-
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
     TryGetMetaOptionsFromConfig();
+
+    if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    }
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

@@ -4,11 +4,6 @@ items:
   include:
     mode: link
     path: ../yql/toc_p.yaml
-- name: Compatibility with PostgreSQL
-  href: ../postgresql/intro.md
-  include:
-    mode: link
-    path: ../postgresql/toc_p.yaml
 - name: Embedded UI
   href: embedded-ui/index.md
   include:

@@ -70,7 +70,7 @@ public:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        if (ev->Get()->Error) {
+        if (ev->Get()->HasError()) {
             SendResponseAndDie(ev->Get()->Error.Message);
             return;
         }

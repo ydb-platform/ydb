@@ -21,6 +21,22 @@ namespace NKikimr::NOlap {
 namespace {
 
 template <class TExternalBlobInfo>
+TPortionDataAccessor::TAssembleBlobInfo MakeAssembleBlobInfoWithMeta(THashMap<TChunkAddress, TExternalBlobInfo>& /*blobsData*/,
+    typename THashMap<TChunkAddress, TExternalBlobInfo>::iterator itBlobs, const TColumnRecord& record) {
+    TPortionDataAccessor::TAssembleBlobInfo blobInfo = [&]() -> TPortionDataAccessor::TAssembleBlobInfo {
+        if constexpr (std::is_same_v<TExternalBlobInfo, TString>) {
+            return TPortionDataAccessor::TAssembleBlobInfo(std::move(itBlobs->second));
+        } else {
+            return std::move(itBlobs->second);
+        }
+    }();
+    if (record.GetMeta().GetAdditionalAccessorData()) {
+        blobInfo.SetAdditionalAccessorData(record.GetMeta().GetAdditionalAccessorData());
+    }
+    return blobInfo;
+}
+
+template <class TExternalBlobInfo>
 TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
     const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
     const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) {
@@ -50,8 +66,9 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() == i) {
             auto itBlobs = blobsData.find(it->GetAddress());
             AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", it->GetAddress().DebugString());
-            columns.back().AddBlobInfo(it->Chunk, it->GetMeta().GetRecordsCount(), std::move(itBlobs->second));
+            TPortionDataAccessor::TAssembleBlobInfo blobInfo = MakeAssembleBlobInfoWithMeta(blobsData, itBlobs, *it);
             blobsData.erase(itBlobs);
+            columns.back().AddBlobInfo(it->Chunk, it->GetMeta().GetRecordsCount(), std::move(blobInfo));
 
             ++it;
             continue;
@@ -783,7 +800,8 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembl
         return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader->GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(*ExpectedRowsCount, loader, Data, internalPathId);
+        return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
+            *ExpectedRowsCount, loader, Data, internalPathId, false, GetAdditionalAccessorData());
     }
 }
 
@@ -794,7 +812,8 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
         return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader.GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return loader.ApplyConclusion(Data, *ExpectedRowsCount).AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));
+        return loader.ApplyConclusion(Data, *ExpectedRowsCount, std::nullopt, GetAdditionalAccessorData())
+            .AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));
     }
 }
 

@@ -2,6 +2,7 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
@@ -67,6 +68,23 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         AFL_VERIFY(arr && arr->num_chunks() == 1);
         return std::make_shared<TDictionaryArray>(arr->chunk(0), recordsNew);
     }
+}
+
+NJson::TJsonValue TDictionaryArray::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("variants_count", ArrayVariants->length());
+    result.InsertValue("records_count", GetRecordsCount());
+    NJson::TJsonValue variantsArr = NJson::JSON_ARRAY;
+    for (int64_t i = 0; i < ArrayVariants->length(); ++i) {
+        auto scalar = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(i));
+        if (scalar->is_valid) {
+            variantsArr.AppendValue(NJson::TJsonValue(scalar->ToString()));
+        } else {
+            variantsArr.AppendValue(NJson::TJsonValue(NJson::JSON_NULL));
+        }
+    }
+    result.InsertValue("variants", std::move(variantsArr));
+    return result;
 }
 
 ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {

@@ -2,6 +2,7 @@
 
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -166,40 +167,59 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         const auto& records = GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {
-            auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
             const ui32 entityId = it->GetEntityId();
-            if (!accessor) {
+            const auto accessorType = Schema->GetColumnLoaderVerified(entityId)->GetAccessorConstructor()->GetType();
+            if (accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
+                while (it != records.end() && it->GetEntityId() == entityId) {
+                    TString data;
+                    if (it->GetMeta().HasAdditionalAccessorData()) {
+                        const auto* dictData = dynamic_cast<const NArrow::NAccessor::TDictionaryAccessorData*>(
+                            it->GetMeta().GetAdditionalAccessorData().get());
+                        if (dictData) {
+                            data = dictData->DebugJson().GetStringRobust();
+                        }
+                    }
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                    ++it;
+                }
+            } else if (accessorType == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(entityId) : nullptr;
+                if (!accessor) {
+                    while (it != records.end() && it->GetEntityId() == entityId) {
+                        NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                        ++it;
+                    }
+                } else {
+                    const auto addChunkInfo = [&builder](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
+                        AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
+                        const NArrow::NAccessor::TSubColumnsPartialArray* arr =
+                            static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
+                        const TString data = arr->GetHeader().DebugJson().GetStringRobust();
+                        NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                    };
+                    AFL_VERIFY(it->GetChunkIdx() == 0);
+                    if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                        const NArrow::NAccessor::TCompositeChunkedArray* composite =
+                            static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
+                        for (auto&& i : composite->GetChunks()) {
+                            AFL_VERIFY(it != records.end());
+                            AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks().size());
+                            AFL_VERIFY(it->GetEntityId() == entityId);
+                            addChunkInfo(i);
+                            ++it;
+                        }
+                    } else {
+                        AFL_VERIFY(it->GetChunkIdx() == 0);
+                        addChunkInfo(accessor);
+                        ++it;
+                    }
+                    AFL_VERIFY(it == records.end() || it->GetEntityId() != entityId)("it", it->GetEntityId())("from", entityId);
+                }
+            } else {
                 while (it != records.end() && it->GetEntityId() == entityId) {
                     NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
                     ++it;
                 }
-            } else {
-                const auto addChunkInfo = [&builder](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
-                    AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
-                    const NArrow::NAccessor::TSubColumnsPartialArray* arr =
-                        static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
-                    const TString data = arr->GetHeader().DebugJson().GetStringRobust();
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
-                };
-
-                AFL_VERIFY(it->GetChunkIdx() == 0);
-                if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
-                    const NArrow::NAccessor::TCompositeChunkedArray* composite =
-                        static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
-                    for (auto&& i : composite->GetChunks()) {
-                        AFL_VERIFY(it != records.end());
-                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks().size());
-                        AFL_VERIFY(it->GetEntityId() == entityId);
-                        addChunkInfo(i);
-                        ++it;
-                    }
-
-                } else {
-                    AFL_VERIFY(it->GetChunkIdx() == 0);
-                    addChunkInfo(accessor);
-                    ++it;
-                }
-                AFL_VERIFY(it == records.end() || it->GetEntityId() != entityId)("it", it->GetEntityId())("from", entityId);
             }
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
@@ -247,11 +267,7 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
     if (addr.GetColumnId() == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
-        THashSet<ui32> entityIds;
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            if (!entityIds.emplace(i.GetEntityId()).second) {
-                continue;
-            }
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,

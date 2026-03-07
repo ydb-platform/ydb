@@ -1,5 +1,6 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -88,8 +89,12 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        TChunkConstructionData infoWithMeta(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            std::nullopt, blobAndMeta.Meta);
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
-            NDictionary::TConstructor().DeserializeFromString(NDictionary::TConstructor().SerializeToString(dict, info), info).DetachResult());
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
         Cerr << PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) << Endl;
         Cerr << PrepareToCompare(dictParsed->GetRecords()->ToString()) << Endl;
         Cerr << PrepareToCompare(dictParsed->GetVariants()->ToString()) << Endl;

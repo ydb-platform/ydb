@@ -159,7 +159,12 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
     }
     IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
         NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
-    col.AddChunk(dictArr, Context);
+    auto accContext = Context.GetLoader()->BuildAccessorContext(dictArr->GetRecordsCount());
+    auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(dictArr, accContext);
+    col.AddPreparedChunk(std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), dictArr,
+        TChunkAddress(Context.GetColumnId(), 0),
+        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()),
+        std::move(blobAndMeta.Meta)));
     return col;
 }
 

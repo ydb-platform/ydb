@@ -10,4 +10,3 @@ domains:
           - count: 5
             kind: slot
             zone: any 
-

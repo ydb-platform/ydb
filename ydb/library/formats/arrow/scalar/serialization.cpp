@@ -17,7 +17,9 @@ TConclusion<TString> TSerializer::SerializePayloadToString(const std::shared_ptr
             memcpy(&resultString[0], scalarTyped->data(), sizeof(CType));
             return true;
         } else if constexpr (arrow::has_string_view<T>()) {
-            const arrow::BaseBinaryScalar* typed = static_cast<const arrow::BaseBinaryScalar*>(scalar.get());
+            using StringScalarType = typename arrow::TypeTraits<T>::ScalarType;
+            const StringScalarType* typed = static_cast<const StringScalarType*>(scalar.get());
+            AFL_VERIFY(typed->value);
             resultString.append(reinterpret_cast<const char*>(typed->value->data()), typed->value->size());
             return true;
         }
@@ -43,7 +45,7 @@ TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWi
             return true;
         } else if constexpr (arrow::has_string_view<T>()) {
             using ScalarType = typename arrow::TypeTraits<T>::ScalarType;
-            result = std::make_shared<ScalarType>(std::make_shared<arrow::Buffer>(reinterpret_cast<const uint8_t*>(data.data()), data.size()), dataType);
+            result = std::make_shared<ScalarType>(arrow::Buffer::FromString(std::string(data.data(), data.size())), dataType);
             return true;
         } else return false;
     });

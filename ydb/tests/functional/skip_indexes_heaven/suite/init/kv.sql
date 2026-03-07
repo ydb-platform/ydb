@@ -20,3 +20,19 @@ ALTER OBJECT `/Root/testdb/kv` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index
 
 ALTER OBJECT `/Root/testdb/kv` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_needle_in_a_haystack_minmax, TYPE=MINMAX,
                     FEATURES=`{"column_name" : "needle_in_a_haystack_minmax"}`);
+
+
+ALTER OBJECT `/Root/testdb/kv` (TYPE TABLE) SET (
+  ACTION = UPSERT_OPTIONS,
+ALTER OBJECT `path/to/table` (TYPE TABLE) SET (
+  ACTION = UPSERT_OPTIONS,
+  `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets',
+  `COMPACTION_PLANNER.FEATURES` = '{"levels":[
+    {"class_name":"Zero","portions_live_duration":"60s","expected_blobs_size":1048576},
+    {"class_name":"Zero","expected_blobs_size":2097152},
+    {"class_name":"OneLayer","expected_portion_size":2097152},
+    {"class_name":"OneLayer","expected_portion_size":4194304},
+    {"class_name":"OneLayer","expected_portion_size":6291456},
+    {"class_name":"OneLayer","expected_portion_size":8388608}
+  ]}'
+););

@@ -280,6 +280,14 @@
             "uri": "file://test_sql_streaming.test_solomon-ReadTopicGroupWriteToSolomon-default.txt_/plan.json"
         }
     },
+    "test_sql_streaming.test[watermarks-watermarks-conditional-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks-conditional-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks-conditional-default.txt_/plan.json"
+        }
+    },
     "test_sql_streaming.test[watermarks-watermarks-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_watermarks-watermarks-default.txt_/ast.txt"

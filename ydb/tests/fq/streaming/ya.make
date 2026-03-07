@@ -7,6 +7,9 @@ TEST_SRCS(
     test_watermarks.py
 )
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(15)
+
 IF (OS_LINUX)
     TEST_SRCS(
         test_udfs.py

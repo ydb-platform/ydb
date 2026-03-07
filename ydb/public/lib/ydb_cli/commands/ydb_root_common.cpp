@@ -190,9 +190,7 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Config(TConfig& config) {
-#if !defined(_win32_)
     NKikimr::EnableYDBBacktraceFormat();
-#endif
 #ifndef NDEBUG
     SetupSignalActions();
 #endif

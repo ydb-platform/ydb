@@ -87,9 +87,7 @@ public:
         Y_DEFER { ResetInterrupted(); };
 
         if (to_lower(line) == "/help") {
-            Cout << Endl;
             PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
-            Cout << Endl;
             return;
         }
 
@@ -136,7 +134,14 @@ public:
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
-        ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+
+        try {
+            ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
+        } catch (NStatusHelpers::TYdbErrorException& error) {
+            Cerr << Colors.Red() << "Failed to execute query:" << Colors.OldColor() << Endl << error << Endl;
+        } catch (std::exception& error) {
+            Cerr << Colors.Red() << "Failed to execute query:" << Colors.OldColor() << Endl << error.what() << Endl;
+        }
     }
 
 private:
@@ -152,7 +157,7 @@ private:
         if (enableAiInteractive) {
             elements.emplace_back(
                 CreateListItem(hbox({
-                    CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"),
+                    CreateEntityName("Ctrl+T or /switch"),
                     text(": switch to "),
                     text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan),
                     text(" interactive mode.")
@@ -162,6 +167,10 @@ private:
 
         elements.emplace_back(CreateListItem(hbox({
             CreateEntityName("TAB"), text(": complete the current word based on YQL syntax.")
+        })));
+
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("Arrows Ctrl+↑ and Ctrl+↓"), text(": navigate through the current word completion list.")
         })));
 
         PrintCommonHotKeys(elements);
@@ -193,11 +202,11 @@ private:
     }
 
     static TLineReaderSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
-        TString placeholder = "Type YQL query (Enter to execute, Ctrl+J for newline";
+        auto placeholder = TStringBuilder() << "Type YQL query (Enter to execute, Ctrl+Enter for newline";
         if (settings.EnableAiInteractive) {
-            placeholder += ", Ctrl+T for AI mode";
+            placeholder << ", Ctrl+T for AI mode";
         }
-        placeholder += ", Ctrl+D to exit)";
+        placeholder << ", Ctrl+D to exit)";
 
         return {
             .Driver = settings.Driver,

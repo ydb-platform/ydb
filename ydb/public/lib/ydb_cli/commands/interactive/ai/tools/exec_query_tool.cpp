@@ -116,7 +116,6 @@ Tool will return:
 
     enum class EAction {
         Approve,
-        Reject,
         Edit,
         Abort,
     };
@@ -125,7 +124,6 @@ Tool will return:
         std::vector<TString> options = {
             "Approve execution",
             "Edit query",
-            "Skip query (don't execute, let agent retry)",
             "Abort operation",
         };
 
@@ -135,11 +133,13 @@ Tool will return:
         }
 
         switch (*result) {
-            case 0: return EAction::Approve;
-            case 1: return EAction::Edit;
-            case 2: return EAction::Reject;
-            case 3: return EAction::Abort;
-            default: return EAction::Abort;
+            case 0:
+                return EAction::Approve;
+            case 1:
+                return EAction::Edit;
+            case 2:
+            default:
+                return EAction::Abort;
         }
     }
 
@@ -158,7 +158,6 @@ protected:
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
         UserMessage = "";
-        IsSkipped = false;
     }
 
     bool AskPermissions() final {
@@ -171,15 +170,14 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        YDB_CLI_LOG(Notice, "Agent wnt to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
+        YDB_CLI_LOG(Notice, "Agent want to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
 
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
-        Cout << Endl;
 
         const auto action = RunFtxuiActionDialog();
 
         if (action == EAction::Abort) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";
         }
 
@@ -187,27 +185,13 @@ protected:
             if (RequestQueryText()) {
                 return true;
             }
-            IsSkipped = true;
-            return true;
+            throw yexception() << "Interrupted by user";
         }
 
-        if (action == EAction::Approve) {
-            return true;
-        }
-
-        Cout << Endl;
-
-        IsSkipped = true;
         return true;
     }
 
     TResponse DoExecute() final {
-        if (IsSkipped) {
-            NJson::TJsonValue jsonResult;
-            jsonResult["status"] = "skipped";
-            return TResponse::Success(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
-        }
-
         Y_DEFER { ResetInterrupted(); };
 
         try {
@@ -216,7 +200,7 @@ protected:
                 return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {
-            Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
+            Cout << Endl << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Flush;
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
@@ -225,8 +209,6 @@ protected:
 
 private:
     bool RequestQueryText() {
-        Cout << Endl;
-
         const auto lineReader = CreateLineReader({
             .Driver = Driver,
             .Database = Database,
@@ -235,10 +217,11 @@ private:
             .ContinueAfterCancel = false,
         });
 
+        Cout << Endl;
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish(false);
         if (!response) {
-            Cout << Endl << "<Interrupted by user>" << Endl << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             return false;
         }
 
@@ -271,7 +254,6 @@ private:
 
     TString Query;
     TString UserMessage;
-    bool IsSkipped = false;
 };
 
 } // anonymous namespace

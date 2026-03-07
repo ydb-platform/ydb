@@ -97,12 +97,6 @@ NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TStrin
 }
 
 int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings) {
-    Y_DEFER {
-        if (execSettings.AddIndent) {
-            Cout << Endl;
-        }
-    };
-
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;

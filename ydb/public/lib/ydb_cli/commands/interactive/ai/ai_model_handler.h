@@ -18,7 +18,7 @@ class TModelHandler {
 
 public:
     struct TSettings {
-        TInteractiveConfigurationManager::TAiProfile::TPtr Profile;
+        TAiModelConfig::TPtr Profile;
         TString Prompt; // Current interactive CLI prompt
         TString Database;
         TDriver Driver;
@@ -34,7 +34,7 @@ public:
 private:
     IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const;
 
-    void SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TSettings& settings);
+    void SetupModel(TAiModelConfig::TPtr profile, const TSettings& settings);
 
     void SetupTools(const TSettings& settings);
 

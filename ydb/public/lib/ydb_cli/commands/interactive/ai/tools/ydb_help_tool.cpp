@@ -68,7 +68,6 @@ protected:
         } else {
             PrintFtxuiMessage("", TStringBuilder() << "Analyzing 'ydb " << Command << "' command description...", ftxui::Color::Green);
         }
-        Cout << Endl;
         return true;
     }
 

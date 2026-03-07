@@ -26,13 +26,15 @@ enum EEv {
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR));
 
 struct TEvRestoreBackup : public TEventLocal<TEvRestoreBackup, EvRestoreBackup> {
-    TEvRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false)
+    TEvRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false, bool dryRun = false)
         : BackupPath(backupPath)
         , SkipChecksumValidation(skipChecksumValidation)
+        , DryRun(dryRun)
     {}
 
     TString BackupPath;
     bool SkipChecksumValidation = false;
+    bool DryRun = false;
 };
 
 struct TEvRestoreCompleted : public TEventLocal<TEvRestoreCompleted, EvRestoreCompleted> {
@@ -56,11 +58,15 @@ struct TEvBackupReaderResult : public TEventLocal<TEvBackupReaderResult, EvBacku
 };
 
 struct TEvBackupInfo : public TEventLocal<TEvBackupInfo, EvBackupInfo> {
-    TEvBackupInfo(ui64 totalBytes)
+    TEvBackupInfo(ui64 totalBytes, ui32 generation, ui32 step)
         : TotalBytes(totalBytes)
+        , Generation(generation)
+        , Step(step)
     {}
 
     ui64 TotalBytes = 0;
+    ui32 Generation = 0;
+    ui32 Step = 0;
 };
 
 struct TEvReadBackup : public TEventLocal<TEvReadBackup, EvReadBackup> {};

@@ -11,6 +11,27 @@
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
+namespace {
+
+TString WithoutSha256(const TString& line) {
+    static constexpr TStringBuf prefix = ",\"sha256\":\"";
+    auto pos = line.rfind(prefix);
+    if (pos == TString::npos) {
+        return line;
+    }
+    return line.substr(0, pos) + "}";
+}
+
+TString WithoutSha256Changelog(const TString& changelog) {
+    auto lines = StringSplitter(changelog).Split('\n').ToList<TString>();
+    for (auto& line : lines) {
+        line = WithoutSha256(line);
+    }
+    return JoinSeq("\n", lines);
+}
+
+} // anonymous namespace
+
 struct TSchema : NIceDb::Schema {
     struct Data : Table<1> {
         struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
@@ -795,6 +816,8 @@ struct TEnv : public TMyEnvBase {
     }
 
     void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackup(backupPath, skipChecksumValidation);
+
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
@@ -803,10 +826,27 @@ struct TEnv : public TMyEnvBase {
 
         TAutoPtr<IEventHandle> handle;
         auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
-        if (result->Error) {
-            Cerr << "...restore has error: " << result->Error << Endl;
-        }
         UNIT_ASSERT_C(result->Success, "Restore completed with unexpected result, error: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Restore completed with unexpected result, warning: " << result->Error);
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        RestartTablet(TestTabletFlags);
+    }
+
+    void RestoreBackupExpectWarning(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackupExpectWarning(backupPath, skipChecksumValidation);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Restore should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Restore must have a warning");
 
         Cerr << "...restarting tablet in normal mode" << Endl;
         RestartTablet(TestTabletFlags);
@@ -814,6 +854,10 @@ struct TEnv : public TMyEnvBase {
 
     void RestoreLastBackup(ui32 TestTabletFlags) {
         RestoreBackup(GetLastBackupPath(), TestTabletFlags);
+    }
+
+    void RestoreLastBackupExpectWarning(ui32 testTabletFlags, bool skipChecksumValidation = false) {
+        RestoreBackupExpectWarning(GetLastBackupPath(), testTabletFlags, skipChecksumValidation);
     }
 
     TFsPath GetLastBackupPath() {
@@ -832,6 +876,8 @@ struct TEnv : public TMyEnvBase {
     }
 
     void RestoreLastBackupExpectFail() {
+        DryRunRestoreLastBackupExpectFail();
+
         auto backupPath = GetLastBackupPath();
 
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
@@ -844,6 +890,57 @@ struct TEnv : public TMyEnvBase {
         auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
         Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
         UNIT_ASSERT_C(!result->Success, "Restore should have failed but succeeded");
+    }
+
+    void DryRunRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        UNIT_ASSERT_C(result->Success, "Dry-run restore failed: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Dry-run restore completed with warning: " << result->Error);
+    }
+
+    void DryRunRestoreLastBackup() {
+        DryRunRestoreBackup(GetLastBackupPath());
+    }
+
+    void DryRunRestoreLastBackupExpectFail() {
+        auto backupPath = GetLastBackupPath();
+
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting failure)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, false, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(!result->Success, "Dry-run restore should have failed but succeeded");
+    }
+
+    void DryRunRestoreBackupExpectWarning(const TString& backupPath, bool skipChecksumValidation = false) {
+
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Dry-run should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Dry-run must have a warning");
+    }
+
+    void DryRunRestoreLastBackupExpectWarning(bool skipChecksumValidation = false) {
+        DryRunRestoreBackupExpectWarning(GetLastBackupPath(), skipChecksumValidation);
     }
 }; // TEnv
 
@@ -1223,7 +1320,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         auto changelog = genDirs.back().Child("changelog.json");
         UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
 
-        TString content = TFileInput(changelog).ReadAll();
+        TString content = WithoutSha256Changelog(TFileInput(changelog).ReadAll());
         UNIT_ASSERT_VALUES_EQUAL(
             content,
             R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})""\n"
@@ -1530,7 +1627,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_C(!json.Has("data_changes"), "Unexpected data changes in changelog");
 
         UNIT_ASSERT_VALUES_EQUAL(
-            lines[1],
+            WithoutSha256(lines[1]),
             R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"NewColumn":20}]})"
         );
 
@@ -1585,7 +1682,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             changelogFile.Flush();
         }
 
-        env.RestoreBackup(genDirs.back(), TestTabletFlags);
+        env.RestoreBackupExpectWarning(genDirs.back(), TestTabletFlags, /*skipChecksumValidation=*/ true);
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
     }
 
@@ -1753,11 +1850,11 @@ Y_UNIT_TEST_SUITE(Backup) {
             changelogLines[0].Contains(R"("column_name":"NoBackupColumn")"),
             "Changelog doesn't contain NoBackupColumn schema changes");
         UNIT_ASSERT_VALUES_EQUAL(
-            changelogLines[1],
+            WithoutSha256(changelogLines[1]),
             R"({"step":3,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})"
         );
         UNIT_ASSERT_VALUES_EQUAL(
-            changelogLines[2],
+            WithoutSha256(changelogLines[2]),
             R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20}]})"
         );
 
@@ -2372,6 +2469,445 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         assertState();
         env.RestoreLastBackup(TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["sha256"] = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidJSON) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        content += "this is not valid json{{{\n";
+        WriteFileContent(changelog, content);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidOp) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["data_changes"][0]["op"] = "unknown_op";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["table"] = "UnknownTable";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["UnknownColumn"] = 42;
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissingKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0].EraseValue("Key");
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogNullKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Key"] = NJson::TJsonValue(NJson::JSON_NULL);
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidBase64) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteBinaryValue(2, "abcdef");
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["BinaryValue"] = "!!!not-valid-base64!!!";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogWrongType) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Value"] = "not-a-number";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogReordering) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        std::swap(lines[2], lines[3]);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissing) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        lines.erase(lines.begin() + 2);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(DryRun) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        Cerr << "...erasing commit from changelog" << Endl;
+        lines.erase(lines.begin() + 2);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+        };
+
+        assertState();
+        env.DryRunRestoreBackup(backup,  /*skipChecksumValidation=*/ true);
+        env.RestartTablet(TestTabletFlags);
         assertState();
     }
 }

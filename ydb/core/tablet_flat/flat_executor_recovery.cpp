@@ -1,6 +1,8 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
+#include "flat_part_iface.h"
 #include "tablet_flat_executed.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -14,13 +16,11 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -193,6 +193,14 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
+    for (size_t i = 0; i < key.size(); ++i) {
+        if (key[i].IsEmpty()) {
+            ui32 keyColId = table->KeyColumns.at(i);
+            const auto& col = table->Columns.at(keyColId);
+            throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
+        }
+    }
+
     try {
         txc.DB.Update(table->Id, *op, key, ops);
     } catch (const std::exception& e) {
@@ -213,6 +221,134 @@ ui64 RestoreInFlightBytes() {
 }
 
 } // anonymous namespace
+
+class TDryRunExecutor
+    : public NFlatExecutorSetup::IExecutor
+    , public IExecuting
+{
+    struct TDryRunPages : public NTable::IPages {
+        TResult Locate(const NTable::TMemTable*, ui64, ui32) override { Y_TABLET_ERROR("Not supported"); }
+        TResult Locate(const NTable::TPart*, ui64, NTable::ELargeObj) override { Y_TABLET_ERROR("Not supported"); }
+        const TSharedData* TryGetPage(const NTable::TPart*, TPageId, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
+    };
+
+    struct TDryRunStats : public TExecutorStats {};
+
+public:
+    explicit TDryRunExecutor(ui64 tabletId)
+        : TabletId(tabletId)
+    {}
+
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override {
+        if (Executing) {
+            PendingTx.push_back(transaction);
+            return;
+        }
+        Executing = true;
+        ExecuteImpl(transaction, ctx);
+        while (!PendingTx.empty()) {
+            auto next = std::move(PendingTx.front());
+            PendingTx.pop_front();
+            ExecuteImpl(next, ctx);
+        }
+        Executing = false;
+    }
+
+    const NTable::TScheme& Scheme() const override { return DB.GetScheme(); }
+    const TExecutorStats& GetStats() const override { return Stats; }
+    void DetachTablet() override {}
+    TExecutorCounters* GetCounters() override { return nullptr; }
+    void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) override {}
+
+    void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext&) const override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+    }
+    void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr& ev) override {
+        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
+            new TEvTablet::TEvGetCountersResponse()));
+    }
+
+    void Boot(TEvTablet::TEvBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void Restored(TEvTablet::TEvRestored::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerBoot(TEvTablet::TEvFBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody>) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAuxUpdate(TString) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAttached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerDetached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerSyncComplete() override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerGcApplied(ui32, TDuration) override { Y_TABLET_ERROR("Not supported"); }
+
+    ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    TString BorrowSnapshot(ui32, const TTableSnapshotContext&, TRawVals, TRawVals, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MakeScanSnapshot(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void DropScanSnapshot(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 QueueScan(ui32, TAutoPtr<NTable::IScan>, ui64, const TScanOptions&) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelScan(ui32, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasSchemaChanges(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactBorrowed(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
+    void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    void OnYellowChannels(TVector<ui32>, TVector<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    NMetrics::TResourceMetrics* GetResourceMetrics() const override { Y_TABLET_ERROR("Not supported"); }
+    float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
+    void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    void StartVacuum(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
+    void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+
+private:
+    void ExecuteImpl(TAutoPtr<ITransaction>& transaction, const TActorContext &ctx) {
+        ++Step0;
+        NTable::TTxStamp stamp(Generation0, Step0);
+        DB.Begin(stamp, Pages);
+        NWilson::TSpan span;
+        TTransactionContext txc(TabletId, Generation0, Step0, DB, *this, Max<ui64>(), 0, span);
+        bool ready = transaction->Execute(txc, ctx);
+        DB.Commit(stamp, ready);
+        if (ready) {
+            transaction->Complete(ctx);
+        } else {
+            PendingTx.push_back(std::move(transaction));
+        }
+    }
+
+    NTable::TDatabase DB;
+    TDryRunPages Pages;
+    TDryRunStats Stats;
+    ui64 TabletId;
+    bool Executing = false;
+    TDeque<TAutoPtr<ITransaction>> PendingTx;
+};
 
 class TRecoveryShard : public TActor<TRecoveryShard>, public TTabletExecutedFlat {
 public:
@@ -258,7 +394,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRestoreBackup, Handle);
             hFunc(TEvBackupReaderResult, Handle);
-            hFunc(TEvBackupInfo, Handle);
+            HFunc(TEvBackupInfo, Handle);
 
             hFunc(TEvSchemaData, Handle);
             hFunc(TEvSnapshotData, Handle);
@@ -270,7 +406,7 @@ public:
 
     void Handle(TEvRestoreBackup::TPtr& ev) {
         if (RestoreState == ERestoreState::NotStarted) {
-            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation);
+            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation, ev->Get()->DryRun);
         }
     }
 
@@ -279,11 +415,19 @@ public:
         CompleteRestore(msg->Success, msg->Error);
     }
 
-    void Handle(TEvBackupInfo::TPtr& ev) {
+    void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
+        PreviousChangelogChecksum = NBackup::ComputeInitialChecksum(ev->Get()->Generation, ev->Get()->Step);
 
-        using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
-        Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        if (DryRun) {
+            DryRunExec = std::make_unique<TDryRunExecutor>(TabletID());
+            Executor0 = DryRunExec.get();
+            ITablet::ExecutorActorID = ctx.SelfID;
+            OnActivateExecutor(ctx);
+        } else {
+            using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
+            Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        }
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
@@ -298,8 +442,10 @@ public:
         Execute(CreateTxUploadChangelog(ev));
     }
 
-    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false) {
+    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
         RestoreState = ERestoreState::InProgress;
+        SkipChecksumValidation = skipChecksumValidation;
+        DryRun = dryRun;
 
         BackupPath = backupPath;
         RestoreSubscriber = subscriber;
@@ -404,7 +550,8 @@ public:
         if (const auto& path = cgi.Get("restoreBackup")) {
             if (RestoreState == ERestoreState::NotStarted) {
                 bool skipChecksum = cgi.Has("skipChecksumValidation");
-                StartRestore(path, {}, skipChecksum);
+                bool dryRun = cgi.Has("dryRun");
+                StartRestore(path, {}, skipChecksum, dryRun);
             }
         }
 
@@ -425,6 +572,10 @@ public:
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<div class='checkbox'><label>"
+                                    << "<input type='checkbox' id='dryRun' name='dryRun'>"
+                                    << " Dry Run"
+                                    << "</label></div>";
                                 str << "<div class='checkbox'><label>"
                                     << "<input type='checkbox' id='skipChecksumValidation' name='skipChecksumValidation'>"
                                     << " Skip Checksum Validation"
@@ -475,7 +626,11 @@ public:
                             var btn = this;
                             var form = $(btn.form);
 
-                            if (!confirm('Are you sure you want to start restore? This will override existing data')) {
+                            var isDryRun = $('#dryRun').is(':checked');
+                            var msg = isDryRun
+                                ? 'Are you sure you want to start dry-run restore?'
+                                : 'Are you sure you want to start restore? This will override existing data';
+                            if (!confirm(msg)) {
                                 return;
                             }
 
@@ -512,6 +667,11 @@ private:
     ui64 TotalBytes = 0;
 
     TActorId RestoreSubscriber; // only for tests
+
+    TString PreviousChangelogChecksum;
+    bool SkipChecksumValidation = false;
+    bool DryRun = false;
+    std::unique_ptr<TDryRunExecutor> DryRunExec;
 }; // TRecoveryShard
 
 class TUploadTxResult {
@@ -693,6 +853,7 @@ public:
 
         while (i < Changelog->Get()->Lines.size()) {
             const auto& line = Changelog->Get()->Lines[i];
+            TString lineChecksum;
 
             NJson::TJsonValue json;
             try {
@@ -705,6 +866,44 @@ public:
             if (!json.IsMap()) {
                 Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
                 return true;
+            }
+
+            if (!Self->SkipChecksumValidation) {
+                if (!json.Has("sha256")) {
+                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
+                    return true;
+                }
+
+                if (!json["sha256"].IsString()) {
+                    Result.Error(TStringBuilder() << "Invalid 'sha256' field in changelog line: " << line);
+                    return true;
+                }
+
+                const TString& expectedChecksum = json["sha256"].GetString();
+
+                static constexpr TStringBuf sha256Prefix = "\"sha256\":\"";
+                auto pos = line.rfind(sha256Prefix);
+                if (pos == TString::npos) {
+                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
+                    return true;
+                }
+
+                auto valueStart = pos + sha256Prefix.size();
+                auto valueEnd = line.find('"', valueStart);
+                if (valueEnd == TString::npos) {
+                    Result.Error(TStringBuilder() << "Malformed sha256 field in changelog line: " << line);
+                    return true;
+                }
+
+                TStringBuf before(line.data(), pos);
+                TStringBuf after(line.data() + valueEnd + 1, line.size() - valueEnd - 1);
+                lineChecksum = NBackup::ComputeChecksum(before, after, Self->PreviousChangelogChecksum);
+    
+                if (lineChecksum != expectedChecksum) {
+                    Result.Error(TStringBuilder() << "Changelog checksum mismatch:"
+                        << " expected " << expectedChecksum << ", got " << lineChecksum << ", line: " << line);
+                    return true;
+                }
             }
 
             if (json.Has("schema_changes")) {
@@ -758,6 +957,7 @@ public:
                 }
             }
 
+            Self->PreviousChangelogChecksum = std::move(lineChecksum);
             processedBytes += line.size() + 1; // +1 for newline;
             ++i;
 
@@ -822,6 +1022,10 @@ public:
     {}
 
     void Bootstrap() {
+        if (!BackupPath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
+        }
+
         if (!SnapshotDirPath.Exists()) {
             return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
         }
@@ -845,7 +1049,7 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        Send(Owner, new TEvBackupInfo(totalBytes));
+        Send(Owner, new TEvBackupInfo(totalBytes, Generation, Step));
         Become(&TThis::StateWork);
     }
 
@@ -969,8 +1173,7 @@ public:
                 return false;
             }
 
-            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            TString actualManifestChecksum = NBackup::ComputeChecksum(manifestStr);
             if (actualManifestChecksum != expectedManifestChecksum) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
                                                          << "expected " << expectedManifestChecksum
@@ -1014,6 +1217,18 @@ public:
                 << ", got " << actualTabletId);
             return false;
         }
+
+        if (!manifest.Has("generation") || !manifest["generation"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'generation' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+        Generation = manifest["generation"].GetUInteger();
+
+        if (!manifest.Has("step") || !manifest["step"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'step' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+        Step = manifest["step"].GetUInteger();
 
         if (!manifest.Has("files") || !manifest["files"].IsArray()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
@@ -1062,7 +1277,7 @@ public:
                 }
 
                 auto fileDigest = calcer.Final();
-                TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+                TString actualFileSha256 = NBackup::FormatChecksumDigest(fileDigest);
                 if (actualFileSha256 != expectedFileSha256) {
                     SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
                                              << ": expected " << expectedFileSha256
@@ -1108,6 +1323,9 @@ private:
     const bool SkipChecksumValidation;
 
     TDeque<TFsPath> SnapshotFiles;
+
+    ui32 Generation = 0;
+    ui32 Step = 0;
 
     TFsPath CurrentFilePath;
     TString CurrentTableName;

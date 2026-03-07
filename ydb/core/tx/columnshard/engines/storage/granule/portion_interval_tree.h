@@ -5,11 +5,17 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/range_treap/range_treap.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <algorithm>
 #include <compare>
 #include <memory>
 #include <variant>
+#include <vector>
 
-namespace NKikimr::NOlap::PortionIntervalTree {
+#include <util/generic/hash_set.h>
+
+namespace NKikimr::NOlap::NPortionIntervalTree {
 
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {
@@ -69,6 +75,57 @@ public:
 };
 
 
-using TPortionIntervalTree = NRangeTreap::TRangeTreap<TPositionView, std::shared_ptr<TPortionInfo>, TPositionView, TPortionIntervalTreeValueTraits, TPositionViewBorderComparator>;
+class TPortionIntervalTree {
+private:
+    using TImpl = NRangeTreap::TRangeTreap<
+        TPositionView,
+        std::shared_ptr<TPortionInfo>,
+        TPositionView,
+        TPortionIntervalTreeValueTraits,
+        TPositionViewBorderComparator>;
 
-} // namespace NKikimr::NOlap::PortionIntervalTree
+public:
+    using TOwnedRange = TImpl::TOwnedRange;
+    using TRange = TImpl::TRange;
+    using TBorder = TImpl::TBorder;
+
+    explicit TPortionIntervalTree(bool countPortionIntersections,
+        NMonitoring::TDynamicCounters::TCounterPtr maxPortionIntersectionsCounter);
+
+    void AddRange(TOwnedRange range, const std::shared_ptr<TPortionInfo>& value);
+
+    void RemoveRanges(const std::shared_ptr<TPortionInfo>& value);
+
+    /** Порция с максимальным числом пересечений (вершина кучи). nullptr если дерево пусто или куча отключена. */
+    std::shared_ptr<TPortionInfo> GetPortionWithMaxIntersections() const;
+
+    template <class TCallback>
+    bool EachRange(TCallback&& callback) const {
+        return Impl.EachRange(std::forward<TCallback>(callback));
+    }
+
+    template <class TCallback>
+    bool EachIntersection(const TRange& range, TCallback&& callback) const {
+        return Impl.EachIntersection(range, std::forward<TCallback>(callback));
+    }
+
+    template <class TCallback>
+    bool EachIntersection(const TBorder& left, const TBorder& right, TCallback&& callback) const {
+        return Impl.EachIntersection(left, right, std::forward<TCallback>(callback));
+    }
+
+    size_t Size() const noexcept;
+
+private:
+    void SetHeapDirty() const;
+    void RebuildHeap() const;
+
+private:
+    TImpl Impl;
+    const bool CountPortionIntersections;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxPortionIntersectionsCounter;
+    mutable std::vector<std::shared_ptr<TPortionInfo>> Heap;
+    mutable bool HeapDirty = true;
+};
+
+} // namespace NKikimr::NOlap::NPortionIntervalTree

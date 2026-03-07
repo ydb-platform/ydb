@@ -125,7 +125,7 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
-    std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
+    std::unique_ptr<NPortionIntervalTree::TPortionIntervalTree> IntervalTree;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildAdditiveMetrics() const;
@@ -167,6 +167,7 @@ private:
     bool DataAccessorConstructed = false;
 
 public:
+    ~TGranuleMeta();
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
@@ -195,7 +196,7 @@ public:
         IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
-        auto copy = innerPortion->MakeCopy();
+        auto copy = innerPortion->MakeCopy(false);
         modifier(*copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
             auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));
@@ -369,9 +370,26 @@ public:
         return IntervalTree != nullptr;
     }
 
-    const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
+    const NPortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
         AFL_VERIFY(HasPortionIntervalTree());
         return *IntervalTree;
+    }
+
+    /** Текущее максимальное число пересечений порций в дереве интервалов (0 если дерева нет). */
+    ui32 GetMaxPortionIntersectionsCount() const {
+        if (!HasPortionIntervalTree()) {
+            return 0;
+        }
+        auto portion = GetPortionIntervalTreeVerified().GetPortionWithMaxIntersections();
+        return portion ? portion->GetPortionIntersections() : 0;
+    }
+
+    /** Возвращает true, если гранула перегружена по числу пересечений порций (limit задаётся опциями таблицы через ALTER). */
+    bool IsOverloadedByPortionIntersections(std::optional<ui64> limit) const;
+
+    /** Обновляет счётчик настроенного лимита пересечений (вызывается при изменении опций схемы и при создании гранулы). */
+    void SetMaxPortionIntersectionsLimitCounter(ui64 value) const {
+        Counters.GetPortionsIndexCounters().SetIntervalTreeMaxPortionIntersectionsLimit(value);
     }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {

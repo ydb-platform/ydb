@@ -23,7 +23,7 @@ public:
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portionInfo : InsertedPortions) {
-            auto copy = portionInfo.GetPortionInfo().MakeCopy();
+            auto copy = portionInfo.GetPortionInfo().MakeCopy(false);
             copy->SetRemoveSnapshot(TSnapshot(1, 1));
             db.WritePortion(portionInfo.GetBlobIds(), *copy);
         }

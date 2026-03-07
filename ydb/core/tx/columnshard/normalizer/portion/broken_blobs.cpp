@@ -30,7 +30,7 @@ public:
             AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
-            auto copy = portionInfo.GetPortionInfo().MakeCopy();
+            auto copy = portionInfo.GetPortionInfo().MakeCopy(false);
             copy->SetRemoveSnapshot(TSnapshot(1, 1));
             db.WritePortion({}, *copy);
         }

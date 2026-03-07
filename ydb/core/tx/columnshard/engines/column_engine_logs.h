@@ -234,7 +234,7 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
-        auto exPortion = portion->MakeCopy();
+        auto exPortion = portion->MakeCopy(false);
         AFL_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);

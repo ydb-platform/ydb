@@ -14,6 +14,7 @@ private:
 private:
     bool SchemeNeedActualization = false;
     std::optional<TString> ScanReaderPolicyName;
+    std::optional<ui64> MaxPortionIntersectionsLimit;
     NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer CompactionPlannerConstructor;
     NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer MetadataManagerConstructor;
 public:

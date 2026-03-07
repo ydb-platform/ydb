@@ -23,8 +23,12 @@ private:
 
     virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const override;
 
-    virtual std::shared_ptr<TPortionInfo> MakeCopy() const override {
-        return std::make_shared<TWrittenPortionInfo>(*this);
+    virtual std::shared_ptr<TPortionInfo> MakeCopy(const bool copyIntersectionCount) const override {
+        auto copy = std::make_shared<TWrittenPortionInfo>(*this);
+        if (!copyIntersectionCount) {
+            copy->IntersectionsCount = 0;
+        }
+        return copy;
     }
 
     virtual TString DoDebugString(const bool /*withDetails*/) const override {

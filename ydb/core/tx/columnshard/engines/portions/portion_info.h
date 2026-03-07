@@ -96,6 +96,7 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
+    ui32 IntersectionsCount = 0;
 
     virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
 
@@ -157,13 +158,15 @@ public:
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
     }
 
-    virtual std::shared_ptr<TPortionInfo> MakeCopy() const = 0;
+    virtual std::shared_ptr<TPortionInfo> MakeCopy(const bool copyIntersectionCount) const = 0;
 
     ui64 GetDataSize() const {
         return sizeof(TPortionInfo) + Meta.GetDataSize() - sizeof(TPortionMeta);
     }
 
-    virtual ~TPortionInfo() = default;
+    virtual ~TPortionInfo() {
+        AFL_VERIFY(0 == IntersectionsCount)("IntersectionsCount", IntersectionsCount)("PortionId", PortionId);
+    }
 
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -303,6 +306,19 @@ public:
 
     ui64 GetPortionId() const {
         return PortionId;
+    }
+
+    ui32 GetPortionIntersections() const {
+        return IntersectionsCount;
+    }
+
+    void IncrementPortionIntersections() {
+        ++IntersectionsCount;
+    }
+
+    void DecrementPortionIntersections() {
+        AFL_VERIFY(IntersectionsCount > 0);
+        --IntersectionsCount;
     }
 
     NJson::TJsonValue SerializeToJsonVisual() const {

@@ -149,12 +149,12 @@ private:
     }
 
     void AppendCommittedPortionsFromIntervalTree() {
-        using TPositionView = PortionIntervalTree::TPositionView;
+        using TPositionView = NPortionIntervalTree::TPositionView;
         using TBorder = NRangeTreap::TBorder<TPositionView>;
 
         std::unordered_map<ui64, TColumnEngineForLogs::TSelectedPortionInfo> selectedPortionsMap;
 
-        const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
+        const auto collector = [&](const NPortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
                                 const std::shared_ptr<TPortionInfo>& portion) -> bool {
             if (portion->IsRemovedFor(Snapshot)) {
                 return true;
@@ -259,6 +259,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));
+    const ui64 portionIntersectionsLimit = indexInfoActual->GetMaxPortionIntersectionsLimit().value_or(0);
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->SetMaxPortionIntersectionsLimitCounter(portionIntersectionsLimit);
+    }
     if (isCriticalScheme) {
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {

@@ -86,14 +86,14 @@ class LocalCluster:
         # Use port allocator with offset to allow multiple instances
         port_allocator = DefaultFirstNodePortAllocator(base_offset=self.port_offset)
 
-        nbs_database = "/Root/NBS"
+        nbs_database_name = "/Root/NBS"
         configurator = kikimr_config.KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             port_allocator=port_allocator,
             output_path=self.working_dir,
             binary_paths=[self.binary_path],
             enable_nbs=self.enable_nbs,
-            nbs_database=nbs_database,
+            nbs_database_name=nbs_database_name,
         )
 
         self.cluster = kikimr_runner.KiKiMR(
@@ -112,7 +112,7 @@ class LocalCluster:
             raise RuntimeError(error_msg) from e
 
         if self.enable_nbs:
-            self.start_nbs(nbs_database)
+            self.start_nbs(nbs_database_name)
 
         logger.info("Cluster started successfully!")
         logger.info("Total nodes: %d", len(self.cluster.nodes))
@@ -158,31 +158,21 @@ class LocalCluster:
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
 
-    def start_nbs(self, nbs_database):
-        logger.info("Creating NBS database: %s", nbs_database)
+    def start_nbs(self, nbs_database_name):
+        logger.info("Creating NBS database: %s", nbs_database_name)
         self.cluster.create_database(
-            nbs_database,
+            nbs_database_name,
             storage_pool_units_count={
                 'hdd': 9
             }
         )
-        # logger.info("Database created, waiting for it to be fully ready...")
-        # # Give the database a moment to propagate through the cluster
-        # time.sleep(3)
-
-        # # Verify database exists before starting slots
-        # try:
-        #     status = self.cluster.get_database_status(nbs_database)
-        #     logger.info("Database status: %s", status)
-        # except Exception as e:
-        #     logger.warning("Could not get database status: %s", e)
 
         logger.info("Registering and starting NBS dynamic slots...")
-        slots = self.cluster.register_and_start_slots(nbs_database, count=1)
+        slots = self.cluster.register_and_start_slots(nbs_database_name, count=1)
 
         logger.info("Waiting for NBS tenant to be up...")
         try:
-            self.cluster.wait_tenant_up(nbs_database)
+            self.cluster.wait_tenant_up(nbs_database_name)
             logger.info("NBS tenant is ready")
         except Exception as e:
             logger.error("Failed to start NBS tenant: %s", e)

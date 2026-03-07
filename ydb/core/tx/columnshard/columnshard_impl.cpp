@@ -198,15 +198,18 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
     ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-
-    if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
-        if (ssClean->GetPlanStep() < minReadStep) {
-            Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
-            return *ssClean;
-        }
-    }
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
+}
+
+NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
+    auto minReadSnapshot = GetMinReadSnapshot();
+    // all snapshots younger than minReadSnapshot may be considered as "potentially in flight".
+    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScapSnapshot],
+    // so we will get a live snapshot at that moment.
+    // that is said, we need here only snapshots that are older than minReadSnapshot.
+    auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minReadSnapshot);
+    return NOlap::TSnapshotHolders(minReadSnapshot, std::move(inFlightTxs));
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -808,10 +811,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+    const auto snapshotHolders = GetSnapshotHolders();
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop(snapshotHolders);
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -838,8 +841,9 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
+    const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
+    for (auto&& i : TablesManager.GetPathsToDrop(snapshotHolders)) {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 

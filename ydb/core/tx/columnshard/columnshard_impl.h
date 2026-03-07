@@ -576,6 +576,7 @@ private:
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
     NOlap::TSnapshot GetMinReadSnapshot() const;
+    NOlap::TSnapshotHolders GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
     TDuration GetTxCompleteLag() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;

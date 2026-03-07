@@ -41,15 +41,14 @@ ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.Spli
 ydb/core/tx/schemeshard/ut_system_names TSchemeShardSysNames.ESchemeOpCreateFileStore-Protect-DbAdmin-clusteradmin
 ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
-ydb/library/actors/interconnect/ut_rdma XdcRdmaTest.Send32000Payloads
 ydb/library/actors/interconnect/ut_rdma XdcRdmaTest/XdcRdmaTestCqMode.SendMixBig/POLLING
+ydb/library/yql/providers/pq/gateway/ut TCompositeTopicReadSessionTest.PartitionBalancingBetweenTwoSessions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache

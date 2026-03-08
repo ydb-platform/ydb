@@ -1487,7 +1487,7 @@ void TTablet::GcLogChannel(ui32 step) {
                     false,
                     false,
                     false,
-                    TWriteSource(TWriteSource::EOp::GcLogChannel)
+                    TWriteSource::GcLogChannel
                 )
             );
         }
@@ -1502,9 +1502,9 @@ void TTablet::GcLogChannel(ui32 step) {
                 false,
                 false,
                 false,
-                TWriteSource(TWriteSource::EOp::GcLogChannel)
-                )
-            );
+                TWriteSource::GcLogChannel
+            )
+        );
     }
     GcInFlyStep = step;
     GcNextStep = 0;

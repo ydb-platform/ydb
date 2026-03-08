@@ -42,7 +42,7 @@ namespace NKikimr {
             true,
             NPriWrite::HullComp,
             true,
-            TWriteSource(TWriteSource::EOp::ScrubWrite));
+            TWriteSource::ScrubWrite);
         ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "writing index to " << part.ToString();

@@ -511,10 +511,9 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLogoBlobOpt, dataToWrite,
-                    seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
+                    seg, loggedRecCookie, std::move(syncLogMsg), nullptr, info.WriteSource);
             // send prepared message to recovery log
             logMsg->Orbit = std::move(orbit);
-            logMsg->WriteSource = info.WriteSource;
             return {std::move(logMsg), loggedRec->GetTraceId()};
         }
 
@@ -629,7 +628,7 @@ namespace NKikimr {
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), item.HasChecksum() ?
                     std::make_optional(item.GetChecksum()) : std::nullopt, item.MutableExtraBlockChecks(),
-                    TWriteSource::FromProto(item.HasWriteSourceOp() ? item.GetWriteSourceOp() : 0),
+                    WriteSourceFromProto(item.GetWriteSourceOp()),
                     item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId(), item.GetIssueKeepFlag(),
                     item.GetIgnoreBlock());
                 TVPutInfo &info = putsInfo.back();
@@ -778,7 +777,7 @@ namespace NKikimr {
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer(), record.HasChecksum() ? std::make_optional(record.GetChecksum()) :
                 std::nullopt, record.MutableExtraBlockChecks(),
-                TWriteSource::FromProto(record.HasWriteSourceOp() ? record.GetWriteSourceOp() : 0),
+                WriteSourceFromProto(record.GetWriteSourceOp()),
                 std::move(ev->TraceId), record.GetIssueKeepFlag(), record.GetIgnoreBlock());
             const ui64 bufSize = info.Buffer.GetSize();
 
@@ -929,8 +928,7 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHugeLogoBlob, dataToWrite, seg,
-                    loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = msg->WriteSource;
+                    loggedRecCookie, std::move(syncLogMsg), nullptr, msg->WriteSource);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
@@ -963,8 +961,8 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
-                    serializedLogRecord, seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonHandoffDelLogoBlob);
+                    serializedLogRecord, seg, loggedRecCookie, std::move(syncLogMsg), nullptr,
+                    TWriteSource::SkeletonHandoffDelLogoBlob);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }
@@ -983,8 +981,7 @@ namespace NKikimr {
             auto traceId = ev->TraceId.Clone();
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecAddBulkSst(seg, false, ev));
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAddBulkSst, commitRecord, data, seg,
-                reinterpret_cast<void*>(loggedRecId), nullptr);
-            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonAddBulkSst);
+                reinterpret_cast<void*>(loggedRecId), nullptr, TWriteSource::SkeletonAddBulkSst);
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
 
@@ -1170,8 +1167,8 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
-                    ev->GetChainBuffer()->GetString(), seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource::FromProto(record.HasWriteSourceOp() ? record.GetWriteSourceOp() : 0);
+                    ev->GetChainBuffer()->GetString(), seg, loggedRecCookie, std::move(syncLogMsg), nullptr,
+                    WriteSourceFromProto(record.GetWriteSourceOp()));
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));
         }
@@ -1276,8 +1273,8 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureGC, data, seg, loggedRecCookie,
-                    std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource::FromProto(record.HasWriteSourceOp() ? record.GetWriteSourceOp() : 0);
+                    std::move(syncLogMsg), nullptr,
+                    WriteSourceFromProto(record.GetWriteSourceOp()));
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
@@ -1632,8 +1629,7 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
-                    loggedRecCookie, nullptr, nullptr);
-            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonLocalSyncData);
+                    loggedRecCookie, nullptr, nullptr, TWriteSource::SkeletonLocalSyncData);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
         }
@@ -1686,8 +1682,7 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAnubisOsirisPut, data, seg,
-                    loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonAnubisOsirisPut);
+                    loggedRecCookie, std::move(syncLogMsg), nullptr, TWriteSource::SkeletonAnubisOsirisPut);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }
@@ -1779,11 +1774,11 @@ namespace NKikimr {
             if (buf) {
                 ctx.Send(Db->HugeKeeperID, new TEvHullWriteHugeBlob(ev->Sender, ev->Cookie, id, ingress, std::move(buf),
                     true, false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource(TWriteSource::EOp::RecoveredHugeBlob), false));
+                    TWriteSource::RecoveredHugeBlob, false));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, id, ingress, TDiskPart(), true, false, ev->Sender,
                     ev->Cookie, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource(TWriteSource::EOp::RecoveredHugeBlob)));
+                    TWriteSource::RecoveredHugeBlob));
             }
         }
 
@@ -1814,8 +1809,7 @@ namespace NKikimr {
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignaturePhantomBlobs, data, seg,
-                    loggedRecCookie, std::move(syncLogMsg), nullptr);
-            logMsg->WriteSource = TWriteSource(TWriteSource::EOp::SkeletonPhantomBlobs);
+                    loggedRecCookie, std::move(syncLogMsg), nullptr, TWriteSource::SkeletonPhantomBlobs);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
         }

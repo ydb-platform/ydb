@@ -513,9 +513,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
-        mon->CountLogWriteOpRequest(TWriteSource(TWriteSource::EOp::WriteLogEntry), 100);
-        mon->CountLogWriteOpRequest(TWriteSource(TWriteSource::EOp::SyncLogCommitterCommit), 200);
-        mon->CountLogWriteOpRequest(TWriteSource(TWriteSource::EOp::Unknown), 300);
+        mon->CountLogWriteOpRequest(TWriteSource::WriteLogEntry, 100);
+        mon->CountLogWriteOpRequest(TWriteSource::SyncLogCommitterCommit, 200);
+        mon->CountLogWriteOpRequest(TWriteSource::Unknown, 300);
 
         auto pdiskGroup = counters->GetSubgroup("subsystem", "pdisk");
         auto getCounterValue = [&](const TString& opName, const TString& counterName) -> i64 {

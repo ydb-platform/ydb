@@ -268,7 +268,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 .Buffer = TRope(buffer),
                 .Deadline = TInstant::Max(),
                 .HandleClass = PutHandleClass,
-                .WriteSource = TWriteSource(TWriteSource::EOp::GroupWriteLoadActor),
+                .WriteSource = TWriteSource::GroupWriteLoadActor,
             });
             InFlightTracker.Request(blobSize);
             return std::move(ev);
@@ -300,7 +300,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
                     !keep, gen, step, blobsToKeep.release(), blobsToCollect.release(), TInstant::Max(), false,
-                    false, false, TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                    false, false, TWriteSource::GroupWriteLoadActor);
         }
 
         TLogoBlobID GetRandomBlobId() {
@@ -656,7 +656,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         void IssueTEvBlock(const TActorContext& ctx) {
             auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(),
-                    TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                    TWriteSource::GroupWriteLoadActor);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvBlockResult *>(event);
@@ -687,7 +687,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 .Buffer = TRope(std::move(buffer)),
                 .Deadline = TInstant::Max(),
                 .HandleClass = PutHandleClass,
-                .WriteSource = TWriteSource(TWriteSource::EOp::GroupWriteLoadActor),
+                .WriteSource = TWriteSource::GroupWriteLoadActor,
             });
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
@@ -705,7 +705,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         void IssueTEvCollectGarbageOnce(const TActorContext& ctx) {
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
-                    Channel, Generation, 0, TInstant::Max(), TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                    Channel, Generation, 0, TInstant::Max(), TWriteSource::GroupWriteLoadActor);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
             ++GarbageCollectStep;
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
@@ -786,7 +786,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void StopWorking(const TActorContext& ctx) {
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
                     Channel, Generation, Max<ui32>(), TInstant::Max(),
-                    TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                    TWriteSource::GroupWriteLoadActor);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " end working, going to send " << ev->ToString());
             ++GarbageCollectStep;
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
@@ -1017,7 +1017,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 .Buffer = TRope(std::move(buffer)),
                 .Deadline = TInstant::Max(),
                 .HandleClass = putHandleClass,
-                .WriteSource = TWriteSource(TWriteSource::EOp::GroupWriteLoadActor),
+                .WriteSource = TWriteSource::GroupWriteLoadActor,
             });
             const ui64 writeQueryId = ++WriteQueryId;
 
@@ -1043,7 +1043,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation,
                                 GarbageCollectStep, Channel, false, Generation, GarbageCollectStep,
                                 new TVector<TLogoBlobID>({id}), nullptr, TInstant::Max(), false,
-                                false, false, TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                                false, false, TWriteSource::GroupWriteLoadActor);
                         SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(gcCallback)));
                     }
 
@@ -1158,7 +1158,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, GarbageCollectStep, Channel,
                     true, Generation, GarbageCollectStep, nullptr, doNotKeeps, TInstant::Max(), false,
-                    false, false, TWriteSource(TWriteSource::EOp::GroupWriteLoadActor));
+                    false, false, TWriteSource::GroupWriteLoadActor);
             ConfirmedBlobIds.erase(ConfirmedBlobIds.begin(), it);
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);

@@ -291,7 +291,7 @@ message TEvVPut {
     optional TTimestamps Timestamps = 23;
 
     repeated TExtraBlockCheck ExtraBlockChecks = 11;
-    optional uint32 WriteSourceOp = 31;
+    optional uint32 WriteSourceOp = 24;
 }
 
 message TEvVPutResult {
@@ -325,7 +325,7 @@ message TVMultiPutItem {
     repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 5;
 
     optional NActorsProto.TTraceId TraceId = 6;
-    optional uint32 WriteSourceOp = 31;
+    optional uint32 WriteSourceOp = 10;
 }
 
 message TEvVMultiPut {
@@ -465,7 +465,7 @@ message TEvVBlock {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
     optional bool NotifyIfNotReady = 4;
     optional TMsgQoS MsgQoS = 10;
-    optional uint32 WriteSourceOp = 31;
+    optional uint32 WriteSourceOp = 11;
 }
 
 message TEvVBlockResult {
@@ -601,7 +601,7 @@ message TEvVCollectGarbage {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 8;
     optional bool NotifyIfNotReady = 9;
     optional TMsgQoS MsgQoS = 10;
-    optional uint32 WriteSourceOp = 31;
+    optional uint32 WriteSourceOp = 14;
 }
 
 message TEvVCollectGarbageResult {

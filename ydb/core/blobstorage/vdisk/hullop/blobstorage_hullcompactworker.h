@@ -67,7 +67,7 @@ namespace NKikimr {
                     auto write = std::make_unique<NPDisk::TEvChunkWrite>(Worker->PDiskCtx->Dsk->Owner,
                         Worker->PDiskCtx->Dsk->OwnerRound, preallocatedLocation.ChunkIdx, preallocatedLocation.Offset,
                         partsPtr, cookie, true, NPriWrite::HullComp, false,
-                        TWriteSource(TWriteSource::EOp::HullCompactWorkerWrite));
+                        TWriteSource::HullCompactWorkerWrite);
                     Worker->PendingWrites.push_back(std::move(write));
                 }
             }

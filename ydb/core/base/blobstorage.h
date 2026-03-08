@@ -1099,7 +1099,7 @@ struct TEvBlobStorage {
             TInstant Deadline;
             NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
             ETactic Tactic = TacticDefault;
-            TWriteSource WriteSource = TWriteSource::Unknown();
+            TWriteSource WriteSource = UnknownWriteSource();
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
@@ -1800,7 +1800,7 @@ struct TEvBlobStorage {
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = TWriteSource::Unknown())
+                TWriteSource writeSource = UnknownWriteSource())
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -1808,7 +1808,7 @@ struct TEvBlobStorage {
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = TWriteSource::Unknown())
+                TWriteSource writeSource = UnknownWriteSource())
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -2490,7 +2490,7 @@ struct TEvBlobStorage {
                 bool collect, ui32 collectGeneration,
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
                 bool isMultiCollectAllowed, bool hard = false, bool ignoreBlock = false,
-                TWriteSource writeSource = TWriteSource::Unknown())
+                TWriteSource writeSource = UnknownWriteSource())
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(perGenerationCounter)
@@ -2509,7 +2509,7 @@ struct TEvBlobStorage {
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
-                TWriteSource writeSource = TWriteSource::Unknown())
+                TWriteSource writeSource = UnknownWriteSource())
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(0)
@@ -2527,7 +2527,7 @@ struct TEvBlobStorage {
 
         static THolder<TEvCollectGarbage> CreateHardBarrier(ui64 tabletId, ui32 recordGeneration,
                 ui32 perGenerationCounter, ui32 channel, ui32 collectGeneration, ui32 collectStep, TInstant deadline,
-                TWriteSource writeSource = TWriteSource::Unknown()) {
+                TWriteSource writeSource = UnknownWriteSource()) {
             return MakeHolder<TEvCollectGarbage>(tabletId, recordGeneration, perGenerationCounter, channel,
                     true /*collect*/, collectGeneration, collectStep, nullptr /*keep*/, nullptr /*doNotKeep*/,
                     deadline, false /*isMultiCollectAllowed*/, true /*hard*/, false /*ignoreBlock*/, writeSource);

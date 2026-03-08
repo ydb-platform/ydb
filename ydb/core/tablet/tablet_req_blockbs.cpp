@@ -21,7 +21,7 @@ public:
     void SendRequest() {
         const TActorId proxy = MakeBlobStorageProxyID(GroupId);
         auto event = MakeHolder<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(), IssuerGuid,
-            TWriteSource(TWriteSource::EOp::BlockBlobStorage));
+            TWriteSource::BlockBlobStorage);
         event->IsMonitored = false;
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
     }

@@ -13,6 +13,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+#include <util/generic/vector.h>
 
 
 namespace NKikimr {
@@ -533,8 +534,8 @@ struct TPDiskMon {
     TIoCounters LogRead;
 
 private:
-    THashMap<ui32, TOpCounters> LogWriteOpCounters;
-    THashMap<ui32, TOpCounters> ChunkWriteOpCounters;
+    TVector<TOpCounters> LogWriteOpCounters;
+    TVector<TOpCounters> ChunkWriteOpCounters;
     TOpCounters& GetLogWriteOpCounters(const TWriteSource& source);
     TOpCounters& GetChunkWriteOpCounters(const TWriteSource& source);
 

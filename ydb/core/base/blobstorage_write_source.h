@@ -1,110 +1,157 @@
 #pragma once
 
-#include "defs.h"
+#include <limits>
+#include <type_traits>
+
+#include <util/system/types.h>
 
 namespace NKikimr {
 
-struct TWriteSource {
-    enum class EOp : ui16 {
-        Unknown = 0,
-        WriteLogEntry = 1,
-        WriteLogReference = 2,
-        BlockBlobStorage = 3,
-        GcLogChannel = 4,
-        DeleteHardBarrier = 5,
-        FlatCompactionPut = 6,
-        FlatCollectGarbage = 7,
-        SkeletonHandoffDelLogoBlob = 101,
-        SkeletonAddBulkSst = 102,
-        SkeletonLocalSyncData = 103,
-        SkeletonAnubisOsirisPut = 104,
-        SkeletonPhantomBlobs = 105,
-        SyncLogCommitterWrite = 106,
-        SyncLogCommitterCommit = 107,
-        HugeKeeperWriteBlob = 108,
-        HugeKeeperAllocChunk = 109,
-        HugeKeeperFreeChunk = 110,
-        HugeKeeperEntryPoint = 111,
-        HullDbCommit = 112,
-        HullCompactWorkerWrite = 113,
-        HullWriteSst = 114,
-        ChunkKeeperCommit = 115,
-        MetadataCommit = 116,
-        ScrubWrite = 117,
-        ScrubCommit = 118,
-        LogCutterCutLog = 119,
-        SyncerCommit = 120,
-        RecoveredHugeBlob = 121,
-        GroupWriteLoadActor = 122,
-    };
+enum class TWriteSource : ui16 {
+    // Source is not classified; the producer did not attach an operation code.
+    Unknown = 0,
 
-    EOp Op = EOp::Unknown;
+    // Tablet WriteLog component writes the primary serialized tablet log entry blob.
+    WriteLogEntry = 1,
 
-    constexpr TWriteSource() = default;
+    // Tablet WriteLog component writes reference blobs linked from the same log entry.
+    WriteLogReference = 2,
 
-    constexpr explicit TWriteSource(EOp op)
-        : Op(op)
-    {}
+    // Tablet block component writes generation block markers for BlobStorage.
+    BlockBlobStorage = 3,
 
-    static constexpr TWriteSource Unknown() {
-        return {};
+    // Tablet system GC component writes log-channel barrier advancement records.
+    GcLogChannel = 4,
+
+    // Tablet deletion component writes terminal hard barriers across tablet channels.
+    DeleteHardBarrier = 5,
+
+    // Tablet FlatExecutor compaction component writes blobs produced by page compaction.
+    FlatCompactionPut = 6,
+
+    // Tablet FlatExecutor GC component writes keep/do-not-keep sets and barrier advancement.
+    FlatCollectGarbage = 7,
+
+    // VDisk Skeleton handoff-delete component writes delete records for handoff LogoBlobs.
+    SkeletonHandoffDelLogoBlob = 101,
+
+    // VDisk Skeleton bulk-SST import component writes records for attaching prebuilt SST data.
+    SkeletonAddBulkSst = 102,
+
+    // VDisk Skeleton local-sync component writes synchronization payload records.
+    SkeletonLocalSyncData = 103,
+
+    // VDisk Skeleton repair component writes reconciliation updates from Anubis/Osiris.
+    SkeletonAnubisOsirisPut = 104,
+
+    // VDisk Skeleton phantom-blob component writes phantom detection records.
+    SkeletonPhantomBlobs = 105,
+
+    // VDisk SyncLogKeeper committer writes SyncLog data pages into chunk storage.
+    SyncLogCommitterWrite = 106,
+
+    // VDisk SyncLogKeeper committer writes SyncLog entry-point checkpoints.
+    SyncLogCommitterCommit = 107,
+
+    // VDisk HugeKeeper allocation component writes chunk allocation commits.
+    HugeKeeperAllocChunk = 109,
+
+    // VDisk HugeKeeper reclamation component writes chunk release commits.
+    HugeKeeperFreeChunk = 110,
+
+    // VDisk HugeKeeper checkpoint component writes entry-point state.
+    HugeKeeperEntryPoint = 111,
+
+    // VDisk Hull DB commit component writes new Hull entry-point and related chunk metadata.
+    HullDbCommit = 112,
+
+    // VDisk Hull compaction component writes non-inline compaction output.
+    HullCompactWorkerWrite = 113,
+
+    // VDisk Hull SST writer component writes buffered SST fragments into chunks.
+    HullWriteSst = 114,
+
+    // VDisk ChunkKeeper component writes entry-point updates for chunk ownership state.
+    ChunkKeeperCommit = 115,
+
+    // VDisk metadata component writes metadata entry-point checkpoints.
+    MetadataCommit = 116,
+
+    // VDisk scrub repair component writes corrected data for damaged parts.
+    ScrubWrite = 117,
+
+    // VDisk scrub component writes scrub-state checkpoints.
+    ScrubCommit = 118,
+
+    // VDisk log-cutter component writes FirstLsnToKeep progression.
+    LogCutterCutLog = 119,
+
+    // VDisk syncer component writes synchronization state checkpoints.
+    SyncerCommit = 120,
+
+    // VDisk recovery component writes recovered huge blobs back into normal storage.
+    RecoveredHugeBlob = 121,
+
+    // BlobStorage load-test component writes synthetic workload traffic.
+    GroupWriteLoadActor = 122,
+}; // Don't forget to update IsKnownWriteSource function when adding new values here.
+
+constexpr TWriteSource UnknownWriteSource() {
+    return TWriteSource::Unknown;
+}
+
+constexpr bool IsKnownWriteSource(TWriteSource op) {
+    switch (op) {
+        case TWriteSource::Unknown:
+        case TWriteSource::WriteLogEntry:
+        case TWriteSource::WriteLogReference:
+        case TWriteSource::BlockBlobStorage:
+        case TWriteSource::GcLogChannel:
+        case TWriteSource::DeleteHardBarrier:
+        case TWriteSource::FlatCompactionPut:
+        case TWriteSource::FlatCollectGarbage:
+        case TWriteSource::SkeletonHandoffDelLogoBlob:
+        case TWriteSource::SkeletonAddBulkSst:
+        case TWriteSource::SkeletonLocalSyncData:
+        case TWriteSource::SkeletonAnubisOsirisPut:
+        case TWriteSource::SkeletonPhantomBlobs:
+        case TWriteSource::SyncLogCommitterWrite:
+        case TWriteSource::SyncLogCommitterCommit:
+        case TWriteSource::HugeKeeperAllocChunk:
+        case TWriteSource::HugeKeeperFreeChunk:
+        case TWriteSource::HugeKeeperEntryPoint:
+        case TWriteSource::HullDbCommit:
+        case TWriteSource::HullCompactWorkerWrite:
+        case TWriteSource::HullWriteSst:
+        case TWriteSource::ChunkKeeperCommit:
+        case TWriteSource::MetadataCommit:
+        case TWriteSource::ScrubWrite:
+        case TWriteSource::ScrubCommit:
+        case TWriteSource::LogCutterCutLog:
+        case TWriteSource::SyncerCommit:
+        case TWriteSource::RecoveredHugeBlob:
+        case TWriteSource::GroupWriteLoadActor:
+            return true;
+    }
+    return false;
+}
+
+constexpr TWriteSource WriteSourceFromProto(ui32 op) {
+    using TUnderlying = std::underlying_type_t<TWriteSource>;
+    if (op > static_cast<ui32>(std::numeric_limits<TUnderlying>::max())) {
+        return UnknownWriteSource();
     }
 
-    static constexpr bool IsKnownOp(EOp op) {
-        switch (op) {
-            case EOp::Unknown:
-            case EOp::WriteLogEntry:
-            case EOp::WriteLogReference:
-            case EOp::BlockBlobStorage:
-            case EOp::GcLogChannel:
-            case EOp::DeleteHardBarrier:
-            case EOp::FlatCompactionPut:
-            case EOp::FlatCollectGarbage:
-            case EOp::SkeletonHandoffDelLogoBlob:
-            case EOp::SkeletonAddBulkSst:
-            case EOp::SkeletonLocalSyncData:
-            case EOp::SkeletonAnubisOsirisPut:
-            case EOp::SkeletonPhantomBlobs:
-            case EOp::SyncLogCommitterWrite:
-            case EOp::SyncLogCommitterCommit:
-            case EOp::HugeKeeperWriteBlob:
-            case EOp::HugeKeeperAllocChunk:
-            case EOp::HugeKeeperFreeChunk:
-            case EOp::HugeKeeperEntryPoint:
-            case EOp::HullDbCommit:
-            case EOp::HullCompactWorkerWrite:
-            case EOp::HullWriteSst:
-            case EOp::ChunkKeeperCommit:
-            case EOp::MetadataCommit:
-            case EOp::ScrubWrite:
-            case EOp::ScrubCommit:
-            case EOp::LogCutterCutLog:
-            case EOp::SyncerCommit:
-            case EOp::RecoveredHugeBlob:
-            case EOp::GroupWriteLoadActor:
-                return true;
-        }
-        return false;
-    }
+    const TWriteSource value = static_cast<TWriteSource>(static_cast<TUnderlying>(op));
+    return IsKnownWriteSource(value)
+        ? value
+        : UnknownWriteSource();
+}
 
-    static constexpr TWriteSource FromProto(ui32 op) {
-        if (op > static_cast<ui32>(EOp::GroupWriteLoadActor)) {
-            return Unknown();
-        }
-
-        const EOp value = static_cast<EOp>(op);
-        return IsKnownOp(value)
-            ? TWriteSource(value)
-            : Unknown();
-    }
-
-    constexpr ui32 ToProtoOp() const {
-        return IsKnownOp(Op)
-            ? static_cast<ui32>(Op)
-            : 0;
-    }
-
-    friend constexpr bool operator==(const TWriteSource&, const TWriteSource&) = default;
-};
+constexpr ui32 WriteSourceToProto(TWriteSource op) {
+    return IsKnownWriteSource(op)
+        ? static_cast<ui32>(op)
+        : static_cast<ui32>(UnknownWriteSource());
+}
 
 } // namespace NKikimr

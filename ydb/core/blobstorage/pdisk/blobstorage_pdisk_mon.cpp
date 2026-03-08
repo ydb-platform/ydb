@@ -9,73 +9,86 @@ namespace NKikimr {
 
 namespace {
 
-using TWriteSourceOp = TWriteSource::EOp;
+// Order is not important here. Just make sure that all values are unique and Unknown is at index 0.
+#define PDISK_WRITE_SOURCE_OPS(XX) \
+    XX(0, Unknown) \
+    XX(1, WriteLogEntry) \
+    XX(2, WriteLogReference) \
+    XX(3, BlockBlobStorage) \
+    XX(4, GcLogChannel) \
+    XX(5, DeleteHardBarrier) \
+    XX(6, FlatCompactionPut) \
+    XX(7, FlatCollectGarbage) \
+    XX(8, SkeletonHandoffDelLogoBlob) \
+    XX(9, SkeletonAddBulkSst) \
+    XX(10, SkeletonLocalSyncData) \
+    XX(11, SkeletonAnubisOsirisPut) \
+    XX(12, SkeletonPhantomBlobs) \
+    XX(13, SyncLogCommitterWrite) \
+    XX(14, SyncLogCommitterCommit) \
+    XX(15, HugeKeeperAllocChunk) \
+    XX(16, HugeKeeperFreeChunk) \
+    XX(17, HugeKeeperEntryPoint) \
+    XX(18, HullDbCommit) \
+    XX(19, HullCompactWorkerWrite) \
+    XX(20, HullWriteSst) \
+    XX(21, ChunkKeeperCommit) \
+    XX(22, MetadataCommit) \
+    XX(23, ScrubWrite) \
+    XX(24, ScrubCommit) \
+    XX(25, LogCutterCutLog) \
+    XX(26, SyncerCommit) \
+    XX(27, RecoveredHugeBlob) \
+    XX(28, GroupWriteLoadActor)
 
-constexpr std::array<std::pair<TWriteSourceOp, const char*>, 30> WriteSourceOpNames = {{
-    {TWriteSourceOp::Unknown, "Unknown"},
-    {TWriteSourceOp::WriteLogEntry, "WriteLogEntry"},
-    {TWriteSourceOp::WriteLogReference, "WriteLogReference"},
-    {TWriteSourceOp::BlockBlobStorage, "BlockBlobStorage"},
-    {TWriteSourceOp::GcLogChannel, "GcLogChannel"},
-    {TWriteSourceOp::DeleteHardBarrier, "DeleteHardBarrier"},
-    {TWriteSourceOp::FlatCompactionPut, "FlatCompactionPut"},
-    {TWriteSourceOp::FlatCollectGarbage, "FlatCollectGarbage"},
-    {TWriteSourceOp::SkeletonHandoffDelLogoBlob, "SkeletonHandoffDelLogoBlob"},
-    {TWriteSourceOp::SkeletonAddBulkSst, "SkeletonAddBulkSst"},
-    {TWriteSourceOp::SkeletonLocalSyncData, "SkeletonLocalSyncData"},
-    {TWriteSourceOp::SkeletonAnubisOsirisPut, "SkeletonAnubisOsirisPut"},
-    {TWriteSourceOp::SkeletonPhantomBlobs, "SkeletonPhantomBlobs"},
-    {TWriteSourceOp::SyncLogCommitterWrite, "SyncLogCommitterWrite"},
-    {TWriteSourceOp::SyncLogCommitterCommit, "SyncLogCommitterCommit"},
-    {TWriteSourceOp::HugeKeeperWriteBlob, "HugeKeeperWriteBlob"},
-    {TWriteSourceOp::HugeKeeperAllocChunk, "HugeKeeperAllocChunk"},
-    {TWriteSourceOp::HugeKeeperFreeChunk, "HugeKeeperFreeChunk"},
-    {TWriteSourceOp::HugeKeeperEntryPoint, "HugeKeeperEntryPoint"},
-    {TWriteSourceOp::HullDbCommit, "HullDbCommit"},
-    {TWriteSourceOp::HullCompactWorkerWrite, "HullCompactWorkerWrite"},
-    {TWriteSourceOp::HullWriteSst, "HullWriteSst"},
-    {TWriteSourceOp::ChunkKeeperCommit, "ChunkKeeperCommit"},
-    {TWriteSourceOp::MetadataCommit, "MetadataCommit"},
-    {TWriteSourceOp::ScrubWrite, "ScrubWrite"},
-    {TWriteSourceOp::ScrubCommit, "ScrubCommit"},
-    {TWriteSourceOp::LogCutterCutLog, "LogCutterCutLog"},
-    {TWriteSourceOp::SyncerCommit, "SyncerCommit"},
-    {TWriteSourceOp::RecoveredHugeBlob, "RecoveredHugeBlob"},
-    {TWriteSourceOp::GroupWriteLoadActor, "GroupWriteLoadActor"},
-}};
+constexpr size_t UnknownWriteSourceOpIndex = 0;
 
-constexpr bool HasNameForWriteSourceOpCode(ui32 code) {
-    for (const auto& [op, _] : WriteSourceOpNames) {
-        if (static_cast<ui32>(op) == code) {
-            return true;
-        }
+constexpr auto WriteSourceOpNames = std::array{
+#define YDB_PDISK_WRITE_SOURCE_NAME(_, op) #op,
+    PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_NAME)
+#undef YDB_PDISK_WRITE_SOURCE_NAME
+};
+
+constexpr size_t GetWriteSourceIndex(TWriteSource op) {
+    switch (op) {
+#define YDB_PDISK_WRITE_SOURCE_CASE(index, op) case TWriteSource::op: return index;
+        PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_CASE)
+#undef YDB_PDISK_WRITE_SOURCE_CASE
     }
-    return false;
+    return UnknownWriteSourceOpIndex;
 }
 
-constexpr bool ValidateWriteSourceOpNames() {
-    for (size_t i = 0; i < WriteSourceOpNames.size(); ++i) {
-        for (size_t j = i + 1; j < WriteSourceOpNames.size(); ++j) {
-            if (WriteSourceOpNames[i].first == WriteSourceOpNames[j].first) {
-                return false;
-            }
-        }
+constexpr bool ValidateWriteSourceOps() {
+    constexpr auto writeSourceOps = std::array{
+    #define YDB_PDISK_WRITE_SOURCE_VALUE(_, op) TWriteSource::op,
+        PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_VALUE)
+    #undef YDB_PDISK_WRITE_SOURCE_VALUE
+    };
+
+    static_assert(writeSourceOps.size() == WriteSourceOpNames.size());
+
+    if (writeSourceOps[UnknownWriteSourceOpIndex] != TWriteSource::Unknown) {
+        return false;
     }
 
-    for (ui32 code = 0; code <= 65535u; ++code) {
-        const TWriteSource source = TWriteSource::FromProto(code);
-        const bool knownCode = code == static_cast<ui32>(TWriteSourceOp::Unknown)
-            || source.Op != TWriteSourceOp::Unknown;
-        if (knownCode && !HasNameForWriteSourceOpCode(code)) {
+    for (size_t i = 0; i < writeSourceOps.size(); ++i) {
+        if (!IsKnownWriteSource(writeSourceOps[i])) {
             return false;
+        }
+        for (size_t j = i + 1; j < writeSourceOps.size(); ++j) {
+            if (static_cast<ui32>(writeSourceOps[i]) == static_cast<ui32>(writeSourceOps[j])) {
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-static_assert(ValidateWriteSourceOpNames(),
-    "WriteSource op-name table must contain unique names for all known TWriteSource::EOp codes");
+static_assert(ValidateWriteSourceOps(),
+    "WriteSource op table must contain unique, known values and Unknown at index 0");
+
+#undef PDISK_WRITE_SOURCE_OPS
 
 } // namespace
 
@@ -344,16 +357,11 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
 
-    for (const auto& [op, name] : WriteSourceOpNames) {
-        auto [it, inserted] = LogWriteOpCounters.try_emplace(static_cast<ui32>(op));
-        Y_ABORT_UNLESS(inserted);
-        it->second.Setup(true, PDiskGroup, TString(name), EVisibility::Public);
-    }
-
-    for (const auto& [op, name] : WriteSourceOpNames) {
-        auto [it, inserted] = ChunkWriteOpCounters.try_emplace(static_cast<ui32>(op));
-        Y_ABORT_UNLESS(inserted);
-        it->second.Setup(false, PDiskGroup, TString(name), EVisibility::Public);
+    LogWriteOpCounters.resize(WriteSourceOpNames.size());
+    ChunkWriteOpCounters.resize(WriteSourceOpNames.size());
+    for (size_t i = 0; i < WriteSourceOpNames.size(); ++i) {
+        LogWriteOpCounters[i].Setup(true, PDiskGroup, TString(WriteSourceOpNames[i]), EVisibility::Public);
+        ChunkWriteOpCounters[i].Setup(false, PDiskGroup, TString(WriteSourceOpNames[i]), EVisibility::Public);
     }
 
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
@@ -559,23 +567,15 @@ void TPDiskMon::UpdateStats() {
 }
 
 TPDiskMon::TOpCounters& TPDiskMon::GetLogWriteOpCounters(const TWriteSource& source) {
-    if (auto it = LogWriteOpCounters.find(source.ToProtoOp()); it != LogWriteOpCounters.end()) {
-        return it->second;
-    }
-
-    auto itUnknown = LogWriteOpCounters.find(static_cast<ui32>(TWriteSource::EOp::Unknown));
-    Y_ABORT_UNLESS(itUnknown != LogWriteOpCounters.end());
-    return itUnknown->second;
+    const size_t index = GetWriteSourceIndex(source);
+    Y_ABORT_UNLESS(index < LogWriteOpCounters.size());
+    return LogWriteOpCounters[index];
 }
 
 TPDiskMon::TOpCounters& TPDiskMon::GetChunkWriteOpCounters(const TWriteSource& source) {
-    if (auto it = ChunkWriteOpCounters.find(source.ToProtoOp()); it != ChunkWriteOpCounters.end()) {
-        return it->second;
-    }
-
-    auto itUnknown = ChunkWriteOpCounters.find(static_cast<ui32>(TWriteSource::EOp::Unknown));
-    Y_ABORT_UNLESS(itUnknown != ChunkWriteOpCounters.end());
-    return itUnknown->second;
+    const size_t index = GetWriteSourceIndex(source);
+    Y_ABORT_UNLESS(index < ChunkWriteOpCounters.size());
+    return ChunkWriteOpCounters[index];
 }
 
 void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {

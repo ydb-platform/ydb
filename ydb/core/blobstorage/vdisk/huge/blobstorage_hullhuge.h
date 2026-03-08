@@ -39,7 +39,7 @@ namespace NKikimr {
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                             TWriteSource writeSource = TWriteSource::Unknown(),
+                             TWriteSource writeSource = UnknownWriteSource(),
                              bool rewriteBlob = false)
             : SenderId(senderId)
             , Cookie(cookie)
@@ -99,7 +99,7 @@ namespace NKikimr {
                            NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                           TWriteSource writeSource = TWriteSource::Unknown(),
+                           TWriteSource writeSource = UnknownWriteSource(),
                            bool rewriteBlob = false)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)

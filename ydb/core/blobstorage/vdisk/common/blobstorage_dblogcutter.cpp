@@ -151,7 +151,7 @@ namespace NKikimr {
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
                         LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr,
                         NPDisk::TEvLog::TCallback(),
-                        TWriteSource(TWriteSource::EOp::LogCutterCutLog)));
+                        TWriteSource::LogCutterCutLog));
                 WriteInProgress = true;
                 FirstLsnToKeepLastWritten = curLsn;
 

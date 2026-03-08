@@ -31,7 +31,7 @@ class TMetadataActor : public TActor<TMetadataActor> {
         auto msg = std::make_unique<NPDisk::TEvLog>(LogCtx->PDiskCtx->Dsk->Owner,
             LogCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureMetadata,
             commitRecord, data, seg, nullptr, NPDisk::TEvLog::TCallback(),
-            TWriteSource(TWriteSource::EOp::MetadataCommit));
+            TWriteSource::MetadataCommit);
 
         Send(LogCtx->LoggerId, msg.release());
 

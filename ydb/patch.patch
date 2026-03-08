@@ -1,0 +1,797 @@
+diff --git a/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp b/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
+index e7cb52cb560..ef1c27e99c6 100644
+--- a/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
++++ b/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
+@@ -22,7 +22,7 @@ struct TActorFactory : public IActorFactory {
+         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-        const NYql::IPqGateway::TPtr& pqGateway,
++        const NYql::IPqStaticGateway::TPtr& pqGateway,
+         ui64 maxBufferSize,
+         bool enableStreamingQueriesCounters) const override {
+ 
+diff --git a/ydb/core/fq/libs/row_dispatcher/actors_factory.h b/ydb/core/fq/libs/row_dispatcher/actors_factory.h
+index ee60aee55db..8b53130832e 100644
+--- a/ydb/core/fq/libs/row_dispatcher/actors_factory.h
++++ b/ydb/core/fq/libs/row_dispatcher/actors_factory.h
+@@ -26,7 +26,7 @@ struct IActorFactory : public TThrRefBase {
+         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-        const NYql::IPqGateway::TPtr& pqGateway,
++        const NYql::IPqStaticGateway::TPtr& pqGateway,
+         ui64 maxBufferSize,
+         bool enableStreamingQueriesCounters) const = 0;
+ };
+diff --git a/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp b/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp
+index ae11081cbc9..6b32c69ea5e 100644
+--- a/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp
++++ b/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp
+@@ -364,7 +364,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
+     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
+     TRowDispatcherMetrics Metrics;
+     TUserPoolMetrics UserPoolMetrics;
+-    NYql::IPqGateway::TPtr PqGateway;
++    NYql::IPqStaticGateway::TPtr PqGateway;
+     NYdb::TDriver Driver;
+     NActors::TMon* Monitoring;
+     TNodesTracker NodesTracker;
+@@ -451,7 +451,7 @@ public:
+         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-        const NYql::IPqGateway::TPtr& pqGateway,
++        const NYql::IPqStaticGateway::TPtr& pqGateway,
+         NYdb::TDriver driver,
+         NActors::TMon* monitoring = nullptr,
+         NActors::TActorId nodesManagerId = {},
+@@ -536,7 +536,7 @@ TRowDispatcher::TRowDispatcher(
+     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     NYdb::TDriver driver,
+     NActors::TMon* monitoring,
+     NActors::TActorId nodesManagerId,
+@@ -1352,7 +1352,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
+     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     NYdb::TDriver driver,
+     NActors::TMon* monitoring,
+     NActors::TActorId nodesManagerId,
+diff --git a/ydb/core/fq/libs/row_dispatcher/row_dispatcher.h b/ydb/core/fq/libs/row_dispatcher/row_dispatcher.h
+index d0480860eb8..f62f3ee539e 100644
+--- a/ydb/core/fq/libs/row_dispatcher/row_dispatcher.h
++++ b/ydb/core/fq/libs/row_dispatcher/row_dispatcher.h
+@@ -28,7 +28,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
+     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     NYdb::TDriver driver,
+     NActors::TMon* monitoring = nullptr,
+     NActors::TActorId nodesManagerId = {},
+diff --git a/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp b/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp
+index 0c99fa3ffec..38881d9f850 100644
+--- a/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp
++++ b/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp
+@@ -16,7 +16,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
+     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+     const TString& tenant,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     NYdb::TDriver driver,
+     NActors::TMon* monitoring,
+     ::NMonitoring::TDynamicCounterPtr countersRoot,
+diff --git a/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h b/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h
+index 93b1a6c3143..88c8a27f93b 100644
+--- a/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h
++++ b/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h
+@@ -24,7 +24,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
+     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+     const TString& tenant,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     NYdb::TDriver driver,
+     NActors::TMon* monitoring = nullptr,
+     ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+diff --git a/ydb/core/fq/libs/row_dispatcher/topic_session.cpp b/ydb/core/fq/libs/row_dispatcher/topic_session.cpp
+index 11f29ce58c5..a9be47d93a8 100644
+--- a/ydb/core/fq/libs/row_dispatcher/topic_session.cpp
++++ b/ydb/core/fq/libs/row_dispatcher/topic_session.cpp
+@@ -275,7 +275,7 @@ private:
+     const TActorId RowDispatcherActorId;
+     const ui32 PartitionId;
+     const NYdb::TDriver Driver;
+-    const NYql::IPqGateway::TPtr PqGateway;
++    const NYql::IPqStaticGateway::TPtr PqGateway;
+     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+     const TRowDispatcherSettings Config;
+     const TActorId CompileServiceActorId;
+@@ -323,7 +323,7 @@ public:
+         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-        const NYql::IPqGateway::TPtr& pqGateway,
++        const NYql::IPqStaticGateway::TPtr& pqGateway,
+         ui64 maxBufferSize,
+         bool enableStreamingQueriesCounters);
+ 
+@@ -412,7 +412,7 @@ TTopicSession::TTopicSession(
+     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     ui64 maxBufferSize,
+     bool enableStreamingQueriesCounters)
+     : ReadGroup(readGroup)
+@@ -1073,7 +1073,7 @@ std::unique_ptr<IActor> NewTopicSession(
+     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     ui64 maxBufferSize,
+     bool enableStreamingQueriesCounters) {
+     return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));
+diff --git a/ydb/core/fq/libs/row_dispatcher/topic_session.h b/ydb/core/fq/libs/row_dispatcher/topic_session.h
+index b09b5bac914..a8229e5c86a 100644
+--- a/ydb/core/fq/libs/row_dispatcher/topic_session.h
++++ b/ydb/core/fq/libs/row_dispatcher/topic_session.h
+@@ -24,7 +24,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
+     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+-    const NYql::IPqGateway::TPtr& pqGateway,
++    const NYql::IPqStaticGateway::TPtr& pqGateway,
+     ui64 maxBufferSize,
+     bool enableStreamingQueriesCounters);
+ 
+diff --git a/ydb/core/fq/libs/row_dispatcher/ut/row_dispatcher_ut.cpp b/ydb/core/fq/libs/row_dispatcher/ut/row_dispatcher_ut.cpp
+index 0e93e3714d1..380dae65de1 100644
+--- a/ydb/core/fq/libs/row_dispatcher/ut/row_dispatcher_ut.cpp
++++ b/ydb/core/fq/libs/row_dispatcher/ut/row_dispatcher_ut.cpp
+@@ -42,7 +42,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
+         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
+         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
+         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
+-        const NYql::IPqGateway::TPtr& /*pqGateway*/,
++        const NYql::IPqStaticGateway::TPtr& /*pqGateway*/,
+         ui64 /*maxBufferSize*/,
+         bool /*enableStreamingQueriesCounters*/) const override {
+         auto actorId  = Runtime.AllocateEdgeActor();
+diff --git a/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp b/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
+index 7079cb6a124..e78f51691b1 100644
+--- a/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
++++ b/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
+@@ -119,8 +119,10 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
+         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
+         bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
+-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
++
++        const NYql::IPqStaticGateway::TPtr pqGateway = federatedQuerySetup->PqGatewayFactory->CreatePqGateway();
++        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
++        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
+         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
+     }
+ 
+diff --git a/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp b/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp
+index 87756ab1838..22368e33ae5 100644
+--- a/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp
++++ b/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp
+@@ -15,7 +15,7 @@
+ #include <ydb/core/protos/table_service_config.pb.h>
+ #include <ydb/library/actors/http/http_proxy.h>
+ #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
++#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
+ #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+ #include <ydb/public/api/protos/ydb_discovery.pb.h>
+ #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
+@@ -200,10 +200,10 @@ namespace {
+         return settings;
+     }
+ 
+-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
++    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
+         auto settings = MakeCommonTopicClientSettings(1, 2);
+ 
+-        return CreatePqNativeGateway(NYql::TPqGatewayServices(
++        return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
+             *driver,
+             nullptr,
+             nullptr,
+@@ -258,7 +258,6 @@ namespace {
+         S3GatewayConfig = queryServiceConfig.GetS3();
+ 
+         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
+-        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
+ 
+         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+ 
+@@ -336,12 +335,11 @@ namespace {
+             YtGatewayConfig,
+             YtGateway,
+             SolomonGatewayConfig,
+-            SolomonGateway,
+             nullptr,
+             S3ReadActorFactoryConfig,
+             DqTaskTransformFactory,
+             PqGatewayConfig,
+-            MakePqGateway(Driver, LocalTopicClientSettings),
++            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
+             ActorSystemPtr
+         };
+ 
+diff --git a/ydb/core/kqp/federated_query/kqp_federated_query_helpers.h b/ydb/core/kqp/federated_query/kqp_federated_query_helpers.h
+index 2abd0988a46..ba1b0130e7b 100644
+--- a/ydb/core/kqp/federated_query/kqp_federated_query_helpers.h
++++ b/ydb/core/kqp/federated_query/kqp_federated_query_helpers.h
+@@ -45,7 +45,7 @@ namespace NKikimr::NKqp {
+     ///
+     std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver);
+ 
+-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
++    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
+ 
+     struct TKqpFederatedQuerySetup {
+         // This Driver must be declared FIRST in this struct.
+@@ -62,12 +62,11 @@ namespace NKikimr::NKqp {
+         NYql::TYtGatewayConfig YtGatewayConfig;
+         NYql::IYtGateway::TPtr YtGateway;
+         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+-        NYql::ISolomonGateway::TPtr SolomonGateway;
+         NMiniKQL::TComputationNodeFactory ComputationFactory;
+         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+         NYql::TTaskTransformFactory DqTaskTransformFactory;
+         NYql::TPqGatewayConfig PqGatewayConfig;
+-        NYql::IPqGateway::TPtr PqGateway;
++        NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
+         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
+     };
+ 
+@@ -104,7 +103,6 @@ namespace NKikimr::NKqp {
+         NYql::TYtGatewayConfig YtGatewayConfig;
+         NYql::IYtGateway::TPtr YtGateway;
+         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+-        NYql::ISolomonGateway::TPtr SolomonGateway;
+         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+         NYql::NConnector::IClient::TPtr ConnectorClient;
+         std::optional<NActors::TActorId> DatabaseResolverActorId;
+@@ -130,12 +128,11 @@ namespace NKikimr::NKqp {
+             const NYql::TYtGatewayConfig& ytGatewayConfig,
+             NYql::IYtGateway::TPtr ytGateway,
+             const NYql::TSolomonGatewayConfig& solomonGatewayConfig,
+-            const NYql::ISolomonGateway::TPtr& solomonGateway,
+             NMiniKQL::TComputationNodeFactory computationFactory,
+             const NYql::NDq::TS3ReadActorFactoryConfig& s3ReadActorFactoryConfig,
+             NYql::TTaskTransformFactory dqTaskTransformFactory,
+             const NYql::TPqGatewayConfig& pqGatewayConfig,
+-            NYql::IPqGateway::TPtr pqGateway,
++            NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+             NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr,
+             std::shared_ptr<NYdb::TDriver> driver)
+             : HttpGateway(httpGateway)
+@@ -147,12 +144,11 @@ namespace NKikimr::NKqp {
+             , YtGatewayConfig(ytGatewayConfig)
+             , YtGateway(ytGateway)
+             , SolomonGatewayConfig(solomonGatewayConfig)
+-            , SolomonGateway(solomonGateway)
+             , ComputationFactory(computationFactory)
+             , S3ReadActorFactoryConfig(s3ReadActorFactoryConfig)
+             , DqTaskTransformFactory(dqTaskTransformFactory)
+             , PqGatewayConfig(pqGatewayConfig)
+-            , PqGateway(pqGateway)
++            , PqGatewayFactory(pqGatewayFactory)
+             , ActorSystemPtr(actorSystemPtr)
+             , Driver(driver)
+         {
+@@ -163,13 +159,13 @@ namespace NKikimr::NKqp {
+                 Driver, HttpGateway, ConnectorClient, CredentialsFactory,
+                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
+                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
+-                SolomonGateway, ComputationFactory, S3ReadActorFactoryConfig,
+-                DqTaskTransformFactory, PqGatewayConfig, PqGateway, ActorSystemPtr};
++                ComputationFactory, S3ReadActorFactoryConfig,
++                DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr};
+         }
+ 
+         void Cleanup() override {
+             HttpGateway.reset();
+-            PqGateway.Reset();
++            PqGatewayFactory.Reset();
+         }
+ 
+     private:
+@@ -182,12 +178,11 @@ namespace NKikimr::NKqp {
+         NYql::TYtGatewayConfig YtGatewayConfig;
+         NYql::IYtGateway::TPtr YtGateway;
+         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+-        NYql::ISolomonGateway::TPtr SolomonGateway;
+         NMiniKQL::TComputationNodeFactory ComputationFactory;
+         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+         NYql::TTaskTransformFactory DqTaskTransformFactory;
+         NYql::TPqGatewayConfig PqGatewayConfig;
+-        NYql::IPqGateway::TPtr PqGateway;
++        NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
+         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
+         std::shared_ptr<NYdb::TDriver> Driver;
+     };
+diff --git a/ydb/core/kqp/gateway/behaviour/streaming_query/queries.cpp b/ydb/core/kqp/gateway/behaviour/streaming_query/queries.cpp
+index 039d4da8172..ce751564bf3 100644
+--- a/ydb/core/kqp/gateway/behaviour/streaming_query/queries.cpp
++++ b/ydb/core/kqp/gateway/behaviour/streaming_query/queries.cpp
+@@ -701,6 +701,7 @@ public:
+                         break;
+                     }
+                 }
++                break;
+             }
+             default: {
+                 FatalError(Ydb::StatusIds::SCHEME_ERROR, ExtractIssues(response, ssStatus, TStringBuilder() << "unexpected transaction status " << status));
+diff --git a/ydb/core/kqp/host/kqp_host.cpp b/ydb/core/kqp/host/kqp_host.cpp
+index c3cc7951b4c..0ba555f8854 100644
+--- a/ydb/core/kqp/host/kqp_host.cpp
++++ b/ydb/core/kqp/host/kqp_host.cpp
+@@ -1899,7 +1899,7 @@ private:
+         solomonState->SupportRtmrMode = false;
+         solomonState->WriteThroughDqIntegration = true;
+         solomonState->Types = TypesCtx.Get();
+-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
++        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
+         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
+         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
+         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+@@ -1923,7 +1923,7 @@ private:
+         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
+         state->FunctionRegistry = FuncRegistry;
+         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
+-        state->Gateway = FederatedQuerySetup->PqGateway;
++        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
+         state->DqIntegration = NYql::CreatePqDqIntegration(state);
+         state->Gateway->OpenSession(sessionId, "username");
+ 
+@@ -1938,7 +1938,7 @@ private:
+         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
+         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+ 
+-        finalizers.emplace_back([pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
++        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
+             return pqGateway->CloseSession(sessionId);
+         });
+     }
+@@ -1986,15 +1986,13 @@ private:
+         if (addExternalDataSources && FederatedQuerySetup) {
+             InitS3Provider(queryType);
+             InitGenericProvider();
++            InitSolomonProvider();
+ 
+             TVector<std::function<TFuture<void>()>> finalizers;
+             if (FederatedQuerySetup->YtGateway) {
+                 InitYtProvider(finalizers);
+             }
+-            if (FederatedQuerySetup->SolomonGateway) {
+-                InitSolomonProvider();
+-            }
+-            if (FederatedQuerySetup->PqGateway) {
++            if (FederatedQuerySetup->PqGatewayFactory) {
+                 InitPqProvider(finalizers);
+             }
+ 
+diff --git a/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp b/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
+index bb7cd7a9c74..5b9ec2b0dff 100644
+--- a/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
++++ b/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
+@@ -1878,7 +1878,7 @@ private:
+             AppData()->FunctionRegistry,
+             AppData()->TenantName,
+             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+-            FederatedQuerySetup->PqGateway,
++            FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(),
+             *FederatedQuerySetup->Driver,
+             AppData()->Mon,
+             Counters->GetKqpCounters(),
+diff --git a/ydb/core/kqp/ut/federated_query/common/common.cpp b/ydb/core/kqp/ut/federated_query/common/common.cpp
+index 3dbaa47f818..c770ea625cb 100644
+--- a/ydb/core/kqp/ut/federated_query/common/common.cpp
++++ b/ydb/core/kqp/ut/federated_query/common/common.cpp
+@@ -1,6 +1,7 @@
+ #include "common.h"
+ 
+ #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
++#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+ #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+ 
+ #include <yql/essentials/utils/log/log.h>
+@@ -130,7 +131,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
+             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
+             nullptr,
+             NYql::TPqGatewayConfig{},
+-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver),
++            options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
+             nullptr,
+             driver);
+ 
+diff --git a/ydb/core/kqp/ut/federated_query/common/ya.make b/ydb/core/kqp/ut/federated_query/common/ya.make
+index 7f65b9eea78..b073968683b 100644
+--- a/ydb/core/kqp/ut/federated_query/common/ya.make
++++ b/ydb/core/kqp/ut/federated_query/common/ya.make
+@@ -9,6 +9,7 @@ STYLE_CPP()
+ PEERDIR(
+     ydb/core/kqp/rm_service
+     ydb/core/kqp/ut/common
++    ydb/library/yql/providers/pq/gateway/dummy
+     ydb/library/yql/providers/s3/actors_factory
+     ydb/public/sdk/cpp/src/client/operation
+     ydb/public/sdk/cpp/src/client/query
+diff --git a/ydb/core/testlib/test_client.cpp b/ydb/core/testlib/test_client.cpp
+index 06d7737e473..bbc81a373bd 100644
+--- a/ydb/core/testlib/test_client.cpp
++++ b/ydb/core/testlib/test_client.cpp
+@@ -106,6 +106,7 @@
+ #include <yql/essentials/minikql/mkql_function_registry.h>
+ #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+ #include <yql/essentials/public/issue/yql_issue_message.h>
++#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+ #include <ydb/library/yql/utils/actor_log/log.h>
+ #include <ydb/core/engine/mkql_engine_flat.h>
+ 
+@@ -1403,7 +1404,7 @@ namespace Tests {
+ 
+                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                 FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+-                auto pqGateway = NKqp::MakePqGateway(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
++                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
+                     .ActorSystem = Runtime->GetActorSystem(nodeIdx),
+                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
+                 });
+@@ -1418,12 +1419,11 @@ namespace Tests {
+                     queryServiceConfig.GetYt(),
+                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                     queryServiceConfig.GetSolomon(),
+-                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
+                     Settings->ComputationFactory,
+                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
+                     Settings->DqTaskTransformFactory,
+                     NYql::TPqGatewayConfig{},
+-                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
++                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
+                     actorSystemPtr,
+                     FederatedQuerySetupDriver_);
+             }
+diff --git a/ydb/core/testlib/test_client.h b/ydb/core/testlib/test_client.h
+index a1c1ceb5f93..76e6ff48a5c 100644
+--- a/ydb/core/testlib/test_client.h
++++ b/ydb/core/testlib/test_client.h
+@@ -177,7 +177,6 @@ namespace Tests {
+         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+         NMiniKQL::TComputationNodeFactory ComputationFactory;
+         NYql::IYtGateway::TPtr YtGateway;
+-        NYql::ISolomonGateway::TPtr SolomonGateway;
+         NYql::IPqGateway::TPtr PqGateway;
+         NYql::TTaskTransformFactory DqTaskTransformFactory;
+         bool InitializeFederatedQuerySetupFactory = false;
+@@ -245,7 +244,6 @@ namespace Tests {
+         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
+         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
+         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
+-        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
+         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
+         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.cpp b/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.cpp
+index b7cfeaef114..414a7247ac7 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.cpp
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.cpp
+@@ -320,7 +320,7 @@ private:
+         ui64 QueuedRows = 0;
+     };
+ 
+-    IPqGateway::TPtr PqGateway;
++    IPqStaticGateway::TPtr PqGateway;
+     TMap<NActors::TActorId, TSession> Sessions;
+     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
+     // Set on Children
+@@ -357,7 +357,7 @@ public:
+         const TString& token,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         i64 bufferSize,
+-        const IPqGateway::TPtr& pqGateway,
++        const IPqStaticGateway::TPtr& pqGateway,
+         bool enableStreamingQueriesCounters,
+         TDqPqRdReadActor* parent = nullptr,
+         const TString& cluster = {});
+@@ -547,7 +547,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
+         const TString& token,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         i64 bufferSize,
+-        const IPqGateway::TPtr& pqGateway,
++        const IPqStaticGateway::TPtr& pqGateway,
+         bool enableStreamingQueriesCounters,
+         TDqPqRdReadActor* parent,
+         const TString& cluster)
+@@ -1628,7 +1628,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
+     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     i64 bufferSize,
+-    const IPqGateway::TPtr& pqGateway,
++    const IPqStaticGateway::TPtr& pqGateway,
+     bool enableStreamingQueriesCounters)
+ {
+     const TString& tokenName = settings.GetToken().GetName();
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h b/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h
+index b3ceaaa7991..bedba73a3af 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h
+@@ -36,7 +36,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
+     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+     i64 bufferSize,
+-    const IPqGateway::TPtr& pqGateway,
++    const IPqStaticGateway::TPtr& pqGateway,
+     bool enableStreamingQueriesCounters);
+ 
+ } // namespace NYql::NDq
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp b/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp
+index 3e33fa1aae9..ef416c35df6 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp
+@@ -236,7 +236,7 @@ public:
+         const TActorId& computeActorId,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         i64 bufferSize,
+-        const IPqGateway::TPtr& pqGateway,
++        const IPqStaticGateway::TPtr& pqGateway,
+         ui32 topicPartitionsCount,
+         bool enableStreamingQueriesCounters,
+         TActorId infoAggregator)
+@@ -1013,7 +1013,7 @@ private:
+     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
+     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
+     std::queue<TReadyBatch> ReadyBuffer;
+-    IPqGateway::TPtr PqGateway;
++    IPqStaticGateway::TPtr PqGateway;
+     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
+     ui32 TopicPartitionsCount = 0;
+     bool WithoutConsumer = false;
+@@ -1064,7 +1064,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
+     const THolderFactory& holderFactory,
+     std::shared_ptr<TScopedAlloc> alloc,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    IPqGateway::TPtr pqGateway,
++    IPqStaticGateway::TPtr pqGateway,
+     ui32 topicPartitionsCount,
+     bool enableStreamingQueriesCounters,
+     i64 bufferSize,
+@@ -1097,7 +1097,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
+     return {actor, actor};
+ }
+ 
+-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
++void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
+         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
+             NPq::NProto::TDqPqTopicSource&& settings,
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h b/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h
+index 2870ec13ea2..efd061ecb03 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h
+@@ -34,13 +34,13 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
+     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    IPqGateway::TPtr pqGateway,
++    IPqStaticGateway::TPtr pqGateway,
+     ui32 topicPartitionsCount,
+     bool enableStreamingQueriesCounters,
+     i64 bufferSize = PQReadDefaultFreeSpace,
+     NActors::TActorId infoAggregator = {}
+ );
+ 
+-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);
++void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);
+ 
+ } // namespace NYql::NDq
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp b/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp
+index 9d1b6ac61d6..a8098801000 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp
+@@ -171,7 +171,7 @@ public:
+         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+         const ::NMonitoring::TDynamicCounterPtr& counters,
+         i64 freeSpace,
+-        const IPqGateway::TPtr& pqGateway,
++        const IPqStaticGateway::TPtr& pqGateway,
+         bool enableStreamingQueriesCounters,
+         bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
+         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
+@@ -557,7 +557,7 @@ private:
+     std::queue<TString> Buffer;
+     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
+     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
+-    IPqGateway::TPtr PqGateway;
++    IPqStaticGateway::TPtr PqGateway;
+     ui64 TaskId;
+     bool Inited = false;
+     bool EnableDeduplication = false;
+@@ -574,7 +574,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
+     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    IPqGateway::TPtr pqGateway,
++    IPqStaticGateway::TPtr pqGateway,
+     bool enableStreamingQueriesCounters,
+     i64 freeSpace,
+     bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
+@@ -600,7 +600,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
+     return {actor, actor};
+ }
+ 
+-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
++void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
+     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
+         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
+             NPq::NProto::TDqPqTopicSink&& settings,
+diff --git a/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h b/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h
+index 49f39efa283..5944a0e1a6c 100644
+--- a/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h
++++ b/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h
+@@ -29,11 +29,11 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
+     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+     const ::NMonitoring::TDynamicCounterPtr& counters,
+-    IPqGateway::TPtr pqGateway,
++    IPqStaticGateway::TPtr pqGateway,
+     bool enableStreamingQueriesCounters,
+     i64 freeSpace = DqPqDefaultFreeSpace,
+     bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag = true);
+ 
+-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = true, bool enableDeduplicationFeatureFlag = true);
++void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = true, bool enableDeduplicationFeatureFlag = true);
+ 
+ } // namespace NYql::NDq
+diff --git a/ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h b/ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h
+index f83c927e688..9c9828fec97 100644
+--- a/ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h
++++ b/ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h
+@@ -17,11 +17,30 @@ class IFunctionRegistry;
+ 
+ namespace NYql {
+ 
++class IPqStaticGateway : public TThrRefBase {
++public:
++    using TPtr = TIntrusivePtr<IPqStaticGateway>;
++
++    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
++
++    virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
++
++    virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
++
++    virtual NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const = 0;
++};
++
+ class TPqClusterConfig;
+ class TPqGatewayConfig;
+ using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
+ 
+-class IPqGateway : public TThrRefBase {
++// May be dynamically changed by methods:
++// - OpenSession
++// - CloseSession
++// - UpdateClusterConfigs
++// - AddCluster
++// Class is thread-safe but may be inconsistent if usage is not correct.
++class IPqGateway : public IPqStaticGateway {
+ public:
+     using TPtr = TIntrusivePtr<IPqGateway>;
+ 
+@@ -48,10 +67,6 @@ public:
+ 
+     virtual TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0;
+ 
+-    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
+-
+-    virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
+-
+     virtual void UpdateClusterConfigs(
+         const TString& clusterName,
+         const TString& endpoint,
+@@ -61,10 +76,6 @@ public:
+     virtual void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) = 0;
+ 
+     virtual void AddCluster(const NYql::TPqClusterConfig& cluster) = 0;
+-
+-    virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
+-
+-    virtual NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const = 0;
+ };
+ 
+ class IPqGatewayFactory : public TThrRefBase {
+diff --git a/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp b/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
+index 2ffe8f20232..035932a916e 100644
+--- a/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
++++ b/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
+@@ -88,16 +88,22 @@ public:
+         }
+     }
+ 
+-    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {   
+-        ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
++    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {
++        auto newClustersConfig = std::make_shared<TPqClusterConfigsMap>();
+         for (const auto& cfg : config->GetClusterMapping()) {
+-            AddCluster(cfg);
++            (*newClustersConfig)[cfg.GetName()] = cfg;
++        }
++
++        with_lock (Mutex) {
++            ClusterConfigs = std::move(newClustersConfig);
+         }
+     }
+ 
+     void AddCluster(const NYql::TPqClusterConfig& cluster) final {
+-        Y_ABORT_UNLESS(ClusterConfigs);
+-        (*ClusterConfigs)[cluster.GetName()] = cluster;
++        with_lock (Mutex) {
++            Y_ABORT_UNLESS(ClusterConfigs);
++            (*ClusterConfigs)[cluster.GetName()] = cluster;
++        }
+     }
+ 
+     ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+diff --git a/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.cpp b/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.cpp
+index 07e97908cab..c151cf47056 100644
+--- a/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.cpp
++++ b/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.cpp
+@@ -4,12 +4,13 @@
+ 
+ namespace NYql {
+ 
++namespace {
++
+ using namespace NThreading;
+ 
+ class TSolomonGateway : public ISolomonGateway {
+ public:
+-    TSolomonGateway(const TSolomonGatewayConfig& config)
+-    {
++    explicit TSolomonGateway(const TSolomonGatewayConfig& config) {
+         for (const auto& item: config.GetClusterMapping()) {
+             Clusters_[item.GetName()] = item;
+         }
+@@ -55,8 +56,10 @@ private:
+     THashMap<TString, TSolomonClusterConfig> Clusters_;
+ };
+ 
++} // anonymous namespace
++
+ ISolomonGateway::TPtr CreateSolomonGateway(const TSolomonGatewayConfig& config) {
+-    return new TSolomonGateway(config);
++    return MakeIntrusive<TSolomonGateway>(config);
+ }
+ 
+ } // namespace NYql
+diff --git a/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h b/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h
+index 2319e7d8440..52d0f71e1dc 100644
+--- a/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h
++++ b/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h
+@@ -6,6 +6,7 @@ namespace NYql {
+ 
+ class TSolomonGatewayConfig;
+ 
++// Not thread safe
+ ISolomonGateway::TPtr CreateSolomonGateway(const TSolomonGatewayConfig& config);
+ 
+ } // namespace NYql

@@ -701,6 +701,7 @@ public:
                         break;
                     }
                 }
+                break;
             }
             default: {
                 FatalError(Ydb::StatusIds::SCHEME_ERROR, ExtractIssues(response, ssStatus, TStringBuilder() << "unexpected transaction status " << status));

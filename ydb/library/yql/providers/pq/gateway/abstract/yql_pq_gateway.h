@@ -17,11 +17,30 @@ class IFunctionRegistry;
 
 namespace NYql {
 
+class IPqStaticGateway : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IPqStaticGateway>;
+
+    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
+
+    virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
+
+    virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
+
+    virtual NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const = 0;
+};
+
 class TPqClusterConfig;
 class TPqGatewayConfig;
 using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
 
-class IPqGateway : public TThrRefBase {
+// May be dynamically changed by methods:
+// - OpenSession
+// - CloseSession
+// - UpdateClusterConfigs
+// - AddCluster
+// Class is thread-safe but may be inconsistent if usage is not correct.
+class IPqGateway : public IPqStaticGateway {
 public:
     using TPtr = TIntrusivePtr<IPqGateway>;
 
@@ -48,10 +67,6 @@ public:
 
     virtual TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0;
 
-    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
-
-    virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
-
     virtual void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,
@@ -61,10 +76,6 @@ public:
     virtual void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) = 0;
 
     virtual void AddCluster(const NYql::TPqClusterConfig& cluster) = 0;
-
-    virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
-
-    virtual NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const = 0;
 };
 
 class IPqGatewayFactory : public TThrRefBase {

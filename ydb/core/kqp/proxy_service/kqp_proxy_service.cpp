@@ -1878,7 +1878,7 @@ private:
             AppData()->FunctionRegistry,
             AppData()->TenantName,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
-            FederatedQuerySetup->PqGateway,
+            FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
             Counters->GetKqpCounters(),

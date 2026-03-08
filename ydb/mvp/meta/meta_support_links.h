@@ -252,6 +252,7 @@ public:
         }
     }
 
+    // Separate state to avoid mixing event IDs from THandlerActorYdb::TEvPrivate and NSupportLinks::TEvPrivate.
     STFUNC(StateResolveSources) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NSupportLinks::TEvPrivate::TEvSourceResponse, Handle);
@@ -261,7 +262,7 @@ public:
 
 };
 
-class TMetaSupportLinksHandlerActor : THandlerActorYdb, public NActors::TActor<TMetaSupportLinksHandlerActor> {
+class TMetaSupportLinksHandlerActor : private THandlerActorYdb, public NActors::TActor<TMetaSupportLinksHandlerActor> {
 public:
     using TBase = NActors::TActor<TMetaSupportLinksHandlerActor>;
     NActors::TActorId HttpProxyId;

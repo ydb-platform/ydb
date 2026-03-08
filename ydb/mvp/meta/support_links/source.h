@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/mvp/meta/support_links/support_links_resolver.h>
+#include <ydb/mvp/meta/support_links/resolve_types.h>
 #include <ydb/mvp/meta/mvp.h>
 
 #include <memory>

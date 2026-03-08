@@ -11,16 +11,15 @@
 namespace NMVP {
 
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : UrlParameters(std::move(params.UrlParameters))
+    : ClusterColumns(std::move(params.ClusterColumns))
+    , UrlParameters(std::move(params.UrlParameters))
+    , Parent(std::move(params.Parent))
+    , HttpProxyId(std::move(params.HttpProxyId))
 {
     const auto& linkSources = params.EntityType == EEntityType::Database
         ? InstanceMVP->MetaSettings.DatabaseLinkSources
         : InstanceMVP->MetaSettings.ClusterLinkSources;
     Sources = linkSources;
-
-    ClusterColumns = std::move(params.ClusterColumns);
-    Parent = std::move(params.Parent);
-    HttpProxyId = std::move(params.HttpProxyId);
 }
 
 auto TSupportLinksResolver::MakeResolveInput(size_t place) const {

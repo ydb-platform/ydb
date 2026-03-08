@@ -1,23 +1,15 @@
 #pragma once
 
 #include "events.h"
+#include "resolve_types.h"
 
 #include <ydb/mvp/meta/mvp.h>
 
-#include <util/generic/maybe.h>
 #include <memory>
 
 namespace NMVP {
 
 class ILinkSource;
-
-struct TResolveOutput {
-    TString Name;
-    bool Ready = false;
-    TVector<NSupportLinks::TResolvedLink> Links;
-    TVector<NSupportLinks::TSupportError> Errors;
-    TMaybe<NActors::TActorId> Actor;
-};
 
 class TSupportLinksResolver {
 public:

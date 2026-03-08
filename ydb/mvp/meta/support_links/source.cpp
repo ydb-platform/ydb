@@ -53,7 +53,11 @@ void RegisterLinkSource(TString source, TLinkSourceFactory factory) {
     }
 
     std::lock_guard guard(LinkSourceFactoriesMutex());
-    LinkSourceFactories()[std::move(source)] = factory;
+    auto& factories = LinkSourceFactories();
+    if (factories.contains(source)) {
+        ythrow yexception() << "support_links source factory is already registered for " << source;
+    }
+    factories.emplace(std::move(source), factory);
 }
 
 std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config) {

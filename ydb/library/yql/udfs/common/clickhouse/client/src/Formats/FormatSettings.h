@@ -97,6 +97,9 @@ struct FormatSettings
         bool crlf_end_of_line = false;
         bool input_format_enum_as_number = false;
         bool input_format_arrays_as_nested_csv = false;
+        // When non-empty, used as a virtual header row (no header is read from the file).
+        // Parsed with the same CSV rules (delimiter, quoting) as a real header row.
+        std::string file_column_names;
     } csv;
 
     struct Custom

@@ -77,7 +77,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 } catch (const std::exception& e) {
                     throw TExternalSourceException() << "Failed to parse partitioned_by: " << e.what();
                 }
-            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
+            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv, "file_columns"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
                 throw TExternalSourceException() << "Unknown attribute " << key;
@@ -217,6 +217,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 }
                 if (value.size() != 1) {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should contain only one character"));
+                }
+                continue;
+            }
+
+            if (key == "file_columns"sv) {
+                if (format != "csv_with_names"sv) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "file_columns should be used only with format csv_with_names"));
                 }
                 continue;
             }

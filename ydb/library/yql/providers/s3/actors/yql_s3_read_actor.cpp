@@ -2347,6 +2347,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+
+        if (const auto it = settings.find("filecolumns"); settings.cend() != it && !it->second.empty()) {
+            readSpec->Settings.csv.file_column_names = it->second;
+        }
+
         ui64 sizeLimit = std::numeric_limits<ui64>::max();
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
             sizeLimit = FromString<ui64>(it->second);

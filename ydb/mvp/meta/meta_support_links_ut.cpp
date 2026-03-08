@@ -87,7 +87,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     }
 
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
-        const TString resultSetString = R"(columns {
+        const TString resultSetString = R"(
+columns {
   name: "workspace"
   type { type_id: UTF8 }
 }

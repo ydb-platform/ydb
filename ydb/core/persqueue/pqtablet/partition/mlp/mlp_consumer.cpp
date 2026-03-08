@@ -561,7 +561,7 @@ void TConsumerActor::ScheduleProcessing() {
     }
 
     auto now = TInstant::Now();
-    TDuration delay = NextProcessingTime > now && Storage->DLQEmpty()
+    TDuration delay = NextProcessingTime > now
         ? NextProcessingTime - now
         : TDuration::Zero();
     ProcessingScheduled = true;

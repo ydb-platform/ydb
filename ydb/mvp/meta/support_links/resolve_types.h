@@ -2,9 +2,11 @@
 
 #include "events.h"
 
-#include <ydb/mvp/meta/mvp.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NMVP {
 

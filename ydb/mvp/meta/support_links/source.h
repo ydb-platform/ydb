@@ -1,8 +1,12 @@
 #pragma once
 
 #include <ydb/mvp/meta/support_links/resolve_types.h>
-#include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/meta/meta_settings.h>
 
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/http/http.h>
+
+#include <util/generic/hash.h>
 #include <memory>
 
 namespace NMVP {

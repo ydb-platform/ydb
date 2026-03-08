@@ -60,9 +60,6 @@ public:
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
-    TMetaSettings MetaSettings;
-
-    TGrafanaSupportConfig GrafanaSupportConfig;
 
     static NMvp::TTokensConfig TokensConfig;
 };

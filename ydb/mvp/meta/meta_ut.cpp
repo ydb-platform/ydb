@@ -1,63 +1,75 @@
-#include <ydb/mvp/core/utils.h>
-#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/source.h>
+#include <ydb/mvp/core/utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/yexception.h>
 #include <yaml-cpp/yaml.h>
 
+static NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
+    YAML::Node node = YAML::Load(yaml);
+    NMvp::NMeta::TMetaAppConfig appConfig;
+    NMVP::MergeYamlNodeToProto(node, appConfig);
+    return appConfig;
+}
+
 Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
+    static NMVP::TMVP MakeTestMvp() {
+        const char* argv[] = {"mvp_test"};
+        return NMVP::TMVP(1, argv);
+    }
+
     Y_UNIT_TEST(MetaBlockWithoutApiEndpointThrows) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "yandex_v2"
 meta:
   meta_database: "/Root/meta"
-)", "mvp_meta_missing_endpoint", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(MetaBlockWithoutDatabaseThrows) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "yandex_v2"
 meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
-)", "mvp_meta_missing_database", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutApiEndpointThrows) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "nebius_v1"
 meta:
   meta_database: "/Root/meta"
-)", "mvp_meta_nebius_without_endpoint", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_api_endpoint must be specified");
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "meta.meta_api_endpoint must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithoutDatabaseThrows) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "nebius_v1"
 meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
-)", "mvp_meta_nebius_without_database", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "meta.meta_database must be specified");
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "meta.meta_database must be specified");
     }
 
     Y_UNIT_TEST(NebiusWithRequiredFieldsDoesNotThrow) {
+        auto mvp = MakeTestMvp();
         const TString yaml = R"(
 generic:
   access_service_type: "nebius_v1"
@@ -65,24 +77,22 @@ meta:
   meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
   meta_database: "/Root/meta"
 )";
-
-        YAML::Node node = YAML::Load(yaml);
-        NMvp::NMeta::TMetaAppConfig appConfig;
-        UNIT_ASSERT_NO_EXCEPTION(NMVP::MergeYamlNodeToProto(node, appConfig));
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_NO_EXCEPTION(mvp.TryGetMetaOptionsFromConfig(appConfig));
         UNIT_ASSERT(appConfig.HasMeta());
         UNIT_ASSERT_VALUES_EQUAL(appConfig.GetMeta().GetMetaApiEndpoint(), "grpc://meta.ydb.example.net:2135");
         UNIT_ASSERT_VALUES_EQUAL(appConfig.GetMeta().GetMetaDatabase(), "/Root/meta");
     }
 
     Y_UNIT_TEST(WithoutMetaBlockThrows) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "yandex_v2"
-)", "mvp_meta_yandex_without_meta_block", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            NMVP::TMVP(3, argv),
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
             yexception,
             "Check that `meta` section exists and is on the same indentation as `generic` section"
         );
@@ -90,8 +100,14 @@ generic:
 }
 
 Y_UNIT_TEST_SUITE(SupportLinksSourceValidation) {
+    static NMVP::TMVP MakeTestMvp() {
+        const char* argv[] = {"mvp_test"};
+        return NMVP::TMVP(1, argv);
+    }
+
     Y_UNIT_TEST(RejectsMissingSourceInConfig) {
-        TTempFileHandle tmpYaml = MakeTestFile(R"(
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
 generic:
   access_service_type: "yandex_v2"
 meta:
@@ -101,10 +117,9 @@ meta:
     cluster:
       - title: "Broken"
         url: "https://example.test"
-)", "mvp_meta_support_links_missing_source", ".yaml");
-        const TString configPath = tmpYaml.Name();
-        const char* argv[] = {"mvp_test", "--config", configPath.c_str()};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(NMVP::TMVP(3, argv), yexception, "source is required");
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "source is required");
     }
 
     Y_UNIT_TEST(UnsupportedSourceInConfigDoesNotThrow) {
@@ -120,10 +135,7 @@ meta:
         title: "Unknown"
         url: "https://example.test"
 )";
-
-        YAML::Node node = YAML::Load(yaml);
-        NMvp::NMeta::TMetaAppConfig appConfig;
-        NMVP::MergeYamlNodeToProto(node, appConfig);
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
 
         UNIT_ASSERT(appConfig.HasMeta());
         UNIT_ASSERT(appConfig.GetMeta().HasSupportLinks());

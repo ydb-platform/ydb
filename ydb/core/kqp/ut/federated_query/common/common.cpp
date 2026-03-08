@@ -126,7 +126,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             queryServiceConfig.GetYt(),
             nullptr,
             solomonConfig,
-            NYql::CreateSolomonGateway(solomonConfig),
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,

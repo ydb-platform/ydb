@@ -1,11 +1,7 @@
 LIBRARY()
 
 SRCS(
-    events.h
-    resolve_types.h
-    source.h
     source.cpp
-    support_links_resolver.h
     support_links_resolver.cpp
 )
 

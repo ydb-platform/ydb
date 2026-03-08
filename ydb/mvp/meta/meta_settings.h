@@ -9,8 +9,8 @@
 
 namespace NMVP {
 
-using TSupportLinkEntryConfig = NMvp::NMeta::TMetaConfig_TSupportLinksConfig_TSupportLinkEntry;
-using TSupportLinksConfig = NMvp::NMeta::TMetaConfig_TSupportLinksConfig;
+using TSupportLinkEntryConfig = NMvp::NMeta::TMetaConfig::TSupportLinksConfig::TSupportLinkEntry;
+using TSupportLinksConfig = NMvp::NMeta::TMetaConfig::TSupportLinksConfig;
 
 class ILinkSource;
 

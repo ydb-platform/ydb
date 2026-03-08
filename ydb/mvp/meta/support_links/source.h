@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/mvp/meta/support_links/resolve_types.h>
+#include <ydb/mvp/meta/support_links/types.h>
 #include <ydb/mvp/meta/meta_settings.h>
 
 #include <ydb/library/actors/core/actorid.h>

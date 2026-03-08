@@ -1,7 +1,7 @@
 #pragma once
 
 #include "events.h"
-#include "resolve_types.h"
+#include "types.h"
 
 #include <ydb/mvp/meta/meta_settings.h>
 #include <ydb/library/actors/http/http.h>

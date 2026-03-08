@@ -9,16 +9,22 @@
 
 namespace NMVP {
 
+namespace {
+
+TVector<std::shared_ptr<ILinkSource>> BuildSources(const TSupportLinksResolver::TParams& params) {
+    if (!params.Settings) {
+        ythrow yexception() << "support links settings are required";
+    }
+    const auto& linkSources = params.EntityType == TSupportLinksResolver::EEntityType::Database
+        ? params.Settings->DatabaseLinkSources
+        : params.Settings->ClusterLinkSources;
+    return linkSources;
+}
+
+} // namespace
+
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : Sources([&params]() -> TVector<std::shared_ptr<ILinkSource>> {
-        if (!params.Settings) {
-            ythrow yexception() << "support links settings are required";
-        }
-        const auto& linkSources = params.EntityType == EEntityType::Database
-            ? params.Settings->DatabaseLinkSources
-            : params.Settings->ClusterLinkSources;
-        return linkSources;
-    }())
+    : Sources(BuildSources(params))
     , ClusterColumns(std::move(params.ClusterColumns))
     , UrlParameters(std::move(params.UrlParameters))
     , Parent(std::move(params.Parent))

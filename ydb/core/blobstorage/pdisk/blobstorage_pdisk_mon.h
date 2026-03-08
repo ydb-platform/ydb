@@ -256,11 +256,6 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr NumActiveSlots;
     ::NMonitoring::TDynamicCounters::TCounterPtr ExpectedSlotCount;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedWriteErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedSilentWriteFails;
-    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadReplays;
-
     // states subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr PDiskState;

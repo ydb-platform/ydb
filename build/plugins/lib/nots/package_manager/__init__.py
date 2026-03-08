@@ -5,7 +5,6 @@ from .package_manager import PackageManager, PackageManagerError, PackageManager
 from .node_modules_bundler import bundle_node_modules, extract_node_modules
 from .pnpm_workspace import PnpmWorkspace
 
-
 __all__ = [
     "Lockfile",
     "LockfilePackageMeta",

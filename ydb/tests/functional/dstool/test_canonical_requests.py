@@ -84,12 +84,15 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
-    def _canonize_table_output(self, rows):
+    def _canonize_table_output(self, rows, canonize_columns=[]):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
                 row['Guid'] = '<Guid>'
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
+            for column in canonize_columns:
+                if column in row:
+                    row[column] = f'<{column}>'
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -104,7 +107,7 @@ class TestBase:
         for vslot in base_config.VSlot:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False):
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=[]):
         common.cache.clear()
         common.name_cache.clear()
         results = []
@@ -135,7 +138,7 @@ class TestBase:
         original_table_dump = table.TableOutput.dump
 
         def mock_table_dump(table_self, rows, args):
-            self._canonize_table_output(rows)
+            self._canonize_table_output(rows, canonize_columns=canonize_columns)
             return original_table_dump(table_self, rows, args)
 
         exit_status = 0
@@ -174,7 +177,7 @@ class Test(TestBase):
             self._trace('--help'),
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
-            self._trace('vdisk', 'list', '-AH'),
+            self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),

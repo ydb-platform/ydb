@@ -536,8 +536,6 @@ struct TPDiskMon {
 private:
     TVector<TOpCounters> LogWriteOpCounters;
     TVector<TOpCounters> ChunkWriteOpCounters;
-    TOpCounters& GetLogWriteOpCounters(const TWriteSource& source);
-    TOpCounters& GetChunkWriteOpCounters(const TWriteSource& source);
 
 public:
     // Halter

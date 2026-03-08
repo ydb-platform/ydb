@@ -566,24 +566,16 @@ void TPDiskMon::UpdateStats() {
     *UsedSpacePerMile = usedPerMile;
 }
 
-TPDiskMon::TOpCounters& TPDiskMon::GetLogWriteOpCounters(const TWriteSource& source) {
+void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
     const size_t index = GetWriteSourceIndex(source);
     Y_ABORT_UNLESS(index < LogWriteOpCounters.size());
-    return LogWriteOpCounters[index];
-}
-
-TPDiskMon::TOpCounters& TPDiskMon::GetChunkWriteOpCounters(const TWriteSource& source) {
-    const size_t index = GetWriteSourceIndex(source);
-    Y_ABORT_UNLESS(index < ChunkWriteOpCounters.size());
-    return ChunkWriteOpCounters[index];
-}
-
-void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
-    GetLogWriteOpCounters(source).CountRequest(size);
+    LogWriteOpCounters[index].CountRequest(size);
 }
 
 void TPDiskMon::CountChunkWriteOpRequest(const TWriteSource& source, ui32 size) {
-    GetChunkWriteOpCounters(source).CountRequest(size);
+    const size_t index = GetWriteSourceIndex(source);
+    Y_ABORT_UNLESS(index < ChunkWriteOpCounters.size());
+    ChunkWriteOpCounters[index].CountRequest(size);
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {

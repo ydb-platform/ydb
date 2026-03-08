@@ -555,23 +555,23 @@ void TConsumerActor::ScheduleProcessing() {
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
         PurgeRequestsQueue.empty() &&
+        Storage->DLQEmpty() &&
         Storage->IsBatchEmpty()) {
         return;
     }
 
     auto now = TInstant::Now();
-    if (NextProcessingTime > now) {
-        ProcessingScheduled = true;
-        Schedule(NextProcessingTime - now, new TEvents::TEvWakeup(EWakeUpTag::Processing));
-    } else {
-        ProcessEventQueue();
-    }
+    TDuration delay = NextProcessingTime > now && Storage->DLQEmpty()
+        ? NextProcessingTime - now
+        : TDuration::Zero();
+    ProcessingScheduled = true;
+    Schedule(delay, new TEvents::TEvWakeup(EWakeUpTag::Processing));
 }
 
 void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
 
-    NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliseconds());
+    NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
 
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {

@@ -55,8 +55,10 @@ def build_dashboard_payload(
     enriched = []
     for r in runs:
         rr = dict(r)
-        dur_s = float(rr["dur_us"]) / 1_000_000.0 if float(rr["dur_us"]) > 0 else 0.0
-        rr["cpu_cores_est"] = (float(rr.get("cpu_sec_report", 0.0) or 0.0) / dur_s) if dur_s > 0 else 0.0
+        dur_used = float(rr.get("duration_used_sec", 0) or 0)
+        if dur_used <= 0:
+            dur_used = float(rr.get("dur_us", 0) or 0) / 1_000_000.0
+        rr["cpu_cores_est"] = (float(rr.get("cpu_sec_report", 0.0) or 0.0) / dur_used) if dur_used > 0 else 0.0
         rr["ram_gb"] = float(rr.get("ram_kb_report", 0.0) or 0.0) / (1024.0 * 1024.0)
         rr["active_one"] = 1.0
         enriched.append(rr)

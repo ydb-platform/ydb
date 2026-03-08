@@ -192,12 +192,30 @@ def build_cpu_recommendations(
             dedup_runs_by_chunk[key] = r
     runs_for_recommendations = list(dedup_runs_by_chunk.values()) + dedup_runs_fallback
     parallel_stats = _compute_parallel_stats(runs_for_recommendations)
+    # Markers (suite_start_sec / suite_end_sec) must match the chart, which uses ALL runs.
+    # Dedup keeps one run per chunk (longer duration), so retries can make marker later than chart.
+    suite_start_us_all: dict[str, float] = {}
+    suite_end_us_all: dict[str, float] = {}
+    for r in runs:
+        suite = str(r.get("suite_path", ""))
+        if not suite:
+            continue
+        start = float(r.get("start_us", 0) or 0)
+        end = float(r.get("end_us", 0) or 0)
+        if end <= start:
+            continue
+        if suite not in suite_start_us_all or start < suite_start_us_all[suite]:
+            suite_start_us_all[suite] = start
+        if suite not in suite_end_us_all or end > suite_end_us_all[suite]:
+            suite_end_us_all[suite] = end
 
     by_suite: dict[str, list[float]] = defaultdict(list)
     by_suite_runs: dict[str, int] = defaultdict(int)
     by_suite_cpu: dict[str, float] = defaultdict(float)
     by_suite_ram_kb: dict[str, float] = defaultdict(float)
     by_suite_dur: dict[str, float] = defaultdict(float)
+    by_suite_dur_report: dict[str, float] = defaultdict(float)
+    by_suite_dur_evlog: dict[str, float] = defaultdict(float)
     by_suite_synthetic: dict[str, bool] = defaultdict(bool)
     by_suite_errors: dict[str, int] = defaultdict(int)
     by_suite_timeouts: dict[str, int] = defaultdict(int)
@@ -209,11 +227,15 @@ def build_cpu_recommendations(
             continue
         cpu = float(r.get("cpu_sec_report", 0.0) or 0.0)
         ram_kb = float(r.get("ram_kb_report", 0.0) or 0.0)
-        dur_s = float(r.get("dur_us", 0) or 0) / 1_000_000.0
+        dur_report = float(r.get("duration_report_sec", 0) or 0)
+        dur_evlog = float(r.get("dur_us", 0) or 0) / 1_000_000.0
+        dur_s = max(dur_report, dur_evlog)
         by_suite_runs[suite] += 1
         by_suite_cpu[suite] += cpu
         by_suite_ram_kb[suite] += ram_kb
         by_suite_dur[suite] += dur_s
+        by_suite_dur_report[suite] += dur_report
+        by_suite_dur_evlog[suite] += dur_evlog
         if r.get("synthetic_metrics"):
             by_suite_synthetic[suite] = True
         status = str(r.get("status", "") or "").upper()
@@ -342,6 +364,8 @@ def build_cpu_recommendations(
             "total_cpu_sec": round(by_suite_cpu[suite], 2),
             "total_ram_gb": round(by_suite_ram_kb[suite] / (1024.0 * 1024.0), 3),
             "total_dur_sec": round(by_suite_dur[suite], 2),
+            "total_dur_report_sec": round(by_suite_dur_report[suite], 2),
+            "total_dur_evlog_sec": round(by_suite_dur_evlog[suite], 2),
             "has_synthetic": by_suite_synthetic.get(suite, False),
             "ya_cpu_cores": ya_cpu,
             "ya_ram_gb": ya_ram,
@@ -363,9 +387,9 @@ def build_cpu_recommendations(
             "muted_timeouts": chunk_status["muted_timeouts"],
             "fails_total": chunk_status["fails_total"],
             "cpu_action": cpu_action,
+            "suite_start_sec": round(suite_start_us_all[suite] / 1e6, 1) if suite in suite_start_us_all else parallel_stats.get(suite, {}).get("suite_start_sec"),
+            "suite_end_sec": round(suite_end_us_all[suite] / 1e6, 1) if suite in suite_end_us_all else parallel_stats.get(suite, {}).get("suite_end_sec"),
             **{k: parallel_stats.get(suite, {}).get(k, v) for k, v in {
-                "suite_start_sec": None,
-                "suite_end_sec": None,
                 "max_parallel_self": 0,
                 "max_parallel_self_at_sec": None,
                 "peak_others_during_suite": 0,

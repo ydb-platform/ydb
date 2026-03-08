@@ -12,6 +12,7 @@ Supports:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import sys
@@ -59,8 +60,16 @@ RUN_SUITE_SOLE_RE = re.compile(
     r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)"
 )
 PART_SUFFIX_RE = re.compile(r"/part\d+$")
+
+
+def _shell_escape(s: str) -> str:
+    """Escape for use inside double-quoted shell argument (e.g. jq --arg x \"...\")."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+# Match path ending with aux file; (?:$|\s) = at end of string or followed by space (evlog name can list multiple paths)
 EVLOG_AUX_OUTPUT_RE = re.compile(
-    r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)$"
+    r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)(?=\s|$)"
 )
 
 
@@ -217,12 +226,12 @@ def parse_report_chunks(
             continue
         if item.get("type") != "test":
             continue
-        suite = str(item.get("path", ""))
-        if not suite:
+        suite_raw = str(item.get("path", ""))
+        if not suite_raw:
             continue
-        if suite_filter and suite != suite_filter:
+        suite = normalize_suite_path(suite_raw)
+        if suite_filter and suite != normalize_suite_path(suite_filter):
             continue
-        suite = normalize_suite_path(suite)
 
         status = str(item.get("status", ""))
         status_u = status.upper()
@@ -278,27 +287,29 @@ def parse_report_chunks(
             "hid": item.get("hid"),
             "id": item.get("id"),
         }
-        parsed_chunk_rows.append((suite, group, idx, meta))
+        # Use suite_raw as chunk key so partitioned suites (part0, part1, ...) keep distinct metrics.
+        parsed_chunk_rows.append((suite_raw, group, idx, meta))
 
-    for suite, group, idx, meta in parsed_chunk_rows:
-        chunks[(suite, group, idx)] = meta
+    for suite_raw, group, idx, meta in parsed_chunk_rows:
+        chunks[(suite_raw, group, idx)] = meta
 
-    # Backward-compatible fallback key: (suite, None, chunk_idx).
-    # Add only when chunk_idx is unique within suite to avoid cross-group mixups.
+    # Backward-compatible fallback key: (suite_raw, None, chunk_idx).
+    # Add only when chunk_idx is unique within suite_raw to avoid cross-group mixups.
     per_suite_idx_count: dict[tuple[str, int], int] = defaultdict(int)
-    for suite, _group, idx, _meta in parsed_chunk_rows:
-        per_suite_idx_count[(suite, idx)] += 1
-    for suite, group, idx, meta in parsed_chunk_rows:
-        if per_suite_idx_count[(suite, idx)] == 1 and (suite, None, idx) not in chunks:
+    for suite_raw, _group, idx, _meta in parsed_chunk_rows:
+        per_suite_idx_count[(suite_raw, idx)] += 1
+    for suite_raw, group, idx, meta in parsed_chunk_rows:
+        if per_suite_idx_count[(suite_raw, idx)] == 1 and (suite_raw, None, idx) not in chunks:
             alias_meta = dict(meta)
             alias_meta["_fallback_alias"] = True
-            chunks[(suite, None, idx)] = alias_meta
-    # Build suite-local map: report chunk hid -> chunk idx.
+            chunks[(suite_raw, None, idx)] = alias_meta
+    # Build suite-local map: report chunk hid -> chunk idx (keyed by normalized suite for callers).
     hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]] = defaultdict(dict)
-    for suite, _group, idx, meta in parsed_chunk_rows:
+    for suite_raw, _group, idx, meta in parsed_chunk_rows:
         hid = meta.get("hid")
-        if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite]:
-            hid_to_chunk_idx_by_suite[suite][hid] = idx
+        suite_norm = normalize_suite_path(suite_raw)
+        if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite_norm]:
+            hid_to_chunk_idx_by_suite[suite_norm][hid] = idx
 
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
@@ -475,7 +486,8 @@ def build_test_event_times_direct(
                 suite, _group, _chunk = extract_suite_group_chunk_from_run_name(arg_name)
                 if not suite:
                     continue
-                if suite_filter and suite != suite_filter:
+                suite = normalize_suite_path(suite)
+                if suite_filter and suite != normalize_suite_path(suite_filter):
                     continue
                 run_begin_by_uid[m_uid.group(1)] = (suite, float(ev.get("ts", 0.0)))
                 continue
@@ -571,10 +583,13 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
             arg_name = str(value.get("name", ""))
             if not arg_name.startswith("Run("):
                 continue
-            suite, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
-            if suite is None or chunk is None:
+            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            if suite_raw is None or chunk is None:
                 continue
-            if suite_filter is not None and suite != suite_filter:
+            # Skip aux-only runs (meta.json, run_test.log, etc.): they are side-effect events, not real chunk runs.
+            if chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
+                continue
+            if suite_filter is not None and normalize_suite_path(suite_raw) != normalize_suite_path(suite_filter):
                 continue
             time_range = value.get("time") if isinstance(value.get("time"), list) else None
             if (
@@ -597,7 +612,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     "start_us": start_us,
                     "end_us": end_us,
                     "dur_us": end_us - start_us,
-                    "suite_path": suite,
+                    "suite_path": suite_raw,
                     "chunk_group": chunk_group,
                     "chunk": chunk,
                     "uid": m_uid.group(1) if m_uid else None,
@@ -645,21 +660,25 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     completed_uids.add(uid)
                 continue
             m_uid = RUN_UID_RE.search(arg_name)
-            suite, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_norm = normalize_suite_path(suite_raw) if suite_raw is not None else None
             is_target = (
                 arg_name.startswith("Run(")
-                and suite is not None
+                and suite_raw is not None
                 and chunk is not None
                 and ev_name == "TM"
-                and (suite_filter is None or suite == suite_filter)
+                and (suite_filter is None or suite_norm == normalize_suite_path(suite_filter))
             )
+            # Skip aux-only runs (meta.json, run_test.log, etc.) in trace format too.
+            if is_target and chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
+                is_target = False
             if is_target and m_uid:
                 run_by_uid[m_uid.group(1)] = {
                     "pid": pid,
                     "tid": tid,
                     "ts": ts,
                     "arg_name": arg_name,
-                    "suite": suite,
+                    "suite": suite_raw,
                     "chunk_group": chunk_group,
                     "chunk": chunk,
                     "uid": m_uid.group(1),
@@ -669,7 +688,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     "ts": ts,
                     "arg_name": arg_name,
                     "is_target": is_target,
-                    "suite": suite,
+                    "suite": suite_raw,
                     "chunk_group": chunk_group,
                     "chunk": chunk,
                     "uid": m_uid.group(1) if m_uid else None,
@@ -825,15 +844,15 @@ def build_trace(
     enriched_runs: list[dict[str, Any]] = []
 
     run_keys = {
-        (normalize_suite_path(str(r["suite_path"])), normalize_chunk_group(r.get("chunk_group")), int(r["chunk"]))
+        (str(r["suite_path"]), normalize_chunk_group(r.get("chunk_group")), int(r["chunk"]))
         for r in runs
         if r.get("suite_path") is not None and r.get("chunk") is not None
     }
     report_chunk_keys = {k for k, v in chunks.items() if not bool(v.get("_fallback_alias"))}
     missing_runs_for_chunk = len(report_chunk_keys - run_keys)
     report_idx_by_suite: dict[str, set[int]] = defaultdict(set)
-    for s, _g, i in report_chunk_keys:
-        report_idx_by_suite[s].add(int(i))
+    for s_raw, _g, i in report_chunk_keys:
+        report_idx_by_suite[normalize_suite_path(s_raw)].add(int(i))
 
     suite_matched: dict[str, int] = defaultdict(int)
     suite_missing: dict[str, int] = defaultdict(int)
@@ -844,7 +863,8 @@ def build_trace(
         suite = normalize_suite_path(suite_raw)
         chunk_group = normalize_chunk_group(r.get("chunk_group"))
         idx = int(r["chunk"])
-        meta = chunks.get((suite, chunk_group, idx), {}) or chunks.get((suite, None, idx), {})
+        # Look up by raw path so partitioned suites (part0, part1, ...) get distinct metrics.
+        meta = chunks.get((suite_raw, chunk_group, idx), {}) or chunks.get((suite_raw, None, idx), {})
         if not meta:
             # Some evlog entries may point to suite-level aux outputs (meta/log/trace/tar),
             # parsed as "sole chunk" (idx=0). For suites with regular report chunks [1/N],
@@ -912,6 +932,8 @@ def build_trace(
                     "cpu_sec_report": cpu,
                     "ram_kb_report": ram,
                     "evlog_dur_sec": round(r["dur_us"] / 1_000_000.0, 3),
+                    "duration_report_sec": round(float(meta.get("duration_sec", 0) or 0) if meta else 0.0, 3),
+                    "duration_evlog_sec": round(r["dur_us"] / 1_000_000.0, 3),
                     "uid": r.get("uid"),
                     "report_hid": meta.get("hid") if meta else None,
                     "report_id": meta.get("id") if meta else None,
@@ -929,9 +951,15 @@ def build_trace(
         ram_delta.append((r["start_us"], +ram))
         ram_delta.append((r["end_us"], -ram))
 
+        dur_report = float(meta.get("duration_sec", 0) or 0) if meta else 0.0
+        dur_evlog = r["dur_us"] / 1_000_000.0
+        dur_used = max(dur_report, dur_evlog)
         er = dict(r)
         er["cpu_sec_report"] = cpu
         er["ram_kb_report"] = ram
+        er["duration_report_sec"] = dur_report
+        er["duration_evlog_sec"] = dur_evlog
+        er["duration_used_sec"] = dur_used
         er["suite_path"] = suite
         er["suite_path_raw"] = suite_raw
         er["chunk_group"] = chunk_group
@@ -990,6 +1018,13 @@ def main() -> None:
     p.add_argument("--out-trace", type=Path, default=None, help="Output trace JSON (default: <html-stem>_trace.json next to --out-html)")
     p.add_argument("--out-stats", type=Path, default=None, help="Output stats JSON (default: <html-stem>_stats.json next to --out-html)")
     p.add_argument("--out-cpu-suggestions", type=Path, default=None, help="Output CPU suggestions JSON (default: <html-stem>_suggestions.json next to --out-html)")
+    p.add_argument(
+        "--out-csv",
+        type=Path,
+        default=None,
+        help="Write CSV of all chunks (default: next to trace as <stem>_chunks.csv). Use --no-csv to disable.",
+    )
+    p.add_argument("--no-csv", action="store_true", help="Do not write chunks CSV (default: write CSV)")
     p.add_argument("--top-n", type=int, default=12, help="Top suites to keep highlighted; suite+chunk mode keeps all chunks of these suites")
     p.add_argument("--max-points", type=int, default=1000, help="Max points per series in HTML dashboard (downsampling)")
     p.add_argument("--html-by-chunk", action="store_true", help="Include suite+chunk charts in HTML (default: only by suite)")
@@ -1024,6 +1059,12 @@ def main() -> None:
 
     if args.out_trace is None:
         raise SystemExit("Specify --out-trace or --out-html (trace path will be derived automatically)")
+
+    # Default CSV path next to trace unless --no-csv.
+    if not args.no_csv and args.out_csv is None:
+        stem = args.out_trace.stem
+        base = stem.replace("_trace", "") if stem.endswith("_trace") else stem
+        args.out_csv = args.out_trace.parent / (base + "_chunks.csv")
 
     # Prevent accidental overwrite of inputs by outputs.
     report_r = args.report.resolve()
@@ -1076,10 +1117,10 @@ def main() -> None:
 
     # Per-suite chunk count from report (declared chunks; may differ from evlog run count).
     report_chunks_by_suite: dict[str, int] = defaultdict(int)
-    for (suite, _group, _idx), meta in chunks.items():
+    for (suite_raw, _group, _idx), meta in chunks.items():
         if meta.get("_fallback_alias"):
             continue
-        report_chunks_by_suite[suite] += 1
+        report_chunks_by_suite[normalize_suite_path(suite_raw)] += 1
 
     resources_overlay = None
     if args.resources_jsonl and args.resources_jsonl.exists():
@@ -1097,6 +1138,71 @@ def main() -> None:
     )
     if args.out_cpu_suggestions:
         args.out_cpu_suggestions.write_text(json.dumps(cpu_suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if args.out_csv:
+        rows = enriched_runs
+        if args.suite_path:
+            suite_filter_norm = normalize_suite_path(args.suite_path)
+            rows = [r for r in enriched_runs if normalize_suite_path(str(r.get("suite_path", ""))) == suite_filter_norm]
+        # One row per (suite_path_raw, chunk, chunk_group): keep run with max duration_used_sec (evlog can have 2+ runs for same chunk, e.g. sole + aux).
+        key_to_best: dict[tuple[str, int, str], dict[str, Any]] = {}
+        key_to_raw_names: dict[tuple[str, int, str], list[str]] = {}
+        for r in rows:
+            key = (str(r.get("suite_path_raw", r.get("suite_path", ""))), int(r.get("chunk", 0)), str(r.get("chunk_group") or ""))
+            raw_n = (r.get("raw_name") or "").strip()
+            if key not in key_to_raw_names:
+                key_to_raw_names[key] = []
+            if raw_n and raw_n not in key_to_raw_names[key]:
+                key_to_raw_names[key].append(raw_n)
+            dur_used = float(r.get("duration_used_sec", 0) or 0) or max(
+                float(r.get("duration_report_sec", 0) or 0),
+                float(r.get("dur_us", 0) or 0) / 1_000_000.0,
+            )
+            if key not in key_to_best or dur_used > float(key_to_best[key].get("duration_used_sec", 0) or 0):
+                key_to_best[key] = dict(r)
+                key_to_best[key]["duration_used_sec"] = dur_used
+        for key, best in key_to_best.items():
+            best["_evlog_raw_names"] = key_to_raw_names.get(key, [])
+        rows = sorted(key_to_best.values(), key=lambda r: (str(r.get("suite_path_raw", r.get("suite_path", ""))), r.get("chunk", 0)))
+        with open(args.out_csv, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["suite_path_raw", "suite_path", "chunk", "chunk_group", "duration_report_sec", "duration_evlog_sec", "ram_kb", "ram_gb", "cpu_sec_report", "cores", "evlog_raw_name", "jq_report", "jq_evlog"])
+            for r in rows:
+                dur_report = float(r.get("duration_report_sec", 0) or 0)
+                dur_evlog = float(r.get("dur_us", 0) or 0) / 1_000_000.0
+                dur_used = float(r.get("duration_used_sec", 0) or 0) or max(dur_report, dur_evlog)
+                cpu = float(r.get("cpu_sec_report", 0) or 0)
+                ram_kb = float(r.get("ram_kb_report", 0) or 0)
+                cores = (cpu / dur_used) if dur_used > 0 else 0.0
+                ram_gb = ram_kb / (1024.0 * 1024.0)
+                suite_raw = str(r.get("suite_path_raw", r.get("suite_path", "")))
+                chunk_idx = int(r.get("chunk", 0))
+                chunk_grp = str(r.get("chunk_group") or "").strip()
+                path_esc = _shell_escape(suite_raw)
+                group_esc = _shell_escape(chunk_grp) if chunk_grp else ""
+                path_match = '.path == $path or (.path | startswith($path + "/"))'
+                # When chunk_group is set, restrict to that group (e.g. only "[test_base.py 0/10] chunk" not all 0/10)
+                group_cond = '(if $group != "" then (.subtest_name | contains($group)) else true end)'
+                if chunk_idx == 0:
+                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' report.json'
+                else:
+                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' report.json'
+                jq_evlog = f'jq -c --arg path "{path_esc}" \'select(.value.name != null and (.value.name | contains($path)))\' evlog.jsonl'
+                w.writerow([
+                    suite_raw,
+                    r.get("suite_path", ""),
+                    r.get("chunk", ""),
+                    r.get("chunk_group") or "",
+                    round(dur_report, 3),
+                    round(dur_evlog, 3),
+                    round(ram_kb, 1),
+                    round(ram_gb, 6),
+                    round(cpu, 3),
+                    round(cores, 3),
+                    " | ".join((n or "").replace("\n", " ").replace("|", " ") for n in r.get("_evlog_raw_names", [r.get("raw_name")]) if n),
+                    jq_report,
+                    jq_evlog,
+                ])
 
     args.out_trace.write_text(json.dumps(trace, ensure_ascii=False), encoding="utf-8")
     if args.out_stats:
@@ -1147,6 +1253,8 @@ def main() -> None:
         print(f"Stats written: {args.out_stats}")
     if args.out_cpu_suggestions:
         print(f"CPU suggestions written: {args.out_cpu_suggestions}")
+    if args.out_csv:
+        print(f"Chunks CSV written: {args.out_csv}")
     if args.out_html:
         print(f"HTML written: {args.out_html}")
         if args.full_table:

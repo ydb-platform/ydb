@@ -116,22 +116,24 @@ def extract_try_dirs(links: list[str], base_url: str, html: str = "") -> list[tu
     return sorted(out, key=lambda x: x[0])
 
 
-def find_report_and_evlog(html: str, try_base_url: str) -> tuple[str | None, str | None]:
-    """From try index HTML, return (report_url, evlog_url) if found."""
+def find_report_evlog_resources(html: str, try_base_url: str) -> tuple[str | None, str | None, str | None]:
+    """From try index HTML, return (report_url, evlog_url, resources_url) if found. resources_url may be None."""
     links = parse_index_links(html, try_base_url)
     report_url = None
     evlog_url = None
+    resources_url = None
     for u in links:
         name = urlparse(u).path.split("/")[-1].lower()
         if name == "report.json":
             report_url = u
         if name == "ya_evlog.jsonl" or name == "ya_evlog.jsonl.json":
-            # Prefer .jsonl
             if name == "ya_evlog.jsonl":
                 evlog_url = u
             elif evlog_url is None:
                 evlog_url = u
-    return report_url, evlog_url
+        if name == "resources_monitor.jsonl":
+            resources_url = u
+    return report_url, evlog_url, resources_url
 
 
 def download_file(url: str, dest: Path, timeout: int = 300) -> None:
@@ -279,7 +281,7 @@ def main() -> None:
             print(f"Failed to fetch {try_name} index: {e}", file=sys.stderr)
             continue
 
-        report_url, evlog_url = find_report_and_evlog(try_html, try_base)
+        report_url, evlog_url, resources_url = find_report_evlog_resources(try_html, try_base)
         if not report_url or not evlog_url:
             print(f"{try_name}: missing report.json or ya_evlog.jsonl (report={report_url!s}, evlog={evlog_url!s})", file=sys.stderr)
             continue
@@ -295,6 +297,12 @@ def main() -> None:
         print(f"Downloading {try_name} evlog ...")
         download_file(evlog_url, evlog_path)
 
+        resources_path = None
+        if resources_url:
+            resources_path = out_dir / "resources_monitor.jsonl"
+            print(f"Downloading {try_name} resources_monitor.jsonl ...")
+            download_file(resources_url, resources_path)
+
         out_html = out_dir / "dashboard.html"
         cmd = [
             sys.executable,
@@ -305,6 +313,8 @@ def main() -> None:
             "--repo-root", str(repo_root),
             "--top-n", str(args.top_n),
         ]
+        if resources_path is not None:
+            cmd += ["--resources-jsonl", str(resources_path)]
         if effective_sanitizer:
             cmd += ["--sanitizer", effective_sanitizer]
 

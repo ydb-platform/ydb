@@ -264,13 +264,24 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> Sum of <i>peak</i> RAM/CPU per active chunk at each time. Can exceed actual system RAM because peaks occurred at different moments.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code>.</li>
-        <li><b>Chunk duration (seconds):</b> <code>evlog_dur_sec = (end_us - start_us) / 1e6</code> from evlog B/E events.</li>
+        <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
-        <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / evlog_dur_sec</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+        <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>RAM per chunk (report):</b> <code>ram_kb_report = ru_maxrss</code>, fallback <code>ru_rss / 1024</code>.</li>
         <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
       </ul>
+      <details style="margin-top:8px;">
+        <summary><b>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</b></summary>
+        <div style="margin:6px 0;">
+          <p><b>Per run</b> (we use <code>dur_sec = max(duration_report_sec, duration_evlog_sec)</code> so cores are not inflated when evlog span is short):</p>
+          <p><code>cpu_cores_est<sub>run</sub> = cpu_sec_report / dur_sec</code></p>
+          <p><b>Chart value at time t</b> (we use all runs, not one chunk):</p>
+          <p><code>value(t) = Σ cpu_cores_est<sub>run</sub></code> over all runs of this suite where <code>start_us ≤ t &lt; end_us</code>.</p>
+          <p>So at each moment we sum estimated cores of every run that is active. If a suite has many parallel runs (e.g. part0..part19), the chart shows the sum of all of them at that time.</p>
+          <p><b>Table columns total_cpu_sec / total_dur_sec</b> are from the <i>deduplicated</i> set (one run per suite+chunk for recommendations). So e.g. total_cpu_sec=89.4 and total_dur_sec=135.3 refer to one representative run; 89.4/135.3 ≈ 0.66 cores is the average for that run. The chart value (e.g. 373 cores) is <i>not</i> 89.4/135.3 — it is the sum of <code>cpu_sec_report/dur_sec</code> over all runs of the suite active at the cursor time (e.g. 40 runs × ~9.3 cores ≈ 373).</p>
+        </div>
+      </details>
     </div>
   </details>
   <div id="activeChunks" class="wide"></div>
@@ -304,6 +315,14 @@ def build_html_dashboard(
     <div id="cpuLayerSuite" class="wide"></div>
     <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
     <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+    <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
+      <summary><b>How the CPU value at cursor is calculated</b></summary>
+      <div style="margin:4px 0;">
+        <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
+        <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
+        <p><b>Why value (e.g. 373) ≠ total_cpu_sec/total_dur_sec (e.g. 89.4/135.3):</b> The table totals are from the deduplicated run (one row per suite); the chart value is the instantaneous sum over all runs active at that moment (e.g. many parts in parallel).</p>
+      </div>
+    </details>
     <div id="ramLayerSuite" class="wide"></div>
     <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
     <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
@@ -1048,7 +1067,7 @@ def build_html_dashboard(
       const suggestionsColumns = [
         'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size', 'ya_split_factor',
         'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
-        'total_ram_gb', 'total_dur_sec', 'recommended_cpu', 'cpu_action',
+        'total_ram_gb', 'total_dur_sec', 'total_dur_report_sec', 'total_dur_evlog_sec', 'recommended_cpu', 'cpu_action',
         'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_skipped', 'test_fails_total',
         'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total',
         'max_parallel_self', 'max_parallel_self_at_sec',
@@ -1106,6 +1125,8 @@ def build_html_dashboard(
             (s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : ''),
             (s.total_ram_gb != null ? Number(s.total_ram_gb).toFixed(3) : ''),
             (s.total_dur_sec != null ? Number(s.total_dur_sec).toFixed(1) : '') + ' s',
+            (s.total_dur_report_sec != null ? Number(s.total_dur_report_sec).toFixed(1) : '') + ' s',
+            (s.total_dur_evlog_sec != null ? Number(s.total_dur_evlog_sec).toFixed(1) : '') + ' s',
             cpuCell,
             actionCell(s.cpu_action || 'ok'),
             String(s.test_errors || 0),
@@ -1147,7 +1168,7 @@ def build_html_dashboard(
           '<th colspan="1">runtime</th>' +
           '<th colspan="3">cpu usage</th>' +
           '<th colspan="1">ram usage</th>' +
-          '<th colspan="1">runtime</th>' +
+          '<th colspan="3">runtime (used / report / evlog)</th>' +
           '<th colspan="2">decision</th>' +
           '<th colspan="6">status tests</th>' +
           '<th colspan="5">status chunks</th>' +
@@ -1167,31 +1188,33 @@ def build_html_dashboard(
           '<th data-col="8" style="cursor:pointer;user-select:none;">p95_cores' + marker(8) + '</th>' +
           '<th data-col="9" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(9) + '</th>' +
           '<th data-col="10" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(10) + '</th>' +
-          '<th data-col="11" class="group-end" style="cursor:pointer;user-select:none;">total_dur_sec' + marker(11) + '</th>' +
-          '<th data-col="12" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(12) + '</th>' +
-          '<th data-col="13" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(13) + '</th>' +
-          '<th data-col="14" style="cursor:pointer;user-select:none;">errors' + marker(14) + '</th>' +
-          '<th data-col="15" style="cursor:pointer;user-select:none;">timeouts' + marker(15) + '</th>' +
-          '<th data-col="16" style="cursor:pointer;user-select:none;">muted' + marker(16) + '</th>' +
-          '<th data-col="17" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(17) + '</th>' +
-          '<th data-col="18" style="cursor:pointer;user-select:none;">skipped' + marker(18) + '</th>' +
-          '<th data-col="19" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(19) + '</th>' +
-          '<th data-col="20" style="cursor:pointer;user-select:none;">errors' + marker(20) + '</th>' +
-          '<th data-col="21" style="cursor:pointer;user-select:none;">timeouts' + marker(21) + '</th>' +
-          '<th data-col="22" style="cursor:pointer;user-select:none;">muted' + marker(22) + '</th>' +
-          '<th data-col="23" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(23) + '</th>' +
-          '<th data-col="24" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(24) + '</th>' +
-          '<th data-col="25" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(25) + '</th>' +
-          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(26) + '</th>' +
-          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(27) + '</th>' +
-          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(28) + '</th>' +
-          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(29) + '</th>' +
-          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(30) + '</th>' +
-          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(31) + '</th>' +
-          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(32) + '</th>' +
+          '<th data-col="11" style="cursor:pointer;user-select:none;" title="Sum of max(report, evlog) duration per run">total_dur_sec' + marker(11) + '</th>' +
+          '<th data-col="12" style="cursor:pointer;user-select:none;" title="Sum of report duration per run">total_dur_report_sec' + marker(12) + '</th>' +
+          '<th data-col="13" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog duration per run">total_dur_evlog_sec' + marker(13) + '</th>' +
+          '<th data-col="14" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(14) + '</th>' +
+          '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(15) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;">errors' + marker(16) + '</th>' +
+          '<th data-col="17" style="cursor:pointer;user-select:none;">timeouts' + marker(17) + '</th>' +
+          '<th data-col="18" style="cursor:pointer;user-select:none;">muted' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;">skipped' + marker(20) + '</th>' +
+          '<th data-col="21" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(21) + '</th>' +
+          '<th data-col="22" style="cursor:pointer;user-select:none;">errors' + marker(22) + '</th>' +
+          '<th data-col="23" style="cursor:pointer;user-select:none;">timeouts' + marker(23) + '</th>' +
+          '<th data-col="24" style="cursor:pointer;user-select:none;">muted' + marker(24) + '</th>' +
+          '<th data-col="25" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(25) + '</th>' +
+          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(26) + '</th>' +
+          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(27) + '</th>' +
+          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(28) + '</th>' +
+          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(29) + '</th>' +
+          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(30) + '</th>' +
+          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(31) + '</th>' +
+          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(32) + '</th>' +
+          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(33) + '</th>' +
+          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(34) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 19, 24, 26, 28, 30, 32]);
+        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 15, 21, 26, 28, 30, 32, 34]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');
@@ -1724,12 +1747,10 @@ def build_html_dashboard(
           (totalMonitoring == null ? 'n/a' : (Number(totalMonitoring).toFixed(3) + ' cores')) +
           '</div>';
       }} else if (unit === 'active') {{
-        const totalBySuite = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
+        const totalActive = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
         totalsHtml =
           '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
-          '<b>Total active by suite:</b> ' + Math.round(totalBySuite) +
-          '&nbsp;&nbsp;|&nbsp;&nbsp;<b>Total active chart:</b> ' +
-          (Number.isFinite(totalAtClick) ? String(Math.round(totalAtClick)) : 'n/a') +
+          '<b>Total active chunks:</b> ' + Math.round(totalActive) +
           '</div>';
       }}
       panel.innerHTML =
@@ -1753,7 +1774,9 @@ def build_html_dashboard(
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
           .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
-        const totalAtClick = Number(ev.points[0]?.y);
+        const totalAtClick = unit === 'active'
+          ? rows.reduce((acc, r) => acc + Number(r.y || 0), 0)
+          : Number(ev.points[0]?.y);
         renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick);
       }});
     }}

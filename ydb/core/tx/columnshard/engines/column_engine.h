@@ -5,6 +5,7 @@
 #include "changes/abstract/settings.h"
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
+#include "snapshot_holders.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -14,8 +15,6 @@
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
-#include <algorithm>
-
 namespace NKikimr::NColumnShard {
 class TTiersManager;
 }   // namespace NKikimr::NColumnShard
@@ -83,56 +82,6 @@ public:
         , Processor(processor) {
         AFL_VERIFY(Request);
         AFL_VERIFY(Processor);
-    }
-};
-
-class TSnapshotHolders {
-    const TSnapshot minReadSnapshot;
-    // sorted from older to younger
-    const std::vector<TSnapshot> txInFlight;
-
-    public:
-    TSnapshotHolders(TSnapshot minReadSnapshot, std::vector<TSnapshot> txInFlight)
-        : minReadSnapshot(std::move(minReadSnapshot))
-        , txInFlight(std::move(txInFlight)) {
-        AFL_VERIFY(std::is_sorted(this->txInFlight.begin(), this->txInFlight.end()));
-        if (!txInFlight.empty()) {
-            AFL_VERIFY(txInFlight.back() < minReadSnapshot);
-        }
-    }
-
-    const TSnapshot GetMinReadSnapshot() const {
-        return minReadSnapshot;
-    }
-
-    bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
-        return CouldUse(
-            [&portion](const TSnapshot& snapshot) { return portion->IsRemovedFor(snapshot); },
-            [&portion](const TSnapshot& snapshot) { return portion->IsVisible(snapshot, true); }
-        );
-    }
-
-    template <class TIsRemovedFor, class TIsVisible>
-    bool CouldUse(const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const {
-        // the portion can be used by new scans
-        if (!isRemovedFor(minReadSnapshot)) {
-            return true;
-        }
-
-        // loop invariant: all txs older than curTx couldn't use the portion
-        for (const auto& txSnapshot : txInFlight) {
-            // this and all younger txs cannot see the portion
-            if (isRemovedFor(txSnapshot)) {
-                return false;
-            }
-            // the tx could use this portion
-            if (isVisible(txSnapshot)) {
-                return true;
-            }
-            // cur tx could not use the portion, but maybe the next tx could
-        }
-        // we have not found any txs that could use the portion
-        return false;
     }
 };
 

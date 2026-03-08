@@ -172,9 +172,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
 
                     auto specNode = NYT::NodeFromYsonString(specStr);
-                    if (isTemporary || isAnonymous) {
-                        UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
-                    }
+                    UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
                     specStr = NYT::NodeToCanonicalYsonString(specNode);
 
                     tables[i].TableOptions = TYtTableOptions{.IsTemporary = isTemporary, .IsAnonymous = isAnonymous, .Epoch = epoch};

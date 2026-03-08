@@ -216,7 +216,7 @@ void TMVP::InitMeta() {
 
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/support_links",
-                         ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation))
+                         ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation, MetaSettings))
                          )
                      );
 

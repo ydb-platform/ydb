@@ -37,6 +37,7 @@ public:
 protected:
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
+    const TMetaSettings Settings;
     TRequest Request;
     EEntityType EntityType = EEntityType::Cluster;
     THashMap<TString, TString> ClusterColumns;
@@ -51,10 +52,12 @@ public:
     TMetaSupportLinksGetHandlerActor(
         const NActors::TActorId& httpProxyId,
         const TYdbLocation& location,
+        const TMetaSettings& settings,
         const NActors::TActorId& sender,
         const NHttp::THttpIncomingRequestPtr& request)
         : HttpProxyId(httpProxyId)
         , Location(location)
+        , Settings(settings)
         , Request(sender, request)
     {}
 
@@ -155,6 +158,7 @@ public:
     virtual std::unique_ptr<TSupportLinksResolver> CreateSupportLinksResolver() {
         return std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
             .EntityType = EntityType,
+            .Settings = &Settings,
             .ClusterColumns = ClusterColumns,
             .UrlParameters = Request.Parameters.UrlParameters,
             .Parent = SelfId(),
@@ -267,17 +271,19 @@ public:
     using TBase = NActors::TActor<TMetaSupportLinksHandlerActor>;
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
+    const TMetaSettings Settings;
 
-    TMetaSupportLinksHandlerActor(const NActors::TActorId& httpProxyId, const TYdbLocation& location)
+    TMetaSupportLinksHandlerActor(const NActors::TActorId& httpProxyId, const TYdbLocation& location, const TMetaSettings& settings)
         : TBase(&TMetaSupportLinksHandlerActor::StateWork)
         , HttpProxyId(httpProxyId)
         , Location(location)
+        , Settings(settings)
     {}
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
         NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
         if (request->Method == "GET") {
-            Register(new TMetaSupportLinksGetHandlerActor(HttpProxyId, Location, event->Sender, request));
+            Register(new TMetaSupportLinksGetHandlerActor(HttpProxyId, Location, Settings, event->Sender, request));
             return;
         }
 

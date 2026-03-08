@@ -1,5 +1,4 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
-#include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/meta_support_links.h>
 #include <ydb/mvp/meta/support_links/ut/mock_link_source.h>
 
@@ -8,24 +7,11 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/yexception.h>
-
 #include <google/protobuf/text_format.h>
 #include <memory>
+#include <mutex>
 
 Y_UNIT_TEST_SUITE(MetaSupportLinks) {
-    class TMvpGuard {
-    public:
-        TMvpGuard() {
-            const char* argv[] = {"meta_support_links_ut"};
-            Mvp = std::make_unique<NMVP::TMVP>(1, argv);
-            NMVP::NTest::RegisterMockLinkSources();
-        }
-
-    private:
-        std::unique_ptr<NMVP::TMVP> Mvp;
-    };
-
     class TTestActorRuntime : public NActors::TTestActorRuntimeBase {
     public:
         TTestActorRuntime() {
@@ -40,15 +26,56 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         TSupportLinksTestActor(
             const NActors::TActorId& httpProxyId,
             const TYdbLocation& location,
+            const NMVP::TMetaSettings& settings,
             const NActors::TActorId& sender,
             const NHttp::THttpIncomingRequestPtr& request,
             NYdb::NTable::TDataQueryResult&& result)
-            : NMVP::TMetaSupportLinksGetHandlerActor(httpProxyId, location, sender, request)
+            : NMVP::TMetaSupportLinksGetHandlerActor(httpProxyId, location, settings, sender, request)
             , Result(std::move(result))
         {}
 
         void RequestClusterInfo() override {
             Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
+        }
+    };
+
+    struct TSupportLinksTestContext {
+        NMVP::TMetaSettings Settings;
+        const TYdbLocation Location = TYdbLocation("meta", "meta", {}, "/Root");
+
+        explicit TSupportLinksTestContext(const NMVP::TSupportLinksConfig& config) {
+            static std::once_flag once;
+            std::call_once(once, [] {
+                NMVP::NTest::RegisterMockLinkSources();
+            });
+            Settings.ClusterLinkSources.reserve(config.GetCluster().size());
+            for (int i = 0; i < config.GetCluster().size(); ++i) {
+                Settings.ClusterLinkSources.push_back(NMVP::MakeLinkSource(config.GetCluster(i)));
+            }
+            Settings.DatabaseLinkSources.reserve(config.GetDatabase().size());
+            for (int i = 0; i < config.GetDatabase().size(); ++i) {
+                Settings.DatabaseLinkSources.push_back(NMVP::MakeLinkSource(config.GetDatabase(i)));
+            }
+        }
+
+        NActors::TActorId RegisterGet(
+            TTestActorRuntime& runtime,
+            const NActors::TActorId& sender,
+            const NHttp::THttpIncomingRequestPtr& request,
+            NYdb::NTable::TDataQueryResult&& result) const {
+            auto httpProxy = runtime.AllocateEdgeActor();
+            return runtime.Register(new TSupportLinksTestActor(
+                httpProxy,
+                Location,
+                Settings,
+                sender,
+                request,
+                std::move(result)));
+        }
+
+        NActors::TActorId RegisterHandler(TTestActorRuntime& runtime) const {
+            auto httpProxy = runtime.AllocateEdgeActor();
+            return runtime.Register(new NMVP::TMetaSupportLinksHandlerActor(httpProxy, Location, Settings));
         }
     };
 
@@ -59,9 +86,8 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         return request;
     }
 
-    static NYdb::NTable::TDataQueryResult MakeClusterInfoResult(TStringBuf workspace, TStringBuf datasource) {
-        const TString resultSetString = TStringBuilder()
-            << R"(columns {
+    static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
+        const TString resultSetString = R"(columns {
   name: "workspace"
   type { type_id: UTF8 }
 }
@@ -70,12 +96,8 @@ columns {
   type { type_id: UTF8 }
 }
 rows {
-  items { text_value: ")"
-            << workspace
-            << R"(" }
-  items { text_value: ")"
-            << datasource
-            << R"(" }
+  items { text_value: "ws" }
+  items { text_value: "ds" }
 }
 )";
 
@@ -116,21 +138,12 @@ columns {
         );
     }
 
-    static NMVP::TSupportLinksConfig MakeSyncConfig() {
+    static NMVP::TSupportLinksConfig MakeConfig(TStringBuf source) {
         NMVP::TSupportLinksConfig cfg;
         auto* cluster = cfg.AddCluster();
-        cluster->SetSource("mock/sourceSync");
-        cluster->SetTitle("sync");
-        cluster->SetUrl("mock://sync");
-        return cfg;
-    }
-
-    static NMVP::TSupportLinksConfig MakeAsyncConfig() {
-        NMVP::TSupportLinksConfig cfg;
-        auto* cluster = cfg.AddCluster();
-        cluster->SetSource("mock/sourceAsync");
-        cluster->SetTitle("async");
-        cluster->SetUrl("mock://async");
+        cluster->SetSource(TString(source));
+        cluster->SetTitle("mock");
+        cluster->SetUrl("mock://source");
         return cfg;
     }
 
@@ -138,32 +151,16 @@ columns {
         return {};
     }
 
-    static void SetSupportLinkSources(const NMVP::TSupportLinksConfig& config) {
-        NMVP::InstanceMVP->MetaSettings.ClusterLinkSources.clear();
-        NMVP::InstanceMVP->MetaSettings.DatabaseLinkSources.clear();
-        NMVP::InstanceMVP->MetaSettings.ClusterLinkSources.reserve(config.GetCluster().size());
-        for (int i = 0; i < config.GetCluster().size(); ++i) {
-            NMVP::InstanceMVP->MetaSettings.ClusterLinkSources.push_back(NMVP::MakeLinkSource(config.GetCluster(i)));
-        }
-        NMVP::InstanceMVP->MetaSettings.DatabaseLinkSources.reserve(config.GetDatabase().size());
-        for (int i = 0; i < config.GetDatabase().size(); ++i) {
-            NMVP::InstanceMVP->MetaSettings.DatabaseLinkSources.push_back(NMVP::MakeLinkSource(config.GetDatabase(i)));
-        }
-    }
-
     Y_UNIT_TEST(SupportLinksReturnsBadRequestWhenClusterMissing) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
-        SetSupportLinkSources(MakeSyncConfig());
+        TSupportLinksTestContext context(MakeConfig("mock/sourceSync"));
 
         auto request = BuildHttpRequest("/meta/support_links?database=/root/test");
-        auto result = MakeClusterInfoResult("ws", "ds");
-        runtime.Register(new TSupportLinksTestActor(anyHttpProxy, location, sender, request, std::move(result)));
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "400");
@@ -178,15 +175,13 @@ columns {
     }
 
     Y_UNIT_TEST(SupportLinksReturnsMethodNotAllowedForNonGet) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
+        TSupportLinksTestContext context(MakeEmptyConfig());
 
-        auto handler = runtime.Register(new NMVP::TMetaSupportLinksHandlerActor(anyHttpProxy, location));
+        auto handler = context.RegisterHandler(runtime);
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global", "POST");
         runtime.Send(new NActors::IEventHandle(handler, sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
 
@@ -216,18 +211,15 @@ columns {
     }
 
     Y_UNIT_TEST(UsesSourceMockSync) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
-        SetSupportLinkSources(MakeSyncConfig());
+        TSupportLinksTestContext context(MakeConfig("mock/sourceSync"));
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
-        auto result = MakeClusterInfoResult("ws", "ds");
-        runtime.Register(new TSupportLinksTestActor(anyHttpProxy, location, sender, request, std::move(result)));
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
@@ -235,18 +227,15 @@ columns {
     }
 
     Y_UNIT_TEST(UsesSourceMockActorAsync) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
-        SetSupportLinkSources(MakeAsyncConfig());
+        TSupportLinksTestContext context(MakeConfig("mock/sourceAsync"));
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
-        auto result = MakeClusterInfoResult("ws", "ds");
-        runtime.Register(new TSupportLinksTestActor(anyHttpProxy, location, sender, request, std::move(result)));
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
@@ -254,18 +243,15 @@ columns {
     }
 
     Y_UNIT_TEST(ReturnsEmptyLinksForValidRequestWhenNoSupportLinksConfigured) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
-        SetSupportLinkSources(MakeEmptyConfig());
+        TSupportLinksTestContext context(MakeEmptyConfig());
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
-        auto result = MakeClusterInfoResult("ws", "ds");
-        runtime.Register(new TSupportLinksTestActor(anyHttpProxy, location, sender, request, std::move(result)));
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
@@ -279,18 +265,15 @@ columns {
     }
 
     Y_UNIT_TEST(PreservesMetaErrorWhenClusterIsNotFoundAndSourcesRespond) {
-        TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
 
         auto sender = runtime.AllocateEdgeActor();
-        auto anyHttpProxy = runtime.AllocateEdgeActor();
-        TYdbLocation location("meta", "meta", {}, "/Root");
-        SetSupportLinkSources(MakeSyncConfig());
+        TSupportLinksTestContext context(MakeConfig("mock/sourceSync"));
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=missing-cluster");
         auto result = MakeEmptyClusterInfoResult();
-        runtime.Register(new TSupportLinksTestActor(anyHttpProxy, location, sender, request, std::move(result)));
+        context.RegisterGet(runtime, sender, request, std::move(result));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");

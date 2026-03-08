@@ -1,26 +1,29 @@
 #include "support_links_resolver.h"
 #include <ydb/mvp/meta/support_links/source.h>
 
-#include <ydb/mvp/meta/mvp.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 
+#include <util/generic/yexception.h>
 #include <utility>
 
 namespace NMVP {
 
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : ClusterColumns(std::move(params.ClusterColumns))
+    : Sources([&params]() -> TVector<std::shared_ptr<ILinkSource>> {
+        if (!params.Settings) {
+            ythrow yexception() << "support links settings are required";
+        }
+        const auto& linkSources = params.EntityType == EEntityType::Database
+            ? params.Settings->DatabaseLinkSources
+            : params.Settings->ClusterLinkSources;
+        return linkSources;
+    }())
+    , ClusterColumns(std::move(params.ClusterColumns))
     , UrlParameters(std::move(params.UrlParameters))
     , Parent(std::move(params.Parent))
     , HttpProxyId(std::move(params.HttpProxyId))
-{
-    const auto& linkSources = params.EntityType == EEntityType::Database
-        ? InstanceMVP->MetaSettings.DatabaseLinkSources
-        : InstanceMVP->MetaSettings.ClusterLinkSources;
-    Sources = linkSources;
-}
+{}
 
 auto TSupportLinksResolver::MakeResolveInput(size_t place) const {
     return ILinkSource::TResolveInput{

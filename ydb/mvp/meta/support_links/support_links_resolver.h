@@ -3,7 +3,7 @@
 #include "events.h"
 #include "resolve_types.h"
 
-#include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/meta/meta_settings.h>
 
 #include <memory>
 
@@ -20,6 +20,7 @@ public:
 
     struct TParams {
         EEntityType EntityType = EEntityType::Cluster;
+        const TMetaSettings* Settings = nullptr;
         THashMap<TString, TString> ClusterColumns;
         NHttp::TUrlParameters UrlParameters;
         NActors::TActorId Parent;

@@ -35,11 +35,10 @@ class TPqGatewayConfig;
 using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
 
 // May be dynamically changed by methods:
-// - OpenSession
-// - CloseSession
-// - UpdateClusterConfigs
-// - AddCluster
-// Class is thread-safe but may be inconsistent if usage is not correct.
+// - OpenSession (thread safe)
+// - CloseSession (thread safe)
+// - UpdateClusterConfigs (not thread safe)
+// - AddCluster (not thread safe)
 class IPqGateway : public IPqStaticGateway {
 public:
     using TPtr = TIntrusivePtr<IPqGateway>;
@@ -73,8 +72,10 @@ public:
         const TString& database,
         bool secure) = 0;
 
+    // Not thread safe
     virtual void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) = 0;
 
+    // Not thread safe
     virtual void AddCluster(const NYql::TPqClusterConfig& cluster) = 0;
 };
 

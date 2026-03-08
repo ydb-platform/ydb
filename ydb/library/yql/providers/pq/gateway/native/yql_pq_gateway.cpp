@@ -89,21 +89,15 @@ public:
     }
 
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {
-        auto newClustersConfig = std::make_shared<TPqClusterConfigsMap>();
+        ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
         for (const auto& cfg : config->GetClusterMapping()) {
-            (*newClustersConfig)[cfg.GetName()] = cfg;
-        }
-
-        with_lock (Mutex) {
-            ClusterConfigs = std::move(newClustersConfig);
+            AddCluster(cfg);
         }
     }
 
     void AddCluster(const NYql::TPqClusterConfig& cluster) final {
-        with_lock (Mutex) {
-            Y_ABORT_UNLESS(ClusterConfigs);
-            (*ClusterConfigs)[cluster.GetName()] = cluster;
-        }
+        Y_ABORT_UNLESS(ClusterConfigs);
+        (*ClusterConfigs)[cluster.GetName()] = cluster;
     }
 
     ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {

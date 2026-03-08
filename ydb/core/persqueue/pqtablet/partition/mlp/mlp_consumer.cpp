@@ -554,7 +554,8 @@ void TConsumerActor::ScheduleProcessing() {
         CommitRequestsQueue.empty() &&
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
-        PurgeRequestsQueue.empty()) {
+        PurgeRequestsQueue.empty() &&
+        Storage->IsBatchEmpty()) {
         return;
     }
 
@@ -873,6 +874,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 }
 
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
+    LOG_D("HandleOnWork TEvents::TEvWakeup " << ev->Get()->Tag);
     switch (ev->Get()->Tag) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
@@ -948,8 +950,8 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 }
 
-void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
-    LOG_D("Handle TEvents::TEvWakeup");
+void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
+    LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->Tag);
     UpdateMetrics();
     NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));

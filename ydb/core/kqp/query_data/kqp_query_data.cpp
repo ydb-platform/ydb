@@ -262,8 +262,16 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
     }
 
     if (!parameterType->IsSameType(*pType)) {
-        ythrow yexception() << "Parameter " << name
-            << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
+        TString incompatibility;
+        GetFirstTypeIncompatibility(pType, parameterType, "$", incompatibility);
+        if (incompatibility) {
+            // shorter message with the first actual incompatibility reported
+            ythrow yexception() << "Parameter " << name << " type mismatch: " << incompatibility;
+        } else {
+            // fallback to old option
+            ythrow yexception() << "Parameter " << name
+                << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
+        }
     }
 }
 

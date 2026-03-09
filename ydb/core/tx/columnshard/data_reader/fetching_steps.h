@@ -70,7 +70,7 @@ private:
             }
 
             if (result.HasRemovedData()) {
-                Fetcher->OnError(TStringBuilder{} << "there is a removed accessors, count: " << result.GetRemovedData().size());
+                Fetcher->OnError(TStringBuilder{} << "some portion accessors were removed, count: " << result.GetRemovedData().size());
                 return;
             }
 

@@ -443,7 +443,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
 
-        // Regulor direct I/O.
+        // Regular direct I/O.
         // Note: releases the op on success (returns true).
         bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
 

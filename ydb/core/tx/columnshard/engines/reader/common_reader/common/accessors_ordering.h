@@ -245,6 +245,15 @@ public:
         if (Finished) {
             return;
         }
+
+        if (accessors.HasErrors()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
+        }
+
+        if (accessors.HasRemovedData()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+        }
+
         AFL_VERIFY(InFlightRequests);
         if (Accessors.empty()) {
             Accessors = std::move(accessors.ExtractPortions());

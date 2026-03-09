@@ -849,7 +849,8 @@ public:
 
             Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj), 0, Event->Cookie);
 
-            if (responseObj->IsDone()) {
+            const bool noBodyExpected = !responseObj->IsNeedBody();
+            if (responseObj->IsDone() || noBodyExpected) {
                 return PassAway();
             } else {
                 CurrentResponse = responseObj;

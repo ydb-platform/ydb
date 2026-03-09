@@ -54,9 +54,12 @@ enum class ELogicalOperator : ui8 { And, Or, Leaf };
 
 struct TPredicateRange {
     TMaybe<NNodes::TExprBase> Left;
+    TMaybe<TString> LeftBound;
+    bool LeftInclusive = false;
+
     TMaybe<NNodes::TExprBase> Right;
-    TMaybe<std::pair<TMaybe<TString>, TMaybe<TString>>> RangeBound;
-    TMaybe<EInequalityPredicateType> CompareSign;
+    TMaybe<TString> RightBound;
+    bool RightInclusive = false;
 };
 
 struct TTreeNode {
@@ -67,10 +70,9 @@ struct TTreeNode {
 
     // For Leaf
     TString Column;
-    TString TableAlias;
+    TMaybe<TString> TableAlias;
     double Selectivity = 0.0;
-    bool CollectMembers = false;
-    TMaybe<TVector<TPredicateRange>> AllRanges;
+    TPredicateRange Range;
 };
 
 TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
@@ -158,41 +160,52 @@ protected:
     double ComputeComparisonSelectivity(
         const NNodes::TExprBase& left,
         const NNodes::TExprBase& right,
-        bool is_contain_str
+        bool containString
     );
 
     std::shared_ptr<TTreeNode> ConvertEqualityToRange(
         const NNodes::TExprBase& left,
         const NNodes::TExprBase& right,
         bool underNot,
-        bool collectMembers
+        bool collectConstantMembers
     );
 
     std::shared_ptr<TTreeNode> ProcessSetPredicate(
         const NNodes::TExprBase& left,
         const TExprNode::TPtr list,
-        bool underNot,bool collectMembers
+        bool underNot,
+        bool collectConstantMembers
     );
 
     std::shared_ptr<TTreeNode> ConvertInequalityToRange(
         const NNodes::TExprBase& left,
         const NNodes::TExprBase& right,
         bool underNot,
-        bool collectMembers,
+        bool collectConstantMembers,
         EInequalityPredicateType inequalitySign
     );
 
     std::shared_ptr<TTreeNode> ProcessRegexPredicte(
         bool underNot,
-        bool collectMembers
+        bool collectConstantMembers
     );
 
     std::shared_ptr<TTreeNode> ProcessStringPredicate(
         const NNodes::TExprBase& left,
         const NNodes::TExprBase& right,
         bool underNot,
-        bool collectMembers,
-        bool is_contain_str
+        bool collectConstantMembers,
+        bool containString
+    );
+
+    double ComputeSelectivity(
+        const std::shared_ptr<TTreeNode>& node,
+        TSet<TString>& tableAliases
+    );
+
+    double ReComputeEstimation(
+        TString attributeName,
+        TPredicateRange& mergedRange
     );
 
 private:

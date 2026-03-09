@@ -114,8 +114,8 @@ namespace {
 
     // Estimates number of rows based on histogram and predicate type.
     template <typename T>
-    TMaybe<ui64> EstimatePredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator, T val,
-                                                          EInequalityPredicateType predicate) {
+    TMaybe<ui64> EstimateInequalityPredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator,
+                                                    T val, EInequalityPredicateType predicate) {
         switch (predicate) {
             case EInequalityPredicateType::Less:
                 return estimator->EstimateLess<T>(val);
@@ -130,6 +130,29 @@ namespace {
             case EInequalityPredicateType::NotEqual:
                 return estimator->GetNumElements() - estimator->EstimateEqual<T>(val);
         }
+        return Nothing();
+    }
+
+    template <typename T>
+    TMaybe<ui64> EstimateRangePredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator,
+                                                T leftVal, T rightVal,
+                                                EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
+        if (leftVal > rightVal) {
+            return Nothing();
+        } else if (leftVal == rightVal) {
+            return estimator->EstimateEqual<T>(leftVal);
+        }
+
+        if (leftPredicate == EInequalityPredicateType::Greater && rightPredicate == EInequalityPredicateType::Less) {
+            return estimator->EstimateRangeGreaterLess<T>(leftVal, rightVal);
+        } else if (leftPredicate == EInequalityPredicateType::Greater && rightPredicate == EInequalityPredicateType::LessOrEqual) {
+            return estimator->EstimateRangeGreaterLessOrEqual<T>(leftVal, rightVal);
+        } else if (leftPredicate == EInequalityPredicateType::GreaterOrEqual && rightPredicate == EInequalityPredicateType::Less) {
+            return estimator->EstimateRangeGreaterOrEqualLess<T>(leftVal, rightVal);
+        } else if (leftPredicate == EInequalityPredicateType::GreaterOrEqual && rightPredicate == EInequalityPredicateType::LessOrEqual) {
+            return estimator->EstimateRangeGreaterOrEqualLessOrEqual<T>(leftVal, rightVal);
+        }
+
         return Nothing();
     }
 
@@ -194,22 +217,65 @@ namespace {
             const TString value = literal.GetRef();
             if (columnType == "Uint32") {
                 ui32 val = FromString<ui32>(value);
-                return EstimatePredicateByType<ui32>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<ui32>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Int32") {
                 i32 val = FromString<i32>(value);
-                return EstimatePredicateByType<ui32>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<i32>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Uint64") {
                 ui64 val = FromString<ui64>(value);
-                return EstimatePredicateByType<ui64>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<ui64>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
-                return EstimatePredicateByType<i64>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Double") {
                 double val = FromString<double>(value);
-                return EstimatePredicateByType<double>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Date") {
                 ui16 val = FromString<ui16>(value);
-                return EstimatePredicateByType<ui16>(eqWidthHistogram, val, predicate);
+                return EstimateInequalityPredicateByType<ui16>(eqWidthHistogram, val, predicate);
+            }
+            // TODO: Add support for other types.
+            return Nothing();
+        }
+
+        return Nothing();
+    }
+
+    TMaybe<ui64> EstimateRangePredicateByHistogram(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
+                                            const TString& columnType,
+                                            const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
+                                            EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
+        const TMaybe<TString> leftLiteral = ExtractLiteral(maybeLeftLiteral);
+        const TMaybe<TString> rightLiteral = ExtractLiteral(maybeRightLiteral);
+
+        if (leftLiteral.Defined() && rightLiteral.Defined()) {
+            const TString leftValue = leftLiteral.GetRef();
+            const TString rightValue = rightLiteral.GetRef();
+
+            if (columnType == "Uint32") {
+                ui32 leftVal = FromString<ui32>(leftValue);
+                ui32 rightVal = FromString<ui32>(rightValue);
+                return EstimateRangePredicateByType<ui32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Int32") {
+                i32 leftVal = FromString<i32>(leftValue);
+                i32 rightVal = FromString<i32>(rightValue);
+                return EstimateRangePredicateByType<i32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Uint64") {
+                ui64 leftVal = FromString<ui64>(leftValue);
+                ui64 rightVal = FromString<ui64>(rightValue);
+                return EstimateRangePredicateByType<ui64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Int64") {
+                i64 leftVal = FromString<i64>(leftValue);
+                i64 rightVal = FromString<i64>(rightValue);
+                return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Double") {
+                double leftVal = FromString<double>(leftValue);
+                double rightVal = FromString<double>(rightValue);
+                return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Date") {
+                ui16 leftVal = FromString<ui16>(leftValue);
+                ui16 rightVal = FromString<ui16>(rightValue);
+                return EstimateRangePredicateByType<ui16>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
             }
             // TODO: Add support for other types.
             return Nothing();
@@ -405,10 +471,10 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
 double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     const TExprBase& left,
     const TExprBase& right,
-    bool is_contain_str
+    bool containString
 ) {
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeComparisonSelectivity(right, left, is_contain_str);
+        return ComputeComparisonSelectivity(right, left, containString);
     }
 
     if (IsAttribute(left)) {
@@ -419,7 +485,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         // Currently, we just return 0.5 for LIKE str% and 0.1 for LIKE %str% string predicates
         else if (IsConstantExprWithParams(right.Ptr())) {
-            if (is_contain_str && IsConstantExpr(right.Ptr())) { 
+            if (containString && IsConstantExpr(right.Ptr())) { 
                 return 0.1;
             }
             return 0.5;
@@ -434,19 +500,20 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     const TExprBase& right,
     bool underNot,
     bool collectMembers,
-    bool is_contain_str
+    bool containString
 ) {
+    Y_UNUSED(collectMembers);
+
     // left is column and right is constant expression
     auto leftAttr = IsAttribute(left);
     auto rightAttr = IsAttribute(right);
 
-    double resSelectivity = ComputeComparisonSelectivity(left, right, is_contain_str);
+    double resSelectivity = ComputeComparisonSelectivity(left, right, containString);
     resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
 
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
     node->Selectivity = resSelectivity;
-    node->CollectMembers = collectMembers;
 
     TString ref = leftAttr.GetRef();
     size_t dotPos = ref.find('.');
@@ -464,13 +531,14 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
     bool underNot,
     bool collectMembers
 ) {
+    Y_UNUSED(collectMembers);
+
     // NOTE: TCoAtom is not a Callable and consider NOT
     double resSelectivity = underNot ? 1.0 - 0.5 : 0.5;
 
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
     node->Selectivity = resSelectivity;
-    node->CollectMembers = collectMembers;
     node->Column = "Re2"; // TODO: temporal column naming
 
     return node;
@@ -486,21 +554,30 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
     auto leftAttr = IsAttribute(left);
     auto rightAttr = IsAttribute(right);
 
+    // the case when both are attributes
     if (leftAttr.Defined() && rightAttr.Defined()) {
+        return nullptr;
+    } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
         return nullptr;
     }
 
     auto leftConstParam = IsConstantExprWithParams(left.Ptr());
     auto rightConstParam = IsConstantExprWithParams(right.Ptr());
 
+    // the case when both are literals
     if (leftConstParam && rightConstParam) {
+        return nullptr;
+    } else if (!leftConstParam && !rightConstParam) {
         return nullptr;
     }
 
     auto leftConst = IsConstantExpr(left.Ptr());
     auto rightConst = IsConstantExpr(right.Ptr());
 
+    // the case when both are literals
     if (leftConst && rightConst) {
+        return nullptr;
+    } else if (leftConst && rightConst) {
         return nullptr;
     }
 
@@ -510,25 +587,30 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
     if (rightAttr) {
         std::swap(leftPtr, rightPtr);
         std::swap(leftAttr, rightAttr);
+        inequalitySign = GetOppositePredicateType(inequalitySign);
     }
 
     if (underNot) {
         inequalitySign = GetOppositeRangeDirection(inequalitySign);
     }
-    double resSelectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
 
-    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), Nothing()};
-    TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, inequalitySign);
-
-    TVector<TPredicateRange> ranges;
-    ranges.push_back(std::move(rangeNode));
+    bool inclusive = false;
+    if (inequalitySign == EInequalityPredicateType::LessOrEqual || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
+        inclusive = true;
+    }
 
     auto node = std::make_shared<TTreeNode>();
     node->Operator = ELogicalOperator::Leaf;
-    node->Selectivity = resSelectivity;
-    node->CollectMembers = collectMembers;
-    node->AllRanges = std::move(ranges);
+    node->Selectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
+
+    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
+    if (inequalitySign == EInequalityPredicateType::Less || inequalitySign == EInequalityPredicateType::LessOrEqual) {
+        TPredicateRange rangeNode(Nothing(), Nothing(), false, *rightPtr, literal.GetRef(), inclusive);
+        node->Range = std::move(rangeNode);
+    } else if (inequalitySign == EInequalityPredicateType::Greater || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
+        TPredicateRange rangeNode(*rightPtr, literal.GetRef(), inclusive, Nothing(), Nothing(), false);
+        node->Range = std::move(rangeNode);
+    }
 
     TString ref = leftAttr.GetRef();
     size_t dotPos = ref.find('.');
@@ -551,21 +633,30 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
     auto leftAttr = IsAttribute(left);
     auto rightAttr = IsAttribute(right);
 
+    // the case when both are attributes
     if (leftAttr.Defined() && rightAttr.Defined()) {
+        return nullptr;
+    } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
         return nullptr;
     }
 
     auto leftConstParam = IsConstantExprWithParams(left.Ptr());
     auto rightConstParam = IsConstantExprWithParams(right.Ptr());
 
+    // the case when both are literals
     if (leftConstParam && rightConstParam) {
+        return nullptr;
+    } else if (!leftConstParam && !rightConstParam) {
         return nullptr;
     }
 
     auto leftConst = IsConstantExpr(left.Ptr());
     auto rightConst = IsConstantExpr(right.Ptr());
 
+    // the case when both are literals
     if (leftConst && rightConst) {
+        return nullptr;
+    } else if (leftConst && rightConst) {
         return nullptr;
     }
 
@@ -577,39 +668,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
         std::swap(leftAttr, rightAttr);
     }
 
-    double resSelectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
-
-    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    TVector<TPredicateRange> ranges;
-    if (underNot) {
-        resSelectivity = 1.0 - resSelectivity;
-
-        std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), literal.GetRef()};
-        EInequalityPredicateType equalitySign = EInequalityPredicateType::Equal;
-        equalitySign = GetOppositeRangeDirection(equalitySign);
-        TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, equalitySign);
-        ranges.push_back(std::move(rangeNode));
-
-        // std::pair<TMaybe<TString>, TMaybe<TString>> rangePairOne {literal.GetRef(), literal.GetRef()};
-        // TPredicateRange rangeNodeOne(*leftPtr, *rightPtr, rangePairOne, EInequalityPredicateType::Less); // OR
-        // ranges.push_back(std::move(rangeNodeOne));
-
-        // std::pair<TMaybe<TString>, TMaybe<TString>> rangePairTwo {literal.GetRef(), literal.GetRef()};
-        // TPredicateRange rangeNodeTwo(*leftPtr, *rightPtr, rangePairTwo, EInequalityPredicateType::Greater); // OR
-        // ranges.push_back(std::move(rangeNodeTwo));
-    } else {
-        std::pair<TMaybe<TString>, TMaybe<TString>> rangePair {literal.GetRef(), literal.GetRef()};
-        EInequalityPredicateType equalitySign = EInequalityPredicateType::Equal;
-        // equalitySign = EInequalityPredicateType::LessOrEqual;
-        TPredicateRange rangeNode(*leftPtr, *rightPtr, rangePair, equalitySign); // AND
-        ranges.push_back(std::move(rangeNode));
-    }
-
     auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
-    node->Selectivity = resSelectivity;
-    node->CollectMembers = collectMembers;
-    node->AllRanges = std::move(ranges);
 
     TString ref = leftAttr.GetRef();
     size_t dotPos = ref.find('.');
@@ -620,6 +679,30 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
         node->Column = ref;
     }
 
+    if (underNot) {
+        // converting not equality into two ranges (col < x) OR (col > x)
+        node->Operator = ELogicalOperator::Or;
+
+        std::shared_ptr<TTreeNode> left = ConvertInequalityToRange(*leftPtr, *rightPtr, false, collectMembers, EInequalityPredicateType::Less);
+        std::shared_ptr<TTreeNode> right = ConvertInequalityToRange(*leftPtr, *rightPtr, false, collectMembers, EInequalityPredicateType::Greater);
+
+        if (left) {
+            node->Children.push_back(left);
+        }
+        if (right) {
+            node->Children.push_back(right);
+        }
+
+        return node;
+    }
+
+    node->Operator = ELogicalOperator::Leaf;
+    node->Selectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
+
+    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
+    TPredicateRange rangeNode(*rightPtr, literal.GetRef(), true, *rightPtr, literal.GetRef(), true);
+    node->Range = std::move(rangeNode);
+
     return node;
 }
 
@@ -629,64 +712,265 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
     bool underNot,
     bool collectMembers
 ) {
-    TMaybe<TString> attribute;
-    TVector<TPredicateRange> setRanges;
-    double resSelectivity = 0.0;
-
-    for (const auto& child : list->Children()) {
-        TExprBase right = TExprBase(child);
-        auto tempSetRanges = ConvertEqualityToRange(left, right, false, collectMembers);
-        if (tempSetRanges) {
-            if (attribute.Defined() && attribute.GetRef() != tempSetRanges->Column) {
-                Y_ENSURE(false, "Unsupported Set selection predicate format");
-            }
-            attribute = tempSetRanges->Column;
-            resSelectivity += tempSetRanges->Selectivity;
-            setRanges.insert(setRanges.end(), tempSetRanges->AllRanges->begin(), tempSetRanges->AllRanges->end());
-        }
-    }
-
-    resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
-
     auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
-    node->Selectivity = resSelectivity;
-    node->CollectMembers = collectMembers;
-    node->AllRanges = std::move(setRanges);
 
-    TString ref = attribute.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
+    // convert set predicate into a subtree
+    auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
+    node->Operator = logicalOperator;
+
+    for (const auto& element : list->Children()) {
+        TExprBase right = TExprBase(element);
+        auto child = ConvertEqualityToRange(left, right, underNot, collectMembers);
+        if (child) {
+            node->Children.push_back(child);
+        }
     }
 
     return node;
 }
 
-double ComputeSelectivity(const std::shared_ptr<TTreeNode>& node) {
+double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName, TPredicateRange& mergedRange) {
+    // unbounded range
+    if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
+        return 1.0;
+    }
+
+    if (!Stats || !Stats->ColumnStatistics) {
+        return DefaultEqualitySelectivity(Stats, attributeName);
+    }
+
+    if (!Stats->Nrows) {
+        return DefaultEqualitySelectivity(Stats, attributeName); 
+    }
+
+    // point predicate logic
+    if (mergedRange.LeftBound.GetRef() == mergedRange.RightBound.GetRef()) {
+
+        if (!mergedRange.LeftInclusive || !mergedRange.RightInclusive) {
+            return 0.0;
+        }
+
+        if (!mergedRange.Left.Defined() || !mergedRange.Right.Defined()) {
+            return DefaultEqualitySelectivity(Stats, attributeName);
+        }
+
+        if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
+            const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+            TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(
+                mergedRange.Left.GetRef(),
+                columnType,
+                countMinSketch
+            );
+
+            if (!estimation.Defined()) {
+                return DefaultEqualitySelectivity(Stats, attributeName);
+            }
+            return (double) estimation.GetRef() / Stats->Nrows;
+        }
+
+        return DefaultEqualitySelectivity(Stats, attributeName);
+    }
+
+    // range predicate logic
+    if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()) {
+
+        if (!mergedRange.Left.Defined() || !mergedRange.Right.Defined()) {
+            return DefaultInequalitySelectivity(Stats, attributeName);
+        }
+
+        EInequalityPredicateType leftInequalitySign = EInequalityPredicateType::Greater;
+        if (mergedRange.LeftInclusive) {
+            leftInequalitySign = EInequalityPredicateType::GreaterOrEqual;
+        }
+
+        EInequalityPredicateType rightInequalitySign = EInequalityPredicateType::Less;
+        if (mergedRange.RightInclusive) {
+            rightInequalitySign = EInequalityPredicateType::LessOrEqual;
+        }
+
+        if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
+            const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+            TMaybe<ui64> estimation = EstimateRangePredicateByHistogram(
+                mergedRange.Left.GetRef(),
+                mergedRange.Right.GetRef(),
+                columnType,
+                eqWidthHistogram,
+                leftInequalitySign,
+                rightInequalitySign
+            );
+
+            if (!estimation.Defined()) {
+                return DefaultInequalitySelectivity(Stats, attributeName);
+            }
+            return (double) estimation.GetRef() / Stats->Nrows;
+        }
+
+        return DefaultInequalitySelectivity(Stats, attributeName);
+    }
+
+    // inequality predicate logic
+    if (!mergedRange.Left.Defined() && !mergedRange.Right.Defined()) {
+        return DefaultInequalitySelectivity(Stats, attributeName);
+    }
+
+    TMaybe<TExprBase> nodePtr = mergedRange.Left.GetRef();
+    EInequalityPredicateType inequalitySign = EInequalityPredicateType::Greater;
+    if (mergedRange.LeftInclusive) {
+        inequalitySign = EInequalityPredicateType::GreaterOrEqual;
+    }
+
+    if (mergedRange.RightBound.Defined()) {
+        nodePtr = mergedRange.Right.GetRef();
+        inequalitySign = EInequalityPredicateType::Less;
+        if (mergedRange.RightInclusive) {
+            inequalitySign = EInequalityPredicateType::LessOrEqual;
+        }
+    }
+
+    if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
+        const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(
+            nodePtr.GetRef(),
+            columnType,
+            eqWidthHistogram,
+            inequalitySign
+        );
+
+        if (!estimation.Defined()) {
+            return DefaultInequalitySelectivity(Stats, attributeName);
+        }
+        return (double) estimation.GetRef() / Stats->Nrows;
+    }
+
+    return DefaultInequalitySelectivity(Stats, attributeName);
+}
+
+i8 CompareBounds(const TString& left, const TString& right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
+TMaybe<TPredicateRange> MergeConjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges) {
+    if (allRanges.empty()) {
+        return Nothing();
+    }
+
+    TPredicateRange mergedRange = allRanges.front()->Range;
+
+    for (size_t i = 1; i < allRanges.size(); ++i) {
+        auto& range = allRanges[i]->Range;
+
+        // Merge Left
+        if (range.LeftBound.Defined()) {
+            if (!mergedRange.LeftBound.Defined()) {
+                mergedRange.Left = range.Left;
+                mergedRange.LeftBound = range.LeftBound;
+                mergedRange.LeftInclusive = range.LeftInclusive;
+            } else {
+                i8 cmp = CompareBounds(*range.LeftBound, *mergedRange.LeftBound);
+                if (cmp > 0 || (cmp == 0 && !range.LeftInclusive)) {
+                    mergedRange.Left = range.Left;
+                    mergedRange.LeftBound = range.LeftBound;
+                    mergedRange.LeftInclusive = range.LeftInclusive;
+                }
+            }
+        }
+
+        // Merge Right
+        if (range.RightBound.Defined()) {
+            if (!mergedRange.RightBound.Defined()) {
+                mergedRange.Right = range.Right;
+                mergedRange.RightBound = range.RightBound;
+                mergedRange.RightInclusive = range.RightInclusive;
+            } else {
+                i8 cmp = CompareBounds(*range.RightBound, *mergedRange.RightBound);
+                if (cmp < 0 || (cmp == 0 && !range.RightInclusive)) {
+                    mergedRange.Right = range.Right;
+                    mergedRange.RightBound = range.RightBound;
+                    mergedRange.RightInclusive = range.RightInclusive;
+                }
+            }
+        }
+
+        // Check for empty intersection
+        if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()) {
+            int cmp = CompareBounds(*mergedRange.LeftBound, *mergedRange.RightBound);
+
+            if (cmp > 0) {
+                return Nothing();
+            }
+
+            if (cmp == 0 && (!mergedRange.LeftInclusive || !mergedRange.RightInclusive)) {
+                return Nothing();
+            }
+        }
+    }
+
+    return mergedRange;
+}
+
+double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node, TSet<TString>& tableAliases) {
     if (!node) { // it is empty tree, i.e. no selection predicates
         return 1.0;
     }
 
     else if (node->Operator == ELogicalOperator::Leaf) {
+        TString tableAlias;
+        if (node->TableAlias.Defined()) {
+            tableAliases.insert(node->TableAlias.GetRef());
+            tableAlias = node->TableAlias.GetRef();
+        }
         return node->Selectivity;
     }
 
     else if (node->Operator == ELogicalOperator::And) {
         double resSelectivity = 1.0;
+        TMap<TString, TVector<std::shared_ptr<TTreeNode>>> columnSelectivities;
+
         for (auto& child : node->Children) {
-            resSelectivity *= ComputeSelectivity(child);
+            TString column = child->Column;
+            if (!columnSelectivities.contains(column)) {
+                TVector<std::shared_ptr<TTreeNode>> ranges;
+                columnSelectivities[column] = ranges;
+            }
+
+            // group by column and convert point predicates into ranges
+            if (child->Operator == ELogicalOperator::Leaf) {
+                columnSelectivities[column].push_back(child);
+            } else {
+                // next conjunction/disjunction
+                resSelectivity *= ComputeSelectivity(child, tableAliases);
+            }
         }
+
+        // find overlaps and re-compute selectivity
+        for (auto& entry : columnSelectivities) {
+            if (entry.second.size() == 0) {
+
+            } else if (entry.second.size() == 1) {
+                resSelectivity *= ComputeSelectivity(entry.second.front(), tableAliases);
+            } else {
+                TMaybe<TPredicateRange> mergedRange = MergeConjunctions(entry.second);
+                if (mergedRange.Defined()) {
+                    resSelectivity *= ReComputeEstimation(entry.first, mergedRange.GetRef());
+                } else {
+                    // in case of no overlaps, zero selectivity
+                    return 0.0;
+                }
+            }
+        }
+
         return resSelectivity;
     }
 
     else if (node->Operator == ELogicalOperator::Or) {
         double resSelectivity = 0.0;
         for (auto& child : node->Children) {
-            resSelectivity += ComputeSelectivity(child);
+            resSelectivity += ComputeSelectivity(child, tableAliases);
         }
         // cap at 1.0 to stop error propagation
         return resSelectivity = std::min(1.0, resSelectivity);
@@ -697,8 +981,16 @@ double ComputeSelectivity(const std::shared_ptr<TTreeNode>& node) {
 
 double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
     std::shared_ptr<TTreeNode> rootNode = ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
+    if (!rootNode) {
+        return 1.0;
+    }
 
-    double resSelectivity = ComputeSelectivity(rootNode);
+    TSet<TString> tableAliases;
+    double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
+    if (tableAliases.size() != 1) {
+        YQL_CLOG(TRACE, CoreDq) << "No or multiple table aliases in computing selectivity.";
+    }
+
     return std::min(1.0, resSelectivity);
 }
 

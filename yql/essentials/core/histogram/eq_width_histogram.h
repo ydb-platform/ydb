@@ -432,6 +432,50 @@ public:
         return SuffixSum_[index + 1] + EstimateEqual(val);
     }
 
+    // `left val` < all values < `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterLess(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLess(rightVal);
+        const ui64 left = EstimateLessOrEqual(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` < all values <= `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterLessOrEqual(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLessOrEqual(rightVal);
+        const ui64 left = EstimateLessOrEqual(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` <= all values < `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterOrEqualLess(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLess(rightVal);
+        const ui64 left = EstimateLess(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` <= all values <= `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterOrEqualLessOrEqual(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLessOrEqual(rightVal);
+        const ui64 left = EstimateLess(leftVal);
+        return right > left ? right - left : 0;
+    }
+
     template <typename T>
     ui64 EstimateEqual(T val) const {
         const auto index = Histogram_->FindBucketIndex(val);

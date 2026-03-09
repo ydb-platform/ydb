@@ -30,9 +30,24 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shar
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_sensors
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
+<<<<<<< HEAD
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
+=======
+ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
+ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
+ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
+ydb/tests/functional/serverless py3test.[test_serverless.py */*] chunk
+ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
+ydb/tests/functional/statistics test_restarts.py.test_basic
+ydb/tests/functional/tenants py3test.[*/*] chunk
+ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
+>>>>>>> 33b45288e5e (Fix and unmute dstool canonized test (#35639))
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test

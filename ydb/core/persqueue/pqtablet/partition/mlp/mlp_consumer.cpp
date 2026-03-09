@@ -550,18 +550,19 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
+    const bool dlqEmptyOrAlreadyProcessing = DLQMoverActorId || Storage->DLQEmpty();
     if (ReadRequestsQueue.empty() &&
         CommitRequestsQueue.empty() &&
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
         PurgeRequestsQueue.empty() &&
-        Storage->DLQEmpty() &&
+        dlqEmptyOrAlreadyProcessing &&
         Storage->IsBatchEmpty()) {
         return;
     }
 
     auto now = TInstant::Now();
-    TDuration delay = NextProcessingTime > now
+    TDuration delay = NextProcessingTime > now && dlqEmptyOrAlreadyProcessing
         ? NextProcessingTime - now
         : TDuration::Zero();
     ProcessingScheduled = true;

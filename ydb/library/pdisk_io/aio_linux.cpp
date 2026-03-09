@@ -159,7 +159,7 @@ public:
         int ret = io_destroy(IoContext);
         if (ret < 0) {
             switch (-ret) {
-                case EFAULT: 
+                case EFAULT:
                     result = EIoResult::BadAddress;
                     break;
                 case EINVAL:
@@ -168,7 +168,7 @@ public:
                 case ENOSYS:
                     result = EIoResult::FunctionNotImplemented;
                     break;
-                default: 
+                default:
                     Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret << " strerror# " << strerror(-ret));
             }
         }
@@ -252,7 +252,7 @@ public:
         io_prep_pwrite(cb, static_cast<FHANDLE>(*File), const_cast<void*>(source), size, offset);
     }
 
-    void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
+    void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperation*>(op)->IsTrim = true;
     }
@@ -583,7 +583,7 @@ public:
         tOp->DataOffset = offset;
     }
 
-    void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
+    void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperationLiburing*>(op)->IsTrim = true;
     }

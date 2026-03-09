@@ -267,7 +267,7 @@ def build_html_dashboard(
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
         <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
-        <li><b>RAM per chunk (report):</b> <code>ram_kb_report = ru_maxrss</code>, fallback <code>ru_rss / 1024</code>.</li>
+        <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
         <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
       </ul>

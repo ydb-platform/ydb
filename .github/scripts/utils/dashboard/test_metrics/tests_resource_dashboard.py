@@ -16,6 +16,7 @@ import csv
 import json
 import re
 import sys
+from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
@@ -95,18 +96,16 @@ def load_json_or_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def cpu_seconds(metrics: dict[str, Any]) -> float:
+    """Sum ru_utime + ru_stime (report is expected to provide values in seconds)."""
     vals: list[float] = []
     for k in ("ru_utime", "ru_stime"):
         v = metrics.get(k)
         if v is None:
             continue
         try:
-            fv = float(v)
+            vals.append(float(v))
         except (TypeError, ValueError):
             continue
-        if fv > 1000:
-            fv /= 1_000_000.0
-        vals.append(fv)
     return sum(vals)
 
 
@@ -114,7 +113,17 @@ def ram_kb(metrics: dict[str, Any]) -> float:
     tree = metrics.get("suite_max_proc_tree_memory_consumption_kb")
     if tree is not None:
         try:
-            return float(tree)
+            tree_f = float(tree)
+            # For suite chunks: report memory attributed to the test run,
+            # excluding baseline RSS at suite start (interpreter, runner, etc.).
+            initial = metrics.get("suite_initial_maxrss_(kb)")
+            if initial is not None:
+                try:
+                    initial_f = float(initial)
+                    return max(0.0, tree_f - initial_f)
+                except (TypeError, ValueError):
+                    pass
+            return tree_f
         except (TypeError, ValueError):
             pass
     mx = metrics.get("ru_maxrss")
@@ -279,6 +288,7 @@ def parse_report_chunks(
             "status": status,
             "error_type": item.get("error_type"),
             "is_muted": is_muted,
+            "subtest_name": sub,
             "duration_sec": float(item.get("duration") or 0.0),
             "cpu_sec": cpu_seconds(metrics),
             "ram_kb": ram_kb(metrics),
@@ -725,6 +735,58 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
     return runs
 
 
+def parse_report_runs_from_chunks(
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
+    suite_filter: Optional[str],
+) -> list[dict[str, Any]]:
+    """Build timeline runs directly from report chunk rows (full coverage, no evlog dependency)."""
+    runs: list[dict[str, Any]] = []
+    for (suite_raw, chunk_group, chunk_idx), meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
+        if suite_filter and normalize_suite_path(suite_raw) != normalize_suite_path(suite_filter):
+            continue
+        dur_sec = float(meta.get("duration_sec", 0.0) or 0.0)
+        start_ts = meta.get("suite_start_timestamp")
+        finish_ts = meta.get("suite_finish_timestamp")
+        try:
+            start_sec = float(start_ts) if start_ts is not None else None
+        except (TypeError, ValueError):
+            start_sec = None
+        try:
+            end_sec = float(finish_ts) if finish_ts is not None else None
+        except (TypeError, ValueError):
+            end_sec = None
+        if start_sec is not None and end_sec is not None and end_sec <= start_sec and dur_sec > 0:
+            end_sec = start_sec + dur_sec
+        if (start_sec is None or end_sec is None or end_sec <= start_sec) and dur_sec > 0:
+            if start_sec is not None:
+                end_sec = start_sec + dur_sec
+            elif end_sec is not None:
+                start_sec = end_sec - dur_sec
+        if start_sec is None or end_sec is None or end_sec <= start_sec:
+            continue
+        key = f"{suite_raw}:{chunk_group or ''}:{chunk_idx}"
+        tid = abs(hash(key)) % 100_000
+        raw_name = str(meta.get("subtest_name") or f"{chunk_group or ''} chunk{chunk_idx}")
+        runs.append(
+            {
+                "pid": 1,
+                "tid": tid,
+                "start_us": start_sec * 1_000_000.0,
+                "end_us": end_sec * 1_000_000.0,
+                "dur_us": (end_sec - start_sec) * 1_000_000.0,
+                "suite_path": suite_raw,
+                "chunk_group": chunk_group,
+                "chunk": int(chunk_idx),
+                "uid": None,
+                "raw_name": raw_name,
+            }
+        )
+    runs.sort(key=lambda x: (x["start_us"], x["tid"]))
+    return runs
+
+
 def _infer_sanitizer_from_report(report_obj: dict[str, Any], report_path: Optional[Path] = None) -> Optional[str]:
     """Best-effort sanitizer detection (address/thread/memory) from report metadata."""
     # report.progress keys often include platform/build tags like:
@@ -1095,7 +1157,26 @@ def main() -> None:
     chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite = parse_report_chunks(
         args.report, args.suite_path
     )
-    runs = parse_evlog_runs(args.evlog, args.suite_path)
+    report_runs = parse_report_runs_from_chunks(chunks, args.suite_path)
+    evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
+    evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
+    for er in evlog_runs:
+        k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
+        prev = evlog_by_key.get(k)
+        if prev is None or float(er.get("dur_us", 0) or 0) > float(prev.get("dur_us", 0) or 0):
+            evlog_by_key[k] = er
+    runs = []
+    enriched_by_evlog = 0
+    for rr in report_runs:
+        k = (str(rr.get("suite_path", "")), normalize_chunk_group(rr.get("chunk_group")), int(rr.get("chunk", 0)))
+        best = evlog_by_key.get(k)
+        out = dict(rr)
+        if best is not None:
+            out["duration_evlog_sec"] = float(best.get("dur_us", 0) or 0) / 1_000_000.0
+            out["uid"] = best.get("uid")
+            out["raw_name"] = best.get("raw_name") or out.get("raw_name")
+            enriched_by_evlog += 1
+        runs.append(out)
 
     requirements_cache = None
     repo_root = args.repo_root
@@ -1114,6 +1195,9 @@ def main() -> None:
         )
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
+    stats["runs_from_report"] = len(report_runs)
+    stats["runs_from_evlog"] = len(evlog_runs)
+    stats["runs_enriched_by_evlog"] = enriched_by_evlog
 
     # Per-suite chunk count from report (declared chunks; may differ from evlog run count).
     report_chunks_by_suite: dict[str, int] = defaultdict(int)
@@ -1166,7 +1250,31 @@ def main() -> None:
         rows = sorted(key_to_best.values(), key=lambda r: (str(r.get("suite_path_raw", r.get("suite_path", ""))), r.get("chunk", 0)))
         with open(args.out_csv, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["suite_path_raw", "suite_path", "chunk", "chunk_group", "duration_report_sec", "duration_evlog_sec", "ram_kb", "ram_gb", "cpu_sec_report", "cores", "evlog_raw_name", "jq_report", "jq_evlog"])
+            w.writerow([
+                "suite_path_raw",
+                "suite_path",
+                "chunk",
+                "chunk_group",
+                "run_start_sec",
+                "run_end_sec",
+                "run_start_utc",
+                "run_end_utc",
+                "report_suite_start_ts",
+                "report_suite_finish_ts",
+                "duration_report_sec",
+                "duration_evlog_sec",
+                "ram_kb",
+                "ram_gb",
+                "cpu_sec_report",
+                "cores",
+                "evlog_raw_name",
+                "jq_report",
+                "jq_evlog",
+            ])
+            def _fmt_utc(sec: float) -> str:
+                if sec <= 0:
+                    return ""
+                return datetime.fromtimestamp(sec, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             for r in rows:
                 dur_report = float(r.get("duration_report_sec", 0) or 0)
                 dur_evlog = float(r.get("dur_us", 0) or 0) / 1_000_000.0
@@ -1175,6 +1283,10 @@ def main() -> None:
                 ram_kb = float(r.get("ram_kb_report", 0) or 0)
                 cores = (cpu / dur_used) if dur_used > 0 else 0.0
                 ram_gb = ram_kb / (1024.0 * 1024.0)
+                start_sec = float(r.get("start_us", 0) or 0) / 1_000_000.0
+                end_sec = float(r.get("end_us", 0) or 0) / 1_000_000.0
+                report_start = r.get("report_suite_start_ts")
+                report_finish = r.get("report_suite_finish_ts")
                 suite_raw = str(r.get("suite_path_raw", r.get("suite_path", "")))
                 chunk_idx = int(r.get("chunk", 0))
                 chunk_grp = str(r.get("chunk_group") or "").strip()
@@ -1193,6 +1305,12 @@ def main() -> None:
                     r.get("suite_path", ""),
                     r.get("chunk", ""),
                     r.get("chunk_group") or "",
+                    round(start_sec, 3),
+                    round(end_sec, 3),
+                    _fmt_utc(start_sec),
+                    _fmt_utc(end_sec),
+                    report_start if report_start is not None else "",
+                    report_finish if report_finish is not None else "",
                     round(dur_report, 3),
                     round(dur_evlog, 3),
                     round(ram_kb, 1),

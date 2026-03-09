@@ -523,7 +523,7 @@ public:
         return Compare(item) != std::partial_ordering::equivalent;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         size_t h = (size_t)Position;
         h = CombineHashes(h, (size_t)RecordsCount);
         h = CombineHashes(h, (size_t)ReverseSort);

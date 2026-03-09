@@ -5,6 +5,8 @@
 
 #include <memory>
 
+#include <library/cpp/json/writer/json_value.h>
+
 namespace NKikimrTxColumnShard {
 class TIndexColumnMeta;
 }
@@ -18,6 +20,11 @@ struct IAdditionalAccessorData {
     virtual ~IAdditionalAccessorData() = default;
     virtual bool HasDataToSerialize() const { return true; }
     virtual void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const = 0;
+
+    // For ChunkDetails in .sys views: JSON representation of chunk-level details (no blob read). Default empty object.
+    virtual NJson::TJsonValue DebugJson() const {
+        return NJson::TJsonValue(NJson::JSON_MAP);
+    }
 };
 
 // Blob bytes plus optional accessor metadata. Used instead of std::pair<concrete_meta, TString> so

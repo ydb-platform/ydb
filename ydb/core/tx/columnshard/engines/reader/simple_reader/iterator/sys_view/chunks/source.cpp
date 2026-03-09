@@ -2,7 +2,6 @@
 
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -169,20 +168,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         for (auto it = records.begin(); it != records.end();) {
             const ui32 entityId = it->GetEntityId();
             const auto accessorType = Schema->GetColumnLoaderVerified(entityId)->GetAccessorConstructor()->GetType();
-            if (accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
-                while (it != records.end() && it->GetEntityId() == entityId) {
-                    TString data;
-                    if (it->GetMeta().HasAdditionalAccessorData()) {
-                        const auto* dictData = dynamic_cast<const NArrow::NAccessor::TDictionaryAccessorData*>(
-                            it->GetMeta().GetAdditionalAccessorData().get());
-                        if (dictData) {
-                            data = dictData->DebugJson().GetStringRobust();
-                        }
-                    }
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
-                    ++it;
-                }
-            } else if (accessorType == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            if (accessorType == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(entityId) : nullptr;
                 if (!accessor) {
                     while (it != records.end() && it->GetEntityId() == entityId) {
@@ -217,7 +203,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                 }
             } else {
                 while (it != records.end() && it->GetEntityId() == entityId) {
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                    TString data;
+                    if (it->GetMeta().HasAdditionalAccessorData()) {
+                        data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
+                    }
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
                     ++it;
                 }
             }

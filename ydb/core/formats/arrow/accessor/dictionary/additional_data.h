@@ -21,8 +21,7 @@ struct TDictionaryAccessorData : IAdditionalAccessorData {
 
     void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const override;
 
-    // For ChunkDetails in .sys: uses only meta (no blob read). Returns JSON with dictionary_blob_size, positions_blob_size.
-    NJson::TJsonValue DebugJson() const;
+    NJson::TJsonValue DebugJson() const override;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

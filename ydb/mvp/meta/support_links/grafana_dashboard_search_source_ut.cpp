@@ -154,8 +154,8 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["workspace"] = "ws";
-        context.ClusterColumns["grafana_ds"] = "ds";
+        context.ClusterColumns["k8s_namespace"] = "ws";
+        context.ClusterColumns["datasource"] = "ds";
         context.QueryParams.emplace_back("cluster", "testing-global");
         context.QueryParams.emplace_back("database", "/root/test");
 
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["grafana_ds"] = "ds";
+        context.ClusterColumns["datasource"] = "ds";
         context.QueryParams.emplace_back("cluster", "testing-global");
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors[0].Source, "meta");
-        UNIT_ASSERT(response->Errors[0].Message.Contains("workspace"));
+        UNIT_ASSERT(response->Errors[0].Message.Contains("k8s_namespace"));
         UNIT_ASSERT(response->Errors[0].Message.Contains("is missing or empty"));
     }
 
@@ -225,8 +225,8 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             .Endpoint = "https://grafana.nebius.dev",
             .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["workspace"] = "ws";
-        context.ClusterColumns["grafana_ds"] = "ds";
+        context.ClusterColumns["k8s_namespace"] = "ws";
+        context.ClusterColumns["datasource"] = "ds";
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 

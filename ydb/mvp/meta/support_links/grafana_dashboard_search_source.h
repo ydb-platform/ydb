@@ -200,8 +200,8 @@ private:
     }
 
     bool ValidateRequiredClusterColumns(TVector<TSupportError>& errors) const {
-        static constexpr TStringBuf WorkspaceColumn = "workspace";
-        static constexpr TStringBuf DatasourceColumn = "grafana_ds";
+        static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
+        static constexpr TStringBuf DatasourceColumn = "datasource";
         bool ok = true;
 
         const auto workspaceIt = Context.ClusterColumns.find(WorkspaceColumn);

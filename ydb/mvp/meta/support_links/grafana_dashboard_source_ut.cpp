@@ -30,8 +30,8 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["workspace"] = "ws";
-        clusterColumns["grafana_ds"] = "ds";
+        clusterColumns["k8s_namespace"] = "ws";
+        clusterColumns["datasource"] = "ds";
         TVector<std::pair<TString, TString>> queryParams;
         queryParams.emplace_back("cluster", "testing-global");
         queryParams.emplace_back("database", "root_test");
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["workspace"] = "ws";
+        clusterColumns["k8s_namespace"] = "ws";
         TVector<std::pair<TString, TString>> queryParams;
         queryParams.emplace_back("cluster", "testing-global");
         queryParams.emplace_back("database", "/root/test");
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         );
         UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.Errors[0].Source, "meta");
-        UNIT_ASSERT(result.Errors[0].Message.Contains("grafana_ds"));
+        UNIT_ASSERT(result.Errors[0].Message.Contains("datasource"));
     }
 
     Y_UNIT_TEST(EncodesQueryParamReservedCharacters) {
@@ -104,8 +104,8 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["workspace"] = "ws";
-        clusterColumns["grafana_ds"] = "ds";
+        clusterColumns["k8s_namespace"] = "ws";
+        clusterColumns["datasource"] = "ds";
         TVector<std::pair<TString, TString>> queryParams;
         queryParams.emplace_back("database", "root&x=y");
         const NActors::TActorId parent;

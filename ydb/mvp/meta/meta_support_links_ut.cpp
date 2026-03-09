@@ -89,11 +89,11 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
         const TString resultSetString = R"(
 columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 rows {
@@ -117,11 +117,11 @@ rows {
 
     static NYdb::NTable::TDataQueryResult MakeEmptyClusterInfoResult() {
         const TString resultSetString = R"(columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 )";

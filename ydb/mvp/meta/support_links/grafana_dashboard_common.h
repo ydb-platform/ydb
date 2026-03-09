@@ -16,8 +16,8 @@ inline TString ResolveGrafanaDashboardUrl(
     const TLinkResolveContext& context,
     TVector<TSupportError>& errors)
 {
-    static constexpr TStringBuf WorkspaceColumn = "workspace";
-    static constexpr TStringBuf DatasourceColumn = "grafana_ds";
+    static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
+    static constexpr TStringBuf DatasourceColumn = "datasource";
 
     TString url = ResolveGrafanaUrl(grafanaConfig, context.LinkConfig.GetUrl());
     const auto workspaceIt = context.ClusterColumns.find(WorkspaceColumn);

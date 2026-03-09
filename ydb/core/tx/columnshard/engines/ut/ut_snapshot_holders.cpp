@@ -2,8 +2,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#ifndef _win_
+#include <cerrno>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 namespace NKikimr::NOlap {
 
@@ -74,6 +77,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         UNIT_ASSERT(!CouldUse(holders, portion3));
     }
 
+#ifndef _win_
     template <class TCallback>
     int RunInChild(const TCallback& callback) {
         const pid_t pid = fork();
@@ -84,11 +88,19 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         }
 
         int status = 0;
-        UNIT_ASSERT_VALUES_EQUAL(waitpid(pid, &status, 0), pid);
+        while (true) {
+            const pid_t waitResult = waitpid(pid, &status, 0);
+            if (waitResult == pid) {
+                break;
+            }
+            UNIT_ASSERT_C(waitResult != -1 || errno == EINTR, "waitpid() failed");
+        }
         return status;
     }
+#endif
 
     Y_UNIT_TEST(ConstructorVerifiesInvariants) {
+#ifndef _win_
         const int unsortedTxs = RunInChild([] {
             [[maybe_unused]] TSnapshotHolders holders(Step(20), { Step(12), Step(5) });
         });
@@ -100,6 +112,9 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         });
         UNIT_ASSERT_C(!WIFEXITED(tooYoungTx) || WEXITSTATUS(tooYoungTx) != 0,
             "tx snapshot >= minReadSnapshot must fail constructor checks");
+#else
+        UNIT_ASSERT_C(true, "POSIX-only test is skipped on Windows");
+#endif
     }
 
 }

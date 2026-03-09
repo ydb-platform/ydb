@@ -103,7 +103,7 @@ public:
 
     std::vector<NOlap::TSnapshot> GetLiveSnapshots(const NOlap::TSnapshot until) const {
         std::vector<NOlap::TSnapshot> result;
-        for (auto&& [snapshot, liveInfo] : SnapshotsLive) {
+        for (auto&& [snapshot, _] : SnapshotsLive) {
             if (snapshot >= until) break;
 
             result.push_back(snapshot);

@@ -214,7 +214,7 @@ public:
     }
 
     static TIntervalsIterator BuildFromSplitter(
-        const TColumnDataSplitter& splitter, const std::vector<ui32>& intervalIdxs, const ui64 basePortionId) {
+        const TColumnDataSplitter& splitter, const std::vector<ui32>& intervalIdxs, const ui64 mainPortionId) {
         TIntervalsIteratorBuilder builder;
         auto intervalIt = intervalIdxs.begin();
         ui64 currentInterval = 0;
@@ -237,7 +237,7 @@ public:
             return true;
         };
 
-        splitter.ForEachIntersectingInterval(callback, basePortionId);
+        splitter.ForEachIntersectingInterval(callback, mainPortionId);
         AFL_VERIFY(builder.NumIntervals() == intervalIdxs.size())("builder", builder.NumIntervals())(
                                                "intervals", TStringBuilder() << '[' << JoinSeq(',', intervalIdxs) << ']');
         return builder.Build();

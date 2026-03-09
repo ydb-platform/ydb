@@ -395,6 +395,8 @@ public:
         return ReverseSort;
     }
     NJson::TJsonValue DebugJson() const;
+    
+    TString DebugString() const;
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
@@ -519,6 +521,13 @@ public:
 
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
+    }
+
+    operator size_t() const {
+        size_t h = (size_t)Position;
+        h = CombineHashes(h, (size_t)RecordsCount);
+        h = CombineHashes(h, (size_t)ReverseSort);
+        return h;
     }
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {

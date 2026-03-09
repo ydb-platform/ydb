@@ -121,7 +121,7 @@ private:
 
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
     TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
-    THashMap<TIntervalBordersView, TIntervalInFlightInfo> IntervalsInFlight;
+    THashMap<TIntervalBorders, TIntervalInFlightInfo> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
 

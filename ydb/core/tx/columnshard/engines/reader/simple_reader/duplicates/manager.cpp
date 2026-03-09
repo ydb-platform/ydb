@@ -109,15 +109,15 @@ TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
         ui64 nextIntervalIdx = 0;
         auto scheduleInterval = [&](const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& /*portions*/) {
             ++nextIntervalIdx;
-            TIntervalBordersView intervalView(begin.MakeView(), end.MakeView());
+            TIntervalBorders intervalBorder(begin.GetKey(), end.GetKey());
             if (auto findCached = FiltersCache.Find(
-                    TDuplicateMapInfo(constructor->GetRequest()->Get()->GetMaxVersion(), intervalView, mainPortion->GetPortionId()));
+                    TDuplicateMapInfo(constructor->GetRequest()->Get()->GetMaxVersion(), intervalBorder, mainPortion->GetPortionId()));
                 findCached != FiltersCache.End()) {
                 AFL_VERIFY(readyFilters.emplace(nextIntervalIdx - 1, findCached.Value()).second);
                 Counters->OnFilterCacheHit();
                 return true;
             }
-            auto [inFlight, emplaced] = IntervalsInFlight.emplace(intervalView, TIntervalInFlightInfo());
+            auto [inFlight, emplaced] = IntervalsInFlight.emplace(intervalBorder, TIntervalInFlightInfo());
             inFlight->second.AddSubscriber(mainPortion->GetPortionId(), TIntervalFilterCallback(nextIntervalIdx - 1, constructor));
             if (emplaced) {
                 intervalsToBuild.emplace_back(nextIntervalIdx - 1);
@@ -174,7 +174,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         memoryGuard->Update(columnFetchingRequest.GetDataSize());
 
         for (const auto& interval : intervalsIterator.GetIntervals()) {
-            auto findInFlight = IntervalsInFlight.FindPtr(interval.MakeView());
+            auto findInFlight = IntervalsInFlight.FindPtr(interval.MakeInterval());
             AFL_VERIFY(findInFlight);
             findInFlight->SetJob(columnFetchingRequest.GetStatus());
         }

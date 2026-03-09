@@ -23,7 +23,6 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    YDB_READONLY_DEF(TString, ExternalTaskId);
     NArrow::TSimpleRow MinPK;
     NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, PortionId);

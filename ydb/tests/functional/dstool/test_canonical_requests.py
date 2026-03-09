@@ -84,15 +84,16 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
-    def _canonize_table_output(self, rows, canonize_columns=[]):
+    def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
                 row['Guid'] = '<Guid>'
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
-            for column in canonize_columns:
-                if column in row:
-                    row[column] = f'<{column}>'
+            if canonize_columns:
+                for column in canonize_columns:
+                    if column in row:
+                        row[column] = f'<{column}>'
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -107,7 +108,7 @@ class TestBase:
         for vslot in base_config.VSlot:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=[]):
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None):
         common.cache.clear()
         common.name_cache.clear()
         results = []

@@ -120,4 +120,15 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareDropObjectSc
     return DoPrepare(schemeOperation, settings, manager, internalContext);
 }
 
+TTableSchema IOperationsManager::GetSchema() const {
+    TReadGuard guard(Mutex);
+    Y_ABORT_UNLESS(!!ActualSchema);
+    return *ActualSchema;
 }
+
+void IOperationsManager::SetActualSchema(std::optional<TTableSchema>&& schema) {
+    TWriteGuard guard(Mutex);
+    ActualSchema = std::move(schema);
+}
+
+} // namespace NKikimr::NMetadata::NModifications

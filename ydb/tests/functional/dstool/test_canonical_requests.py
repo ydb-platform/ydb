@@ -276,7 +276,6 @@ class Test(TestBase):
             initial_total_size = vslots[0].VDiskMetrics.AllocatedSize + vslots[0].VDiskMetrics.AvailableSize
 
         def check_vdisks_total_size_doubled():
-            nonlocal initial_total_size
             base_config = self.cluster.client.query_base_config().BaseConfig
             vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
             assert len(vslots) == 8

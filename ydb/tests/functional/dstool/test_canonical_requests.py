@@ -3,7 +3,6 @@ import sys
 import os
 import logging
 import pytest
-import time
 import yatest
 import yaml
 
@@ -254,6 +253,7 @@ class Test(TestBase):
             'VDiskSlotUsage',
             'VDiskRawUsage',
             'NormalizedOccupancy',
+            'UsedSize',
             'TotalSize',
             'CapacityAlert',
         ]
@@ -287,22 +287,22 @@ class Test(TestBase):
         def wait_vdisks_total_size_doubled():
             try:
                 retry_assertions(check_vdisks_total_size_doubled)
-            except:
+            except AssertionError:
                 pass
 
         return [
             self._trace('pdisk', 'stop', '--node-id', '7', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
             self._trace('pdisk', 'stop', '--node-id', '8', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
-            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns, 'UsedSize'),
-            self._trace('group', 'list', '-H', '--columns', *group_columns, 'UsedSize'),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '-H', '--columns', *group_columns),
             yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'init', '-w', '1'], wait=True).returncode,
             yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'import', '-w', '1'], wait=True).returncode,
             retry_assertions(check_vdisks_allocated_size_updated),
-            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns, 'UsedSize'),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '--columns', *group_columns),
             self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
             wait_vdisks_total_size_doubled(),
-            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns, 'UsedSize'),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '--columns', *group_columns),
         ]
 

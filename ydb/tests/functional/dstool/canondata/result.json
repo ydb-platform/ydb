@@ -30,6 +30,9 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.7"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.8"
         }
     ],
     "test_canonical_requests.Test.test_cluster_get_set": [

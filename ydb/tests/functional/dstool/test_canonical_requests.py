@@ -303,6 +303,9 @@ class Test(TestBase):
             wait_vdisks_total_size_doubled(),
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '--columns', *group_columns),
+
+            # Errors:
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
         ]
 
     def test_infer_pdisk_slot_count(self):

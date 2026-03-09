@@ -129,8 +129,7 @@ TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) 
     for (ui64 i = 0; i < pkIds.size(); ++i) {
         TValidator::CheckNotNull(columns.FindPtr(pkIds[i]))->KeyOrder = i;
     }
-    
-    auto cache = std::make_shared<TSchemaObjectsCache>();
+
     TIndexInfo indexInfo = TIndexInfo::BuildDefault(1, TTestStoragesManager::GetInstance(), columns, pkIds);
     
     // Create a minimal schema with special columns
@@ -165,10 +164,7 @@ TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) 
     // Load metadata from proto
     TPortionMetaConstructor metaConstructor;
     TFakeGroupSelector groupSelector;
-    Y_UNUSED(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
-    
-    // Build the portion
-    auto portion = std::make_shared<TCompactedPortionInfo>(metaConstructor.Build());
+    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
     
     // Use the constructor to set the private fields
     TCompactedPortionInfoConstructor constructor(pathId, portionId);

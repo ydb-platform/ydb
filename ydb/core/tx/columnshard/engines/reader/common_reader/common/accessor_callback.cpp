@@ -14,7 +14,7 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
     }
 
     if (result.HasRemovedData()) {
-        Source->GetContext()->GetCommonContext()->AbortWithError(TStringBuilder{} << "there is a removed accessors restore, count" << result.GetRemovedData().size());
+        Source->GetContext()->GetCommonContext()->AbortWithError(TStringBuilder{} << "there is a removed accessors restore, count: " << result.GetRemovedData().size());
         return;
     }
 

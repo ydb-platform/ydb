@@ -227,13 +227,17 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
     if (status == TReplyStatus::OVERLOADED) {
         reason = "io_uring SQ ring full (short I/O retry)";
     } else if (status != TReplyStatus::OK) {
-        const char* opName = opType == TUringOperationBase::EREAD
-            ? "read"
-            : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
-        reason = TStringBuilder()
-            << opName
-            << " failed: " << strerror(-result)
-            << " (errno " << (-result) << ")";
+        if (result < 0) {
+            const char* opName = opType == TUringOperationBase::EREAD
+                ? "read"
+                : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
+            reason = TStringBuilder()
+                << opName
+                << " failed: " << strerror(-result)
+                << " (errno " << (-result) << ")";
+        } else {
+            reason = "I/O failed";
+        }
     }
 
     switch (opType) {

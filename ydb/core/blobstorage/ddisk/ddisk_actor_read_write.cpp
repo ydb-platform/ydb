@@ -116,7 +116,8 @@ namespace NKikimr::NDDisk {
 
         // fill the op with result
         auto* op = it->second.Op.get();
-        op->SetResult(op->GetTotalSize());
+        Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
+        op->SetResult(static_cast<i32>(op->GetTotalSize()));
 
         op->Reply(TActorContext::ActorSystem(), NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
@@ -211,7 +212,8 @@ namespace NKikimr::NDDisk {
 
         // fill the op with result
         auto* op = it->second.Op.get();
-        op->SetResult(op->GetTotalSize(), std::move(msg.Data));
+        Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
+        op->SetResult(static_cast<i32>(op->GetTotalSize()), std::move(msg.Data));
 
         op->Reply(TActorContext::ActorSystem(), NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 

@@ -66,16 +66,22 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 Fetcher->OnError("cannot fetch accessors");
-            } else {
-                AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
-                std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
-                for (auto&& i : Fetcher->GetInput().GetPortions()) {
-                    accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
-                }
-                Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
-                Fetcher->MutableScript().Next();
-                Fetcher->Resume(Fetcher);
+                return;
             }
+
+            if (result.HasRemovedData()) {
+                Fetcher->OnError(TStringBuilder{} << "there is a removed accessors, count" << result.GetRemovedData().size());
+                return;
+            }
+
+            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
+            for (auto&& i : Fetcher->GetInput().GetPortions()) {
+                accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
+            }
+            Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
+            Fetcher->MutableScript().Next();
+            Fetcher->Resume(Fetcher);
         }
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();

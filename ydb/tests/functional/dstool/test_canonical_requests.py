@@ -306,6 +306,7 @@ class Test(TestBase):
 
             # Errors:
             self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id), '--format', 'json'),
         ]
 
     def test_infer_pdisk_slot_count(self):

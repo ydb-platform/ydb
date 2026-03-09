@@ -29,6 +29,8 @@ public:
 
     TChunkConstructionData GetSubset(const ui32 recordsCount, const std::optional<ui32>& notNullRecordsCount = std::nullopt) const;
 
+    TChunkConstructionData WithAdditionalData(std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const;
+
     bool HasNullRecordsCount() const {
         return !!NotNullRecordsCount;
     }

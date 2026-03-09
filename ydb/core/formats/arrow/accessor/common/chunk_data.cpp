@@ -24,6 +24,10 @@ TChunkConstructionData TChunkConstructionData::GetSubset(const ui32 recordsCount
     return TChunkConstructionData(recordsCount, DefaultValue, ColumnType, DefaultSerializer, notNullRecordsCount, AdditionalAccessorData);
 }
 
+TChunkConstructionData TChunkConstructionData::WithAdditionalData(std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
+    return TChunkConstructionData(RecordsCount, DefaultValue, ColumnType, DefaultSerializer, NotNullRecordsCount, std::move(additionalAccessorData));
+}
+
 ui32 TChunkConstructionData::GetNullRecordsCountVerified() const {
     AFL_VERIFY(NotNullRecordsCount);
     return RecordsCount - *NotNullRecordsCount;

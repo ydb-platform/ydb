@@ -49,8 +49,8 @@ message TIndexPortionMeta {
 }
 
 message TDictionaryAccessor {
-    optional uint32 VariantsBlobSize = 1;
-    optional uint32 RecordsBlobSize = 2;
+    optional uint32 DictionaryBlobSize = 1;
+    optional uint32 PositionsBlobSize = 2;
 }
 
 // Accessor-specific metadata stored in portion index. Passed through to the accessor at read/assembly.

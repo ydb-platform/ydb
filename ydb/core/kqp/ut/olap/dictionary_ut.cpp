@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
         ------
         READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName = 'field' ORDER BY ChunkIdx;
-        EXPECTED: [[["{\"records_blob_size\":152,\"variants_blob_size\":176}"]]]
+        EXPECTED: [[["{\"positions_blob_size\":152,\"dictionary_blob_size\":176}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();

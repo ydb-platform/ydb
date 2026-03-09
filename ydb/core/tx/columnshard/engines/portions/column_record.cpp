@@ -23,7 +23,7 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
         if (add.Accessor_case() == NKikimrTxColumnShard::TAdditionalAccessorData::kDictionaryAccessorData) {
             const auto& acc = add.GetDictionaryAccessorData();
             AdditionalAccessorData = std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(
-                acc.GetVariantsBlobSize(), acc.GetRecordsBlobSize());
+                acc.GetDictionaryBlobSize(), acc.GetPositionsBlobSize());
         } else {
             AdditionalAccessorData.reset();
         }

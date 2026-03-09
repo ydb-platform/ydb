@@ -22,55 +22,55 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     if (!dictData) {
         return TConclusionStatus::Fail("dictionary blob requires TDictionaryAccessorData in chunk metadata");
     }
-    const ui32 variantsBlobSize = dictData->VariantsBlobSize;
-    const ui32 recordsBlobSize = dictData->RecordsBlobSize;
-    if (!variantsBlobSize && !recordsBlobSize) {
-        return TConclusionStatus::Fail("dictionary blob requires non-zero VariantsBlobSize and RecordsBlobSize in chunk metadata");
+    const ui32 dictionaryBlobSize = dictData->DictionaryBlobSize;
+    const ui32 positionsBlobSize = dictData->PositionsBlobSize;
+    if (!dictionaryBlobSize && !positionsBlobSize) {
+        return TConclusionStatus::Fail("dictionary blob requires non-zero DictionaryBlobSize and PositionsBlobSize in chunk metadata");
     }
     TStringBuf sbOriginal(originalData.data(), originalData.size());
 
-    if (sbOriginal.size() < variantsBlobSize) {
-        return TConclusionStatus::Fail("cannot READ variants blob for dictionary accessor");
+    if (sbOriginal.size() < dictionaryBlobSize) {
+        return TConclusionStatus::Fail("cannot read dictionary blob for dictionary accessor");
     }
-    const TStringBuf blobVariants(sbOriginal.data(), variantsBlobSize);
-    sbOriginal.Skip(variantsBlobSize);
+    const TStringBuf blobDictionary(sbOriginal.data(), dictionaryBlobSize);
+    sbOriginal.Skip(dictionaryBlobSize);
 
-    if (sbOriginal.size() < recordsBlobSize) {
-        return TConclusionStatus::Fail("cannot READ records blob for dictionary accessor");
+    if (sbOriginal.size() < positionsBlobSize) {
+        return TConclusionStatus::Fail("cannot read positions blob for dictionary accessor");
     }
-    const TStringBuf blobRecords(sbOriginal.data(), recordsBlobSize);
-    sbOriginal.Skip(recordsBlobSize);
+    const TStringBuf blobPositions(sbOriginal.data(), positionsBlobSize);
+    sbOriginal.Skip(positionsBlobSize);
 
-    auto schemaVariants =
+    auto schemaDictionary =
         std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
-    auto resultVariants = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobVariants.data(), blobVariants.size()), schemaVariants);
-    if (!resultVariants.ok()) {
+    auto resultDictionary = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobDictionary.data(), blobDictionary.size()), schemaDictionary);
+    if (!resultDictionary.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}
-            << "Internal deserialization error. type: dictionary (schema variants), schema: " << schemaVariants->ToString()
+            << "Internal deserialization error. type: dictionary (schema dictionary), schema: " << schemaDictionary->ToString()
             << " records count: " << externalInfo.GetRecordsCount()
             << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
-            << " reason: " << resultVariants.status().ToString()
-            << " original data: " << Base64Encode(TString(blobVariants.data(), blobVariants.size())));
+            << " reason: " << resultDictionary.status().ToString()
+            << " original data: " << Base64Encode(TString(blobDictionary.data(), blobDictionary.size())));
     }
-    auto rbVariants = TStatusValidator::GetValid(resultVariants);
-    AFL_VERIFY(rbVariants->num_columns() == 1);
+    auto rbDictionary = TStatusValidator::GetValid(resultDictionary);
+    AFL_VERIFY(rbDictionary->num_columns() == 1);
 
-    const std::shared_ptr<arrow::DataType> type = GetTypeByVariantsCount(rbVariants->num_rows());
-    auto schemaRecords = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", type) }));
-    auto resultRecords = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobRecords.data(), blobRecords.size()), schemaRecords);
-    if (!resultRecords.ok()) {
+    const std::shared_ptr<arrow::DataType> type = GetTypeByVariantsCount(rbDictionary->num_rows());
+    auto schemaPositions = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", type) }));
+    auto resultPositions = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobPositions.data(), blobPositions.size()), schemaPositions);
+    if (!resultPositions.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}
-            << "Internal deserialization error. type: dictionary (schema records), schema: " << schemaRecords->ToString()
+            << "Internal deserialization error. type: dictionary (schema positions), schema: " << schemaPositions->ToString()
             << " records count: " << externalInfo.GetRecordsCount()
             << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
-            << " variants count: " << rbVariants->num_rows()
-            << " reason: " << resultRecords.status().ToString()
-            << " original data: " << Base64Encode(TString(blobRecords.data(), blobRecords.size())));
+            << " dictionary count: " << rbDictionary->num_rows()
+            << " reason: " << resultPositions.status().ToString()
+            << " original data: " << Base64Encode(TString(blobPositions.data(), blobPositions.size())));
     }
-    auto rbRecords = TStatusValidator::GetValid(resultRecords);
-    AFL_VERIFY(rbRecords->num_columns() == 1);
+    auto rbPositions = TStatusValidator::GetValid(resultPositions);
+    AFL_VERIFY(rbPositions->num_columns() == 1);
 
-    return std::make_shared<NArrow::NAccessor::TDictionaryArray>(rbVariants->column(0), rbRecords->column(0));
+    return std::make_shared<NArrow::NAccessor::TDictionaryArray>(rbDictionary->column(0), rbPositions->column(0));
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
@@ -94,16 +94,16 @@ TBlobWithAccessorMeta TConstructor::SerializeToBlobAndMeta(
     auto arrRecords = arr->GetRecords();
     auto schemaVariants = NArrow::BuildFakeSchema({ arrVariants });
     auto schemaRecords = NArrow::BuildFakeSchema({ arrRecords });
-    const TString blobVariants =
+    const TString blobDictionary =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaVariants, arrVariants->length(), { arrVariants }));
-    const TString blobRecords =
+    const TString blobPositions =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
 
-    auto meta = std::make_shared<TDictionaryAccessorData>(blobVariants.size(), blobRecords.size());
+    auto meta = std::make_shared<TDictionaryAccessorData>(blobDictionary.size(), blobPositions.size());
     TString blob;
-    blob.reserve(blobVariants.size() + blobRecords.size());
-    blob.append(blobVariants);
-    blob.append(blobRecords);
+    blob.reserve(blobDictionary.size() + blobPositions.size());
+    blob.append(blobDictionary);
+    blob.append(blobPositions);
     return {std::move(blob), std::move(meta)};
 }
 
@@ -182,6 +182,33 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     auto arrVariants = NArrow::FinishBuilder(std::move(builderVariants));
     auto arrRecords = NArrow::FinishBuilder(std::move(builderRecords));
     return std::make_shared<TDictionaryArray>(arrVariants, arrRecords);
+}
+
+TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyReader(
+    const TString& dictionaryBlob, const TChunkConstructionData& externalInfo) {
+    if (!externalInfo.HasAdditionalAccessorData()) {
+        return TConclusionStatus::Fail("dictionary-only reader requires additional accessor data in chunk metadata");
+    }
+    const TDictionaryAccessorData* dictData = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
+    if (!dictData) {
+        return TConclusionStatus::Fail("dictionary-only reader requires TDictionaryAccessorData in chunk metadata");
+    }
+    if (dictionaryBlob.size() < dictData->DictionaryBlobSize) {
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "dictionary blob too small: need at least " << dictData->DictionaryBlobSize << ", got " << dictionaryBlob.size());
+    }
+    // Use only the dictionary prefix; blob may be full (dictionary + positions) when e.g. cached or read for other purposes.
+    TStringBuf dictionaryPrefix(dictionaryBlob.data(), dictData->DictionaryBlobSize);
+    auto schemaDictionary = std::make_shared<arrow::Schema>(
+        arrow::FieldVector({std::make_shared<arrow::Field>("val", externalInfo.GetColumnType())}));
+    auto result = externalInfo.GetDefaultSerializer()->Deserialize(TString(dictionaryPrefix), schemaDictionary);
+    if (!result.ok()) {
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "dictionary-only deserialization failed: " << result.status().ToString());
+    }
+    auto rb = TStatusValidator::GetValid(result);
+    AFL_VERIFY(rb->num_columns() == 1);
+    return rb->column(0);
 }
 
 std::shared_ptr<arrow::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {

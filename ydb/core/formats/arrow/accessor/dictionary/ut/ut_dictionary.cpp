@@ -102,4 +102,32 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(dictParsed->GetRecords()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
         AFL_VERIFY(PrepareToCompare(dictParsed->GetVariants()->ToString()) == R"(["","ab","abc","abcd"])");
     }
+
+    // Reading only the dictionary part of the blob (first DictionaryBlobSize bytes). Blob on disk
+    // is still full (dictionary + positions); we only deserialize the dictionary prefix.
+    Y_UNIT_TEST(BuildDictionaryOnlyReader) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abcd");
+        builder.AddRecord(4, "abc");
+        builder.AddRecord(6, "ab");
+        builder.AddRecord(8, "");
+        auto arr = builder.Finish(10);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
+        AFL_VERIFY(dictData);
+        TString dictionaryBlobOnly(blobAndMeta.Blob.data(), dictData->DictionaryBlobSize);
+        TChunkConstructionData infoWithMeta(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            std::nullopt, blobAndMeta.Meta);
+        auto conclusion = NDictionary::TConstructor::BuildDictionaryOnlyReader(dictionaryBlobOnly, infoWithMeta);
+        AFL_VERIFY(conclusion.IsSuccess())("error", conclusion.GetErrorMessage());
+        auto dictionaryArray = conclusion.DetachResult();
+        AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetVariants()->ToString()));
+        AFL_VERIFY(dictionaryArray->length() == dict->GetVariants()->length());
+    }
 };

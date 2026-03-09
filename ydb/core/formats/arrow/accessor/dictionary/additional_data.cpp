@@ -6,8 +6,8 @@ namespace NKikimr::NArrow::NAccessor {
 
 NJson::TJsonValue TDictionaryAccessorData::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("variants_blob_size", VariantsBlobSize);
-    result.InsertValue("records_blob_size", RecordsBlobSize);
+    result.InsertValue("dictionary_blob_size", DictionaryBlobSize);
+    result.InsertValue("positions_blob_size", PositionsBlobSize);
     return result;
 }
 
@@ -17,8 +17,8 @@ void TDictionaryAccessorData::AddToProto(NKikimrTxColumnShard::TIndexColumnMeta*
     }
     auto* add = meta->MutableAdditionalAccessorData();
     auto* acc = add->MutableDictionaryAccessorData();
-    acc->SetVariantsBlobSize(VariantsBlobSize);
-    acc->SetRecordsBlobSize(RecordsBlobSize);
+    acc->SetDictionaryBlobSize(DictionaryBlobSize);
+    acc->SetPositionsBlobSize(PositionsBlobSize);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

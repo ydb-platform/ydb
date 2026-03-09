@@ -834,8 +834,111 @@ void TProducer::TMessagesWorker::RechoosePartitionIfNeeded(MessageIter message) 
     message->Partition = newPartition;
 }
 
+void TProducer::TMessagesWorker::HandleReadyInitSeqNoFutures() {
+    std::unique_lock lock(InitLock);
+    for (const auto& partition : GotInitSeqNoPartitions) {
+        auto it = InitGetMaxSeqNoFutures.find(partition);
+        Y_ABORT_UNLESS(it != InitGetMaxSeqNoFutures.end(), "Init get max seq no future not found");
+        Y_ABORT_UNLESS(it->second.IsReady(), "Init get max seq no future is not ready");
+
+        CurrentSeqNo = std::max(CurrentSeqNo, it->second.GetValue());
+        InitGetMaxSeqNoFutures.erase(it);
+    }
+
+    GotInitSeqNoPartitions.clear();
+}
+
+void TProducer::TMessagesWorker::FinishInit() {
+    for (const auto& partition : Producer->Partitions) {
+        if (!partition.second.IsSplitted() && !InFlightMessagesIndex.contains(partition.first)) {
+            Producer->SessionsWorker->AddIdleSession(partition.first);
+        }
+    }
+
+    InitWriteSessions.clear();
+    InitGetMaxSeqNoFutures.clear();
+}
+
+bool TProducer::TMessagesWorker::LazyInit() {
+    if (State == EState::Ready) {
+        return true;
+    }
+    
+    if (Producer->SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo) {
+        MoveTo(EState::Ready);
+        return true;
+    }
+
+    if (State == EState::PendingSeqNo) {
+        HandleReadyInitSeqNoFutures();
+        if (InitGetMaxSeqNoFutures.empty()) {
+            FinishInit();
+            MoveTo(EState::Ready);
+            return true;
+        }
+
+        return false;
+    }
+
+    std::weak_ptr<TProducer> producer = Producer->shared_from_this();
+    std::weak_ptr<TMessagesWorker> self = shared_from_this();
+    for (const auto& partition : Producer->Partitions) {
+        auto partitionId = partition.first;
+        WrappedWriteSessionPtr wrappedSession = nullptr;
+        if (partition.second.IsSplitted()) {
+            wrappedSession = Producer->SessionsWorker->GetWriteSession(partition.first, false);
+        } else {
+            wrappedSession = Producer->SessionsWorker->GetWriteSession(partition.first);
+        }
+
+        InitWriteSessions.push_back(wrappedSession);
+        auto initGetMaxSeqNoFuture = wrappedSession->Session->GetInitSeqNo();
+
+        initGetMaxSeqNoFuture.Subscribe([self, producer, partitionId](NThreading::TFuture<uint64_t> future) {
+            auto selfPtr = self.lock();
+            if (!selfPtr) {
+                return;
+            }
+
+            auto producerPtr = producer.lock();
+            if (!producerPtr) {
+                return;
+            }
+
+            if (!future.IsReady()) {
+                return;
+            }
+
+            {
+                std::lock_guard lock(selfPtr->InitLock);
+                selfPtr->GotInitSeqNoPartitions.push_back(partitionId);
+            }
+            producerPtr->RunMainWorker(partitionId);
+        });
+        InitGetMaxSeqNoFutures.emplace(partition.first, initGetMaxSeqNoFuture);
+    }
+
+    MoveTo(EState::PendingSeqNo);
+    return false;
+}
+
+void TProducer::TMessagesWorker::MoveTo(EState state) {
+    State = state;
+}
+
+std::optional<std::uint64_t> TProducer::TMessagesWorker::GetCurrentSeqNo() const {
+    return State == EState::Ready ? std::make_optional(CurrentSeqNo) : std::nullopt;
+}
+
 void TProducer::TMessagesWorker::DoWork() {
+    if (MessagesToResendIndex.empty() && PendingMessagesIndex.empty()) {
+        return;
+    }
+
     auto sessionsWorker = Producer->SessionsWorker;
+    if (!LazyInit()) {
+        return;
+    }
 
     auto iterateMessagesIndex = [&](std::unordered_map<std::uint32_t, std::list<MessageIter>>& messagesIndex, auto stopCondition) {
         std::vector<std::uint32_t> partitionsProcessed;
@@ -846,6 +949,10 @@ void TProducer::TMessagesWorker::DoWork() {
                     break;
                 }
 
+                if (!head->SeqNo.has_value()) {
+                    head->SeqNo.emplace(++CurrentSeqNo);
+                }
+
                 auto wrappedSession = sessionsWorker->GetWriteSession(head->Partition);
                 if (!SendMessage(wrappedSession, *head)) {
                     break;
@@ -853,7 +960,6 @@ void TProducer::TMessagesWorker::DoWork() {
 
                 Producer->Metrics.AddWriteLag((TInstant::Now() - head->CreateTimestamp.value_or(TInstant::Now())).MilliSeconds());
                 head->Sent = true;
-                // sessionsWorker->OnWriteToSession(wrappedSession);
                 messages.pop_front();
             }
 
@@ -1417,6 +1523,22 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     return TCloseResult{ .Status = ECloseStatus::Timeout };
 }
 
+NThreading::TFuture<std::uint64_t> TProducer::GetInitSeqNo() {
+    std::lock_guard lock(GlobalLock);
+    if (InitPromise) {
+        return InitPromise->GetFuture();
+    }
+
+    auto currentSeqNo = MessagesWorker->GetCurrentSeqNo();
+    if (currentSeqNo) {
+        return NThreading::MakeFuture<std::uint64_t>(*currentSeqNo);
+    }
+
+    MessagesWorker->LazyInit();
+    InitPromise = NThreading::NewPromise<std::uint64_t>();
+    return InitPromise->GetFuture();
+}
+
 void TProducer::NonBlockingClose() {
     Closed.store(true);
     Done.store(true);
@@ -1643,6 +1765,8 @@ void TProducer::RunMainWorker(std::int64_t owner) {
         MainWorkerState.fetch_and(std::uint8_t(~Rerun), std::memory_order_acq_rel);
         bool needRerun = false;
         std::optional<NThreading::TPromise<void>> eventsPromise;
+        std::optional<std::uint64_t> initSeqNo;
+        std::optional<NThreading::TPromise<std::uint64_t>> initPromise;
 
         {
             std::unique_lock lock(GlobalLock);
@@ -1653,10 +1777,21 @@ void TProducer::RunMainWorker(std::int64_t owner) {
                 SessionsWorker->DoWork();
                 MessagesWorker->DoWork();
             }
+
+            if (InitPromise) {
+                initSeqNo = MessagesWorker->GetCurrentSeqNo();
+                if (initSeqNo) {
+                    initPromise = *InitPromise;
+                }
+            }
         }
 
         if (eventsPromise) {
             eventsPromise->TrySetValue();
+        }
+
+        if (initSeqNo && initPromise) {
+            initPromise->TrySetValue(*initSeqNo);
         }
 
         while (!FlushPromises.empty()) {

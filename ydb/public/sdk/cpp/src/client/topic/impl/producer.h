@@ -143,7 +143,7 @@ private:
         static constexpr TDuration SESSION_REMOVE_DELAY = TDuration::Seconds(5);
     };
 
-    struct TMessagesWorker {
+    struct TMessagesWorker : public std::enable_shared_from_this<TMessagesWorker> {
         TMessagesWorker(TProducer* producer);
         
         void DoWork();
@@ -157,9 +157,17 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);
+        void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);  
+        std::optional<std::uint64_t> GetCurrentSeqNo() const; 
+
 
     private:
+        enum class EState : std::uint8_t {
+            Init = 0,
+            PendingSeqNo = 1,
+            Ready = 2,
+        };
+
         using MessageIter = std::list<TMessageInfo>::iterator;
 
         void PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message);
@@ -167,6 +175,10 @@ private:
         bool SendMessage(WrappedWriteSessionPtr wrappedSession, const TMessageInfo& message);
         std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
         void RechoosePartitionIfNeeded(MessageIter message);
+        bool LazyInit();
+        void MoveTo(EState state);
+        void HandleReadyInitSeqNoFutures();
+        void FinishInit();
 
         TProducer* Producer;
 
@@ -177,6 +189,14 @@ private:
         std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
         
         std::uint64_t MemoryUsage = 0;
+        std::uint64_t CurrentSeqNo = 0;
+        EState State = EState::Init;
+
+        std::vector<WrappedWriteSessionPtr> InitWriteSessions;
+        std::unordered_map<std::uint32_t, NThreading::TFuture<uint64_t>> InitGetMaxSeqNoFutures;
+
+        std::mutex InitLock;
+        std::vector<std::uint32_t> GotInitSeqNoPartitions;
 
         friend class TProducer;
     };
@@ -390,6 +410,8 @@ public:
 
     size_t GetIdleSessionsCount();
 
+    NThreading::TFuture<std::uint64_t> GetInitSeqNo() override;
+
     ~TProducer();
 
 private:
@@ -410,6 +432,7 @@ private:
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> ShutdownPromise;
     NThreading::TFuture<void> ShutdownFuture;
+    std::optional<NThreading::TPromise<std::uint64_t>> InitPromise;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

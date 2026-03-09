@@ -1956,6 +1956,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
+
+    Y_UNIT_TEST(Producer_GetInitSeqNo) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(10_KB, 'a');
+
+        for (ui64 i = 0; i < 100; ++i) {    
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
+        }
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        auto producer2 = client.CreateProducer(writeSettings);
+        auto seqNo = producer->GetInitSeqNo().GetValueSync();
+        UNIT_ASSERT_EQUAL(seqNo, 100);
+    }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

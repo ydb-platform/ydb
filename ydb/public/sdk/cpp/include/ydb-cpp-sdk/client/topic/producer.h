@@ -162,6 +162,12 @@ public:
     //! DO NOT IGNORE THE RETURN VALUE.
     [[nodiscard]] virtual TCloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
+    //! Get initial sequence number.
+    //! Returns future that is set when initial sequence number is available.
+    //! If initial sequence number is available, returns TFuture with value set to the initial sequence number.
+    //! If initial sequence number is not available, returns TFuture with value set to std::nullopt.
+    virtual NThreading::TFuture<std::uint64_t> GetInitSeqNo() = 0;
+
     //! Get statistics of write operations.
     //! Returns statistics of write operations.
     virtual TWriteStats GetWriteStats() = 0;

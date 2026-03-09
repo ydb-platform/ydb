@@ -26,7 +26,7 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse> {
 
     static void InitMerger() {
         const auto* field = NKikimrWhiteboard::TBSGroupStateInfo::descriptor()->FindFieldByName("Latency");
-        TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeEnumField;
+        TWhiteboardMergerBase::SetMergeField(field, &TWhiteboardMergerBase::ProtoMaximizeEnumField);
     }
 
     static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {

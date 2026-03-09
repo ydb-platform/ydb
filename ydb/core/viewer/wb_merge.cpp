@@ -5,7 +5,12 @@ namespace NKikimr::NViewer {
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
 
-std::unordered_map<TWhiteboardMergerBase::TMergerKey, TWhiteboardMergerBase::TMergerValue> TWhiteboardMergerBase::FieldMerger;
+namespace {
+
+std::unordered_map<TWhiteboardMergerBase::TMergerKey, TWhiteboardMergerBase::TMergerValue> FieldMerger;
+TRWMutex FieldMergerMutex;
+
+} // anonymous namespace
 
 void TWhiteboardMergerBase::ProtoMaximizeEnumField(
         const ::google::protobuf::Reflection& reflectionTo,
@@ -35,6 +40,7 @@ void TWhiteboardMergerBase::ProtoMaximizeBoolField(
 
 void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const google::protobuf::Message& protoFrom) {
     using namespace ::google::protobuf;
+    TReadGuard guard(FieldMergerMutex);
     const Descriptor& descriptor = *protoTo.GetDescriptor();
     const Reflection& reflectionTo = *protoTo.GetReflection();
     const Reflection& reflectionFrom = *protoFrom.GetReflection();
@@ -214,4 +220,9 @@ void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const
     }
 }
 
+void TWhiteboardMergerBase::SetMergeField(TMergerKey key, TMergerValue value) {
+    TWriteGuard guard(FieldMergerMutex);
+    FieldMerger[key] = std::move(value);
 }
+
+} // namespace NKikimr::NViewer

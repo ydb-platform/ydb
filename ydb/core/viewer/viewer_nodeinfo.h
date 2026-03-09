@@ -29,9 +29,9 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse> {
 
     static void InitMerger() {
         const auto* field = NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("ConnectStatus");
-        TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeEnumField;
+        TWhiteboardMergerBase::SetMergeField(field, &TWhiteboardMergerBase::ProtoMaximizeEnumField);
         field = NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("Connected");
-        TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeBoolField;
+        TWhiteboardMergerBase::SetMergeField(field, &TWhiteboardMergerBase::ProtoMaximizeBoolField);
     }
 };
 

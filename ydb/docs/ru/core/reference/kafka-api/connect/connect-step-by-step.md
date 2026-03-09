@@ -5,6 +5,7 @@
 В инструкции используются:
 
 * `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
+* `<sasl.mechanism>` - название механизма SASL. Поддерживаются механизмы: `PLAIN` и `SCRAM-SHA-256`.
 * `<sasl.username>` — имя пользователя SASL. Подробности читайте в разделе [Аутентификация](../auth.md).
 * `<sasl.password>` — пароль пользователя SASL. Подробности читайте в разделе [Аутентификация](../auth.md).
 
@@ -31,17 +32,17 @@
     bootstrap.servers=<ydb-endpoint>
 
     # AdminAPI properties
-    sasl.mechanism=PLAIN
+    sasl.mechanism=<sasl.mechanism>
     security.protocol=SASL_SSL
     sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
     # Producer properties
-    producer.sasl.mechanism=PLAIN
+    producer.sasl.mechanism=<sasl.mechanism>
     producer.security.protocol=SASL_SSL
     producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
     # Consumer properties
-    consumer.sasl.mechanism=PLAIN
+    consumer.sasl.mechanism=<sasl.mechanism>
     consumer.security.protocol=SASL_SSL
     consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 

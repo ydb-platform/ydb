@@ -4,6 +4,10 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
+SPLIT_FACTOR(20)
+FORK_SUBTESTS()
+FORK_TEST_FILES()
+
 CFLAGS(
     -DYDB_SDK_USE_STD_STRING
 )

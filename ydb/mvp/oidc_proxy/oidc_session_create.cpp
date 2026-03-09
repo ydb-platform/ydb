@@ -21,7 +21,7 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
 {}
 
 void THandlerSessionCreate::Bootstrap() {
-    BLOG_D("Restore oidc session");
+    BLOG_D("rid=" << GetRequestIdForLogs(Request) << " Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
@@ -36,14 +36,14 @@ void THandlerSessionCreate::Bootstrap() {
     if (checkStateResult.IsSuccess()) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
-                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
+                BLOG_D("rid=" << GetRequestIdForLogs(Request) << " Restore oidc session failed: receive empty 'code' parameter");
                 RetryRequestToProtectedResourceAndDie();
             } else {
                 RequestSessionToken(code);
             }
         } else {
             const auto& restoreSessionStatus = restoreContextResult.Status;
-            BLOG_D(restoreSessionStatus.ErrorMessage);
+            BLOG_D("rid=" << GetRequestIdForLogs(Request) << " " << restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
                 RetryRequestToProtectedResourceAndDie();
             } else {
@@ -51,7 +51,7 @@ void THandlerSessionCreate::Bootstrap() {
             }
         }
     } else {
-        BLOG_D(checkStateResult.ErrorMessage);
+        BLOG_D("rid=" << GetRequestIdForLogs(Request) << " " << checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
             RetryRequestToProtectedResourceAndDie();
         } else {
@@ -71,7 +71,7 @@ void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
 void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Error.empty() && event->Get()->Response) {
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
-        BLOG_D("Incoming response from authorization server: " << response->Status);
+        BLOG_D("rid=" << GetRequestIdForLogs(Request) << " Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;

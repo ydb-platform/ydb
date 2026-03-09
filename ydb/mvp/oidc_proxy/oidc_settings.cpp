@@ -16,6 +16,7 @@ const TVector<TStringBuf> TOpenIdConnectSettings::REQUEST_HEADERS_WHITE_LIST = {
     "Upgrade-Insecure-Requests",
     "Content-Type",
     "Origin",
+    "X-Request-Id",
     "X-Trace-Verbosity",
     "X-Want-Trace",
     "traceparent"

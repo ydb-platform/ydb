@@ -59,7 +59,7 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
     for (const auto& interval : Context.GetIntervals()) {
         for (auto&& [portionId, filter] : BuildFiltersOnInterval(interval, merger, columnData)) {
-            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
+            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBorders(interval.GetBegin().GetKey(), interval.GetEnd().GetKey()), portionId), std::move(filter)).second);
         }
     }
 

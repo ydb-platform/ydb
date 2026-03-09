@@ -18,17 +18,14 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
     }
+    AdditionalAccessorData.reset();
     if (proto.HasAdditionalAccessorData()) {
         const auto& add = proto.GetAdditionalAccessorData();
         if (add.Accessor_case() == NKikimrTxColumnShard::TAdditionalAccessorData::kDictionaryAccessorData) {
             const auto& acc = add.GetDictionaryAccessorData();
             AdditionalAccessorData = std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(
                 acc.GetDictionaryBlobSize(), acc.GetPositionsBlobSize());
-        } else {
-            AdditionalAccessorData.reset();
         }
-    } else {
-        AdditionalAccessorData.reset();
     }
     return TConclusionStatus::Success();
 }

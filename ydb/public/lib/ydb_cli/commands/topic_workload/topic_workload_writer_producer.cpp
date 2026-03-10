@@ -180,18 +180,18 @@ void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSess
         << ": got close event: " << event.DebugString());
 }
 
-bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() {
+bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() const {
     return !!ContinuationToken_;
 }
 
-ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() {
+ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() const {
     return MessageId_;
 }
 
-ui64 TTopicWorkloadWriterProducer::GetPartitionId() {
+ui64 TTopicWorkloadWriterProducer::GetPartitionId() const {
     return PartitionId_;
 }
 
-size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() {
+size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() const {
     return InflightMessagesCount_.load(std::memory_order_relaxed);
 }

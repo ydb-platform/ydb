@@ -30,6 +30,7 @@ PY_SRCS(
     dstool_cmd_group_add.py
     dstool_cmd_group_check.py
     dstool_cmd_group_decommit.py
+    dstool_cmd_group_resize.py
     dstool_cmd_group_list.py
     dstool_cmd_group_show_blob_info.py
     dstool_cmd_group_show_storage_efficiency.py

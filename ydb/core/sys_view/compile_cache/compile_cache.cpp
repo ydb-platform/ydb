@@ -84,6 +84,10 @@ public:
             insert({TSchema::QueryType::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 12
                 return TCell(info.GetQueryType());
             }});
+
+            insert({TSchema::Syntax::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 13
+                return TCell(info.GetSyntax());
+            }});
         }
     };
 

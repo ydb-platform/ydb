@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -774,12 +775,6 @@ namespace {
             auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
             auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
 
-            std::atomic<ui32> cancels{0};
-            const auto cancelObserver = env.Runtime.AddObserver<TEvKqp::TEvCancelQueryRequest>(
-                [&cancels](TEvKqp::TEvCancelQueryRequest::TPtr&) {
-                    cancels++;
-                });
-
             const auto compileBlocker = env.Runtime.AddObserver<TEvKqp::TEvQueryResponse>(
                 [warmupActorId](TEvKqp::TEvQueryResponse::TPtr& ev) {
                     if (ev->Recipient == warmupActorId) {
@@ -805,9 +800,6 @@ namespace {
             UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded == 0,
                 "No compilations should succeed when responses are blocked, loaded: "
                 << warmupComplete->Get()->EntriesLoaded);
-            UNIT_ASSERT_C(cancels > 0,
-                "Hard deadline should send cancel requests for stuck compilations, got "
-                << cancels.load() << " cancel requests");
         }
 
         Y_UNIT_TEST(WarmupAllCompilationsFail) {
@@ -993,6 +985,208 @@ namespace {
             UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
                 "At least one sysview request should have been intercepted");
         }
+        Y_UNIT_TEST(WarmupPgSyntaxQueries) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+            GrantPermissions(kikimr, "/Root/KeyValue", params.UserSids, false);
+
+            {
+                TDriverConfig driverConfig;
+                driverConfig
+                    .SetEndpoint(kikimr.GetEndpoint())
+                    .SetDatabase("/Root")
+                    .SetAuthToken("user0@builtin");
+                auto driver = NYdb::TDriver(driverConfig);
+                auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+                auto pgSettings = NYdb::NQuery::TExecuteQuerySettings()
+                    .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+                auto result1 = queryClient.ExecuteQuery(
+                    "SELECT 1 AS result",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                    pgSettings
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "PG query failed: " << result1.GetIssues().ToString());
+
+                auto result2 = queryClient.ExecuteQuery(
+                    "SELECT 2 + 3 AS sum_result",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                    pgSettings
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "PG query 2 failed: " << result2.GetIssues().ToString());
+
+                auto yqlSettings = NYdb::NQuery::TExecuteQuerySettings()
+                    .Syntax(NYdb::NQuery::ESyntax::YqlV1);
+                auto result3 = queryClient.ExecuteQuery(
+                    "SELECT 42 AS answer",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                    yqlSettings
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "YQL query failed: " << result3.GetIssues().ToString());
+            }
+
+            {
+                auto edgeActor = runtime.AllocateEdgeActor(0);
+                auto compileServiceId = MakeKqpCompileServiceID(runtime.GetNodeId(0));
+                auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
+                request->Record.SetTenantName("/Root");
+                request->Record.SetFreeSpace(1024 * 1024);
+                runtime.Send(new IEventHandle(compileServiceId, edgeActor, request), 0);
+
+                auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                    edgeActor, TDuration::Seconds(5));
+                UNIT_ASSERT_C(response, "Failed to get cache entries");
+
+                bool foundPgSyntax = false;
+                bool foundYqlSyntax = false;
+                for (const auto& entry : response->Get()->Record.GetCacheCacheQueries()) {
+                    if (entry.GetSyntax() == "SYNTAX_PG") {
+                        foundPgSyntax = true;
+                    }
+                    if (entry.GetSyntax() == "SYNTAX_YQL_V1") {
+                        foundYqlSyntax = true;
+                    }
+                }
+                UNIT_ASSERT_C(foundPgSyntax, "Sysview should store SYNTAX_PG for PG queries");
+                UNIT_ASSERT_C(foundYqlSyntax, "Sysview should store SYNTAX_YQL_V1 for YQL queries");
+            }
+
+            TWarmupTestEnv env{kikimr, runtime, false, 0, params.NodeCount, params.UserSids, 0};
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed for mixed PG/YQL queries: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded >= 3,
+                "Should load at least 3 entries (2 PG + 1 YQL). Loaded: " << warmupComplete->Get()->EntriesLoaded);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
+                "No entries should fail. Failed: " << warmupComplete->Get()->EntriesFailed);
+        }
+
+        Y_UNIT_TEST(WarmupMixedQueryTypes) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+            GrantPermissions(kikimr, "/Root/KeyValue", {"user0"}, false);
+
+            TDriverConfig driverConfig;
+            driverConfig
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("user0@builtin");
+            auto driver = NYdb::TDriver(driverConfig);
+
+            // 1. DML via Table API (QUERY_TYPE_SQL_DML)
+            {
+                auto tableClient = NYdb::NTable::TTableClient(driver);
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                TExecDataQuerySettings settings;
+                settings.KeepInQueryCache(true);
+                auto result = session.ExecuteDataQuery(
+                    "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 0",
+                    TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "DML query failed: " << result.GetIssues().ToString());
+            }
+
+            // 2. SCAN via Table API (QUERY_TYPE_SQL_SCAN)
+            {
+                auto tableClient = NYdb::NTable::TTableClient(driver);
+                auto it = tableClient.StreamExecuteScanQuery(
+                    "SELECT Key FROM `/Root/KeyValue` LIMIT 1").GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), "Scan query failed: " << it.GetIssues().ToString());
+                while (true) {
+                    auto part = it.ReadNext().GetValueSync();
+                    if (!part.IsSuccess()) break;
+                }
+            }
+
+            // 3. GENERIC_QUERY via Query API (QUERY_TYPE_SQL_GENERIC_QUERY)
+            {
+                auto queryClient = NYdb::NQuery::TQueryClient(driver);
+                auto result = queryClient.ExecuteQuery(
+                    "SELECT 100 AS generic_result",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                    "Generic query failed: " << result.GetIssues().ToString());
+            }
+
+            // 4. GENERIC_SCRIPT via Query API (QUERY_TYPE_SQL_GENERIC_SCRIPT)
+            {
+                auto queryClient = NYdb::NQuery::TQueryClient(driver);
+                auto scriptOp = queryClient.ExecuteScript("SELECT 200 AS script_result").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(scriptOp.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                    "Script submit failed: " << scriptOp.Status().GetIssues().ToString());
+
+                NYdb::NOperation::TOperationClient opClient(driver);
+                for (int i = 0; i < 100; ++i) {
+                    auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(
+                        scriptOp.Id()).GetValueSync();
+                    if (op.Ready()) break;
+                    UNIT_ASSERT_C(op.Status().IsSuccess(),
+                        "Script poll failed: " << op.Status().GetIssues().ToString());
+                    Sleep(TDuration::MilliSeconds(100));
+                }
+            }
+
+            // Verify sysview has different QueryType entries
+            {
+                auto edgeActor = runtime.AllocateEdgeActor(0);
+                auto compileServiceId = MakeKqpCompileServiceID(runtime.GetNodeId(0));
+                auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
+                request->Record.SetTenantName("/Root");
+                request->Record.SetFreeSpace(1024 * 1024);
+                runtime.Send(new IEventHandle(compileServiceId, edgeActor, request), 0);
+
+                auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                    edgeActor, TDuration::Seconds(5));
+                UNIT_ASSERT_C(response, "Failed to get cache entries");
+
+                THashSet<TString> foundTypes;
+                for (const auto& entry : response->Get()->Record.GetCacheCacheQueries()) {
+                    if (!entry.GetQueryType().empty()) {
+                        foundTypes.insert(entry.GetQueryType());
+                    }
+                }
+
+                Cerr << "Found QueryTypes in cache: " << JoinSeq(", ", foundTypes) << Endl;
+                UNIT_ASSERT_C(foundTypes.contains("QUERY_TYPE_SQL_DML"),
+                    "Cache should have DML entries. Found: " << JoinSeq(", ", foundTypes));
+                UNIT_ASSERT_C(foundTypes.contains("QUERY_TYPE_SQL_GENERIC_QUERY") ||
+                              foundTypes.contains("QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY"),
+                    "Cache should have Generic Query entries. Found: " << JoinSeq(", ", foundTypes));
+            }
+
+            TWarmupTestEnv env{kikimr, runtime, false, 0, params.NodeCount, params.UserSids, 0};
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed for mixed query types: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded >= 3,
+                "Should load at least 3 entries (DML + scan + generic). Loaded: "
+                << warmupComplete->Get()->EntriesLoaded);
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
+                "No entries should fail. Failed: " << warmupComplete->Get()->EntriesFailed);
+        }
+
         Y_UNIT_TEST(WarmupTruncatedCountStats) {
             TWarmupTestParams params;
             params.UserSids = {"user0"};

@@ -31,8 +31,8 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
     class TFilterSizeProvider {
     public:
-        size_t operator()(const NArrow::TColumnFilter& filter) {
-            return filter.GetDataSize();
+        size_t operator()(const TPortionColumnFilter& filter) {
+            return filter.Filter.GetDataSize() + sizeof(filter.Offset);
         }
     };
 
@@ -48,7 +48,7 @@ private:
         {
         }
 
-        void OnFilterReady(const NArrow::TColumnFilter& filter) {
+        void OnFilterReady(const TPortionColumnFilter& filter) {
             Constructor->AddFilter(IntervalIdx, filter);
         }
 
@@ -75,7 +75,7 @@ private:
             AFL_VERIFY(SubscribersByPortion.emplace(portionId, std::vector<TIntervalFilterCallback>({std::move(callback)})).second);
         }
 
-        bool OnFilterReady(const ui64 portionId, const NArrow::TColumnFilter& filter) {
+        bool OnFilterReady(const ui64 portionId, const TPortionColumnFilter& filter) {
             if (auto findPortion = SubscribersByPortion.find(portionId); findPortion != SubscribersByPortion.end()) {
                 for (auto&& subscriber : findPortion->second) {
                     subscriber.OnFilterReady(filter);
@@ -119,7 +119,7 @@ private:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
+    TLRUCache<TDuplicateMapInfo, TPortionColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
     TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
     THashMap<TIntervalBorders, TIntervalInFlightInfo> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;

@@ -77,7 +77,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
         constructor->SetIntervalsCount(1);
-        constructor->AddFilter(0, std::move(filter));
+        constructor->AddFilter(0, std::move(TPortionColumnFilter{0, std::move(filter)}));
         AFL_VERIFY(constructor->IsDone());
         Counters->OnFilterRequest(1);
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
@@ -103,7 +103,7 @@ TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
     LOCAL_LOG_TRACE("event", "split_portion")
     ("source", constructor->GetRequest()->Get()->GetPortionId())("splitter", splitter.DebugString())(
         "intersection_portions", intersectingPortions.size());
-    THashMap<ui32, NArrow::TColumnFilter> readyFilters;
+    THashMap<ui32, TPortionColumnFilter> readyFilters;
     std::vector<ui32> intervalsToBuild;
     {
         ui64 nextIntervalIdx = 0;

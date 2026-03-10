@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
@@ -308,6 +309,11 @@ public:
     TIntervalBorders MakeInterval() const {
         return TIntervalBorders(Begin.GetKey(), End.GetKey());
     }
+};
+
+struct TPortionColumnFilter {
+    ui64 Offset = 0;
+    NArrow::TColumnFilter Filter;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

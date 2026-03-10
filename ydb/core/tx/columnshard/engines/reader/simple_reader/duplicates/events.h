@@ -42,7 +42,7 @@ public:
 class TEvFilterConstructionResult
     : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
 private:
-    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
+    using TFilters = THashMap<TDuplicateMapInfo, TPortionColumnFilter>;
     TConclusion<TFilters> Result;
 
 public:

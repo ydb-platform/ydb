@@ -97,7 +97,7 @@ private:
         return "BUILD_DUPLICATE_FILTERS";
     }
 
-    THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
+    THashMap<ui64, TPortionColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();

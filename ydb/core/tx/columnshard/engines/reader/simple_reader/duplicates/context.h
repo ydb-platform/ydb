@@ -49,7 +49,7 @@ private:
     const TEvRequestFilter::TPtr OriginalRequest;
     bool Done = false;
 
-    std::vector<std::optional<NArrow::TColumnFilter>> Filters;
+    std::vector<std::optional<TPortionColumnFilter>> Filters;
     ui64 FiltersAccumulated = 0;
 
 private:
@@ -66,7 +66,7 @@ private:
         NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
         for (const auto& filter : Filters) {
             AFL_VERIFY(!!filter);
-            result.Append(*filter);
+            result.Append(filter->Filter);
         }
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(result));
         Done = true;
@@ -80,7 +80,7 @@ public:
         Filters.resize(cnt);
     }
 
-    void AddFilter(const ui32 intervalIdx, const NArrow::TColumnFilter& filterExt) {
+    void AddFilter(const ui32 intervalIdx, const TPortionColumnFilter& filterExt) {
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(intervalIdx < Filters.size());
         AFL_VERIFY(!Filters[intervalIdx]);
@@ -124,7 +124,7 @@ public:
     }
 
     ui64 GetDataSize() const {
-        return Filters.capacity() * sizeof(std::optional<NArrow::TColumnFilter>);
+        return Filters.capacity() * sizeof(std::optional<TPortionColumnFilter>);
     }
 };
 
@@ -245,7 +245,7 @@ public:
 
     static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
         return intersectionCount *
-               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
+               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<TPortionColumnFilter>));
     }
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));

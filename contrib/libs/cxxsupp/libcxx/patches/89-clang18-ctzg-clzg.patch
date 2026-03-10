@@ -1,8 +1,17 @@
 diff --git a/include/__bit/countl.h b/include/__bit/countl.h
-index 9c37749..e53b7c3 100644
+index 9499bf9..558fb91 100644
 --- a/include/__bit/countl.h
 +++ b/include/__bit/countl.h
-@@ -24,10 +24,46 @@ _LIBCPP_PUSH_MACROS
+@@ -18,15 +18,55 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#if !__has_builtin(__builtin_clzg) || defined(__CUDACC__)
++  #include <__bit/rotate.h>
++#endif
++
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -50,10 +59,19 @@ index 9c37749..e53b7c3 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/countr.h b/include/__bit/countr.h
-index f871759..124d3c0 100644
+index 7b311b8..51d3126 100644
 --- a/include/__bit/countr.h
 +++ b/include/__bit/countr.h
-@@ -24,10 +24,40 @@ _LIBCPP_PUSH_MACROS
+@@ -18,15 +18,49 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#if !__has_builtin(__builtin_clzg) || defined(__CUDACC__)
++  #include <__bit/rotate.h>
++#endif
++
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -95,10 +113,10 @@ index f871759..124d3c0 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/popcount.h b/include/__bit/popcount.h
-index 622c8ef..42adf04 100644
+index 9ae572d..084361c 100644
 --- a/include/__bit/popcount.h
 +++ b/include/__bit/popcount.h
-@@ -24,10 +24,37 @@ _LIBCPP_PUSH_MACROS
+@@ -22,10 +22,37 @@ _LIBCPP_PUSH_MACROS
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  

@@ -209,6 +209,16 @@
             "uri": "file://test.test_MutInsert_/results.txt"
         }
     ],
+    "test.test[MutKeepAttrDict]": [
+        {
+            "uri": "file://test.test_MutKeepAttrDict_/results.txt"
+        }
+    ],
+    "test.test[MutKeepAttrList]": [
+        {
+            "uri": "file://test.test_MutKeepAttrList_/results.txt"
+        }
+    ],
     "test.test[MutTryDown]": [
         {
             "uri": "file://test.test_MutTryDown_/results.txt"

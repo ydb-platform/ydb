@@ -9,6 +9,10 @@ namespace NLongTxService {
         , AcquireReadSnapshotOutRequests(group->GetCounter("AcquireReadSnapshotOutRequests", true))
         , AcquireReadSnapshotInInFlight(group->GetCounter("AcquireReadSnapshotInInFlight"))
         , AcquireReadSnapshotOutInFlight(group->GetCounter("AcquireReadSnapshotOutInFlight"))
+        , TimeSinceLastRemoteSnapshotsUpdateMs(group->GetCounter("TimeSinceLastRemoteSnapshotsUpdateMs"))
+        , RemoteSnapshotsInRegistry(group->GetCounter("RemoteSnapshotsInRegistry"))
+        , SnapshotsCollectionTimeMs(group->GetCounter("SnapshotsCollectionTimeMs"))
+        , SnapshotsPropagationTimeMs(group->GetCounter("SnapshotsPropagationTimeMs"))
     {}
 
     IActor* CreateLongTxService(const TLongTxServiceSettings& settings) {

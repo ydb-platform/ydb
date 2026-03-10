@@ -1,18 +1,24 @@
 #pragma once
 #include "long_tx_service.h"
+#include "snapshots_storage.h"
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/base/row_version.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <util/datetime/base.h>
+#include <util/generic/vector.h>
+#include <util/generic/set.h>
+
 namespace NKikimr {
 namespace NLongTxService {
-
     class TLongTxServiceActor : public TActorBootstrapped<TLongTxServiceActor> {
     private:
         class TCommitActor;
@@ -124,6 +130,7 @@ namespace NLongTxService {
         struct TAcquireSnapshotUserRequest {
             TActorId Sender;
             ui64 Cookie;
+            TVector<ui64> TableIds;
             NLWTrace::TOrbit Orbit;
         };
 
@@ -165,6 +172,7 @@ namespace NLongTxService {
                 EvAcquireSnapshotFlush,
                 EvAcquireSnapshotFinished,
                 EvReconnect,
+                EvSnapshotMaintenance,
             };
 
             struct TEvCommitFinished : public TEventLocal<TEvCommitFinished, EvCommitFinished> {
@@ -214,6 +222,10 @@ namespace NLongTxService {
                 explicit TEvReconnect(ui32 nodeId)
                     : NodeId(nodeId)
                 { }
+            };
+
+            struct TEvSnapshotMaintenance : public TEventLocal<TEvSnapshotMaintenance, EvSnapshotMaintenance> {
+                TEvSnapshotMaintenance() = default;
             };
         };
 
@@ -304,6 +316,7 @@ namespace NLongTxService {
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
+                hFunc(TEvPrivate::TEvSnapshotMaintenance, Handle);
                 hFunc(TEvents::TEvUndelivered, Handle);
             }
         }
@@ -327,6 +340,7 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
         void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
+        void Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -359,6 +373,10 @@ namespace NLongTxService {
         const TString& GetDatabaseNameOrLegacyDefault(const TString& databaseName);
 
     private:
+        void UpdateLocalSnapshots();
+        void UpdateImmutableSnapshotsRegistry();
+
+    private:
         const TLongTxServiceSettings Settings;
         TString LogPrefix;
         TSessionSubscribeActor* SessionSubscribeActor = nullptr;
@@ -371,6 +389,9 @@ namespace NLongTxService {
         THashMap<ui64, TLockState> Locks;
         THashMap<TActorId, TSessionState> Sessions;
         ui64 LastCookie = 0;
+        TActorId SnapshotsExchangeActorId;
+        TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
+        TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
     };
 
 } // namespace NLongTxService

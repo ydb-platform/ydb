@@ -2,7 +2,9 @@
 #include "types.h"
 
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/long_tx_service.pb.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -36,6 +38,10 @@ namespace NLongTxService {
             EvWaitingLockAdd,
             EvWaitingLockRemove,
             EvWaitingLockDeadlock,
+            EvCollectSnapshots,
+            EvCollectSnapshotsResult,
+            EvPropagateSnapshots,
+            EvPropagateSnapshotsResult,
             EvEnd,
         };
 
@@ -168,12 +174,14 @@ namespace NLongTxService {
         };
 
         struct TEvAcquireReadSnapshot
-            : TEventPB<TEvAcquireReadSnapshot, NKikimrLongTxService::TEvAcquireReadSnapshot, EvAcquireReadSnapshot>
+            : TEventPB<TEvAcquireReadSnapshot, NKikimrLongTxService::TEvAcquireReadSnapshot, EvAcquireReadSnapshot> // TODO: make it local
         {
             TEvAcquireReadSnapshot() = default;
 
             template<class... TArgs>
-            explicit TEvAcquireReadSnapshot(const TString& databaseName, TArgs&&... args) {
+            explicit TEvAcquireReadSnapshot(const TString& databaseName, TVector<ui64> tableIds = {}, TArgs&&... args)
+                : TableIds(std::move(tableIds))
+            {
                 Record.SetDatabaseName(databaseName);
                 (SetOptionalArg(std::forward<TArgs>(args)), ...);
             }
@@ -182,32 +190,37 @@ namespace NLongTxService {
                 Orbit = std::move(orbit);
             }
 
+            TVector<ui64> TableIds;
             NLWTrace::TOrbit Orbit;
         };
 
         struct TEvAcquireReadSnapshotResult
-            : TEventPB<TEvAcquireReadSnapshotResult, NKikimrLongTxService::TEvAcquireReadSnapshotResult, EvAcquireReadSnapshotResult>
+            : TEventPB<TEvAcquireReadSnapshotResult, NKikimrLongTxService::TEvAcquireReadSnapshotResult, EvAcquireReadSnapshotResult>  // TODO: make it local
         {
             TEvAcquireReadSnapshotResult() = default;
 
             // Success
-            explicit TEvAcquireReadSnapshotResult(const TString& databaseName, const TRowVersion& snapshot, NLWTrace::TOrbit&& orbit) {
+            explicit TEvAcquireReadSnapshotResult(const TString& databaseName, const TRowVersion& snapshot, NKqp::TSnapshotHandle&& snapshotHandle, NLWTrace::TOrbit&& orbit)
+                : SnapshotHandle(std::move(snapshotHandle))
+                , Orbit(std::move(orbit))
+            {
                 Record.SetStatus(Ydb::StatusIds::SUCCESS);
                 Record.SetSnapshotStep(snapshot.Step);
                 Record.SetSnapshotTxId(snapshot.TxId);
                 Record.SetDatabaseName(databaseName);
-                Orbit = std::move(orbit);
             }
 
             // Failure
-            explicit TEvAcquireReadSnapshotResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, NLWTrace::TOrbit&& orbit) {
+            explicit TEvAcquireReadSnapshotResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, NLWTrace::TOrbit&& orbit)
+                : Orbit(std::move(orbit))
+            {
                 Record.SetStatus(status);
                 if (issues) {
                     IssuesToMessage(issues, Record.MutableIssues());
                 }
-                Orbit = std::move(orbit);
             }
 
+            NKqp::TSnapshotHandle SnapshotHandle;
             NLWTrace::TOrbit Orbit;
         };
 
@@ -274,6 +287,30 @@ namespace NLongTxService {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
             }
+        };
+
+        struct TEvCollectSnapshots
+            : TEventPB<TEvCollectSnapshots, NKikimrLongTxService::TEvCollectSnapshots, EvCollectSnapshots>
+        {
+            TEvCollectSnapshots() = default;
+        };
+
+        struct TEvCollectSnapshotsResult
+            : TEventPB<TEvCollectSnapshotsResult, NKikimrLongTxService::TEvCollectSnapshotsResult, EvCollectSnapshotsResult>
+        {
+            TEvCollectSnapshotsResult() = default;
+        };
+
+        struct TEvPropagateSnapshots
+            : TEventPB<TEvPropagateSnapshots, NKikimrLongTxService::TEvPropagateSnapshots, EvPropagateSnapshots>
+        {
+            TEvPropagateSnapshots() = default;
+        };
+
+        struct TEvPropagateSnapshotsResult
+            : TEventPB<TEvPropagateSnapshotsResult, NKikimrLongTxService::TEvPropagateSnapshotsResult, EvPropagateSnapshotsResult>
+        {
+            TEvPropagateSnapshotsResult() = default;
         };
 
         struct TEvWaitingLockAdd

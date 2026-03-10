@@ -799,7 +799,7 @@ private:
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, {}));
 
             KQP_STLOG_T(KQPDATA, "Create temporary mvcc snapshot, become WaitSnapshotState",
                 (trace_id, TraceId()));

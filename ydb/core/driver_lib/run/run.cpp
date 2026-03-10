@@ -71,6 +71,7 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #if defined(OS_LINUX)
@@ -1638,6 +1639,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
     }
+
+    if (runConfig.AppConfig.HasLongTxServiceConfig()) {
+        AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
     TAppDataInitializersList appDataInitializers;
     // setup domain info
     appDataInitializers.AddAppDataInitializer(new TDomainsInitializer(runConfig));

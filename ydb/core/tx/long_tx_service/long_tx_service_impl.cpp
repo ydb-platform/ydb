@@ -1,11 +1,16 @@
 #include "long_tx_service_impl.h"
 #include "lwtrace_probes.h"
+#include "snapshots_exchange.h"
 
+#include <util/string/builder.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/library/actors/core/actor.h>
-#include <util/string/builder.h>
+#include <ydb/library/actors/core/log.h>
+#include <atomic>
 
 #define TXLOG_LOG(priority, stream) \
     LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
@@ -26,6 +31,22 @@ static constexpr bool InterconnectUndeliveryBroken = true;
 void TLongTxServiceActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "TLongTxService [Node " << SelfId().NodeId() << "] ";
     RegisterLongTxServiceProbes();
+
+    Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
+
+    TSnapshotExchangeCounters snapshotExchangeCounters;
+    if (Settings.Counters) {
+        snapshotExchangeCounters.SnapshotsCollectionTimeMs = Settings.Counters->SnapshotsCollectionTimeMs;
+        snapshotExchangeCounters.SnapshotsPropagationTimeMs = Settings.Counters->SnapshotsPropagationTimeMs;
+        snapshotExchangeCounters.TimeSinceLastRemoteSnapshotsUpdateMs = Settings.Counters->TimeSinceLastRemoteSnapshotsUpdateMs;
+    }
+
+    auto* snapshotExchangeActor = CreateSnapshotExchangeActor(
+        LocalSnapshotsStorage,
+        RemoteSnapshotsStorage,
+        snapshotExchangeCounters);
+    SnapshotsExchangeActorId = RegisterWithSameMailbox(snapshotExchangeActor);
+
     Become(&TThis::StateWork);
 }
 
@@ -83,6 +104,9 @@ void TLongTxServiceActor::HandlePoison() {
         SessionSubscribeActor->PassAway();
         SessionSubscribeActor->Self = nullptr;
         SessionSubscribeActor = nullptr;
+    }
+    if (SnapshotsExchangeActorId) {
+        Send(SnapshotsExchangeActorId, new TKikimrEvents::TEvPoison());
     }
     PassAway();
 }
@@ -361,6 +385,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         auto& req = state.PendingUserRequests.emplace_back();
         req.Sender = ev->Sender;
         req.Cookie = ev->Cookie;
+        req.TableIds = std::move(msg->TableIds);
         req.Orbit = std::move(msg->Orbit);
     }
 
@@ -407,9 +432,22 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
+        const auto now = AppData()->TimeProvider->Now();
         for (auto& userReq : req->UserRequests) {
+            auto snapshotHandle = [&]() {
+                if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+                    TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds), now);
+                    NKqp::TSnapshotHandle snapshotHandle(snapshotInfo.AliveFlag);
+                    LocalSnapshotsStorage->Insert(std::move(snapshotInfo));
+
+                    return std::move(snapshotHandle);
+                } else {
+                    return NKqp::TSnapshotHandle{};
+                }
+            }();
+            
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
@@ -1070,6 +1108,57 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
     Y_UNUSED(ev);
+}
+
+void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
+    UpdateImmutableSnapshotsRegistry();
+    TXLOG_DEBUG("Scheduled next TEvSnapshotMaintenance event in "
+        << AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds() << " seconds");
+    Schedule(
+        TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds()),
+        new TEvPrivate::TEvSnapshotMaintenance());
+}
+
+void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {    
+    if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+        TXLOG_DEBUG("Snapshots locking is disabled, clearing local and remote snapshots storage");
+        LocalSnapshotsStorage->Clear();
+        RemoteSnapshotsStorage->Clear();
+        AppData()->SnapshotRegistryHolder->Set(nullptr);
+        return;
+    }
+
+    LocalSnapshotsStorage->CleanExpired();
+    if (!RemoteSnapshotsStorage->IsReady()) {
+        TXLOG_DEBUG("Remote snapshots storage is not ready, skipping update");
+        return;
+    }
+
+    auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
+    registryBuilder->SetSnapshotBorder(RemoteSnapshotsStorage->GetBorder());
+
+    size_t localSnapshotsCount = 0;
+    for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {
+        registryBuilder->AddSnapshot(snapshotInfo.TableIds, snapshotInfo.Snapshot);
+        ++localSnapshotsCount;
+    }
+
+    size_t remoteSnapshotsCount = 0;
+    for (const auto& remoteSnapshotInfo : RemoteSnapshotsStorage->View()) {
+        registryBuilder->AddSnapshot(
+            remoteSnapshotInfo.TableIds,
+            remoteSnapshotInfo.Snapshot);
+        ++remoteSnapshotsCount;
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->RemoteSnapshotsInRegistry->Set(remoteSnapshotsCount);
+    }
+
+    AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build().release());
+    TXLOG_DEBUG("Updated immutable snapshots registry. "
+        << "Local snapshots count: " << localSnapshotsCount
+        << ", Remote snapshots count: " << remoteSnapshotsCount);
 }
 
 } // namespace NLongTxService

@@ -15,6 +15,11 @@ namespace NLongTxService {
         TCounterPtr AcquireReadSnapshotInInFlight;
         TCounterPtr AcquireReadSnapshotOutInFlight;
 
+        TCounterPtr TimeSinceLastRemoteSnapshotsUpdateMs;
+        TCounterPtr RemoteSnapshotsInRegistry;
+        TCounterPtr SnapshotsCollectionTimeMs;
+        TCounterPtr SnapshotsPropagationTimeMs;
+
         explicit TLongTxServiceCounters(const TGroupPtr& group);
     };
 

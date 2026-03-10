@@ -1042,7 +1042,8 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryId, std::move(QueryState->Orbit));
+        TVector<ui64> tableIds;
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(tableIds), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
     }
 
@@ -1085,7 +1086,9 @@ public:
             return;
         }
         AcquireSnapshotSpan.EndOk();
+
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
+        QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();

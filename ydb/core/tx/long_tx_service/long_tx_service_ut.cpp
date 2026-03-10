@@ -1,13 +1,16 @@
 #include "long_tx_service.h"
 
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -29,7 +32,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             return res;
         }
 
-        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard) {
+        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard, size_t nodesCount = 2) {
+            TVector<TTenantTestConfig::TNodeConfig> nodes(nodesCount, {MakeDefaultTenantPoolConfig()});
             TTenantTestConfig res = {
                 // Domains {name, schemeshard {{ subdomain_names }}}
                 {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
@@ -42,7 +46,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 // CreateConsole
                 false,
                 // Nodes {tenant_pool_config}
-                {{
+                /*{{
                     // Node0
                     {
                         MakeDefaultTenantPoolConfig()
@@ -51,7 +55,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                     {
                         MakeDefaultTenantPoolConfig()
                     },
-                }},
+                }}*/nodes,
                 // DataCenterCount
                 1
             };
@@ -358,6 +362,93 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         // We expect multiple disconnects before unavailable result is returned
         UNIT_ASSERT_GE(disconnectCount, 3);
+    }
+
+    void RunSimpleSnapshotsTest(size_t nodesCount, bool hasTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        // Sleep a little, so there's at least one plan step generated
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+        }
+
+        const ui64 table = 1;
+        const ui64 otherTable = 2;
+
+        // Send an acquire read snapshot for node 1
+        NKqp::TSnapshotHandle handle;
+        TRowVersion snapshot;
+        {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<ui64>{table} : TVector<ui64>{})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+            handle = std::move(msg->SnapshotHandle);
+            snapshot = TRowVersion(msg->Record.GetSnapshotStep(), msg->Record.GetSnapshotTxId());
+        }
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+        }
+
+        SimulateSleep(runtime, TDuration::Minutes(1));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
+        }
+
+        SimulateSleep(runtime, TDuration::Minutes(3));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == !hasTable);
+        }
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot, snapshot));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev(), snapshot));
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot, snapshot.Next()));
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev(), snapshot.Next()));
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev().Prev(), snapshot.Next().Next()));
+
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Next(), snapshot.Next().Next()));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev().Prev(), snapshot.Prev()));
+        }
+
+        handle.Reset();
+
+        SimulateSleep(runtime, TDuration::Minutes(3));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SimpleSnapshotsSingleNode, HasTable) {
+        RunSimpleSnapshotsTest(1, HasTable);
+    }
+
+    Y_UNIT_TEST_TWIN(SimpleSnapshotsManyNodes, HasTable) {
+        RunSimpleSnapshotsTest(4, HasTable);
     }
 
 } // Y_UNIT_TEST_SUITE(LongTxService)

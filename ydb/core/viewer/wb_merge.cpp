@@ -1,5 +1,7 @@
 #include "wb_merge.h"
 
+#include <util/system/rwlock.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;

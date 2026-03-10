@@ -195,7 +195,7 @@ def extract_suite_group_chunk_from_run_name(arg_name: str) -> tuple[Optional[str
 
 
 def _status_bucket() -> dict[str, int]:
-    return {"errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
+    return {"total": 0, "passed": 0, "errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
 
 
 def _classify_failure(status: str, error_type: str, is_muted: bool) -> tuple[bool, bool, bool]:
@@ -214,6 +214,8 @@ def parse_report_chunks(
     dict[str, dict[str, dict[str, int]]],
     dict[str, dict[str, set[Any]]],
     dict[str, dict[Any, int]],
+    dict[tuple[str, Optional[str], int], int],
+    dict[str, int],
 ]:
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -252,6 +254,9 @@ def parse_report_chunks(
         bucket = ensure_suite(suite)[bucket_key]
         count_in_bucket = not (bucket_key == "tests" and is_suite_row)
         if count_in_bucket:
+            bucket["total"] += 1
+            if status_u in {"OK", "PASS"}:
+                bucket["passed"] += 1
             if timeout:
                 bucket["timeouts"] += 1
             if muted:
@@ -321,10 +326,27 @@ def parse_report_chunks(
         if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite_norm]:
             hid_to_chunk_idx_by_suite[suite_norm][hid] = idx
 
+    # Count tests per chunk: test rows (chunk=false) reference chunk via chunk_hid.
+    hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
+    for suite_raw, group, idx, meta in parsed_chunk_rows:
+        if meta.get("hid") is not None:
+            hid_to_chunk_key[meta["hid"]] = (suite_raw, group, idx)
+    tests_per_chunk: dict[tuple[str, Optional[str], int], int] = defaultdict(int)
+    tests_per_suite: dict[str, int] = defaultdict(int)
+    for item in results:
+        if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
+            continue
+        suite_raw = str(item.get("path", ""))
+        if suite_raw:
+            tests_per_suite[normalize_suite_path(suite_raw)] += 1
+        chunk_hid = item.get("chunk_hid")
+        if chunk_hid is not None and chunk_hid in hid_to_chunk_key:
+            tests_per_chunk[hid_to_chunk_key[chunk_hid]] += 1
+
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
         by_kind["tests"]["fails_total"] = by_kind["tests"]["errors"] + by_kind["tests"]["timeouts"]
-    return chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite
+    return chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite, dict(tests_per_chunk), dict(tests_per_suite)
 
 
 def build_test_event_times_by_suite(
@@ -1154,9 +1176,14 @@ def main() -> None:
     report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
     effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
 
-    chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite = parse_report_chunks(
+    chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite, tests_per_chunk, tests_per_suite = parse_report_chunks(
         args.report, args.suite_path
     )
+    tests_per_chunk_by_label: dict[str, int] = {}
+    for (suite_raw, group, idx), count in tests_per_chunk.items():
+        suite_norm = normalize_suite_path(suite_raw)
+        label = f"{suite_norm}::{group}/chunk{idx}" if group else f"{suite_norm}::chunk{idx}"
+        tests_per_chunk_by_label[label] = count
     report_runs = parse_report_runs_from_chunks(chunks, args.suite_path)
     evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
@@ -1255,6 +1282,7 @@ def main() -> None:
                 "suite_path",
                 "chunk",
                 "chunk_group",
+                "tests_in_chunk",
                 "run_start_sec",
                 "run_end_sec",
                 "run_start_utc",
@@ -1300,11 +1328,13 @@ def main() -> None:
                 else:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' report.json'
                 jq_evlog = f'jq -c --arg path "{path_esc}" \'select(.value.name != null and (.value.name | contains($path)))\' evlog.jsonl'
+                tests_in_chunk_val = tests_per_chunk.get((suite_raw, chunk_grp or None, chunk_idx), "")
                 w.writerow([
                     suite_raw,
                     r.get("suite_path", ""),
                     r.get("chunk", ""),
                     r.get("chunk_group") or "",
+                    tests_in_chunk_val if tests_in_chunk_val != "" else "",
                     round(start_sec, 3),
                     round(end_sec, 3),
                     _fmt_utc(start_sec),
@@ -1360,6 +1390,8 @@ def main() -> None:
             run_config=run_config,
             suite_event_times=suite_test_event_times,
             resources_overlay=resources_overlay,
+            tests_per_suite=tests_per_suite,
+            tests_per_chunk_by_label=tests_per_chunk_by_label,
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")

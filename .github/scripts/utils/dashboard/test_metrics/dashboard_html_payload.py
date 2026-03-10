@@ -37,6 +37,8 @@ def build_dashboard_payload(
     run_config: Optional[dict[str, Any]] = None,
     suite_event_times: Optional[dict[str, dict[str, list[float]]]] = None,
     resources_overlay: Optional[dict[str, Any]] = None,
+    tests_per_suite: Optional[dict[str, int]] = None,
+    tests_per_chunk_by_label: Optional[dict[str, int]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -314,4 +316,6 @@ def build_dashboard_payload(
         "ram_suite_trace_count": len(ram_tracks_suite),
         "cpu_chunk_trace_count": len(cpu_tracks) if by_chunk else 0,
         "ram_chunk_trace_count": len(ram_tracks) if by_chunk else 0,
+        "tests_per_suite": tests_per_suite or {},
+        "tests_per_chunk_by_label": tests_per_chunk_by_label or {},
     }

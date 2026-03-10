@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
@@ -117,10 +118,18 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
             }
         )
 
+    tests_per_suite: dict[str, int] = defaultdict(int)
+    for r in rows:
+        tests_per_suite[r["suite_path"]] += 1
+    for r in rows:
+        r["tests_in_suite"] = tests_per_suite[r["suite_path"]]
+
+    suite_summary = "; ".join(f"{s}: {c} tests" for s, c in sorted(tests_per_suite.items()))
     payload = {
         "suite_filter": suite_filter,
         "report_path": str(report_path),
         "rows_count": len(rows),
+        "suite_summary": suite_summary,
         "rows": rows,
     }
     html = f"""<!doctype html>
@@ -140,12 +149,13 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
     td pre {{ margin: 0; white-space: pre-wrap; word-break: break-word; max-width: 620px; }}
     #tbody tr {{ content-visibility: auto; contain-intrinsic-size: 28px; }}
     th:nth-child(1), td:nth-child(1) {{ width: 320px; }}
-    th:nth-child(2), td:nth-child(2) {{ width: 70px; }}
-    th:nth-child(3), td:nth-child(3) {{ width: 130px; }}
-    th:nth-child(4), td:nth-child(4) {{ width: 70px; }}
-    th:nth-child(5), td:nth-child(5) {{ width: 220px; }}
-    th:nth-child(6), td:nth-child(6) {{ width: 260px; }}
-    th:nth-child(22), td:nth-child(22) {{ width: 130px; }}
+    th:nth-child(2), td:nth-child(2) {{ width: 90px; }}
+    th:nth-child(3), td:nth-child(3) {{ width: 70px; }}
+    th:nth-child(4), td:nth-child(4) {{ width: 130px; }}
+    th:nth-child(5), td:nth-child(5) {{ width: 70px; }}
+    th:nth-child(6), td:nth-child(6) {{ width: 220px; }}
+    th:nth-child(7), td:nth-child(7) {{ width: 260px; }}
+    th:nth-child(23), td:nth-child(23) {{ width: 130px; }}
     .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
     .muted {{ color: #6a737d; }}
     .ok {{ color: #155724; }}
@@ -157,7 +167,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
 </head>
 <body>
   <h2>Report table: suite/chunk/test</h2>
-  <div class="muted">suite filter: {suite_filter or 'ALL SUITES'} | rows: <span id="rowsCount"></span></div>
+  <div class="muted">suite filter: {suite_filter or 'ALL SUITES'} | rows: <span id="rowsCount"></span> | <span id="suiteSummary"></span></div>
   <div class="toolbar">
     <label>Search:</label>
     <input id="q" type="text" placeholder="suite/test/subtest/status/tags" style="min-width: 360px;" />
@@ -192,6 +202,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
     const data = {json.dumps(payload, ensure_ascii=False)};
     const cols = [
       ['suite_path', 'suite_path'],
+      ['tests_in_suite', 'tests in suite'],
       ['chunk', 'chunk'],
       ['chunk_group', 'chunk_group'],
       ['chunk_idx', 'chunk_idx'],
@@ -277,6 +288,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
           suite_path: esc(r.suite_path),
           chunk: r.chunk ? 'true' : 'false',
           chunk_group: esc(r.chunk_group || ''),
+          tests_in_suite: String(r.tests_in_suite ?? ''),
           chunk_idx: r.chunk_idx == null ? '' : String(r.chunk_idx),
           test_name: esc(r.test_name || ''),
           subtest_name: esc(r.subtest_name || ''),
@@ -306,6 +318,8 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
         openMetricsPanel(idx);
       }}));
       document.getElementById('rowsCount').textContent = String(filtered.length);
+      const summaryEl = document.getElementById('suiteSummary');
+      if (summaryEl) summaryEl.textContent = data.suite_summary || ('total: ' + data.rows_count + ' tests');
     }}
 
     function openMetricsPanel(idx) {{

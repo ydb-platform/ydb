@@ -29,6 +29,8 @@ def build_html_dashboard(
     run_config: Optional[dict[str, Any]] = None,
     suite_event_times: Optional[dict[str, dict[str, list[float]]]] = None,
     resources_overlay: Optional[dict[str, Any]] = None,
+    tests_per_suite: Optional[dict[str, int]] = None,
+    tests_per_chunk_by_label: Optional[dict[str, int]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -41,6 +43,8 @@ def build_html_dashboard(
         run_config=run_config,
         suite_event_times=suite_event_times,
         resources_overlay=resources_overlay,
+        tests_per_suite=tests_per_suite,
+        tests_per_chunk_by_label=tests_per_chunk_by_label,
     )
 
     html = f"""<!doctype html>
@@ -192,8 +196,8 @@ def build_html_dashboard(
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>
       </ol>
       <ul>
-        <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>.</li>
-        <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests).</li>
+        <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
+        <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests, suite aggregate row excluded). <b>total</b> = all such rows, <b>passed</b> = status OK/PASS.</li>
         <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
         <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
         <li><b>skipped</b>: status <code>SKIP</code> or <code>SKIPPED</code>.</li>
@@ -285,6 +289,7 @@ def build_html_dashboard(
     </div>
   </details>
   <div id="activeChunks" class="wide"></div>
+  <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
@@ -439,6 +444,22 @@ def build_html_dashboard(
       let n = Number(v);
       if (!Number.isFinite(n)) n = Date.parse(String(v));
       return Number.isFinite(n) ? n : null;
+    }}
+    function activeCountAtTime(tDisplay) {{
+      const xs = data.xs_active;
+      const ys = data.ys_active;
+      if (!Array.isArray(xs) || !Array.isArray(ys) || xs.length === 0 || ys.length === 0) return null;
+      const targetSec = xFromDisplay(tDisplay);
+      if (!Number.isFinite(targetSec)) return null;
+      // Step function: count at t is ys[i] for the last i where xs[i] <= t (not "nearest" point).
+      let idx = -1;
+      for (let i = 0; i < xs.length; i++) {{
+        if (Number(xs[i]) <= targetSec) idx = i;
+        else break;
+      }}
+      if (idx < 0) return 0;
+      const v = Number(ys[idx]);
+      return Number.isFinite(v) ? Math.round(v) : null;
     }}
     function axisLayout(xsDisp) {{
       const msVals = Array.isArray(xsDisp) ? xsDisp.map(_toMs).filter(v => v != null) : [];
@@ -671,7 +692,7 @@ def build_html_dashboard(
       }}
 
       // Default: show suites with the highest non-chunk failures first.
-      let suggestionsSortCol = 19;  // test_fails_total
+      let suggestionsSortCol = 23;  // test_fails_total
       let suggestionsSortAsc = false;
 
       function getSuggestionsForScript() {{
@@ -1068,8 +1089,8 @@ def build_html_dashboard(
         'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size', 'ya_split_factor',
         'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
         'total_ram_gb', 'total_dur_sec', 'total_dur_report_sec', 'total_dur_evlog_sec', 'recommended_cpu', 'cpu_action',
-        'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_skipped', 'test_fails_total',
-        'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total',
+        'test_total', 'test_passed', 'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_skipped', 'test_fails_total',
+        'chunk_total', 'chunk_passed', 'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total',
         'max_parallel_self', 'max_parallel_self_at_sec',
         'peak_others_during_suite', 'peak_others_during_suite_at_sec',
         'peak_self_cpu_cores_during_suite', 'peak_self_cpu_at_sec',
@@ -1129,12 +1150,16 @@ def build_html_dashboard(
             (s.total_dur_evlog_sec != null ? Number(s.total_dur_evlog_sec).toFixed(1) : '') + ' s',
             cpuCell,
             actionCell(s.cpu_action || 'ok'),
+            String(s.test_total ?? ''),
+            String(s.test_passed ?? ''),
             String(s.test_errors || 0),
             String(s.test_timeouts || 0),
             String(s.test_muted || 0),
             String(s.test_muted_timeouts || 0),
             String(s.test_skipped || 0),
             String(s.test_fails_total || 0),
+            String(s.chunk_total ?? ''),
+            String(s.chunk_passed ?? ''),
             String(s.chunk_errors || 0),
             String(s.chunk_timeouts || 0),
             String(s.chunk_muted || 0),
@@ -1170,8 +1195,8 @@ def build_html_dashboard(
           '<th colspan="1">ram usage</th>' +
           '<th colspan="3">runtime (used / report / evlog)</th>' +
           '<th colspan="2">decision</th>' +
-          '<th colspan="6">status tests</th>' +
-          '<th colspan="5">status chunks</th>' +
+          '<th colspan="8">status tests</th>' +
+          '<th colspan="7">status chunks</th>' +
           '<th colspan="2">suite parallelism</th>' +
           '<th colspan="2">others during suite</th>' +
           '<th colspan="2">cpu_self_peak during suite</th>' +
@@ -1193,28 +1218,32 @@ def build_html_dashboard(
           '<th data-col="13" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog duration per run">total_dur_evlog_sec' + marker(13) + '</th>' +
           '<th data-col="14" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(14) + '</th>' +
           '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(15) + '</th>' +
-          '<th data-col="16" style="cursor:pointer;user-select:none;">errors' + marker(16) + '</th>' +
-          '<th data-col="17" style="cursor:pointer;user-select:none;">timeouts' + marker(17) + '</th>' +
-          '<th data-col="18" style="cursor:pointer;user-select:none;">muted' + marker(18) + '</th>' +
-          '<th data-col="19" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(19) + '</th>' +
-          '<th data-col="20" style="cursor:pointer;user-select:none;">skipped' + marker(20) + '</th>' +
-          '<th data-col="21" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(21) + '</th>' +
-          '<th data-col="22" style="cursor:pointer;user-select:none;">errors' + marker(22) + '</th>' +
-          '<th data-col="23" style="cursor:pointer;user-select:none;">timeouts' + marker(23) + '</th>' +
-          '<th data-col="24" style="cursor:pointer;user-select:none;">muted' + marker(24) + '</th>' +
-          '<th data-col="25" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(25) + '</th>' +
-          '<th data-col="26" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(26) + '</th>' +
-          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(27) + '</th>' +
-          '<th data-col="28" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(28) + '</th>' +
-          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(29) + '</th>' +
-          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(30) + '</th>' +
-          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(31) + '</th>' +
-          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(32) + '</th>' +
-          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(33) + '</th>' +
-          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(34) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;">total' + marker(16) + '</th>' +
+          '<th data-col="17" style="cursor:pointer;user-select:none;">passed' + marker(17) + '</th>' +
+          '<th data-col="18" style="cursor:pointer;user-select:none;">errors' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;">timeouts' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;">muted' + marker(20) + '</th>' +
+          '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
+          '<th data-col="22" style="cursor:pointer;user-select:none;">skipped' + marker(22) + '</th>' +
+          '<th data-col="23" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(23) + '</th>' +
+          '<th data-col="24" style="cursor:pointer;user-select:none;">total' + marker(24) + '</th>' +
+          '<th data-col="25" style="cursor:pointer;user-select:none;">passed' + marker(25) + '</th>' +
+          '<th data-col="26" style="cursor:pointer;user-select:none;">errors' + marker(26) + '</th>' +
+          '<th data-col="27" style="cursor:pointer;user-select:none;">timeouts' + marker(27) + '</th>' +
+          '<th data-col="28" style="cursor:pointer;user-select:none;">muted' + marker(28) + '</th>' +
+          '<th data-col="29" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(29) + '</th>' +
+          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(30) + '</th>' +
+          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(31) + '</th>' +
+          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(32) + '</th>' +
+          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(33) + '</th>' +
+          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(34) + '</th>' +
+          '<th data-col="35" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(35) + '</th>' +
+          '<th data-col="36" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(36) + '</th>' +
+          '<th data-col="37" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(37) + '</th>' +
+          '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(38) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 15, 21, 26, 28, 30, 32, 34]);
+        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 15, 23, 30, 32, 34, 36, 38]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');
@@ -1712,13 +1741,20 @@ def build_html_dashboard(
       if (!panel) return;
       const top = rows.slice(0, 100);
       const includeSynthetic = document.getElementById('includeSyntheticCb')?.checked ?? true;
+      const testsMap = data.by_chunk ? (data.tests_per_chunk_by_label || {{}}) : (data.tests_per_suite || {{}});
+      const testsFor = (name) => {{
+        const n = testsMap[name];
+        return (n !== undefined && n !== null) ? String(n) : '';
+      }};
       const htmlRows = top.map((r, i) => {{
         const isSynthetic = includeSynthetic && data.has_synthetic_metrics && data.track_has_synthetic && data.track_has_synthetic[r.name];
         const syntheticBadge = isSynthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '';
+        const testsCell = testsFor(r.name);
         return (
         '<tr>' +
           '<td>' + (i + 1) + '</td>' +
           '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;background:' + colorForTrack(r.name) + ';"></span>' + r.name + syntheticBadge + '</td>' +
+          '<td>' + (testsCell !== '' ? testsCell : '—') + '</td>' +
           '<td>' + formatValue(r.y, unit) + ' ' + unit + '</td>' +
         '</tr>'
         );
@@ -1750,13 +1786,18 @@ def build_html_dashboard(
         const totalActive = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
         totalsHtml =
           '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
-          '<b>Total active chunks:</b> ' + Math.round(totalActive) +
+          '<b>Tests (chunks) running at this time:</b> ' + Math.round(totalActive) +
           '</div>';
       }}
+      const runningCount = activeCountAtTime(t);
+      const runningLine = (runningCount != null)
+        ? '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;"><b>Tests (chunks) running at this time:</b> ' + runningCount + '</div>'
+        : '';
+      const summaryBlock = (unit === 'active') ? totalsHtml : (runningLine + totalsHtml);
       panel.innerHTML =
         '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
-        totalsHtml +
-        '<table><thead><tr><th>#</th><th>suite+chunk</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
+        summaryBlock +
+        '<table><thead><tr><th>#</th><th>suite+chunk</th><th>tests</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
     }}
 
     function attachSortedClick(plotId, panelId, unit) {{
@@ -1794,6 +1835,19 @@ def build_html_dashboard(
       yaxis: {{title: 'count'}},
       hovermode: 'x unified',
     }}, {{responsive: true}});
+    (function() {{
+      const plot = document.getElementById('activeChunks');
+      const panel = document.getElementById('activeChunksClick');
+      if (plot && panel) {{
+        plot.on('plotly_click', (ev) => {{
+          if (!ev || !ev.points || !ev.points.length) return;
+          const t = ev.points[0].x;
+          const y = Number(ev.points[0].y);
+          const n = Number.isFinite(y) ? Math.round(y) : activeCountAtTime(t);
+          panel.innerHTML = '<b>t=' + formatTimeLabel(t) + '</b>: ' + (n != null ? n + ' tests (chunks) running' : '—');
+        }});
+      }}
+    }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
       stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);

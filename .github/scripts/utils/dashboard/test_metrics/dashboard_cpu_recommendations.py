@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 
 def _status_bucket() -> dict[str, int]:
-    return {"errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
+    return {"total": 0, "passed": 0, "errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
 
 
 def _round_cpu_tier(cores: float) -> int:
@@ -370,11 +370,15 @@ def build_cpu_recommendations(
             "ya_cpu_cores": ya_cpu,
             "ya_ram_gb": ya_ram,
             "ya_size": ya_size,
+            "chunk_total": chunk_status.get("total", 0),
+            "chunk_passed": chunk_status.get("passed", 0),
             "chunk_errors": chunk_status["errors"],
             "chunk_timeouts": chunk_status["timeouts"],
             "chunk_muted": chunk_status["muted"],
             "chunk_muted_timeouts": chunk_status["muted_timeouts"],
             "chunk_fails_total": chunk_status["fails_total"],
+            "test_total": test_status.get("total", 0),
+            "test_passed": test_status.get("passed", 0),
             "test_errors": test_status["errors"],
             "test_timeouts": test_status["timeouts"],
             "test_muted": test_status["muted"],

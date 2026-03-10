@@ -147,6 +147,7 @@ private:
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
         std::unordered_set<std::uint32_t> SessionsToRemove;
+        std::deque<WrappedWriteSessionPtr> ClosedSessionsToRemove;
     };
 
     struct TMessagesWorker : public std::enable_shared_from_this<TMessagesWorker> {
@@ -265,11 +266,11 @@ private:
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
         std::optional<TContinuationToken> GetContinuationToken();
         std::optional<TSessionClosedEvent> GetSessionClosedEvent();
+        bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
-        bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
         bool TransferEventsToOutputQueue();
         void AddContinuationToken();
         bool AddSessionClosedIfNeeded();

@@ -205,7 +205,7 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
 NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
     auto minReadSnapshot = GetMinReadSnapshot();
     // all snapshots younger than minReadSnapshot may be considered as "potentially in flight".
-    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScapSnapshot],
+    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
     // so we will get a live snapshot at that moment.
     // that is said, we need here only snapshots that are older than minReadSnapshot.
     auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minReadSnapshot);

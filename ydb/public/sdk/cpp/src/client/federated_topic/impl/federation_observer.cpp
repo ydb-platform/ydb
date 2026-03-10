@@ -135,6 +135,9 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
+            LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG, TStringBuilder()
+                << "OnFederationDiscovery: Got error. Status: " << status.GetStatus()
+                << ". Description: " << status.GetIssues().ToOneLineString());
             LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS

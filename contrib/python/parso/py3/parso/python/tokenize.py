@@ -16,7 +16,7 @@ import re
 import itertools as _itertools
 from codecs import BOM_UTF8
 from typing import NamedTuple, Tuple, Iterator, Iterable, List, Dict, \
-    Pattern, Set
+    Pattern, Set, Any
 
 from parso.python.token import PythonTokenTypes
 from parso.utils import split_lines, PythonVersionInfo, parse_version_string
@@ -47,12 +47,12 @@ class TokenCollection(NamedTuple):
     endpats: Dict[str, Pattern]
     whitespace: Pattern
     fstring_pattern_map: Dict[str, str]
-    always_break_tokens: Tuple[str]
+    always_break_tokens: Set[str]
 
 
 BOM_UTF8_STRING = BOM_UTF8.decode('utf-8')
 
-_token_collection_cache: Dict[PythonVersionInfo, TokenCollection] = {}
+_token_collection_cache: Dict[Tuple[int, int], TokenCollection] = {}
 
 
 def group(*choices, capture=False, **kwargs):
@@ -249,7 +249,7 @@ class Token(NamedTuple):
 class PythonToken(Token):
     def __repr__(self):
         return ('TokenInfo(type=%s, string=%r, start_pos=%r, prefix=%r)' %
-                self._replace(type=self.type.name))
+                self._replace(type=self.type.name))  # type: ignore[arg-type]
 
 
 class FStringNode:
@@ -257,7 +257,7 @@ class FStringNode:
         self.quote = quote
         self.parentheses_count = 0
         self.previous_lines = ''
-        self.last_string_start_pos = None
+        self.last_string_start_pos: Any = None
         # In the syntax there can be multiple format_spec's nested:
         # {x:{y:3}}
         self.format_spec_count = 0
@@ -340,7 +340,7 @@ def _find_fstring_string(endpats, fstring_stack, line, lnum, pos):
 
 
 def tokenize(
-    code: str, *, version_info: PythonVersionInfo, start_pos: Tuple[int, int] = (1, 0)
+    code: str, *, version_info: Tuple[int, int], start_pos: Tuple[int, int] = (1, 0)
 ) -> Iterator[PythonToken]:
     """Generate tokens from a the source code (string)."""
     lines = split_lines(code, keepends=True)
@@ -363,7 +363,7 @@ def _print_tokens(func):
 def tokenize_lines(
     lines: Iterable[str],
     *,
-    version_info: PythonVersionInfo,
+    version_info: Tuple[int, int],
     indents: List[int] = None,
     start_pos: Tuple[int, int] = (1, 0),
     is_first_token=True,
@@ -444,7 +444,7 @@ def tokenize_lines(
                     if string:
                         yield PythonToken(
                             FSTRING_STRING, string,
-                            tos.last_string_start_pos,
+                            tos.last_string_start_pos,  # type: ignore[arg-type]
                             # Never has a prefix because it can start anywhere and
                             # include whitespace.
                             prefix=''
@@ -496,8 +496,8 @@ def tokenize_lines(
                 initial = token[0]
             else:
                 match = whitespace.match(line, pos)
-                initial = line[match.end()]
-                start = match.end()
+                initial = line[match.end()]  # type: ignore[union-attr]
+                start = match.end()  # type: ignore[union-attr]
                 spos = (lnum, start)
 
             if new_line and initial not in '\r\n#' and (initial != '\\' or pseudomatch is None):
@@ -512,12 +512,12 @@ def tokenize_lines(
             if not pseudomatch:  # scan for tokens
                 match = whitespace.match(line, pos)
                 if new_line and paren_level == 0 and not fstring_stack:
-                    yield from dedent_if_necessary(match.end())
-                pos = match.end()
+                    yield from dedent_if_necessary(match.end())  # type: ignore[union-attr]
+                pos = match.end()  # type: ignore[union-attr]
                 new_line = False
                 yield PythonToken(
                     ERRORTOKEN, line[pos], (lnum, pos),
-                    additional_prefix + match.group(0)
+                    additional_prefix + match.group(0)  # type: ignore[union-attr]
                 )
                 additional_prefix = ''
                 pos += 1
@@ -586,7 +586,7 @@ def tokenize_lines(
                     # backslash and is continued.
                     contstr_start = lnum, start
                     endprog = (endpats.get(initial) or endpats.get(token[1])
-                               or endpats.get(token[2]))
+                               or endpats.get(token[2]))  # type: ignore[assignment]
                     contstr = line[start:]
                     contline = line
                     break

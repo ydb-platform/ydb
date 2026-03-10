@@ -58,7 +58,7 @@ SRCS(
     viewer_autocomplete.h
     viewer_browse.h
     viewer_bscontrollerinfo.h
-    viewer_bsgroupinfo.h
+    viewer_bsgroupinfo.cpp
     viewer_capabilities.h
     viewer_check_access.h
     viewer_cluster.h
@@ -83,7 +83,7 @@ SRCS(
     viewer_labeled_counters.h
     viewer_metainfo.h
     viewer_netinfo.h
-    viewer_nodeinfo.h
+    viewer_nodeinfo.cpp
     viewer_nodelist.h
     viewer_nodes.h
     viewer_pdiskinfo.h

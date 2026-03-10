@@ -35,6 +35,7 @@ class ParallelWorkloadTestBase:
             ""))  # Path to yaml configuration
     event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
     ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
+    ydb_database = get_external_param('ydb-db', '/Root/db1').lstrip('/')
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self):
@@ -57,7 +58,7 @@ class ParallelWorkloadTestBase:
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:
-        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode)
+        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode, self.ydb_database)
 
     def execute_parallel_workloads_test(
         self,

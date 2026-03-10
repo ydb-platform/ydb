@@ -27,7 +27,7 @@ private:
         auto operator<=>(const TPortionKey& other) const {
             return std::tie(PathId, PortionId) <=> std::tie(other.PathId, other.PortionId);
         }
-        operator size_t() const {
+        explicit operator size_t() const {
             return CombineHashes(PathId, PortionId);
         }
     };

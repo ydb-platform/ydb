@@ -55,7 +55,7 @@ public:
         return End - Begin;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return CombineHashes(Begin, End);
     }
 
@@ -104,7 +104,7 @@ public:
         return TPortionBorderView(portionId, EBorder::LAST);
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return CombineHashes(PortionId, (ui64)Border);
     }
 
@@ -160,7 +160,7 @@ public:
         return End;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return CombineHashes((size_t)Begin, (size_t)End);
     }
 
@@ -206,7 +206,7 @@ public:
     {
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         size_t h = (size_t)MaxVersion;
         h = CombineHashes(h, (size_t)Interval);
         h = CombineHashes(h, PortionId);

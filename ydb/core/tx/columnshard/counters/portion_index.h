@@ -15,7 +15,7 @@ public:
     public:
         TPortionClass(const NOlap::TPortionInfo& portion);
 
-        operator size_t() const {
+        explicit operator size_t() const {
             return (ui64)Produced;
         }
     };

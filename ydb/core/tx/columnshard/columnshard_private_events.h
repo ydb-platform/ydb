@@ -152,7 +152,7 @@ struct TEvPrivate {
             {
             }
 
-            operator size_t() const {
+            explicit operator size_t() const {
                 ui64 h = 0;
                 h = CombineHashes(h, THash<NOlap::TPortionAddress>()(Portion));
                 h = CombineHashes(h, (size_t)Consumer);

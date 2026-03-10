@@ -504,7 +504,7 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
         result.KernelUserTimeout = result.DeadPeer != TDuration::Zero()
             ? result.DeadPeer
-            : TDuration::Seconds(10);
+            : NActors::DEFAULT_DEADPEER_TIMEOUT;
         // Keep kernel liveness approximately aligned to KernelUserTimeout while keeping the setup simple.
         // Target budget on idle links is:
         //   KernelKeepAliveIdle + KernelKeepAliveInterval * KernelKeepAliveProbes ~= KernelUserTimeout.

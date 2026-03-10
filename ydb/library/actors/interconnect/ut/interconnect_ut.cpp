@@ -298,13 +298,13 @@ ui64 MeasureIdleGeneratedPackets(bool enableKernelLiveness, bool withRdma) {
     return packetsAfter - packetsBefore;
 }
 
-void RunKernelLivenessMixedConfigFallback(bool withRdma) {
-    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessMixedConfigFallbackRdma")) {
+void RunKernelLivenessMixedConfigAsymmetric(bool withRdma, ui32 kernelLivenessNodeId) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessMixedConfigAsymmetricRdma")) {
         return;
     }
 
-    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
-        settings.EnableKernelLiveness = (nodeId == 2);
+    auto settingsCustomizer = [kernelLivenessNodeId](ui32 nodeId, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = (nodeId == kernelLivenessNodeId);
         settings.PingPeriod = TDuration::MilliSeconds(200);
     };
 
@@ -319,8 +319,10 @@ void RunKernelLivenessMixedConfigFallback(bool withRdma) {
         return recipientPtr->GetReceived() >= 1;
     }, "mixed cluster initial message delivery");
 
-    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
-    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 0ULL);
+    const ui64 node2Expected = kernelLivenessNodeId == 2 ? 1ULL : 0ULL;
+    const ui64 node1Expected = kernelLivenessNodeId == 1 ? 1ULL : 0ULL;
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), node2Expected);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), node1Expected);
 }
 
 void RunKernelLivenessSocketSetupFallback(bool withRdma) {
@@ -348,7 +350,7 @@ void RunKernelLivenessSocketSetupFallback(bool withRdma) {
     }, "socket-setup fallback initial message delivery");
 
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
-    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 0ULL);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
 }
 
 void RunKernelLivenessReducesIdlePackets(bool withRdma) {
@@ -573,7 +575,11 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {
-        RunKernelLivenessMixedConfigFallback(false);
+        RunKernelLivenessMixedConfigAsymmetric(false, 2);
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverse) {
+        RunKernelLivenessMixedConfigAsymmetric(false, 1);
     }
 
     Y_UNIT_TEST(KernelLivenessSocketSetupFallback) {
@@ -593,7 +599,11 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallbackRdma) {
-        RunKernelLivenessMixedConfigFallback(true);
+        RunKernelLivenessMixedConfigAsymmetric(true, 2);
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverseRdma) {
+        RunKernelLivenessMixedConfigAsymmetric(true, 1);
     }
 
     Y_UNIT_TEST(KernelLivenessSocketSetupFallbackRdma) {

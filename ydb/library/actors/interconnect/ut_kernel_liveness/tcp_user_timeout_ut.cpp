@@ -263,8 +263,14 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
         auto* sender21 = new TBlackholeFloodSenderActor(recipient21Id, messages, payloadSize);
         const TActorId sender21Id = cluster.RegisterActor(sender21, 1);
 
-        WaitForCondition(TDuration::Seconds(10), [&] {
-            return sender12->IsConnected() && sender21->IsConnected();
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            // NodeConnected notifications can briefly flap around reconnect races.
+            // Require that each sender has observed at least one connect and the current
+            // interconnect sockets are established on both directions.
+            return sender12->GetConnects() > 0 &&
+                sender21->GetConnects() > 0 &&
+                TryGetSessionSocketFd(cluster, 1, 2) >= 0 &&
+                TryGetSessionSocketFd(cluster, 2, 1) >= 0;
         }, "senders connected to peer");
 
         UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);

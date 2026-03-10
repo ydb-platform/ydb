@@ -932,7 +932,6 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
-                request.SetRequestKernelLiveness(MainChannel.IsKernelLivenessReady());
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1026,7 +1025,9 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
-                Params.UseKernelLiveness = success.GetUseKernelLiveness() && MainChannel.IsKernelLivenessReady();
+                // Kernel liveness mode is a local transport decision: it depends on whether this side
+                // configured keepalive/user-timeout on its own socket.
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -1076,7 +1077,7 @@ namespace NActors {
                 ProgramInfo.ConstructInPlace(); // successful handshake
             }
 
-            Params.UseKernelLiveness = Params.UseKernelLiveness && MainChannel.IsKernelLivenessReady();
+            Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
         }
 
         std::vector<NInterconnect::TAddress> ResolvePeer() {
@@ -1208,7 +1209,7 @@ namespace NActors {
                     PeerVirtualId = request.Header.SelfVirtualId;
                     NextPacketToPeer = ack->NextPacket;
                     Params = ack->Params;
-                    Params.UseKernelLiveness = Params.UseKernelLiveness && MainChannel.IsKernelLivenessReady();
+                    Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                     // only succeed in case when proxy returned valid SelfVirtualId; otherwise it wants us to terminate
                     // the handshake process and it does not expect the handshake reply
@@ -1324,7 +1325,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
-                Params.UseKernelLiveness = request.GetRequestKernelLiveness() && MainChannel.IsKernelLivenessReady();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1397,7 +1398,6 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
-                    success.SetUseKernelLiveness(Params.UseKernelLiveness);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;

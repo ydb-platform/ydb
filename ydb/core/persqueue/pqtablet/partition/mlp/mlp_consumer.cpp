@@ -965,7 +965,7 @@ void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
 }
 
 bool TConsumerActor::UseForReading() const {
-    return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout;
+    return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
 }
 
 void TConsumerActor::NotifyPQRB(bool force) {

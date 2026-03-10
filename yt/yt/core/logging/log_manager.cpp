@@ -1586,9 +1586,30 @@ TFiberMinLogLevelGuard::~TFiberMinLogLevelGuard()
 ////////////////////////////////////////////////////////////////////////////////
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
+    : TFiberMessageTagGuard(std::move(messageTag), EMode::Prepend)
+{ }
+
+TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag, EMode mode)
     : OldMessageTag_(std::move(GetThreadMessageTag()))
 {
-    SetThreadMessageTag(std::move(messageTag));
+    auto concatenateTags = [] (const std::string& lhs, const std::string& rhs) {
+        if (lhs.empty()) {
+            return rhs;
+        } else if (rhs.empty()) {
+            return lhs;
+        } else {
+            return lhs + ", " + rhs;
+        }
+    };
+
+    SetThreadMessageTag([&] {
+        switch (mode) {
+            case EMode::Replace:
+                return std::move(messageTag);
+            case EMode::Prepend:
+                return concatenateTags(messageTag, OldMessageTag_);
+        }
+    } ());
 }
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept

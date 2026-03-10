@@ -826,9 +826,23 @@ public:
         PassAway();
     }
 
+    // Mixed-version compatibility: old node may return no-body response without terminating CRLFCRLF.
+    void FixupLegacyNoBodyResponseHeaders(TString& responseTxt) const {
+        NHttp::THttpResponseParser parser(responseTxt);
+        const bool headersIncomplete = parser.HasHeaders() && !parser.HasCompletedHeaders();
+        const bool noBodyExpected = !parser.ExpectedBody();
+        if (headersIncomplete && noBodyExpected && !responseTxt.EndsWith("\r\n\r\n")) {
+            if (!responseTxt.EndsWith("\r\n")) {
+                responseTxt += "\r\n";
+            }
+            responseTxt += "\r\n";
+        }
+    }
+
     void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
         if (ev->Get()->Record.HasHttpResponse()) {
             TString responseTxt = ev->Get()->Record.GetHttpResponse();
+            FixupLegacyNoBodyResponseHeaders(responseTxt);
             NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
 
             if (responseObj->Status == "301" || responseObj->Status == "302") {

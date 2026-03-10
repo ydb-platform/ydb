@@ -14,6 +14,8 @@ message TReplyStatus {
         MISSING_RECORD = 7;
         OUTDATED = 8;
         OVERLOADED = 9;
+        UNDELIVERED = 10;
+        DISCONNECTED = 11;
     }
 }
 
@@ -138,6 +140,16 @@ message TEvWritePersistentBuffers {
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
     repeated TDDiskId PersistentBufferIds = 5;
+    uint32 ReplyTimeoutMicroseconds = 6;
+}
+
+message TEvWritePersistentBuffersResult {
+    message TResult {
+        TDDiskId PersistentBufferId = 1;
+        TEvWritePersistentBufferResult Result = 2;
+    }
+
+    repeated TResult Result = 1;
 }
 
 message TEvReadPersistentBuffer {

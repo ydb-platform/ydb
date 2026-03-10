@@ -34,6 +34,7 @@ namespace NKikimr::NDDisk {
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
             EvWritePersistentBuffers,
+            EvWritePersistentBuffersResult,
         };
     };
 
@@ -175,6 +176,7 @@ namespace NKikimr::NDDisk {
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvWritePersistentBuffers;
+    struct TEvWritePersistentBuffersResult;
     struct TEvReadPersistentBuffer;
     struct TEvReadPersistentBufferResult;
     struct TEvErasePersistentBuffer;
@@ -304,14 +306,23 @@ namespace NKikimr::NDDisk {
         }
     };
 
+    DECLARE_DDISK_EVENT(WritePersistentBuffersResult) {
+        TEvWritePersistentBuffersResult() {
+        }
+    };
+
     DECLARE_DDISK_EVENT(WritePersistentBuffers) {
+        using TResult = TEvWritePersistentBuffersResult;
+
         TEvWritePersistentBuffers() = default;
 
         TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                const TWriteInstruction& instruction, const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds) {
+                const TWriteInstruction& instruction, const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
+                ui32 replyTimeoutMicroseconds) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+            Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
             instruction.Serialize(Record.MutableInstruction());
             for (auto id : persistentBufferIds) {
                 auto* pbId = Record.AddPersistentBufferIds();

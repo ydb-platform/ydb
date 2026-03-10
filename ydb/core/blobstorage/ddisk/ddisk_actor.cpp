@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include "write_persistent_buffers_request_actor.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -133,8 +134,6 @@ namespace NKikimr::NDDisk {
             hFunc(TEvBatchErasePersistentBuffer, handleQuery)
             hFunc(TEvListPersistentBuffer, handleQuery)
 
-            hFunc(TEvWritePersistentBuffers, Handle)
-
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)
 
@@ -161,6 +160,11 @@ namespace NKikimr::NDDisk {
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
+
+            case TEvWritePersistentBuffers::EventType: {
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TWritePersistentBuffersRequest()));
+                break;
+            }
         )
     }
 

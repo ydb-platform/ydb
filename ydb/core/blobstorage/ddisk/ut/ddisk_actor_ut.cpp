@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         auto pbs = std::vector<std::tuple<ui32, ui32, ui32>>{{NodeId, disk1.PDiskId, disk1.SlotId}, {NodeId, disk2.PDiskId, disk2.SlotId}, {NodeId, disk3.PDiskId, disk3.SlotId}};
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffers>(creds, selector, lsn, NDDisk::TWriteInstruction(0)
-            , pbs);
+            , pbs, 1000);
         write->AddPayload(TRope(payload));
         SendToDDisk(ctx, disk1.ServiceId, write.release());
         for (auto disk : {disk1, disk2, disk3}) {
@@ -453,10 +453,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         }
 
-        for (auto _ : {disk1, disk2, disk3}) {
-            auto writeResult = ctx.Runtime.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(
-                ctx.Edge, false);
-            AssertStatus(writeResult, TReplyStatus::OK);
+        auto writeResult = ctx.Runtime.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBuffersResult>(
+            ctx.Edge, false);
+        UNIT_ASSERT(writeResult->Get()->Record.ResultSize() == 3);
+        for (ui32 i = 0; i < writeResult->Get()->Record.ResultSize(); i++) {
+            auto& wr = writeResult->Get()->Record.GetResult(i);
+            UNIT_ASSERT(wr.GetResult().GetStatus() == TReplyStatus::OK);
+
         }
         for (auto disk : {disk1, disk2, disk3}) {
             creds = Connect(ctx, disk.ServiceId, 40, 1);

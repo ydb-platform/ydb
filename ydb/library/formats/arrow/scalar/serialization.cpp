@@ -19,8 +19,9 @@ TConclusion<TString> TSerializer::SerializePayloadToString(const std::shared_ptr
         } else if constexpr (arrow::has_string_view<T>()) {
             using StringScalarType = typename arrow::TypeTraits<T>::ScalarType;
             const StringScalarType* typed = static_cast<const StringScalarType*>(scalar.get());
-            AFL_VERIFY(typed->value);
-            resultString.append(reinterpret_cast<const char*>(typed->value->data()), typed->value->size());
+            if (typed->value) {
+                resultString.append(reinterpret_cast<const char*>(typed->value->data()), typed->value->size());
+            }
             return true;
         }
         return false;

@@ -6,7 +6,7 @@ import string
 import argparse 
 import random
 from hamcrest import assert_that, is_
-import yatest.common
+# import yatest.common
 import os
 
 def stream_to_parquet_pyarrow(output_file, total_rows=1_000, chunk_size=100_000):
@@ -66,61 +66,31 @@ def stream_to_parquet_pyarrow(output_file, total_rows=1_000, chunk_size=100_000)
         writer.close()
 
 
-def a_lot_of_skip_index_ddl(output_file, total_ddl_statements, index_type):
+def a_lot_of_skip_index_ddl(output_folder, total_ddl_statements, index_type):
+    num_files = 1000
+    statements_per_file = (total_ddl_statements + num_files - 1) // num_files
 
+    # base, ext = os.path.splitext(output_file)
+    base = output_folder
+    os.makedirs(base, exist_ok=True)
+
+    for file_idx in range(num_files):
+        start = file_idx * statements_per_file
+        end = min(start + statements_per_file, total_ddl_statements)
+        if start >= total_ddl_statements:
+            break
+        file_path = f"{base}/{file_idx:04d}.sql"
+        with open(file_path, 'w') as f:
+            for i in range(start, end):
+                if index_type == "minmax":
+                    f.write(f"ALTER OBJECT `/Root/testdb/log_writer_test` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_c{i}_minmax, TYPE=MINMAX, FEATURES=`{{\"column_name\" : \"c{i}\"}}`);\n")
+                elif index_type == "bloom":
+                    f.write(f"ALTER OBJECT `/Root/testdb/log_writer_test` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_c{i}_bloom_filter, TYPE=BLOOM_FILTER, FEATURES=`{{\"column_name\" : \"c{i}\",  \"false_positive_probability\" : 0.01}}`);\n")
+                else:
+                    raise ValueError(f"Invalid index type: {index_type}")
+        print(f"Written {file_path} ({end - start} statements)")
     
 
-    with open(output_file, 'w') as f:
-        for i in range(total_ddl_statements):
-            if index_type == "minmax":
-                f.write(f"ALTER OBJECT `/Root/testdb/log_writer_test` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_c{i}_minmax, TYPE=MINMAX, FEATURES=`{{\"column_name\" : \"c{i}\"}}`);\n")
-            elif index_type == "bloom":
-                f.write(f"ALTER OBJECT `/Root/testdb/log_writer_test` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_c{i}_bloom_filter, TYPE=BLOOM_FILTER, FEATURES=`{{\"column_name\" : \"c{i}\",  \"false_positive_probability\" : 0.01}}`);\n")
-            else:
-                raise ValueError(f"Invalid index type: {index_type}")
-
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
-
-
-def run_cli(argv):
-    return yatest.common.execute(
-        [
-            ydb_bin(),
-            "--endpoint",
-            "grpc://" + os.getenv("YDB_ENDPOINT"),
-            "--database",
-            "/" + os.getenv("YDB_DATABASE"),
-        ] + argv
-    )
-
-
-
-def run_log_import(string_cols, int_cols, rows):
-    
-    ret = run_cli([
-        "workload","log", "init", "--clear", "--store", "column","--str-cols", str(string_cols), "--int-cols", str(int_cols), "--key-cols", "5","--len", "15",  "--ttl", "60", "--null-percent", "90"])
-    assert_that(ret.exit_code, is_(0))
-
-    total_columns = int(int_cols) + int(string_cols)
-    calls = 100
-    assert_that(total_columns % calls, is_(0))
-    for i in range(calls):
-        stmt = ""
-        for j in range(total_columns // calls):
-            col_num = i * (total_columns // calls) + j
-            stmt += f"ALTER OBJECT `/Root/testdb/log_writer_test` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_c{col_num}_minmax, TYPE=MINMAX, FEATURES=`{{\"column_name\" : \"c{col_num}\"}}`);\n"
-        ret = run_cli(
-            ["sql", "-s", stmt]
-        )
-        assert_that(ret.exit_code, is_(0), f"Failed to add minmax index to columns {i} of {calls}")
-
-    ret = run_cli([
-        "workload","log", "import", "--bulk-size", "100", "generator", "--key-cols", "5","--len", "15", "--str-cols", str(string_cols), "--int-cols", str(int_cols), "--rows", str(rows)]
-    )
-    assert_that(ret.exit_code, is_(0))
 
 
 def main(args=None):
@@ -131,7 +101,7 @@ def main(args=None):
     # Subparser for "yaem-ddl"
     ddl_parser = subparsers.add_parser("yaem-ddl", help="Generate a lot of MINMAX DDL statements")
     ddl_parser.add_argument("--cols", type=int, required=True, help="Number of columns to generate DDL for. since statement is identical for int and string columns, pass summ of int and srtings here")
-    ddl_parser.add_argument("--output", "-o", required=True, help="output DDL file path")
+    ddl_parser.add_argument("--output", "-o", required=True, help="output DDL folder path")
     ddl_parser.add_argument(
         "--index", 
         type=str, 
@@ -144,17 +114,11 @@ def main(args=None):
     big_parquet.add_argument("--output", "-o", required=True, help="output parquet(csv and others are not supported) file path")
     big_parquet.add_argument("--rows", "-r", required=True, help="output row count")
 
-    log_import = subparsers.add_parser("log-import", help="run import for worload log to test minmaxi index effect on compaction speed")
-    log_import.add_argument("--strings", type=int, required=True, help="Number of string columns in log scheme. string size is 15 chars")
-    log_import.add_argument("--ints", type=int, required=True, help="Number of ui64 columns in log scheme.")
-    log_import.add_argument("--rows", type=int, required=True, help="Number of rows to import.")
     args = parser.parse_args()
     if args.command == "yaem-ddl":
         a_lot_of_skip_index_ddl(args.output, int(args.cols), args.index)
     elif args.command == "big-parquet":
         stream_to_parquet_pyarrow(args.output, total_rows=int(args.rows), chunk_size=1_000_000)
-    elif args.command == "log-import":
-        run_log_import(args.strings, args.ints, args.rows)
     else:   
         parser.print_help()
     return

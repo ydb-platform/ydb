@@ -62,6 +62,7 @@ inline TKeyPair Deserialize(TStringBuf data, const std::shared_ptr<arrow::DataTy
 }   // namespace NArrowProtocol
 
 inline bool cmp(NKikimr::NKernels::EOperation op , const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    Errs("calling arrow function %s with args: left: %s, right: %s\n", ToString(op), left->type->ToString(), right->type->ToString());
     arrow::Datum res = VALUE_OR_VERIFY(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
     return res.scalar_as<arrow::BooleanScalar>().value;
 }
@@ -90,7 +91,6 @@ public:
     }
 
 private:
-    mutable std::shared_ptr<arrow::DataType> MinMaxType;
     using TBase = TSkipIndex;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
@@ -135,8 +135,8 @@ protected:
                 }
             }
         }
-        MinMaxType = thisChunkIndex.Max->type;
         AFL_VERIFY(thisChunkIndex.Max->type->Equals(thisChunkIndex.Min->type));
+        Errs("serializing index of type: %s\n", thisChunkIndex.Max->type->ToString());
 
         auto serializedIndex = NArrowProtocol::Serialize(thisChunkIndex);
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, serializedIndex.size(), serializedIndex) };
@@ -206,7 +206,7 @@ public:
             return false;
         }
         auto typedId = (*dataTypeResult)->id();
-        return arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId);
+        return (arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId)) && !(typedId==arrow::Type::TIMESTAMP /*not supported yet, see gh35699*/);
     }
 
     virtual TString GetClassName() const override {

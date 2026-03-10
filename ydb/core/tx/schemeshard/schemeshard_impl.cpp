@@ -5,7 +5,7 @@
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
 #include "schemeshard.h"
-#include "schemeshard__domain_shred_manager.h"
+#include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
 
@@ -581,8 +581,8 @@ void TSchemeShard::Clear() {
         ForcedCompactionQueue->Clear();
     }
 
-    if (DomainShredManager) {
-        DomainShredManager->Clear();
+    if (RootShredManager) {
+        RootShredManager->Clear();
     }
     if (TenantShredManager) {
         TenantShredManager->Clear();
@@ -2495,8 +2495,8 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::StoragePools>().Key(pathId.LocalPathId, pool.GetName(), pool.GetKind()).Delete();
         }
 
-        if (DomainShredManager && DomainShredManager->Remove(pathId)) {
-            db.Table<Schema::ShredGenerations>().Key(DomainShredManager->GetGeneration()).Update<Schema::ShredGenerations::Status>(DomainShredManager->GetStatus());
+        if (RootShredManager && RootShredManager->Remove(pathId)) {
+            db.Table<Schema::ShredGenerations>().Key(RootShredManager->GetGeneration()).Update<Schema::ShredGenerations::Status>(RootShredManager->GetStatus());
             db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
@@ -6261,7 +6261,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
     if (IsDomainSchemeShard) {
-        DomainShredManager->HandleDisconnect(tabletId, clientId, ctx);
+        RootShredManager->HandleDisconnect(tabletId, clientId, ctx);
     }
     TenantShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
@@ -6315,7 +6315,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
     if (IsDomainSchemeShard) {
-        DomainShredManager->HandleDisconnect(tabletId, clientId, ctx);
+        RootShredManager->HandleDisconnect(tabletId, clientId, ctx);
     }
     TenantShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
@@ -8453,23 +8453,23 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorCo
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const TActorContext &ctx) {
-    if (!DomainShredManager) {
+    if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShred in tenant schemeshard: " << TabletID());
         return;
     } 
-    DomainShredManager->WakeupToRunShred(ev, ctx);
+    RootShredManager->WakeupToRunShred(ev, ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvShredInfoRequest, at schemeshard: " << TabletID());
-    if (!DomainShredManager) {
+    if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvShredInfoRequest in tenant schemeshard: " << TabletID());
         return;
     }
     NKikimrScheme::TEvShredInfoResponse::EStatus status = NKikimrScheme::TEvShredInfoResponse::UNSPECIFIED;
 
-    switch (DomainShredManager->GetStatus()) {
+    switch (RootShredManager->GetStatus()) {
     case EShredStatus::UNSPECIFIED:
         status = NKikimrScheme::TEvShredInfoResponse::UNSPECIFIED;
         break;
@@ -8483,7 +8483,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const T
         status = NKikimrScheme::TEvShredInfoResponse::IN_PROGRESS_BSC;
         break;
     }
-    ctx.Send(ev->Sender, new TEvSchemeShard::TEvShredInfoResponse(DomainShredManager->GetGeneration(), status));
+    ctx.Send(ev->Sender, new TEvSchemeShard::TEvShredInfoResponse(RootShredManager->GetGeneration(), status));
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr&, const TActorContext& ctx) {
@@ -8491,7 +8491,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr&, c
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvShredManualStartupRequest in tenant schemeshard: " << TabletID());
         return;
     }
-    RunDomainShred();
+    RunRootShred();
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx) {
@@ -8513,7 +8513,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TAc
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!DomainShredManager) {
+    if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvTenantShredResponse in tenant schemeshard: " << TabletID());
         return;
     }
@@ -8523,7 +8523,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, cons
 void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvControllerShredResponse, at schemeshard: " << TabletID());
-    if (!DomainShredManager) {
+    if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvControllerShredResponse in tenant schemeshard: " << TabletID());
         return;
     }
@@ -8531,11 +8531,11 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext& ctx) {
-    if (!DomainShredManager) {
+    if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShredBSC in tenant schemeshard: " << TabletID());
         return;
     }
-    DomainShredManager->WakeupSendRequestToBSC();
+    RootShredManager->WakeupSendRequestToBSC();
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
@@ -8746,10 +8746,10 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
 
 void TSchemeShard::ConfigureShredManager(const NKikimrConfig::TDataErasureConfig& config) {
     if (IsDomainSchemeShard) {
-        if (DomainShredManager) {
-            DomainShredManager->UpdateConfig(config);
+        if (RootShredManager) {
+            RootShredManager->UpdateConfig(config);
         } else {
-            DomainShredManager = MakeHolder<TDomainShredManager>(this, config);
+            RootShredManager = MakeHolder<TRootShredManager>(this, config);
         }
     }
     if (TenantShredManager) {
@@ -8762,22 +8762,22 @@ void TSchemeShard::ConfigureShredManager(const NKikimrConfig::TDataErasureConfig
 void TSchemeShard::StartStopShred() {
     if (EnableShred) {
         if (IsDomainSchemeShard) {
-            DomainShredManager->Start();
+            RootShredManager->Start();
         }
         TenantShredManager->Start();
     } else {
         if (IsDomainSchemeShard) {
-            DomainShredManager->Stop();
+            RootShredManager->Stop();
         }
         TenantShredManager->Stop();
     }
 }
 
-void TSchemeShard::InitDomainShred() {
+void TSchemeShard::InitRootShred() {
     Execute(CreateTxShredManagerInit(), this->ActorContext());
 }
 
-void TSchemeShard::RunDomainShred() {
+void TSchemeShard::RunRootShred() {
     Execute(CreateTxRunShred(), this->ActorContext());
 }
 

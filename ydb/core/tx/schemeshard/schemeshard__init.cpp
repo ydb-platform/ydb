@@ -1,4 +1,4 @@
-#include "schemeshard__domain_shred_manager.h"
+#include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_index_build_info.h"
@@ -1936,7 +1936,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read Running shred
         {
             if (Self->IsDomainSchemeShard) {
-                if (!Self->DomainShredManager->Restore(db)) {
+                if (!Self->RootShredManager->Restore(db)) {
                     return false;
                 }
             }

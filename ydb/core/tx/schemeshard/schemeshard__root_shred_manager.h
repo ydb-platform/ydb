@@ -18,7 +18,7 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
-class TDomainShredManager {
+class TRootShredManager {
 private:
 using TQueue = NOperationQueue::TOperationQueueWithTimer<
     TPathId,
@@ -29,13 +29,13 @@ using TQueue = NOperationQueue::TOperationQueueWithTimer<
 
     class TStarter : public TQueue::IStarter {
     public:
-        TStarter(TDomainShredManager* const manager);
+        TStarter(TRootShredManager* const manager);
 
         NOperationQueue::EStartStatus StartOperation(const TPathId&) override;
         void OnTimeout(const TPathId&) override;
 
     private:
-        TDomainShredManager* const Manager;
+        TRootShredManager* const Manager;
     };
 
 private:
@@ -63,7 +63,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletedTenantsCounter;
 
 public:
-    TDomainShredManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
+    TRootShredManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
 
     void UpdateConfig(const NKikimrConfig::TDataErasureConfig& config);
     void Start();

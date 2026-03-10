@@ -16,7 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -199,10 +199,14 @@ namespace {
         return settings;
     }
 
+<<<<<<< HEAD
     NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
+=======
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
-        return CreatePqNativeGateway(NYql::TPqGatewayServices(
+        return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
             nullptr,
@@ -256,7 +260,6 @@ namespace {
         S3GatewayConfig = queryServiceConfig.GetS3();
 
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
-        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
@@ -326,13 +329,17 @@ namespace {
             YtGatewayConfig,
             YtGateway,
             SolomonGatewayConfig,
-            SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
+<<<<<<< HEAD
             PqGateway,
             ActorSystemPtr,
+=======
+            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
+            ActorSystemPtr
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
         };
 
         // Init DatabaseAsyncResolver only if all requirements are met

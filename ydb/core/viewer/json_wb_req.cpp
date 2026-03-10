@@ -88,8 +88,12 @@ void InitViewerBSGroupInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonBSGroupInfo::TResponseType>());
+<<<<<<< HEAD
     jsonHandlers.AddHandler("/viewer/bsgroupinfo", new TJsonHandler<TJsonBSGroupInfo>(yaml));
     TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
+=======
+    jsonHandlers.AddHandler("/viewer/bsgroupinfo", new THttpHandler<TJsonBSGroupInfo>(yaml));
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
 }
 
 void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -101,8 +105,12 @@ void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonNodeInfo::TResponseType>());
+<<<<<<< HEAD
     jsonHandlers.AddHandler("/viewer/nodeinfo", new TJsonHandler<TJsonNodeInfo>(yaml));
     TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
+=======
+    jsonHandlers.AddHandler("/viewer/nodeinfo", new THttpHandler<TJsonNodeInfo>(yaml));
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
 }
 
 void InitViewerPDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -228,4 +236,4 @@ void InitViewerVDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/vdiskinfo", new TJsonHandler<TJsonVDiskInfo>(yaml));
 }
 
-}
+} // namespace NKikimr::NViewer

@@ -311,7 +311,7 @@ private:
 };
 
 template <typename TDerived>
-class TActionActorBase : public TActorBootstrapped<TDerived> {
+class TActionActorBase : public TActorBootstrapped<TDerived>, public IActorExceptionHandler {
     using TBase = TActorBootstrapped<TDerived>;
 
 public:
@@ -323,6 +323,11 @@ public:
     TActionActorBase(const TString& operationName, const TString& workingDir, const TString& queryName)
         : TActionActorBase(operationName, JoinPath({workingDir, queryName}))
     {}
+
+    bool OnUnhandledException(const std::exception& e) final {
+        FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unhandled exception: " << e.what());
+        return true;
+    }
 
 protected:
     // Do action before finish, return true if there is required action to perform
@@ -598,25 +603,24 @@ public:
         const auto& response = ev->Get()->Record;
         const auto ssStatus = response.GetSchemeShardStatus();
         const auto status = ev->Get()->Status();
-        const auto txId = response.GetTxId();
+        TxId = response.GetTxId();
+        SchemeShardTabletId = response.GetSchemeShardTabletId();
 
         LOG_D("Got propose transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType()) << " response"
             << ", Status: " << status
             << ", SchemeShardStatus: " << NKikimrScheme::EStatus_Name(ssStatus)
-            << ", TxId: " << txId);
+            << ", TxId: " << TxId
+            << ", SchemeShardTabletId: " << SchemeShardTabletId);
 
         switch (status) {
             case NTxProxy::TResultStatus::ExecInProgress: {
-                if (txId == 0) {
+                if (TxId == 0) {
                     FatalError(Ydb::StatusIds::INTERNAL_ERROR, ExtractIssues(response, ssStatus, "unable to subscribe on creation transaction"));
                     return;
                 }
 
                 Become(&TExecuteTransactionSchemeActor::StateFuncWaitCompletion);
-                SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId()));
-                NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
-
-                LOG_D("Subscribe on scheme tx: " << txId);
+                OpenPipeClientAndWaitCompletion();
                 break;
             }
             case NTxProxy::TResultStatus::ExecAlready:
@@ -633,6 +637,7 @@ public:
             case NTxProxy::TResultStatus::ProxyNotReady:
             case NTxProxy::TResultStatus::ProxyShardTryLater:
             case NTxProxy::TResultStatus::ProxyShardNotAvailable: {
+                LOG_W("Retry scheme transaction error: " << status << ", tablet id: " << SchemeShardTabletId << ", tx id: " << TxId);
                 ScheduleRetry(response, TStringBuilder() << "proxy shard not available " << status);
                 break;
             }
@@ -700,6 +705,7 @@ public:
                         break;
                     }
                 }
+                break;
             }
             default: {
                 FatalError(Ydb::StatusIds::SCHEME_ERROR, ExtractIssues(response, ssStatus, TStringBuilder() << "unexpected transaction status " << status));
@@ -713,6 +719,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, HandleWaitCompletion);
             hFunc(TEvTabletPipe::TEvClientDestroyed, HandleWaitCompletion);
             hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleWaitCompletion);
+            sFunc(TEvents::TEvWakeup, OpenPipeClientAndWaitCompletion);
             IgnoreFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             default:
                 StateFuncBase(ev);
@@ -720,6 +727,11 @@ public:
     }
 
     void HandleWaitCompletion(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (SchemePipeActorId != ev->Get()->ClientId) {
+            // Pipe outdated
+            return;
+        }
+
         if (const auto status = ev->Get()->Status; status != NKikimrProto::OK) {
             FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Pipe to tablet is not connected: " << NKikimrProto::EReplyStatus_Name(status) << " " << ev->Get()->ToString());
             return;
@@ -729,19 +741,27 @@ public:
     }
 
     void HandleWaitCompletion(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Pipe to tablet unexpectedly destroyed " << ev->Get()->ToString());
+        if (SchemePipeActorId != ev->Get()->ClientId) {
+            // Pipe already closed
+            return;
+        }
+
+        ClosePipeClient();
+
+        if (!TBase::ScheduleRetry("Pipe to tablet destroyed")) {
+            FatalError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Retry limit exceeded, pipe to tablet destroyed " << ev->Get()->ToString());
+        }
     }
 
     void HandleWaitCompletion(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_D("Scheme transaction " << ev->Get()->Record.GetTxId() << " successfully finished");
+        const auto completedTxId = ev->Get()->Record.GetTxId();
+        Y_VALIDATE(completedTxId == TxId, "Unexpected completed tx id: " << completedTxId << ", expected tx: " << TxId);
+        LOG_D("Scheme transaction " << completedTxId << " successfully finished");
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
     void PassAway() final {
-        if (SchemePipeActorId) {
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-        }
-
+        ClosePipeClient();
         TBase::PassAway();
     }
 
@@ -761,13 +781,30 @@ protected:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status) final {
-        if (SchemePipeActorId) {
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-        }
+        ClosePipeClient();
         Send(Owner, new TEvPrivate::TEvExecuteSchemeTransactionResult(status, std::move(Issues)));
     }
 
 private:
+    void OpenPipeClientAndWaitCompletion() {
+        Y_VALIDATE(!SchemePipeActorId, "Pipe client is not closed before wait completion");
+
+        SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), SchemeShardTabletId, NTabletPipe::TClientRetryPolicy{
+            .RetryLimitCount = 10,
+            .MaxRetryTime = TDuration::Seconds(5),
+        }));
+        NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
+
+        LOG_D("Subscribe on scheme tx: " << TxId << " on scheme shard: " << SchemeShardTabletId << ", pipe id: " << SchemePipeActorId);
+    }
+
+    void ClosePipeClient() {
+        if (SchemePipeActorId) {
+            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
+            SchemePipeActorId = {};
+        }
+    }
+
     void ScheduleRetry(const NKikimrTxUserProxy::TEvProposeTransactionStatus& response, const TString& message, bool longDelay = false) {
         const auto ssStatus = response.GetSchemeShardStatus();
         if (!TBase::ScheduleRetry(ExtractIssues(response, ssStatus, message), longDelay)) {
@@ -789,6 +826,8 @@ private:
 
 private:
     const NKikimrSchemeOp::TModifyScheme SchemeTx;
+    ui64 SchemeShardTabletId = 0;
+    ui64 TxId = 0;
     TActorId SchemePipeActorId;
 };
 

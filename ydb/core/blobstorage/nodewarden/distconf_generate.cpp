@@ -428,9 +428,9 @@ namespace NKikimr::NStorage {
             return s.Str();
         };
 
-        TString error;
+        NBsController::TGroupMapperError error;
         if (!mapper.AllocateGroup(groupId, groupDefinition, replacedDisks, forbid, requiredSpace, false, error)) {
-            throw TExConfigError() << "group allocation failed Error# " << error
+            throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
 

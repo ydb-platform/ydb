@@ -1,6 +1,6 @@
 # system_tablet_backup_config
 
-Механизм [резервного копирования системных таблеток](../../devops/backup-and-recovery/system-tablet-backup.md) обеспечивает инкрементальное копирование метаданных кластера — таких как [Hive](../../concepts/glossary.md#hive), [BSController](../../concepts/glossary.md#bs-controller) и [SchemeShard](../../concepts/glossary.md#scheme-shard) — на локальную файловую систему хостов кластера. Поведение резервного копирования конфигурируется в секции `system_tablet_backup_config` конфигурации {{ ydb-short-name }}.
+Механизм [резервного копирования системных таблеток](../../devops/backup-and-recovery/system-tablet-backup.md) обеспечивает инкрементальное копирование метаданных кластера — таких как [Hive](../../concepts/glossary.md#hive), [BSController](../../concepts/glossary.md#ds-controller) и [SchemeShard](../../concepts/glossary.md#scheme-shard) — на локальную файловую систему хостов кластера. Поведение резервного копирования конфигурируется в секции `system_tablet_backup_config` конфигурации {{ ydb-short-name }}.
 
 ## Синтаксис
 

@@ -170,10 +170,10 @@ public:
             {
                 // liburing itself will decide if it should enter the kernel
                 struct io_uring_cqe* waitCqe = nullptr;
-                io_uring_wait_cqe(Owner.Ring, &waitCqe);
+                io_uring_wait_cqe(Owner.Ring.get(), &waitCqe);
             }
 
-            io_uring_for_each_cqe(Owner.Ring, head, cqe) {
+            io_uring_for_each_cqe(Owner.Ring.get(), head, cqe) {
                 void* data = io_uring_cqe_get_data(cqe);
                 if (data == &StopCqeMarker) {
                     ++count;
@@ -195,7 +195,7 @@ public:
             }
 
             if (count > 0) {
-                io_uring_cq_advance(Owner.Ring, count);
+                io_uring_cq_advance(Owner.Ring.get(), count);
             }
         }
 
@@ -217,7 +217,7 @@ TUringRouter::TUringRouter(FHANDLE fd, TActorSystem* actorSystem, TUringRouterCo
     , Ring(new struct io_uring())
 {
     TUringRouterConfig effectiveConfig = Config;
-    int ret = InitRingWithFallback(Ring, Config, &effectiveConfig);
+    int ret = InitRingWithFallback(Ring.get(), Config, &effectiveConfig);
     Y_ABORT_UNLESS(ret == 0, "io_uring_queue_init_params failed after fallbacks: %s (errno %d)", strerror(-ret), -ret);
     Config = effectiveConfig;
 }
@@ -228,7 +228,7 @@ TUringRouter::~TUringRouter() {
 
 std::expected<void, int> TUringRouter::RegisterFile() {
     int fd = Fd;
-    int ret = io_uring_register_files(Ring, &fd, 1);
+    int ret = io_uring_register_files(Ring.get(), &fd, 1);
     if (ret == 0) {
         FixedFdIndex = 0;
         return {};
@@ -237,7 +237,7 @@ std::expected<void, int> TUringRouter::RegisterFile() {
 }
 
 std::expected<void, int> TUringRouter::RegisterBuffers(const struct iovec* iovs, unsigned count) {
-    int ret = io_uring_register_buffers(Ring, iovs, count);
+    int ret = io_uring_register_buffers(Ring.get(), iovs, count);
     if (ret == 0) {
         BuffersRegistered = true;
         return {};
@@ -252,7 +252,7 @@ void TUringRouter::Start() {
 }
 
 struct io_uring_sqe* TUringRouter::GetSqe() {
-    return io_uring_get_sqe(Ring);
+    return io_uring_get_sqe(Ring.get());
 }
 
 void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op) {
@@ -346,7 +346,7 @@ void TUringRouter::Flush() {
     //    the kernel-visible *sq->ktail stays stale.
     // 2. Calls io_uring_enter() when needed: always for non-SQPOLL,
     //    and only for SQPOLL wakeup when IORING_SQ_NEED_WAKEUP is set.
-    io_uring_submit(Ring);
+    io_uring_submit(Ring.get());
 }
 
 void TUringRouter::Stop() {
@@ -358,7 +358,7 @@ void TUringRouter::Stop() {
         // Submit a stop marker that will complete only after all previously
         // submitted operations (including those not yet flushed) are complete.
         while (true) {
-            struct io_uring_sqe* sqe = io_uring_get_sqe(Ring);
+            struct io_uring_sqe* sqe = io_uring_get_sqe(Ring.get());
             if (sqe) {
                 io_uring_prep_nop(sqe);
                 sqe->flags |= IOSQE_IO_DRAIN;
@@ -366,26 +366,25 @@ void TUringRouter::Stop() {
                 break;
             }
 
-            int ret = io_uring_submit(Ring);
+            int ret = io_uring_submit(Ring.get());
             Y_ABORT_UNLESS(ret >= 0, "io_uring_submit failed in Stop while reserving marker SQE: %s (errno %d)",
                 strerror(-ret), -ret);
         }
 
-        int ret = io_uring_submit(Ring);
+        int ret = io_uring_submit(Ring.get());
         Y_ABORT_UNLESS(ret >= 0, "io_uring_submit failed in Stop: %s (errno %d)", strerror(-ret), -ret);
 
         Poller->Join();
         Poller.reset();
     }
 
-    io_uring_queue_exit(Ring);
-    delete Ring;
-    Ring = nullptr;
+    io_uring_queue_exit(Ring.get());
+    Ring.reset();
 }
 
 ui32 TUringRouter::SubmitItemsLeft() const {
     Y_DEBUG_ABORT_UNLESS(Ring, "SubmitItemsLeft() called after Stop()");
-    return io_uring_sq_space_left(Ring);
+    return io_uring_sq_space_left(Ring.get());
 }
 
 bool TUringRouter::IsFileRegistered() const {

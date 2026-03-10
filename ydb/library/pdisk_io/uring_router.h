@@ -148,8 +148,7 @@ private:
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
 
-    // we intentionally use a naked pointer to simplify the code
-    struct io_uring* Ring;
+    std::unique_ptr<struct io_uring> Ring;
 
     int FixedFdIndex = -1; // -1 means fd is not registered
     bool BuffersRegistered = false;

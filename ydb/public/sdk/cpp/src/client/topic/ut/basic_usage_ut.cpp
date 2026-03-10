@@ -68,6 +68,60 @@ std::string Serialize(const TExample& value) {
     return value.Payload;
 }
 
+// Reads exactly expectedCount messages from the topic and asserts that within each partition
+// messages are ordered by seqNo (strictly increasing). Uses provided client, topic path and consumer.
+void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
+                                         const std::string& topicPath,
+                                         const std::string& consumerName,
+                                         size_t expectedCount,
+                                         TDuration timeout = TDuration::Seconds(30)) {
+    struct TMessageInfo {
+        ui64 PartitionId;
+        ui64 SeqNo;
+    };
+    std::vector<TMessageInfo> messages;
+    messages.reserve(expectedCount);
+    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(consumerName)
+        .AppendTopics(topicPath);
+
+    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+        for (auto& msg : ev.GetMessages()) {
+            messages.push_back({
+                msg.GetPartitionSession()->GetPartitionId(),
+                msg.GetSeqNo(),
+            });
+            msg.Commit();
+        }
+        if (messages.size() >= expectedCount) {
+            donePromise.SetValue();
+        }
+    });
+
+    auto readSession = client.CreateReadSession(readSettings);
+    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    readSession->Close(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
+        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
+
+    // Group by partition and check seqNo is strictly increasing per partition
+    std::map<ui64, std::vector<ui64>> byPartition;
+    for (const auto& m : messages) {
+        byPartition[m.PartitionId].push_back(m.SeqNo);
+    }
+    for (const auto& [partitionId, seqNos] : byPartition) {
+        for (size_t i = 1; i < seqNos.size(); ++i) {
+            UNIT_ASSERT_C(seqNos[i] > seqNos[i - 1],
+                "Partition " << partitionId << ": expected seqNo strictly increasing, got "
+                << seqNos[i - 1] << " then " << seqNos[i] << " at index " << i);
+        }
+    }
+}
+
 // Write a message with binary (non-UTF8) producer ID using direct tablet communication
 // This bypasses gRPC string validation by sending directly to the PQ tablet
 // The SourceId field in TCmdWrite is defined as 'bytes' in protobuf, so it supports binary data
@@ -1721,6 +1775,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), 100);
     }
 
     Y_UNIT_TEST(TypedProducer_BasicWrite) {

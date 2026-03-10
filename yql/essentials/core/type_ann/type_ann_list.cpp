@@ -8266,6 +8266,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(lambda->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (lambda->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder()
                 << "Expend Stream as output type of lambda, but got : " << *lambda->GetTypeAnn()));

@@ -1,6 +1,11 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
+FORK_TEST_FILES()
+SPLIT_FACTOR(30)
+
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_generic_provider_ut.cpp

@@ -9,7 +9,7 @@ namespace NYql {
 class TStructuredTokenBuilder {
 public:
     TStructuredTokenBuilder();
-    explicit TStructuredTokenBuilder(const TStructuredToken& data);
+    explicit TStructuredTokenBuilder(TStructuredToken data);
     TStructuredTokenBuilder(TStructuredTokenBuilder&&) = default;
 
     TStructuredTokenBuilder& SetServiceAccountIdAuth(const TString& accountId, const TString& accountIdSignature);

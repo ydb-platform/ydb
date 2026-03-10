@@ -5,6 +5,8 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -165,7 +167,7 @@ UDF_IMPL(TIncrementWithCounters,
 
 class TGenericAsStruct: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;
@@ -236,7 +238,7 @@ private:
 class TLogging: public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
-        : Logger_(logger)
+        : Logger_(std::move(logger))
         , Component_(component)
     {
     }

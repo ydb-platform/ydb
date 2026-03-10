@@ -1,13 +1,15 @@
 #include "translator.h"
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 namespace {
 
 class TDummyTranslator: public ITranslator {
 public:
-    explicit TDummyTranslator(const TString& name)
-        : Name_(name)
+    explicit TDummyTranslator(TString name)
+        : Name_(std::move(name))
     {
     }
 

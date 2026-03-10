@@ -3,14 +3,16 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <deque>
 #include <map>
-#include <unordered_map>
-#include <unordered_set>
+
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -164,8 +166,9 @@ public:
     TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
+    bool DLQEmpty() const;
     std::deque<TDLQMessage> GetDLQMessages();
-    const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
+    const absl::flat_hash_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
@@ -193,7 +196,8 @@ public:
     size_t Compact();
     void MoveBaseDeadline();
 
-    TBatch GetBatch();
+    TBatch ExtractBatch();
+    bool IsBatchEmpty() const;
 
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
@@ -251,10 +255,10 @@ private:
 
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;
-    std::unordered_set<ui32> LockedMessageGroupsId;
+    absl::flat_hash_set<ui32> LockedMessageGroupsId;
     std::deque<TDLQMessage> DLQQueue;
     // offset->seqNo
-    std::unordered_map<ui64, ui64> DLQMessages;
+    absl::flat_hash_map<ui64, ui64> DLQMessages;
 
     TBatch Batch;
     TMetrics Metrics;

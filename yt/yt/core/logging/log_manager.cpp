@@ -269,7 +269,7 @@ public:
         DequeueExecutor_->ScheduleOutOfBand();
 
         if (sync) {
-            future.Get().ThrowOnError();
+            future.BlockingGet().ThrowOnError();
         }
 
         DefaultConfigured_.store(false);

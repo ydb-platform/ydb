@@ -1,6 +1,9 @@
 #pragma once
 #include "fetching.h"
 
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
+
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -21,7 +24,8 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    TActorId DuplicatesManager = TActorId();
+    mutable TSpinLock DuplicatesManagerLock;
+    NActors::TActorId DuplicatesManager = NActors::TActorId();
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -75,7 +79,8 @@ public:
     void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    const TActorId& GetDuplicatesManagerVerified() const {
+    NActors::TActorId GetDuplicatesManagerVerified() const {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
         AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
@@ -88,6 +93,8 @@ public:
         if (NActors::TActorSystem::IsStopped()) {
             return;
         }
+
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
         AFL_VERIFY(!DuplicatesManager);
     }
 };

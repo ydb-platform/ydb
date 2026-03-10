@@ -44,14 +44,11 @@ TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
-    TVector<NBsController::TDDiskId> ddiskIds,
-    TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
-    ui32 blockSize,
-    ui64 blocksCount,
-    ui32 storageMedia,
-    const NProto::TStorageConfig& storageConfig,
+    std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
+    const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
+    , Region(std::move(region))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(
@@ -59,28 +56,19 @@ TFastPathService::TFastPathService(
           storageConfig.GetDDiskPoolName(),
           tabletId))
 {
-    if (storageMedia == NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY) {
-        DirectBlockGroup = std::make_shared<
-            NStorage::NPartitionDirect::TInMemoryDirectBlockGroup>(
-            tabletId,
-            generation,
-            std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            blockSize,
-            blocksCount);
-    } else {
-        DirectBlockGroup =
-            std::make_shared<NStorage::NPartitionDirect::TDirectBlockGroup>(
-                ActorSystem,
-                tabletId,
-                generation,
-                std::move(ddiskIds),
-                std::move(persistentBufferDDiskIds),
-                blockSize,
-                blocksCount);
-    }
+    Y_UNUSED(generation);
+    Y_UNUSED(ActorSystem);
+}
 
-    DirectBlockGroup->EstablishConnections();
+NWilson::TTraceId TFastPathService::SpanTrace()
+{
+    return NWilson::TTraceId::NewTraceIdThrottled(
+        15,                           // verbosity
+        4095,                         // timeToLive
+        LastTraceTs,                  // atomic counter for throttling
+        NActors::TMonotonic::Now(),   // current monotonic time
+        TraceSamplePeriod             // 100ms between samples
+    );
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -88,19 +76,13 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
     with_lock (Lock) {
-        auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
-            15,                           // verbosity
-            4095,                         // timeToLive
-            LastTraceTs,                  // atomic counter for throttling
-            NActors::TMonotonic::Now(),   // current monotonic time
-            TraceSamplePeriod             // 100ms between samples
-        );
+        auto traceId = SpanTrace();
 
         Counters.RequestStarted(
             EBlockStoreRequest::ReadBlocks,
             request->Range.Size() * BlockSize);
 
-        auto result = DirectBlockGroup->ReadBlocksLocal(
+        auto result = Region->ReadBlocksLocal(
             std::move(callContext),
             std::move(request),
             std::move(traceId));
@@ -138,7 +120,7 @@ TFastPathService::WriteBlocksLocal(
             EBlockStoreRequest::WriteBlocks,
             request->Range.Size() * BlockSize);
 
-        auto result = DirectBlockGroup->WriteBlocksLocal(
+        auto result = Region->WriteBlocksLocal(
             std::move(callContext),
             std::move(request),
             std::move(traceId));

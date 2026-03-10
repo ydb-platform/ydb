@@ -64,26 +64,42 @@ struct TAlignedBuf {
 };
 
 // Completion op that signals a TManualEvent
-struct TTestOp : TUringOperation {
+struct TTestOp : TUringOperationBase {
     TManualEvent* Event = nullptr;
 
-    static void SignalComplete(TUringOperation* op, TActorSystem*) noexcept {
-        static_cast<TTestOp*>(op)->Event->Signal();
+    void OnComplete(TActorSystem*) noexcept override {
+        if (Event) {
+            Event->Signal();
+        }
+    }
+
+    void OnDrop() noexcept override {
+        if (Event) {
+            Event->Signal();
+        }
     }
 };
 
 // Completion op that increments an atomic counter and signals when target reached
-struct TCountingOp : TUringOperation {
+struct TCountingOp : TUringOperationBase {
     std::atomic<int>* Counter = nullptr;
     int Target = 0;
     TManualEvent* Event = nullptr;
 
-    static void CountComplete(TUringOperation* op, TActorSystem*) noexcept {
-        auto* self = static_cast<TCountingOp*>(op);
-        int val = self->Counter->fetch_add(1, std::memory_order_relaxed) + 1;
-        if (val >= self->Target) {
-            self->Event->Signal();
+    void CountAndMaybeSignal() noexcept {
+        Y_ABORT_UNLESS(Counter);
+        int val = Counter->fetch_add(1, std::memory_order_relaxed) + 1;
+        if (Event && val >= Target) {
+            Event->Signal();
         }
+    }
+
+    void OnComplete(TActorSystem*) noexcept override {
+        CountAndMaybeSignal();
+    }
+
+    void OnDrop() noexcept override {
+        CountAndMaybeSignal();
     }
 };
 
@@ -94,6 +110,21 @@ struct TCountingOp : TUringOperation {
             return; \
         } \
     } while (false)
+
+void AssertSuccess(const std::expected<void, int>& result) {
+    UNIT_ASSERT_C(result.has_value(),
+        TStringBuilder() << "operation failed with errno=" << result.error());
+}
+
+void PrepareWriteOp(TUringOperationBase& op, void* buf, ui32 size, ui64 offset) {
+    op.SetOperationType(TUringOperationBase::EWRITE);
+    op.PrepareIov(buf, size, offset);
+}
+
+void PrepareReadOp(TUringOperationBase& op, void* buf, ui32 size, ui64 offset) {
+    op.SetOperationType(TUringOperationBase::EREAD);
+    op.PrepareIov(buf, size, offset);
+}
 
 void DoCreateAndDestroy(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
@@ -112,7 +143,7 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
     if (registerFile) {
-        UNIT_ASSERT(router.RegisterFile());
+        AssertSuccess(router.RegisterFile());
         UNIT_ASSERT(router.IsFileRegistered());
     }
     router.Start();
@@ -125,13 +156,13 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
 
     TManualEvent writeEv;
     TTestOp writeOp;
-    writeOp.OnComplete = TTestOp::SignalComplete;
     writeOp.Event = &writeEv;
 
-    UNIT_ASSERT(router.Write(writeBuf.Data(), size, 0, &writeOp));
+    PrepareWriteOp(writeOp, writeBuf.Data(), size, 0);
+    UNIT_ASSERT(router.Write(&writeOp));
     router.Flush();
     writeEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(writeOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
     // Read back
     TAlignedBuf readBuf(size);
@@ -139,13 +170,13 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
 
     TManualEvent readEv;
     TTestOp readOp;
-    readOp.OnComplete = TTestOp::SignalComplete;
     readOp.Event = &readEv;
 
-    UNIT_ASSERT(router.Read(readBuf.Data(), size, 0, &readOp));
+    PrepareReadOp(readOp, readBuf.Data(), size, 0);
+    UNIT_ASSERT(router.Read(&readOp));
     router.Flush();
     readEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(readOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
     router.Stop();
@@ -157,7 +188,7 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr int N = 8;
@@ -175,18 +206,18 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
         TCountingOp ops[N];
         for (int i = 0; i < N; ++i) {
             memset(writeBufs[i].Data(), (ui8)(i + 1), size);
-            ops[i].OnComplete = TCountingOp::CountComplete;
             ops[i].Counter = &counter;
             ops[i].Target = N;
             ops[i].Event = &allDone;
 
-            UNIT_ASSERT(router.Write(writeBufs[i].Data(), size, i * size, &ops[i]));
+            PrepareWriteOp(ops[i], writeBufs[i].Data(), size, i * size);
+            UNIT_ASSERT(router.Write(&ops[i]));
         }
         router.Flush();
         allDone.WaitI();
 
         for (int i = 0; i < N; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(ops[i].Result, (i32)size);
+            UNIT_ASSERT_VALUES_EQUAL(ops[i].GetResult(), (i32)size);
         }
     }
 
@@ -202,18 +233,18 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
         TCountingOp ops[N];
         for (int i = 0; i < N; ++i) {
             memset(readBufs[i].Data(), 0, size);
-            ops[i].OnComplete = TCountingOp::CountComplete;
             ops[i].Counter = &counter;
             ops[i].Target = N;
             ops[i].Event = &allDone;
 
-            UNIT_ASSERT(router.Read(readBufs[i].Data(), size, i * size, &ops[i]));
+            PrepareReadOp(ops[i], readBufs[i].Data(), size, i * size);
+            UNIT_ASSERT(router.Read(&ops[i]));
         }
         router.Flush();
         allDone.WaitI();
 
         for (int i = 0; i < N; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(ops[i].Result, (i32)size);
+            UNIT_ASSERT_VALUES_EQUAL(ops[i].GetResult(), (i32)size);
             UNIT_ASSERT(memcmp(writeBufs[i].Data(), readBufs[i].Data(), size) == 0);
         }
     }
@@ -229,7 +260,7 @@ void DoSubmitQueueFull(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -241,9 +272,9 @@ void DoSubmitQueueFull(TUringRouterConfig config) {
     int submitted = 0;
 
     for (int i = 0; i < 5; ++i) {
-        ops[i].OnComplete = TTestOp::SignalComplete;
         ops[i].Event = &events[i];
-        if (router.Write(buf.Data(), size, 0, &ops[i])) {
+        PrepareWriteOp(ops[i], buf.Data(), size, 0);
+        if (router.Write(&ops[i])) {
             ++submitted;
         }
     }
@@ -275,38 +306,36 @@ void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
     memset(readBuf.Data(), 0, size);
 
     // Register file and buffers before Start()
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
 
     struct iovec iovs[2];
     iovs[0].iov_base = writeBuf.Data();
     iovs[0].iov_len = size;
     iovs[1].iov_base = readBuf.Data();
     iovs[1].iov_len = size;
-    UNIT_ASSERT(router.RegisterBuffers(iovs, 2));
+    AssertSuccess(router.RegisterBuffers(iovs, 2));
 
     router.Start();
 
     // WriteFixed using buffer index 0
     TManualEvent writeEv;
     TTestOp writeOp;
-    writeOp.OnComplete = TTestOp::SignalComplete;
     writeOp.Event = &writeEv;
 
     UNIT_ASSERT(router.WriteFixed(writeBuf.Data(), size, 0, /*bufIndex=*/0, &writeOp));
     router.Flush();
     writeEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(writeOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
     // ReadFixed using buffer index 1
     TManualEvent readEv;
     TTestOp readOp;
-    readOp.OnComplete = TTestOp::SignalComplete;
     readOp.Event = &readEv;
 
     UNIT_ASSERT(router.ReadFixed(readBuf.Data(), size, 0, /*bufIndex=*/1, &readOp));
     router.Flush();
     readEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(readOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
     router.Stop();
@@ -321,7 +350,7 @@ void DoSubmitItemsLeft(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Initially all slots should be available
@@ -336,9 +365,9 @@ void DoSubmitItemsLeft(TUringRouterConfig config) {
     TTestOp ops[N];
     TManualEvent events[N];
     for (int i = 0; i < N; ++i) {
-        ops[i].OnComplete = TTestOp::SignalComplete;
         ops[i].Event = &events[i];
-        UNIT_ASSERT(router.Write(buf.Data(), size, 0, &ops[i]));
+        PrepareWriteOp(ops[i], buf.Data(), size, 0);
+        UNIT_ASSERT(router.Write(&ops[i]));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(router.SubmitItemsLeft(), queueDepth - N);
@@ -366,7 +395,7 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
     constexpr ui32 size = 256 * 1024; // 256 KB
     f.Resize(size);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Write 256K of a pattern
@@ -377,13 +406,13 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
 
     TManualEvent writeEv;
     TTestOp writeOp;
-    writeOp.OnComplete = TTestOp::SignalComplete;
     writeOp.Event = &writeEv;
 
-    UNIT_ASSERT(router.Write(writeBuf.Data(), size, 0, &writeOp));
+    PrepareWriteOp(writeOp, writeBuf.Data(), size, 0);
+    UNIT_ASSERT(router.Write(&writeOp));
     router.Flush();
     writeEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(writeOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
     // Read it back
     TAlignedBuf readBuf(size);
@@ -391,13 +420,13 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
 
     TManualEvent readEv;
     TTestOp readOp;
-    readOp.OnComplete = TTestOp::SignalComplete;
     readOp.Event = &readEv;
 
-    UNIT_ASSERT(router.Read(readBuf.Data(), size, 0, &readOp));
+    PrepareReadOp(readOp, readBuf.Data(), size, 0);
+    UNIT_ASSERT(router.Read(&readOp));
     router.Flush();
     readEv.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(readOp.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
     router.Stop();
@@ -409,7 +438,7 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -427,13 +456,13 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
 
         TManualEvent ev;
         TTestOp op;
-        op.OnComplete = TTestOp::SignalComplete;
         op.Event = &ev;
 
-        UNIT_ASSERT(router.Write(writeBufs[i].Data(), size, offsets[i], &op));
+        PrepareWriteOp(op, writeBufs[i].Data(), size, offsets[i]);
+        UNIT_ASSERT(router.Write(&op));
         router.Flush();
         ev.WaitI();
-        UNIT_ASSERT_VALUES_EQUAL(op.Result, (i32)size);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
     }
 
     // Read back each offset and verify
@@ -443,13 +472,13 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
 
         TManualEvent ev;
         TTestOp op;
-        op.OnComplete = TTestOp::SignalComplete;
         op.Event = &ev;
 
-        UNIT_ASSERT(router.Read(readBuf.Data(), size, offsets[i], &op));
+        PrepareReadOp(op, readBuf.Data(), size, offsets[i]);
+        UNIT_ASSERT(router.Read(&op));
         router.Flush();
         ev.WaitI();
-        UNIT_ASSERT_VALUES_EQUAL(op.Result, (i32)size);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
         UNIT_ASSERT(memcmp(writeBufs[i].Data(), readBuf.Data(), size) == 0);
     }
 
@@ -462,7 +491,7 @@ void DoDoubleStop(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Explicit stop, then destructor calls Stop() again -- must not crash
@@ -477,7 +506,7 @@ void DoFlushWithNothingPending(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Flush on an empty ring must not crash or hang
@@ -491,13 +520,13 @@ void DoFlushWithNothingPending(TUringRouterConfig config) {
 
     TManualEvent ev;
     TTestOp op;
-    op.OnComplete = TTestOp::SignalComplete;
     op.Event = &ev;
 
-    UNIT_ASSERT(router.Write(buf.Data(), size, 0, &op));
+    PrepareWriteOp(op, buf.Data(), size, 0);
+    UNIT_ASSERT(router.Write(&op));
     router.Flush();
     ev.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(op.Result, (i32)size);
+    UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
 
     router.Stop();
 }
@@ -511,7 +540,7 @@ void DoErrorResultPropagation(TUringRouterConfig config) {
     f.Resize(fileSize);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 ioSize = 4096;
@@ -525,14 +554,14 @@ void DoErrorResultPropagation(TUringRouterConfig config) {
 
     TManualEvent ev;
     TTestOp op;
-    op.OnComplete = TTestOp::SignalComplete;
     op.Event = &ev;
 
-    UNIT_ASSERT(router.Write(buf.Data(), ioSize, badOffset, &op));
+    PrepareWriteOp(op, buf.Data(), ioSize, badOffset);
+    UNIT_ASSERT(router.Write(&op));
     router.Flush();
     ev.WaitI();
     // The kernel should have rejected this; Result should be negative errno
-    UNIT_ASSERT_LT(op.Result, 0);
+    UNIT_ASSERT_LT(op.GetResult(), 0);
 
     router.Stop();
 }
@@ -544,7 +573,7 @@ void DoStopAfterFlush(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -556,9 +585,9 @@ void DoStopAfterFlush(TUringRouterConfig config) {
     TTestOp ops[N];
     TManualEvent events[N];
     for (int i = 0; i < N; ++i) {
-        ops[i].OnComplete = TTestOp::SignalComplete;
         ops[i].Event = &events[i];
-        UNIT_ASSERT(router.Write(buf.Data(), size, 0, &ops[i]));
+        PrepareWriteOp(ops[i], buf.Data(), size, 0);
+        UNIT_ASSERT(router.Write(&ops[i]));
     }
     router.Flush();
 
@@ -573,7 +602,7 @@ void DoStopWithoutFlush(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -585,9 +614,9 @@ void DoStopWithoutFlush(TUringRouterConfig config) {
     TTestOp ops[N];
     TManualEvent events[N];
     for (int i = 0; i < N; ++i) {
-        ops[i].OnComplete = TTestOp::SignalComplete;
         ops[i].Event = &events[i];
-        UNIT_ASSERT(router.Write(buf.Data(), size, 0, &ops[i]));
+        PrepareWriteOp(ops[i], buf.Data(), size, 0);
+        UNIT_ASSERT(router.Write(&ops[i]));
     }
 
     // Stop without flush.  Must not crash or deadlock.
@@ -595,16 +624,22 @@ void DoStopWithoutFlush(TUringRouterConfig config) {
 }
 
 // Completion op that signals "entered" then blocks until "proceed" is signaled or times out
-struct TBlockingOp : TUringOperation {
+struct TBlockingOp : TUringOperationBase {
     TManualEvent* EnteredEvent = nullptr;
     TManualEvent* ProceedEvent = nullptr;
 
-    static void BlockingComplete(TUringOperation* op, TActorSystem*) noexcept {
-        auto* self = static_cast<TBlockingOp*>(op);
+    void OnComplete(TActorSystem*) noexcept override {
         // Signal to the main thread that we've entered the callback
-        self->EnteredEvent->Signal();
+        if (EnteredEvent) {
+            EnteredEvent->Signal();
+        }
         // Block inside the callback until proceed is signaled or timeout (200 ms)
-        self->ProceedEvent->WaitT(TDuration::MilliSeconds(200));
+        if (ProceedEvent) {
+            ProceedEvent->WaitT(TDuration::MilliSeconds(200));
+        }
+    }
+
+    void OnDrop() noexcept override {
     }
 };
 
@@ -615,7 +650,7 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -625,11 +660,11 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     TManualEvent enteredEvent;
     TManualEvent proceedEvent;
     TBlockingOp op;
-    op.OnComplete = TBlockingOp::BlockingComplete;
     op.EnteredEvent = &enteredEvent;
     op.ProceedEvent = &proceedEvent;
 
-    UNIT_ASSERT(router.Write(buf.Data(), size, 0, &op));
+    PrepareWriteOp(op, buf.Data(), size, 0);
+    UNIT_ASSERT(router.Write(&op));
     router.Flush();
 
     // Wait until the callback is actively running on the poller thread

@@ -5,7 +5,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -142,10 +141,16 @@ struct TEvPrivate {
 
 class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool STATIC_DISCOVERY = true;
+    static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
-            const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters)
         {
@@ -162,7 +167,11 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
                 Source = SubGroup->GetSubgroup("tx_id", TxId);
-                Task = Source->GetSubgroup("task_id", ToString(taskId));
+                if (enableCountersPerTask) {
+                    Task = Source->GetSubgroup("task_id", ToString(taskId));
+                } else {
+                    Task = Source;
+                }
             }
             InFlyAsyncInputData = Task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = Task->GetCounter("InFlySubscribe");
@@ -227,7 +236,7 @@ public:
         const TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
         TActorId infoAggregator)
@@ -345,13 +354,20 @@ public:
                     amountPartitions += cluster.PartitionsCount;
                 }
 
+                auto counters = Metrics.Task;
+                if (!clusterState.Info.Name.empty()) {
+                    counters = counters->GetSubgroup("federated_pq_cluster", TString(clusterState.Info.Name));
+                }
+
                 std::tie(clusterState.ReadSession, clusterState.ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
                     .TxId = TxId,
                     .TaskId = TaskId,
+                    .Cluster = TString(clusterState.Info.Name),
                     .AmountPartitionsCount = amountPartitions,
-                    .Counters = Metrics.Task,
+                    .InputIndex = InputIndex,
+                    .Counters = counters,
                     .BaseSettings = GetReadSessionSettings(clusterState),
-                    .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
+                    .IdleTimeout = NProtoInterop::CastFromProto(SourceParams.GetPartitionsBalancingIdleTimeout()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
                     .AggregatorActor = InfoAggregator,
                 });
@@ -403,6 +419,7 @@ private:
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
+        hFunc(TEvents::TEvWakeup, Handle);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -422,7 +439,11 @@ private:
     }
 
     void NotifyCA() {
-        Metrics.InFlyAsyncInputData->Set(1);
+        if (!CaNotified) {
+            Metrics.InFlyAsyncInputData->Inc();
+            CaNotified = true;
+        }
+
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -592,9 +613,35 @@ private:
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        WakeupScheduled = false;
+        ScheduleWakeup();
+
+        if (TInstant::Now() - LastActiveTime <= CHECK_HANGING_PERIOD) {
+            return;
+        }
+        LastActiveTime = TInstant::Now();
+
+        for (const auto& clusterState : Clusters) {
+            if (const auto& readSession = clusterState.ReadSession) {
+                SRC_LOG_D("Check Read Session, cluster: " << clusterState.Info.Name << ", is ready: " << readSession->WaitEvent().IsReady());
+            }
+        }
+    }
+
+    void ScheduleWakeup() {
+        if (!WakeupScheduled) {
+            WakeupScheduled = true;
+            Schedule(CHECK_HANGING_PERIOD, new TEvents::TEvWakeup());
+        }
+    }
+
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         // called with bound allocator
-        Metrics.InFlyAsyncInputData->Set(0);
+        if (CaNotified) {
+            Metrics.InFlyAsyncInputData->Dec();
+            CaNotified = false;
+        }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -656,6 +703,9 @@ private:
         }
 
         if (recheckBatch) {
+            LastActiveTime = TInstant::Now();
+            ScheduleWakeup();
+
             usedSpace = 0;
             if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
                 return usedSpace;
@@ -963,10 +1013,13 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
+    bool WakeupScheduled = false;
+    TInstant LastActiveTime = TInstant::Now();
+    bool CaNotified = false;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -1011,7 +1064,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     const THolderFactory& holderFactory,
     std::shared_ptr<TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqGateway::TPtr pqGateway,
+    IPqStaticGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
@@ -1044,7 +1097,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
@@ -1066,9 +1119,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         TActorId infoAggregator;
-        if (const auto it = args.TaskParams.find("dq_info_aggregator"); it != args.TaskParams.end()) {
+        if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
             NActorsProto::TActorId actorIdProto;
-            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse dq_info_aggregator");
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
             infoAggregator = ActorIdFromProto(actorIdProto);
         }
 

@@ -7,6 +7,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
@@ -16,29 +17,18 @@
 
 
 namespace NKikimr::NKqp {
-// class TSkipIndexTestFixture : public NUnitTest::TBaseFixture {
-// public:
-//     TKikimrRunner kikimr = TKikimrSettings()
-//             .SetColumnShardAlterObjectEnabled(true)
-//             .SetWithSampleTables(false);
-//     NYdb::NTable::TTableClient tableClient = kikimr.GetTableClient();
-//     NYdb::Dev::TStatus RunSql(TString query) {
-//         auto session = tableClient.CreateSession().GetValueSync().GetSession();
-//         return session.ExecuteSchemeQuery(query).GetValueSync();
-//     }
+static void ExecSchemeQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
+    if (useQueryService) {
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    } else {
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
 
-//     void SetUp(NUnitTest::TTestContext& ctx) override {
-
-//     }
-
-
-//     void AssertSqlOk(TString query) {
-//         auto res = RunSql(query);
-//         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
-//     }
-
-    
-// };
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(CreateMinMaxIndex) {
         auto settings = TKikimrSettings()
@@ -156,102 +146,190 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
 
     }
-    Y_UNIT_TEST(MinMaxIndexSanityCheck) {
+
+    Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableWithLocalIndexes`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        auto helper = TLocalHelper(kikimr);
-        helper.CreateTestOlapTable();
-        helper.SetForcedCompaction();
-        auto tableClient = kikimr.GetTableClient();
-
-        Tests::NCommon::TLoggerInit(kikimr)
-            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
-            .SetPriority(NActors::NLog::PRI_DEBUG)
-            .Initialize();
-
-
-        auto runSql = [&](TString query) {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            return session.ExecuteSchemeQuery(query).GetValueSync();
-        };
-
-        auto assertSqlOk = [&](TString query) {
-            auto res = runSql(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
-        };
-        auto mismatchErrorMessage = [](TString key, TString actual) {
-            return Sprintf("actual %s: %s", key.data(), actual.data());
-        };
-
-        auto selectInt64 = [&](TString select) {
-            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(select).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it); // todo: verify results
-            Cerr << result << Endl;
-            auto node = NYT::NodeFromYsonString(result);
-            auto ptr1 = &node.AsList();
-            auto ptr2 = &(*ptr1)[0].AsList();
-            UNIT_ASSERT(ptr1 != ptr2);
-            UNIT_ASSERT_VALUES_EQUAL_C(node.AsList().size(), 1,mismatchErrorMessage("yson", NYT::NodeToYsonString(node)));
-            return node.AsList()[0]
-                       .AsList()[0]
-                       .AsList()[0]
-                       .AsInt64();
-        };
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 123, 213, 10000);
-        UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(5)));
-
-        assertSqlOk(R"(
-            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET 
-                (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX, FEATURES=`{"column_name" : "level"}`);
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableWithLocalIndexes`
+            ADD INDEX idx_bloom LOCAL USING bloom_filter
+                ON (resource_id)
+                WITH (false_positive_probability = 0.01);
         )");
-        assertSqlOk(R"(
-            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) 
-                SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`));
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableWithLocalIndexes`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
         )");
-        assertSqlOk(R"(
-            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET 
-                SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_bloom;
         )");
-        
-        
 
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_ngram;
+        )");
+    }
 
-        // csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
-        csController->WaitActualization(TDuration::Seconds(30));
+    Y_UNIT_TEST_DUO(AddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
 
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTable`
+            ADD INDEX idx_bloom LOCAL USING bloom_filter
+                ON (uid)
+                WITH (false_positive_probability = 0.01);
+        )");
 
-        i64 level = selectInt64("select cast(sum(level) as Int64) from `/Root/olapStore/olapTable`;");
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTable`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
+        )");
 
-        UNIT_ASSERT_VALUES_EQUAL_C(level, 0+1+2, mismatchErrorMessage("level", ToString(level)));
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
+    }
 
+    Y_UNIT_TEST_DUO(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
 
-        i64 indexMissingBefore = csController->GetIndexesSkippedNoData().Val();
-        i64 skippedRowsBefore = csController->GetIndexesSkippingOnSelect().Val();
-        i64 notSkippedRowsBefore = csController->GetIndexesApprovedOnSelect().Val();
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableCreateBloom`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        i64 countFiltered = selectInt64("select cast(count(level) as Int64) from `/Root/olapStore/olapTable` where level = -1;");
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
+    }
 
+    Y_UNIT_TEST_DUO(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
 
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableCreateNgram`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        UNIT_ASSERT_VALUES_EQUAL_C(countFiltered, 0, mismatchErrorMessage("level", ToString(countFiltered)));
-        UNIT_ASSERT_VALUES_EQUAL(indexMissingBefore, csController->GetIndexesSkippedNoData().Val());
-        UNIT_ASSERT_VALUES_EQUAL(notSkippedRowsBefore, csController->GetIndexesApprovedOnSelect().Val());
-        CS_UNIT_ASSERT_LESS_INTS(skippedRowsBefore,csController->GetIndexesSkippingOnSelect().Val());
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
+    }
 
-        Cerr << ToString(csController->GetIndexesSkippingOnSelect().Val() - skippedRowsBefore) << Endl;
+    Y_UNIT_TEST_DUO(LocalBloomNgramIndexDefaultCaseSensitivePersisted, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
 
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableNgramDefault`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        // assertSqlOk(TString query)
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto showResult = session.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/olapTableNgramDefault`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+        UNIT_ASSERT(!showResult.GetResultSets().empty());
+        NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+        TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+        bool hasDefault = createText.Contains("case_sensitive=true") ||
+            createText.Contains("\"case_sensitive\":true") ||
+            createText.Contains("\\\"case_sensitive\\\":true");
+        UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
+    }
+
+    Y_UNIT_TEST_DUO(LocalIndexCannotBeUsedInTableView, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableViewLocalIndex`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            "SELECT * FROM `/Root/olapTableViewLocalIndex` VIEW idx_ngram;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
     }
 
     Y_UNIT_TEST(TablesInStore) {
@@ -893,7 +971,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
 
             csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
-            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(10)));
+            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
 
             {
                 ExecuteSQL(R"(

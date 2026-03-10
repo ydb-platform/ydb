@@ -525,14 +525,27 @@ namespace NMonitoring {
             }
 
             void ConsumeLabels(TStringBuf name, const TLabelsMap& labels) {
-                Y_PARSER_ENSURE(labels.count(MetricNameLabel_) == 0,
-                    "label name '" << MetricNameLabel_ <<
-                    "' is reserved, but is used with metric: " << name << LabelsToStr(labels));
+                auto it = labels.find(MetricNameLabel_);
+                if(it != labels.end() && !Settings_.NameMangler) {
+                    Y_PARSER_ENSURE(false,
+                        "label name '" << MetricNameLabel_ <<
+                        "' is reserved, but is used with metric: " << name << LabelsToStr(labels));
+                }
+                const bool labelClashPresent = it != labels.end();
 
                 Consumer_->OnLabelsBegin();
                 Consumer_->OnLabel(MetricNameLabel_, TString(name)); // TODO: remove this string allocation
-                for (const auto& it: labels) {
-                    Consumer_->OnLabel(it.first, it.second);
+                for (const auto& [k, v]: labels) {
+                    if(labelClashPresent && k == MetricNameLabel_) {
+                        auto newKey = Settings_.NameMangler(k);
+                            Y_PARSER_ENSURE(!labels.contains(newKey),
+                                "after mangling label name: " << MetricNameLabel_ <<
+                                " the resulting label is: " << newKey <<
+                                "but it is already used in: " << LabelsToStr(labels));
+                        Consumer_->OnLabel(newKey, v);
+                        continue;
+                    }
+                    Consumer_->OnLabel(k, v);
                 }
                 Consumer_->OnLabelsEnd();
             }

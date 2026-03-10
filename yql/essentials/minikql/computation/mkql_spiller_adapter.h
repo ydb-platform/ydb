@@ -2,6 +2,8 @@
 #include "mkql_spiller.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 /// Stores and loads very long sequences of TMultiType UVs
@@ -13,7 +15,7 @@ namespace NKikimr::NMiniKQL {
 class TWideUnboxedValuesSpillerAdapter {
 public:
     TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit, ui64 minMemorySizeToReport = 10_KB)
-        : Spiller_(spiller)
+        : Spiller_(std::move(spiller))
         , ItemType_(type)
         , SizeLimit_(sizeLimit)
         , Packer_(type, EValuePackerVersion::V1)

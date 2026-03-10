@@ -11,6 +11,7 @@ LIBRARY()
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
+        direct_io_op.cpp
         persistent_buffer_space_allocator.cpp
         segment_manager.cpp
     )
@@ -18,6 +19,7 @@ LIBRARY()
     PEERDIR(
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
+        ydb/library/pdisk_io
     )
 
 END()

@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -196,6 +197,7 @@ public:
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const NKikimrConfig::TTliConfig& tliConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources,
@@ -204,6 +206,7 @@ public:
         ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
+        , TliConfig(tliConfig)
         , FeatureFlags()
         , WorkloadManagerConfig()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
@@ -244,15 +247,16 @@ public:
 
         UpdateYqlLogLevels();
 
-        // Subscribe for TableService & Logger & FeatureFlags config changes
+        // Subscribe for TableService & Logger & FeatureFlags & TliConfig config changes
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
         ui32 workloadManagerKind = (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem;
         ui32 queryServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem;
+        ui32 tliConfigKind = (ui32)NKikimrConsole::TConfigItem::TliConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind, queryServiceConfigKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind, queryServiceConfigKind, tliConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
@@ -499,6 +503,10 @@ public:
 
         if (event.GetConfig().HasQueryServiceConfig()) {
             QueryServiceConfig.Swap(event.MutableConfig()->MutableQueryServiceConfig());
+        }
+
+        if (event.GetConfig().HasTliConfig()) {
+            TliConfig.Swap(event.MutableConfig()->MutableTliConfig());
         }
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -954,9 +962,15 @@ public:
 
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
-            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-            ui64 millis = sbs.GetBoardLookupIntervalMs();
-            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            TDuration d;
+            if (!WarmupStarted && TableServiceConfig.HasCompileCacheWarmupConfig()) {
+                // Short polling interval until warmup starts
+                d = TDuration::Seconds(2);
+            } else {
+                const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+                ui64 millis = sbs.GetBoardLookupIntervalMs();
+                d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            }
             Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
 
@@ -1000,6 +1014,29 @@ public:
 
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
+        TryStartWarmup();
+    }
+
+    void TryStartWarmup() {
+        if (WarmupStarted) {
+            return;
+        }
+
+        if (!TableServiceConfig.HasCompileCacheWarmupConfig()) {
+            return;
+        }
+
+        if (PeerProxyNodeResources.size() > 1) {
+            WarmupStarted = true;
+            TVector<ui32> nodeIds;
+            nodeIds.reserve(PeerProxyNodeResources.size());
+            for (const auto& resource : PeerProxyNodeResources) {
+                nodeIds.push_back(resource.GetNodeId());
+            }
+            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
+                << " proxy nodes, starting warmup");
+            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
+        }
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1421,14 +1458,14 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, ExecuterConfig, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, ExecuterConfig, TableServiceConfig, QueryServiceConfig, TliConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
         IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
-            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService);
+            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService, clientSid);
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
@@ -1834,6 +1871,9 @@ private:
             return;
         }
 
+        const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
+        Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,
@@ -1841,7 +1881,7 @@ private:
             AppData()->FunctionRegistry,
             AppData()->TenantName,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
-            FederatedQuerySetup->PqGateway,
+            pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
             Counters->GetKqpCounters(),
@@ -1874,6 +1914,7 @@ private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    NKikimrConfig::TTliConfig TliConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
@@ -1904,6 +1945,7 @@ private:
     TKqpQueryCachePtr QueryCache;
 
     bool ServerWorkerBalancerComplete = false;
+    bool WarmupStarted = false;
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;
@@ -1949,6 +1991,7 @@ private:
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TTliConfig& tliConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
@@ -1956,7 +1999,7 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
     )
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, std::move(settings),
+    return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, tliConfig, std::move(settings),
         std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
 

@@ -1723,6 +1723,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMkDir:
     case TTxState::TxCreateTable:
     case TTxState::TxCopyTable:
+    case TTxState::TxReadOnlyCopyColumnTable:
     case TTxState::TxCreatePQGroup:
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
@@ -1995,7 +1996,8 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::ResolvedTimestampsIntervalMs>(alterData->ResolvedTimestamps.MilliSeconds()),
         NIceDb::TUpdate<Schema::CdcStream::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
-        NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State)
+        NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State),
+        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2022,7 +2024,8 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(alterData->ResolvedTimestamps.MilliSeconds()),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs)
     );
 }
 
@@ -2637,7 +2640,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
 
         TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
-    } else if (txState.TxType == TTxState::TxCopyTable) {
+    } else if (txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         if (txState.TargetPathTargetState) {
@@ -3727,6 +3730,14 @@ void TSchemeShard::PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, T
             NIceDb::TUpdate<Schema::MigratedShards::OwnerPathId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::MigratedShards::LocalPathId>(pathId.LocalPathId));
     }
+}
+
+void TSchemeShard::PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Update();
+}
+
+void TSchemeShard::PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
@@ -5460,6 +5471,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         // namespace NForcedCompaction {
         HFuncTraced(TEvForcedCompaction::TEvCreateRequest, Handle);
         HFuncTraced(TEvForcedCompaction::TEvGetRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvCancelRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvForgetRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvListRequest, Handle);
         // } // NForcedCompaction
 
         //namespace NCdcStreamScan {
@@ -5984,8 +5998,10 @@ TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TB
 
 void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     switch (static_cast<ECompactionType>(ev->Cookie)) {
-    case ECompactionType::Unspecified: // backward compatibility for 0, handle like both Background and Forced
+    case ECompactionType::Unspecified: // Backward compatibility for 0, handle like both Background and Forced.
+        // For background compaction, it doesn't matter who started compaction.
         HandleBackgroundCompactionResult(ev, ctx);
+        // For forced compaction, shards without a known compact operation will be ignored.
         HandleForcedCompactionResult(ev, ctx);
         break;
     case ECompactionType::Background:

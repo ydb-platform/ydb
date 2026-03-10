@@ -66,6 +66,7 @@ public:
         , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
+        , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
@@ -103,9 +104,13 @@ public:
             KqpSessionSpan.Attribute("database", AppData()->TenantName);
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            QuerySpanId = KqpSessionSpan ?
-                *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr()) :
-                RandomNumber<ui64>();
+            if (KqpSessionSpan) {
+                QuerySpanId = *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr());
+            } else {
+                while (QuerySpanId == 0) { // avoid 0 as query span id
+                    QuerySpanId = RandomNumber<ui64>();
+                }
+            }
         }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
@@ -155,6 +160,7 @@ public:
     ui64 CurrentTx = 0;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
+    bool IsWarmupCompilation_ = false;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -493,7 +499,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
+            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable && tx->ResultsSize() == 0) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData, GetQuerySpanId());
                 YQL_ENSURE(success);

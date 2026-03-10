@@ -10,10 +10,15 @@
 #include "object_processing.h"
 #include "antlr_token.h"
 #include "secret_settings.h"
+
+#include <yql/essentials/sql/v1/proto_parser/token.h>
+
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
+
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+
 #ifdef GetMessage
     #undef GetMessage
 #endif
@@ -332,13 +337,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
             TNodePtr node = YqlSelectOrLegacy(
                 [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                    return BuildYqlSelectStatement(*this, stmt);
                 },
                 [&]() -> TNodePtr {
                     Ctx_.BodyPart();
 
                     TPosition pos;
-                    TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(stmt, pos);
+                    TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
                     if (!source) {
                         return nullptr;
                     }
@@ -349,7 +354,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(Beginning(stmt)));
 
             if (!node) {
                 return false;
@@ -519,7 +525,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TSourcePtr tableSource = nullptr;
             if (isCreateTableAs) {
-                tableSource = TSqlAsValues(Ctx_, Mode_).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
+                tableSource = TSqlAsValues(*this).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
                 if (!tableSource) {
                     return false;
                 }
@@ -571,7 +577,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore7: {
             Ctx_.BodyPart();
-            TSqlIntoTable intoTable(Ctx_, Mode_);
+            TSqlIntoTable intoTable(*this);
             TNodePtr block(intoTable.Build(core.GetAlt_sql_stmt_core7().GetRule_into_table_stmt1()));
             if (!block) {
                 return false;
@@ -751,13 +757,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
             TNodePtr node = YqlSelectOrLegacy(
                 [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                    return BuildYqlSelectStatement(*this, stmt);
                 },
                 [&]() -> TNodePtr {
                     Ctx_.BodyPart();
 
                     TPosition pos;
-                    TSourcePtr source = TSqlValues(Ctx_, Mode_).Build(stmt, pos, {}, TPosition());
+                    TSourcePtr source = TSqlValues(*this).Build(stmt, pos, {}, TPosition());
 
                     if (!source) {
                         return nullptr;
@@ -769,7 +775,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(stmt.GetToken1()));
 
             if (!node) {
                 return false;
@@ -1227,7 +1234,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), expr, true, prefixPath)) {
                 return false;
             }
@@ -1592,7 +1599,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), expr, prefixPath)) {
                 return false;
             }
@@ -2021,7 +2028,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (node.GetBlock10().HasRule_transfer_settings3() &&
                 !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true, prefixPath)) {
                 return false;
@@ -2052,7 +2059,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TNodePtr> settings;
             std::optional<TString> transformLambda;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
@@ -2411,7 +2418,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
     TNodePtr defaultValue;
     if (stmt.HasBlock5()) {
-        TSqlExpression sqlExpr(Ctx_, Mode_);
+        TSqlExpression sqlExpr(*this);
         auto exprOrId = sqlExpr.LiteralExpr(stmt.GetBlock5().GetRule_literal_value2());
         if (!exprOrId) {
             return false;
@@ -2652,6 +2659,26 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_compact1();
 
             if (!AlterTableCompact(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction21: {
+            // ALTER COLUMN id SET DEFAULT expr
+            const auto& alterRule = node.GetAlt_alter_table_action21().GetRule_alter_table_alter_column_set_default1();
+
+            if (!AlterTableAlterColumnSetDefault(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction22: {
+            // ALTER COLUMN id DROP DEFAULT
+            const auto& alterRule = node.GetAlt_alter_table_action22().GetRule_alter_table_alter_column_drop_default1();
+
+            if (!AlterTableAlterColumnDropDefault(alterRule, params)) {
                 return false;
             }
 
@@ -3031,8 +3058,39 @@ bool TSqlQuery::AlterTableAlterColumnSetCompression(const TRule_alter_table_alte
     return true;
 }
 
+bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+
+    const auto& defaultValueRule = node.GetRule_default_value5();
+    TSqlExpression expr(*this);
+    auto defaultExpr = Unwrap(expr.Build(defaultValueRule.GetRule_expr2()));
+    if (!defaultExpr) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .DefaultExpr = std::move(defaultExpr),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropDefault,
+    });
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
-    TSqlExpression expr(Ctx_, Mode_);
+    TSqlExpression expr(*this);
     return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
 }
 
@@ -3049,7 +3107,7 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
         case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
             // SET
             const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!ChangefeedSettings(rule, expr, params.AlterChangefeeds.back().Settings, true)) {
                 return false;
             }
@@ -4107,7 +4165,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
                 const auto& alt = stmt.GetBlock5().GetAlt1();
 
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-                TSqlExpression sqlExpr(Ctx_, Mode_);
+                TSqlExpression sqlExpr(*this);
                 auto whereExpr = Unwrap(sqlExpr.Build(alt.GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
@@ -4119,7 +4177,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             case TRule_delete_stmt_TBlock5::kAlt2: {
                 const auto& alt = stmt.GetBlock5().GetAlt2();
 
-                auto values = TSqlIntoValues(Ctx_, Mode_).Build(alt.GetRule_into_values_source2(), "DELETE ON");
+                auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "DELETE ON");
                 if (!values) {
                     return nullptr;
                 }
@@ -4179,7 +4237,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
 
             if (alt.HasBlock3()) {
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-                TSqlExpression sqlExpr(Ctx_, Mode_);
+                TSqlExpression sqlExpr(*this);
                 auto whereExpr = Unwrap(sqlExpr.Build(alt.GetBlock3().GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
@@ -4197,7 +4255,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         case TRule_update_stmt_TBlock4::kAlt2: {
             const auto& alt = stmt.GetBlock4().GetAlt2();
 
-            auto values = TSqlIntoValues(Ctx_, Mode_).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
+            auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
             if (!values) {
                 return nullptr;
             }
@@ -4229,7 +4287,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
 bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values) {
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-    TSqlExpression sqlExpr(Ctx_, Mode_);
+    TSqlExpression sqlExpr(*this);
     if (!Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()))) {
         return false;
     }
@@ -4259,7 +4317,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     const TPosition pos(Ctx_.Pos());
     auto parenthesis = stmt.GetRule_smart_parenthesis3();
 
-    TNodePtr node = TSqlExpression(Ctx_, Mode_).BuildSourceOrNode(parenthesis);
+    TNodePtr node = TSqlExpression(*this).BuildSourceOrNode(parenthesis);
     if (TSourcePtr source = MoveOutIfSource(node)) {
         return BuildWriteValues(pos, "UPDATE", targetList, std::move(source));
     } else if (TTupleNode* tuple = dynamic_cast<TTupleNode*>(node.Get())) {

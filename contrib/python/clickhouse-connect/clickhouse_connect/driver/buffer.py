@@ -8,6 +8,7 @@ from clickhouse_connect.driver.types import ByteSource
 must_swap = sys.byteorder == 'big'
 
 
+# pylint: disable=too-many-instance-attributes
 class ResponseBuffer(ByteSource):
     slots = 'slice_sz', 'buf_loc', 'end', 'gen', 'buffer', 'slice'
 
@@ -18,6 +19,39 @@ class ResponseBuffer(ByteSource):
         self.source = source
         self.gen = source.gen
         self.buffer = bytes()
+        self.exception_tag = getattr(source, "exception_tag", None)
+        if self.exception_tag:
+            tag_bytes = self.exception_tag.encode()
+            self._open_marker = b"__exception__" + tag_bytes
+            self._close_marker = tag_bytes + b"__exception__"
+            self._carryover = b""
+            self._exception_buf = None
+
+    def _check_for_exception(self, new_chunk: bytes) -> None:
+        """Check if the stream contains a complete exception block matching our tag."""
+        if not self.exception_tag:
+            return
+
+        if self._exception_buf is not None:
+            self._exception_buf += new_chunk
+            if self._close_marker in self._exception_buf:
+                self.buffer = bytes(self._exception_buf)
+                raise StreamCompleteException
+            return
+
+        search_data = self._carryover + new_chunk
+        marker_pos = search_data.find(self._open_marker)
+        if marker_pos != -1:
+            self._exception_buf = bytearray(search_data[marker_pos:])
+            if self._close_marker in self._exception_buf:
+                self.buffer = bytes(self._exception_buf)
+                raise StreamCompleteException
+        else:
+            carry_size = len(self._open_marker) - 1
+            if len(search_data) >= carry_size:
+                self._carryover = search_data[-carry_size:]
+            else:
+                self._carryover = search_data
 
     def read_bytes(self, sz: int):
         if self.buf_loc + sz <= self.buf_sz:
@@ -31,6 +65,7 @@ class ResponseBuffer(ByteSource):
             chunk = next(self.gen, None)
             if not chunk:
                 raise StreamCompleteException
+            self._check_for_exception(chunk)
             x = len(chunk)
             if len(bridge) + x <= sz:
                 bridge.extend(chunk)
@@ -51,6 +86,7 @@ class ResponseBuffer(ByteSource):
         chunk = next(self.gen, None)
         if not chunk:
             raise StreamCompleteException
+        self._check_for_exception(chunk)
         x = len(chunk)
         if x > 1:
             self.buffer = chunk

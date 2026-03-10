@@ -298,6 +298,13 @@ def get_pdisk_inferred_settings(pdisk):
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
 
+def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
+    # Identical to blobstorage/pdisk/blobstorage_pdisk_config.h GetOwnerWeight()
+    vu = group_size_in_units if group_size_in_units else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
+    return int(vu / pu) + (1 if (vu % pu) else 0)
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int
@@ -738,7 +745,7 @@ def invoke_nbs_request(request_type, request):
 def print_nbs_request_result(args, request, response):
     success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
+    print_status(args, success, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
@@ -828,21 +835,21 @@ def bytes_to_string(num, round, suffix):
     return f'{res}{right}{suffix}'
 
 
-def gib_string(num):
-    return bytes_to_string(num, 1024 ** 3, '')
+def gb_string(num):
+    return bytes_to_string(num, 1000 ** 3, ' GB')
 
 
 def bytes_string(num):
-    if num > 1024 ** 5:
-        return bytes_to_string(num, 1024 ** 5, ' PiB')
-    if num > 1024 ** 4:
-        return bytes_to_string(num, 1024 ** 4, ' TiB')
-    if num > 1024 ** 3:
-        return bytes_to_string(num, 1024 ** 3, ' GiB')
-    if num > 1024 ** 2:
-        return bytes_to_string(num, 1024 ** 2, ' MiB')
-    if num > 1024:
-        return bytes_to_string(num, 1024, ' kiB')
+    if num > 1000 ** 5:
+        return bytes_to_string(num, 1000 ** 5, ' PB')
+    if num > 1000 ** 4:
+        return bytes_to_string(num, 1000 ** 4, ' TB')
+    if num > 1000 ** 3:
+        return bytes_to_string(num, 1000 ** 3, ' GB')
+    if num > 1000 ** 2:
+        return bytes_to_string(num, 1000 ** 2, ' MB')
+    if num > 1000:
+        return bytes_to_string(num, 1000, ' kB')
     return bytes_to_string(num, 1, '')
 
 
@@ -1310,19 +1317,7 @@ def print_result(format: str, status: str, description: str = None, file=None):
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
-
-
-def print_status_if_verbose(args, success, error_reason):
-    format = getattr(args, 'format', 'pretty')
-    verbose = getattr(args, 'verbose', False)
-    if success:
-        print_result(format, 'success')
-    else:
-        if verbose:
-            print_result(format, 'error', error_reason)
-        else:
-            print_result(format, 'error', 'add --verbose for more info')
+    print_status(args, success, error_reason)
 
 
 def print_status_if_not_quiet(args, success, error_reason):

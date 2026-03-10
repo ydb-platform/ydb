@@ -880,6 +880,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    void BalanceTablets(TTestBasicRuntime& runtime, ui64 hiveTabletId, const TActorId& sender) {
+        runtime.SendToPipe(hiveTabletId, sender, new NHive::TEvPrivate::TEvProcessTabletBalancer, 0, GetPipeConfigWithRetries());
+    }
+
+    void BalanceTablets(TTestBasicRuntime& runtime, ui64 hiveTabletId) {
+        BalanceTablets(runtime, hiveTabletId, runtime.AllocateEdgeActor());
+    }
+
     Y_UNIT_TEST(TestCreateTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
@@ -9047,6 +9055,94 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(followers, 2); // followers in both piles
+    }
+
+    Y_UNIT_TEST(SegmentsInSync) {
+        static constexpr int NodeCount = 1;
+        static constexpr auto NodeDeletePeriod = TDuration::Seconds(5);
+
+        TTestBasicRuntime runtime(NodeCount, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetNodeDeletePeriod(NodeDeletePeriod.Seconds());
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NodeCount);
+            runtime.DispatchEvents(options);
+        }
+
+        // recreate node
+        TBlockEvents<TEvTabletPipe::TEvServerDisconnected> blockDisconnected(runtime);
+        TBlockEvents<TEvLocal::TEvStatus> blockStatusDead(runtime, [](auto&& ev) {
+            return ev->Get()->Record.GetStatus() == TEvLocal::TEvStatus::StatusDead;
+        });
+        SendKillLocal(runtime, 0);
+
+        CreateLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+            runtime.DispatchEvents(options);
+        }
+
+        blockDisconnected.Unblock().Stop();
+        blockStatusDead.Unblock().Stop();
+
+        // delete node
+        SendKillLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            runtime.AdvanceCurrentTime(NodeDeletePeriod);
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
+            runtime.DispatchEvents(options);
+        }
+
+        // some action
+        BalanceTablets(runtime, hiveTablet);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(LoadEverythingNoUpdateNodeSegmentsAfterDelete) {
+        static constexpr int NodeCount = 1;
+        static constexpr auto NodeDeletePeriod = TDuration::Seconds(5);
+
+        TTestBasicRuntime runtime(NodeCount, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetNodeDeletePeriod(NodeDeletePeriod.Seconds());
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NodeCount);
+            runtime.DispatchEvents(options);
+        }
+
+        // kill node
+        SendKillLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::TEvCommit::EventType);
+            runtime.DispatchEvents(options);
+        }
+
+        runtime.AdvanceCurrentTime(NodeDeletePeriod + TDuration::Seconds(1));
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBootTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        // trigger balancer
+        BalanceTablets(runtime, hiveTablet);
+        runtime.SimulateSleep(TDuration::Seconds(1));
     }
 }
 

@@ -22,25 +22,30 @@ struct TEvService
         EvReadBlocksRequest,
         EvReadBlocksResponse,
 
-            EvWriteBlocksRequest,
-            EvWriteBlocksResponse,
+        EvWriteBlocksRequest,
+        EvWriteBlocksResponse,
 
-            EvGetLoadActorAdapterActorIdRequest,
-            EvGetLoadActorAdapterActorIdResponse,
-        };
-
-        BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
-        BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
-
-        struct TEvGetLoadActorAdapterActorIdRequest
-            : public NActors::TEventLocal<TEvGetLoadActorAdapterActorIdRequest, EvGetLoadActorAdapterActorIdRequest>
-        {};
-
-        struct TEvGetLoadActorAdapterActorIdResponse
-            : public NActors::TEventLocal<TEvGetLoadActorAdapterActorIdResponse, EvGetLoadActorAdapterActorIdResponse>
-        {
-            TString ActorId;
-        };
+        EvGetLoadActorAdapterActorIdRequest,
+        EvGetLoadActorAdapterActorIdResponse,
     };
+
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
+
+    struct TEvGetLoadActorAdapterActorIdRequest
+        : public NActors::TEventLocal<
+              TEvGetLoadActorAdapterActorIdRequest,
+              EvGetLoadActorAdapterActorIdRequest>
+    {
+    };
+
+    struct TEvGetLoadActorAdapterActorIdResponse
+        : public NActors::TEventLocal<
+              TEvGetLoadActorAdapterActorIdResponse,
+              EvGetLoadActorAdapterActorIdResponse>
+    {
+        TString ActorId;
+    };
+};
 
 }   // namespace NYdb::NBS::NBlockStore

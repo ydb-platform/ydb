@@ -2882,6 +2882,7 @@ struct TCdcStreamSettings {
     OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
+    OPTION(bool, UserSIDs);
 
     #undef OPTION
 };
@@ -2928,7 +2929,9 @@ struct TCdcStreamInfo
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
             .WithSchemaChanges(desc.GetSchemaChanges())
-            .WithAwsRegion(desc.GetAwsRegion()));
+            .WithAwsRegion(desc.GetAwsRegion())
+            .WithUserSIDs(desc.GetUserSIDs())
+        );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2952,6 +2955,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsTotal(ScanShards.size());
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
+        desc.SetUserSIDs(UserSIDs);
     }
 
     void FinishAlter() {
@@ -3394,6 +3398,16 @@ public:
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }
 
+    TString GetSource() const {
+        if (Kind == EKind::S3) {
+            return GetS3Settings().source_prefix();
+        } else if (Kind == EKind::FS) {
+            return GetFsSettings().base_path();
+        }
+        Y_ABORT("Unknown import kind");
+        return {};
+    }
+
     // Getters for common settings fields
     bool GetNoAcl() const {
         return Visit([](const auto& settings) {
@@ -3401,9 +3415,27 @@ public:
         });
     }
 
+    TString GetDestinationPath() const {
+        return Visit([](const auto& settings) {
+            return settings.destination_path();
+        });
+    }
+
+    bool GetEncryptedBackup() const {
+        return Visit([](const auto& settings) {
+            return settings.has_encryption_settings();
+        });
+    }
+
     bool GetSkipChecksumValidation() const {
         return Visit([](const auto& settings) {
             return settings.skip_checksum_validation();
+        });
+    }
+
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetIndexPopulationMode() const {
+        return Visit([](const auto& settings) {
+            return settings.index_population_mode();
         });
     }
 
@@ -3855,10 +3887,11 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
         InProgress = 1,
         Done = 2,
         Cancelled = 3,
+        Cancelling = 4,
     };
 
     ui64 Id;  // TxId from the original TEvCreateRequest
-    EState State = EState::Invalid; 
+    EState State = EState::Invalid;
     TPathId TablePathId;
     TPathId SubdomainPathId;
     bool Cascade;
@@ -3878,8 +3911,11 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
 
     bool IsFinished() const;
     void AddNotifySubscriber(const TActorId& actorId);
+    float CalcProgress() const;
 };
 // } // NForcedCompaction
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 
 }
 

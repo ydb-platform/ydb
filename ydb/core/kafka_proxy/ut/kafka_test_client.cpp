@@ -916,16 +916,6 @@ void TKafkaTestClient::ScramAuthenticateToKafka(const TString& userName, const T
     const auto& authBytes2 = response2->AuthBytes.value();
     std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
 
-    Cerr << ">>>>> Server final message: " << serverFinalMessage << Endl;
-    Cerr << ">>>>> Server final message length: " << serverFinalMessage.size() << Endl;
-
-    // DEBUG: Print raw bytes
-    Cerr << ">>>>> Raw bytes: ";
-    for (size_t i = 0; i < authBytes2.size(); ++i) {
-        Cerr << "0x" << Hex((unsigned char)authBytes2[i]) << " ";
-    }
-    Cerr << Endl;
-
     NLogin::NSasl::TFinalServerMsg parsedFinalServerMsg;
     auto parseFinalResult = NLogin::NSasl::ParseFinalServerMsg(serverFinalMessage, parsedFinalServerMsg);
     UNIT_ASSERT_C(parseFinalResult == NLogin::NSasl::EParseMsgReturnCodes::Success,

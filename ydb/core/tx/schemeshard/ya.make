@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_column_build_reboots
     ut_compaction
+    ut_compaction_reboots
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
@@ -244,8 +245,11 @@ SRCS(
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp
     schemeshard_backup_incremental__progress.cpp
+    schemeshard_forced_compaction__cancel.cpp
     schemeshard_forced_compaction__create.cpp
+    schemeshard_forced_compaction__forget.cpp
     schemeshard_forced_compaction__get.cpp
+    schemeshard_forced_compaction__list.cpp
     schemeshard_forced_compaction__progress.cpp
     schemeshard_forced_compaction.cpp
     schemeshard_restore_incremental__forget.cpp

@@ -1,0 +1,38 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: muted */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Sum(ws_ext_discount_amt) AS `Excess Discount Amount`
+FROM
+    `/Root/test/ds/web_sales`
+,
+    `/Root/test/ds/item`
+,
+    `/Root/test/ds/date_dim`
+WHERE
+    i_manufact_id == 269
+    AND i_item_sk == ws_item_sk
+    AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+        CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
+    )
+    AND d_date_sk == ws_sold_date_sk
+    AND ws_ext_discount_amt > (
+        SELECT
+            1.3 * Avg(ws_ext_discount_amt)
+        FROM
+            `/Root/test/ds/web_sales`
+        ,
+            `/Root/test/ds/date_dim`
+        WHERE
+            ws_item_sk == i_item_sk
+            AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+                CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
+            )
+            AND d_date_sk == ws_sold_date_sk
+    )
+ORDER BY
+    Sum(ws_ext_discount_amt)
+LIMIT 100;

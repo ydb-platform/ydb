@@ -121,4 +121,221 @@ pdisk_key_config:
             "{host: fqdn2, host_config_id: 2}]}";
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, false), yexception);
     }
+
+    Y_UNIT_TEST(StoragePoolTypesWithDefaultDomainName) {
+        TString config = R"(
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "Root");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 1);
+    }
+
+    Y_UNIT_TEST(StoragePoolTypesWithExplicitDomainName) {
+        TString config = R"(
+domain_name: MyCluster
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "MyCluster");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 1);
+    }
+
+    Y_UNIT_TEST(StoragePoolTypesWithDomainsConfigName) {
+        TString config = R"(
+domains_config:
+  domain:
+    - name: CustomDomain
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "CustomDomain");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 1);
+    }
+
+    Y_UNIT_TEST(DomainNameOverridesDomainsConfigName) {
+        TString config = R"(
+domain_name: ExplicitName
+domains_config:
+  domain:
+    - name: ConfigName
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "ExplicitName");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 1);
+    }
+
+    Y_UNIT_TEST(StoragePoolTypesWithDomainsConfigStoragePoolTypesFails) {
+        TString config = R"(
+domains_config:
+  domain:
+    - name: CustomDomain
+      storage_pool_types:
+        - kind: hdd
+          pool_config:
+            box_id: 1
+            erasure_species: mirror-3-dc
+            kind: hdd
+            vdisk_kind: Default
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, true), yexception);
+    }
+
+    Y_UNIT_TEST(StoragePoolTypesPreservesSecurityConfig) {
+        TString config = R"(
+domains_config:
+  domain:
+    - name: TestDomain
+  security_config:
+    enforce_user_token_requirement: true
+    default_users:
+      - name: admin
+        password: secret
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "TestDomain");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 1);
+        UNIT_ASSERT(cfg.GetDomainsConfig().HasSecurityConfig());
+        UNIT_ASSERT(cfg.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetSecurityConfig().DefaultUsersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetSecurityConfig().GetDefaultUsers(0).GetName(), "admin");
+    }
+
+    Y_UNIT_TEST(StoragePoolTypesWithExplicitDomainNamePreservesSecurityConfig) {
+        TString config = R"(
+domain_name: ExplicitDomain
+domains_config:
+  domain:
+    - name: ConfigDomain
+  security_config:
+    enforce_user_token_requirement: true
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "ExplicitDomain");
+        UNIT_ASSERT(cfg.GetDomainsConfig().HasSecurityConfig());
+        UNIT_ASSERT(cfg.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
+    }
+
+    Y_UNIT_TEST(MultipleStoragePoolTypesWithCustomDomain) {
+        TString config = R"(
+domain_name: MyCluster
+storage_pool_types:
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      vdisk_kind: Default
+  - kind: hdd
+    pool_config:
+      box_id: 1
+      erasure_species: block-4-2
+      kind: hdd
+      vdisk_kind: Default
+  - kind: nvme
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: nvme
+      vdisk_kind: Default
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().DomainSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetName(), "MyCluster");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).StoragePoolTypesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(0).GetKind(), "ssd");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(1).GetKind(), "hdd");
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(2).GetKind(), "nvme");
+    }
 }

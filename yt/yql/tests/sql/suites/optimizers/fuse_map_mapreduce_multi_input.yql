@@ -1,7 +1,7 @@
 use plato;
 
 pragma yt.MapJoinLimit="10G";
-pragma yt.EnableFuseMapToMapReduce = "true";
+pragma yt.FuseMapToMapReduce="normal";
 
 select t2.value
 from Input

@@ -30,7 +30,7 @@ class TJsonDescribe : public TViewerPipeClient {
     EAskSchemeCache AskSchemeCache = EAskSchemeCache::Second;
 
 public:
-    TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonDescribe(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
@@ -178,8 +178,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 

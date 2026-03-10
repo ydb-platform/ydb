@@ -2,11 +2,13 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 using namespace NYql;
 
 struct TTestCacheObj: public TSizedCache::ICacheObj {
-    TTestCacheObj(const TString& name, ui64 size)
-        : Name(name)
+    TTestCacheObj(TString name, ui64 size)
+        : Name(std::move(name))
         , Size(size)
         , Dismissed(false)
     {

@@ -83,7 +83,7 @@ bool TSqlValues::BuildRows(const TRule_values_source_row_list& node, TVector<TVe
 }
 
 bool TSqlValues::BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr>& outRow) {
-    TSqlExpression sqlExpr(Ctx_, Mode_);
+    TSqlExpression sqlExpr(*this);
     return Unwrap(ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2()));
 }
 
@@ -102,7 +102,7 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             return BuildWriteValues(pos, operationName, columnsHint, rows);
         }
         case TRule_values_source::kAltValuesSource2: {
-            TSqlSelect select(Ctx_, Mode_);
+            TSqlSelect select(*this);
             TPosition selectPos;
             auto source = select.Build(node.GetAlt_values_source2().GetRule_select_stmt1(), selectPos);
             if (!source) {

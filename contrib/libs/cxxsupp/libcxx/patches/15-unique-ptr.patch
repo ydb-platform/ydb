@@ -1,5 +1,5 @@
 diff --git a/include/__memory/unique_ptr.h b/include/__memory/unique_ptr.h
-index 6f1dc98..c2ae375 100644
+index fa02926..d52b58a 100644
 --- a/include/__memory/unique_ptr.h
 +++ b/include/__memory/unique_ptr.h
 @@ -51,6 +51,7 @@
@@ -16,6 +16,6 @@ index 6f1dc98..c2ae375 100644
  
 -template <class _Tp, class _Dp = default_delete<_Tp> >
 +template <class _Tp, class _Dp>
- class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr {
+ class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI unique_ptr {
  public:
    typedef _Tp element_type;

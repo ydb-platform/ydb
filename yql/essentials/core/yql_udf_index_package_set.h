@@ -6,7 +6,7 @@ namespace NYql {
 
 class TUdfIndexPackageSet : public TThrRefBase {
 public:
-    typedef TIntrusivePtr<TUdfIndexPackageSet> TPtr;
+    using TPtr = TIntrusivePtr<TUdfIndexPackageSet>;
 
 private:
     TUdfIndexPackageSet(const TSet<TString>& knownPackages, const THashMap<TString, ui32>& packageDefaultVersions, const TMap<std::pair<TString, ui32>, TResourceInfo::TPtr>& resources);

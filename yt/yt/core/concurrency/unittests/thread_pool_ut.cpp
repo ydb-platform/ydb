@@ -1,5 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/actions/invoker.h>
@@ -30,8 +31,7 @@ TEST(TThreadPoolTest, Configure)
         }
     }
 
-    AllSucceeded(std::move(futures))
-        .Get();
+    WaitUntilSet(AllSucceeded(std::move(futures)));
 
     // Thread pool doesn't contain less than one thread whatever you configured.
     threadPool->SetThreadCount(0);

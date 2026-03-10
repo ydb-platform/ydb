@@ -663,7 +663,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                 }
 
                 constexpr bool isIdempotencyChecked = true;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, isIdempotencyChecked)) {
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, isIdempotencyChecked)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -842,7 +842,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
             constexpr bool isIdempotencyChecked = true;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, isIdempotencyChecked)) {
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, isIdempotencyChecked)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;

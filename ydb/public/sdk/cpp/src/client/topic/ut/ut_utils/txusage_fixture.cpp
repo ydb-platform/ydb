@@ -38,8 +38,6 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
     settings.SetEnableTopicSplitMerge(true);
-    settings.SetEnableOltpSink(GetEnableOltpSink());
-    settings.SetEnableOlapSink(GetEnableOlapSink());
     settings.SetEnableHtapTx(GetEnableHtapTx());
     settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
 
@@ -1088,16 +1086,6 @@ auto TFixture::GetAvgWriteBytes(const std::string& topicName,
     return result;
 }
 
-bool TFixture::GetEnableOltpSink() const
-{
-    return false;
-}
-
-bool TFixture::GetEnableOlapSink() const
-{
-    return false;
-}
-
 bool TFixture::GetEnableHtapTx() const
 {
     return false;
@@ -2101,16 +2089,6 @@ void TFixtureSinks::CreateColumnTable(const std::string& tablePath)
         .Build();
     auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-bool TFixtureSinks::GetEnableOltpSink() const
-{
-    return true;
-}
-
-bool TFixtureSinks::GetEnableOlapSink() const
-{
-    return true;
 }
 
 bool TFixtureSinks::GetEnableHtapTx() const

@@ -153,7 +153,7 @@ void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers) {
         .Summary = "Viewer capabilities",
         .Description = "Viewer capabilities",
     });
-    jsonHandlers.AddHandler("/viewer/capabilities", new TJsonHandler<TViewerCapabilities>(yaml));
+    jsonHandlers.AddHandler("/viewer/capabilities", new THttpHandler<TViewerCapabilities>(yaml));
 }
 
 void InitViewerNodelistJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -167,7 +167,7 @@ void InitViewerPDiskInfoJsonHandler(TJsonHandlers& jsonHandlers);
 void InitViewerTabletInfoJsonHandler(TJsonHandlers& jsonHandlers);
 
 void InitViewerDescribeJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/describe", new TJsonHandler<TJsonDescribe>(TJsonDescribe::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/describe", new THttpHandler<TJsonDescribe>(TJsonDescribe::GetSwagger()));
 }
 
 void InitViewerDescribeReplicationJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -241,7 +241,7 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 8);
+    handlers.AddHandler("/viewer/cluster", new THttpHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 8);
 }
 
 void InitViewerLabeledCountersJsonHandler(TJsonHandlers &handlers) {
@@ -257,11 +257,11 @@ void InitViewerHiveStatsJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTenantInfoJsonHandler(TJsonHandlers &handlers) {
-    handlers.AddHandler("/viewer/tenantinfo", new TJsonHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 4);
+    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 4);
 }
 
 void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/whoami", new TJsonHandler<TJsonWhoAmI>(TJsonWhoAmI::GetSwagger()));
+    handlers.AddHandler("/viewer/whoami", new THttpHandler<TJsonWhoAmI>(TJsonWhoAmI::GetSwagger()));
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
@@ -277,16 +277,16 @@ void InitViewerComputeJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/healthcheck", new TJsonHandler<TJsonHealthCheck>(TJsonHealthCheck::GetSwagger()));
+    handlers.AddHandler("/viewer/healthcheck", new THttpHandler<TJsonHealthCheck>(TJsonHealthCheck::GetSwagger()));
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 20);
+    handlers.AddHandler("/viewer/nodes", new THttpHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 20);
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
-    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
+    jsonHandlers.AddHandler("/viewer/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 11);
+    jsonHandlers.AddHandler("/storage/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 11);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

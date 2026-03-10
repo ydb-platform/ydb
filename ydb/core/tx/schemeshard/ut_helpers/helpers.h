@@ -379,6 +379,13 @@ namespace NSchemeShardUT_Private {
     void AsyncCopyTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName);
     void TestCopyTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
     void TestCopyTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
+    // copy column table
+    TEvTx* CopyColumnTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf = {});
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName);
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName);
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
+
 
     // move table
     TEvTx* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard, const TApplyIf& applyIf = {});
@@ -461,6 +468,20 @@ namespace NSchemeShardUT_Private {
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// export

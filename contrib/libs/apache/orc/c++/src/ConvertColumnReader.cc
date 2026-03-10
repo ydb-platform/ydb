@@ -846,7 +846,7 @@ namespace orc {
     }
 
    private:
-    // Algorithm: http://howardhinnant.github.io/date_algorithms.html
+    // Algorithm: https://howardhinnant.github.io/date_algorithms.html
     // The algorithm implements a proleptic Gregorian calendar.
     int64_t daysFromProlepticGregorianCalendar(int32_t y, int32_t m, int32_t d) {
       y -= m <= 2;

@@ -50,14 +50,13 @@ public:
     template <typename F>
     void Add(F f)
     {
-        Workers.push_back(
-            SystemThreadFactory()->Run(
-                [this, f = std::move(f)]()
-                {
-                    while (!ShouldStart.test()) {
-                    }
-                    f();
-                }));
+        Workers.push_back(SystemThreadFactory()->Run(
+            [this, f = std::move(f)]()
+            {
+                while (!ShouldStart.test()) {
+                }
+                f();
+            }));
     }
 };
 
@@ -240,7 +239,7 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
                     .BlocksCount = 1024 * 1024,
                     .VhostQueuesCount = 2,
                     .UnalignedRequestsDisabled = false,
-                });
+                    .CreateOverlappedRequestsGuard = true});
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }

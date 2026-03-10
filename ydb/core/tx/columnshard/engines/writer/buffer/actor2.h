@@ -32,7 +32,7 @@ public:
         return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType && IsBulk == item.IsBulk;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return CombineHashes<ui64>(CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
     }
 };

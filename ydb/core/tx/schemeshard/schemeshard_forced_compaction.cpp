@@ -8,9 +8,12 @@ void TSchemeShard::AddForcedCompaction(
     const TForcedCompactionInfo::TPtr& forcedCompactionInfo)
 {
     ForcedCompactions[forcedCompactionInfo->Id] = forcedCompactionInfo;
+    ForcedCompactionsByTime.insert(std::make_pair(forcedCompactionInfo->StartTime, forcedCompactionInfo->Id));
     if (forcedCompactionInfo->State == TForcedCompactionInfo::EState::InProgress) {
         InProgressForcedCompactionsByTable[forcedCompactionInfo->TablePathId] = forcedCompactionInfo;
         ForcedCompactionTablesQueue.Enqueue(forcedCompactionInfo->TablePathId);
+    } else if (forcedCompactionInfo->State == TForcedCompactionInfo::EState::Cancelling) {
+        CancellingForcedCompactions.emplace_back(forcedCompactionInfo);
     }
 }
 
@@ -18,7 +21,9 @@ void TSchemeShard::AddForcedCompactionShard(
     const TShardIdx& shardId,
     const TForcedCompactionInfo::TPtr& forcedCompactionInfo)
 {
-    ForcedCompactionShardsByTable[forcedCompactionInfo->TablePathId].Enqueue(shardId);
+    if (ForcedCompactionShardsByTable[forcedCompactionInfo->TablePathId].Enqueue(shardId)) {
+        ++ForcedCompactionTotalInQueues;
+    }
     if (forcedCompactionInfo->State == TForcedCompactionInfo::EState::InProgress) {
         InProgressForcedCompactionsByShard[shardId] = forcedCompactionInfo;
     }
@@ -44,6 +49,10 @@ void TSchemeShard::PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForc
             NIceDb::TUpdate<Schema::ForcedCompactions::UserSID>(*info.UserSID)
         );
     }
+}
+
+void TSchemeShard::PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info) {
+    db.Table<Schema::ForcedCompactions>().Key(info.Id).Delete();
 }
 
 void TSchemeShard::PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info, const TVector<TShardIdx>& shardsToCompact) {
@@ -72,14 +81,33 @@ void TSchemeShard::FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedComp
         compaction.SetUserSID(*info.UserSID);
     }
 
+    compaction.SetShardsTotal(info.TotalShardCount);
+    compaction.SetShardsDone(info.DoneShardCount);
+
     TPath table = TPath::Init(info.TablePathId, this);
     compaction.MutableSettings()->set_source_path(table.PathString());
     compaction.MutableSettings()->set_cascade(info.Cascade);
     compaction.MutableSettings()->set_max_shards_in_flight(info.MaxShardsInFlight);
 
-    float progress = info.TotalShardCount > 0 ? (100.f * info.DoneShardCount / info.TotalShardCount) : 0;
-
-    compaction.SetProgress(progress);
+    switch (info.State) {
+        case TForcedCompactionInfo::EState::InProgress:
+        case TForcedCompactionInfo::EState::Cancelling:
+            compaction.SetState(Ydb::Table::CompactState::STATE_IN_PROGRESS);
+            compaction.SetProgress(info.CalcProgress());
+            break;
+        case TForcedCompactionInfo::EState::Done:
+            compaction.SetState(Ydb::Table::CompactState::STATE_DONE);
+            compaction.SetProgress(100.0);
+            break;
+        case TForcedCompactionInfo::EState::Cancelled:
+            compaction.SetState(Ydb::Table::CompactState::STATE_CANCELLED);
+            compaction.SetProgress(info.CalcProgress());
+            break;
+        case TForcedCompactionInfo::EState::Invalid:
+            compaction.SetState(Ydb::Table::CompactState::STATE_UNSPECIFIED);
+            compaction.SetProgress(0.0);
+            break;
+    }
 }
 
 void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx) {
@@ -90,9 +118,7 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
     auto compaction = *compactionPtr;
     auto* shardsQueue = ForcedCompactionShardsByTable.FindPtr(compaction->TablePathId); // TODO: check all table when cascade = true
 
-    if (compaction->ShardsInFlight.erase(shardIdx)
-        || shardsQueue && shardsQueue->Remove(shardIdx))
-    {
+    if (compaction->ShardsInFlight.erase(shardIdx)) {
         DoneShardsToPersist.emplace_back(shardIdx, compaction);
     }
 
@@ -108,6 +134,20 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
     ProcessForcedCompactionQueues();
 }
 
+void TSchemeShard::RetryForcedCompactionForShard(const TShardIdx& shardIdx) {
+    auto compactionPtr = InProgressForcedCompactionsByShard.FindPtr(shardIdx);
+    if (!compactionPtr) {
+        return;
+    }
+    auto compaction = *compactionPtr;
+    compaction->ShardsInFlight.erase(shardIdx);
+    if (ForcedCompactionShardsByTable[compaction->TablePathId].Enqueue(shardIdx)) {
+        ++ForcedCompactionTotalInQueues;
+    }
+    ForcedCompactionTablesQueue.Enqueue(compaction->TablePathId);
+    ProcessForcedCompactionQueues();
+}
+
 void TSchemeShard::ProcessForcedCompactionQueues() {
     // try enqueue shards from multiple tables fairly
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
@@ -118,9 +158,10 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         auto& shards = ForcedCompactionShardsByTable.at(tablePathId);
         if (!shards.Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {
             const auto& shardIdx = shards.Front();
-            EnqueueForcedCompaction(shards.Front());
+            EnqueueForcedCompaction(shardIdx);
             compaction->ShardsInFlight.insert(shardIdx);
             shards.PopFront();
+            --ForcedCompactionTotalInQueues;
         }
         if (shards.Empty()) {
             tablesWithoutCandidates.insert(tablePathId);
@@ -133,6 +174,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
             ForcedCompactionTablesQueue.PopFrontToBack();
         }
     }
+    UpdateForcedCompactionQueueMetrics();
 }
 
 void TSchemeShard::Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
@@ -141,6 +183,18 @@ void TSchemeShard::Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const
 
 void TSchemeShard::Handle(TEvForcedCompaction::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxGetForcedCompaction(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvForcedCompaction::TEvCancelRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCancelForcedCompaction(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvForcedCompaction::TEvForgetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxForgetForcedCompaction(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvForcedCompaction::TEvListRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxListForcedCompaction(ev), ctx);
 }
 
 NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardIdx& shardIdx) {
@@ -182,9 +236,23 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
 void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
-    // backward compatibility for 0 cookie
-    // forced compaction uses CompactBorrowed = true, so this ev definitely not from forced compaction, just ignore it
-    if (record.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::BORROWED) {
+
+    switch (record.GetStatus()) {
+    case NKikimrTxDataShard::TEvCompactTableResult::OK:
+        TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_OK].Increment(1);
+        break;
+    case NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED:
+        TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_NOT_NEEDED].Increment(1);
+        break;
+    case NKikimrTxDataShard::TEvCompactTableResult::FAILED:
+        TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_FAILED].Increment(1);
+        break;
+    case NKikimrTxDataShard::TEvCompactTableResult::LOANED:
+        TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_LOANED].Increment(1);
+        break;
+    case NKikimrTxDataShard::TEvCompactTableResult::BORROWED:
+        // backward compatibility for 0 cookie
+        // forced compaction uses CompactBorrowed = true, so this ev definitely not from forced compaction, just ignore it
         return;
     }
 
@@ -195,16 +263,35 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         record.GetPathId().GetOwnerId(),
         record.GetPathId().GetLocalId());
 
-    if (ForcedCompactionQueue) {
-        auto duration = ForcedCompactionQueue->OnDone(shardIdx);
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
+    if (shardIdx == InvalidShardIdx) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Failed to resolve shard info "
+            "for pathId# " << pathId << ", datashard# " << tabletId
+            << " at schemeshard# " << TabletID());
+    } else if (record.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::FAILED) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Failed] Compaction failed "
             "for pathId# " << pathId << ", datashard# " << tabletId
             << ", shardIdx# " << shardIdx
-            << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
+            << " with status# " << (int)record.GetStatus()
             << " at schemeshard " << TabletID());
+        // do nothing, failed shards will be retried after timeout
+    } else {
+        if (ForcedCompactionQueue) {
+            auto duration = ForcedCompactionQueue->OnDone(shardIdx);
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << ", shardIdx# " << shardIdx
+                << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
+                << " at schemeshard " << TabletID());
+        } else {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << ", shardIdx# " << shardIdx
+                << " with status# " << (int)record.GetStatus()
+                << " at schemeshard " << TabletID()
+                << " (no ForcedCompactionQueue)");
+        }
+        CompleteForcedCompactionForShard(shardIdx, ctx);
     }
-
-    CompleteForcedCompactionForShard(shardIdx, ctx);
 }
 
 void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
@@ -220,6 +307,7 @@ void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
 }
 
 void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
+    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_TIMEOUT].Increment(1);
     auto ctx = ActorContext();
 
     auto it = ShardInfos.find(shardIdx);
@@ -227,6 +315,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Timeout] Failed to resolve shard info "
             "for timeout forced compaction# " << shardIdx
             << " at schemeshard# " << TabletID());
+        CompleteForcedCompactionForShard(shardIdx, ctx);
         return;
     }
 
@@ -240,7 +329,16 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
         << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
     
+    RetryForcedCompactionForShard(shardIdx);
+}
 
+void TSchemeShard::UpdateForcedCompactionQueueMetrics() {
+    if (!ForcedCompactionQueue)
+        return;
+
+    TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE].Set(ForcedCompactionTotalInQueues);
+    TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE].Set(ForcedCompactionQueue->Size());
+    TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING].Set(ForcedCompactionQueue->RunningSize());
 }
 
 } // namespace NKikimr::NSchemeShard

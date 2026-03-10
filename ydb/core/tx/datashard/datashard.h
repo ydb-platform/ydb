@@ -378,6 +378,9 @@ namespace TEvDataShard {
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
 
+        EvValidateRowConditionRequest,
+        EvValidateRowConditionResponse,
+
         EvEnd
     };
 
@@ -917,6 +920,10 @@ namespace TEvDataShard {
                                                         TEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
+
+        TString GetUserSID() const {
+            return Record.GetUserSID();
+        }
     };
 
     struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,
@@ -1430,6 +1437,10 @@ namespace TEvDataShard {
             , Info(info)
         {
             Y_ENSURE(Info.DataETag);
+        }
+
+        TString GetUserSID() const {
+            return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
         }
 
         TString ToString() const override {
@@ -1986,6 +1997,20 @@ namespace TEvDataShard {
         : public TEventPB<TEvValidateUniqueIndexResponse,
                           NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
                           TEvDataShard::EvValidateUniqueIndexResponse>
+    {
+    };
+
+    struct TEvValidateRowConditionRequest
+        : public TEventPB<TEvValidateRowConditionRequest,
+                          NKikimrTxDataShard::TEvValidateRowConditionRequest,
+                          TEvDataShard::EvValidateRowConditionRequest>
+    {
+    };
+
+    struct TEvValidateRowConditionResponse
+        : public TEventPB<TEvValidateRowConditionResponse,
+                          NKikimrTxDataShard::TEvValidateRowConditionResponse,
+                          TEvDataShard::EvValidateRowConditionResponse>
     {
     };
 };

@@ -217,8 +217,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             for (int column : Meta_->KeyColumns.SelectSide(side)) {
                 roles[column] = NPackedTuple::EColumnRole::Key;
             }
-            bool rememberNullBitmaps = !(Kind == EJoinKind::Left && side == ESide::Build);
-            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool, rememberNullBitmaps);
+            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userTypes.Build);
     }

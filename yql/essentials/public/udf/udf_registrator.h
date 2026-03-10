@@ -81,7 +81,7 @@ inline TStaticSymbols GetStaticSymbols();
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionDescriptor {
 public:
-    typedef TUniquePtr<IFunctionDescriptor> TPtr;
+    using TPtr = TUniquePtr<IFunctionDescriptor>;
 
     virtual ~IFunctionDescriptor() = default;
 
@@ -102,7 +102,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IFunctionsSink, 8);
 
-typedef IFunctionsSink IFunctionNamesSink;
+using IFunctionNamesSink = IFunctionsSink;
 
 //////////////////////////////////////////////////////////////////////////////
 // IUdfModule
@@ -153,7 +153,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
 
-typedef void (*TBackTraceCallback)();
+using TBackTraceCallback = void (*)();
 
 using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
 using TAbiVersionFunctionPtr = ui32 (*)();

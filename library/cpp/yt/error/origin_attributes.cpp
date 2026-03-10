@@ -51,7 +51,8 @@ bool TOriginAttributes::operator==(const TOriginAttributes& other) const noexcep
         Datetime == other.Datetime &&
         Pid == other.Pid &&
         Tid == other.Tid &&
-        ExtensionData == other.ExtensionData;
+        ExtensionData.has_value() == other.ExtensionData.has_value() &&
+        (!ExtensionData.has_value() || NDetail::CompareExtensionData(*ExtensionData, *other.ExtensionData));
 }
 
 void TOriginAttributes::Capture()
@@ -104,6 +105,16 @@ std::string FormatOrigin(const TOriginAttributes& attributes)
             }
             FormatValue(builder, threadName, "v");
         }));
+}
+
+bool CompareExtensionData(const TOriginAttributes::TErasedExtensionData& lhs, const TOriginAttributes::TErasedExtensionData& rhs)
+{
+    using TFunctor = bool(*)(const TOriginAttributes::TErasedExtensionData&, const TOriginAttributes::TErasedExtensionData&);
+
+    if (auto strong = NGlobal::GetErasedVariable(CompareExtensionDataTag)) {
+        return strong->AsConcrete<TFunctor>()(lhs, rhs);
+    }
+    return lhs == rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

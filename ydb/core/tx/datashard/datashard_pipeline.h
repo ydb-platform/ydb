@@ -118,7 +118,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, const TString& userSID);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -270,20 +270,23 @@ public:
     TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan);
+                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan,
+                                    const TString& userSID);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     NWilson::TSpan &&operationSpan);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
-                     const TActorContext &ctx);
+                     const TActorContext &ctx,
+                     const TString& userSID);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
-            const TActorContext &ctx)
+            const TActorContext &ctx,
+            const TString& userSID)
     {
-        return tx->RestoreTxData(Self, txc, ctx);
+        return tx->RestoreTxData(Self, txc, ctx, userSID);
     }
 
     ERestoreDataStatus RestoreWriteTx(

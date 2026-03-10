@@ -11,6 +11,7 @@
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
@@ -178,7 +179,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(std::move(storageOperator)));
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
         if (!MetadataUploaded) {
             UploadMetadata();
@@ -753,14 +754,19 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
+        return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "s3"sv;
-    }
+        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
+            return "s3"sv;
+        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
+            return "fs"sv;
+        }
 
-    static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
+        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
+            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
+    }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
             const NWrappers::IExternalStorageConfig::TPtr& config)
@@ -782,7 +788,7 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
@@ -956,20 +962,6 @@ private:
     std::function<void()> ChecksumUploadedCallback;
 
 }; // TS3Uploader
-
-template <>
-NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
-    return task.GetS3Settings();
-}
-
-template <>
-NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
-    return task.GetFSSettings();
-}
 
 IActor* CreateUploaderBySettingsType(
     const TActorId& dataShard,

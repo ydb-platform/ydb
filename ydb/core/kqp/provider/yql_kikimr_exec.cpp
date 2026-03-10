@@ -1623,12 +1623,12 @@ public:
 };
 
 bool ParseCompressionSettings(
-    const TExprList& alterColumnList,
-    Ydb::Table::ColumnMeta* alter_columns,
+    const TExprList& columnSource,
+    Ydb::Table::ColumnMeta* columnDest,
     TExprContext& ctx) {
 
-    auto compression = alter_columns->mutable_compression();
-    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+    auto compression = columnDest->mutable_compression();
+    const auto settings = columnSource.Item(1).Cast<TExprList>();
     for (const auto setting : settings) {
         const auto sKV = setting.Cast<TExprList>();
         const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
@@ -1650,7 +1650,7 @@ bool ParseCompressionSettings(
             compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
-                << " Column: \"" << alter_columns->name()
+                << " Column: \"" << columnDest->name()
                 << "\". Setting: \"" << key
                 << "\". Only algorithm and level settings supported for column COMPRESSION"));
             return false;
@@ -1991,20 +1991,32 @@ public:
                         }
 
                         if (columnTuple.Size() > 3) {
-                            auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                            if (families.Size() > 1) {
-                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                    "Unsupported number of families"));
-                                return SyncError();
-                            }
+                            auto columnItem = columnTuple.Item(3);
+                            if (columnItem.Maybe<TExprList>()) {
 
-                            for (auto family : families) {
-                                add_column->set_family(TString(family.Value()));
-                            }
 
-                            if (columnBuild) {
-                                for (auto family : families) {
-                                    columnBuild->SetFamily(TString(family.Value()));
+                                const auto exprs = columnItem.Cast<TExprList>();
+                                if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                                    if (!ParseCompressionSettings(exprs, add_column, ctx)) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    auto families = columnItem.Cast<TCoAtomList>();
+                                    if (families.Size() > 1) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                            "Unsupported number of families"));
+                                        return SyncError();
+                                    }
+
+                                    for (auto family : families) {
+                                        add_column->set_family(TString(family.Value()));
+                                    }
+
+                                    if (columnBuild) {
+                                        for (auto family : families) {
+                                            columnBuild->SetFamily(TString(family.Value()));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2097,6 +2109,37 @@ public:
                                     << "Unknown operation in changeColumnConstraints"));
                                 return SyncError();
                             }
+                        } else if (alterColumnAction == "setDefaultValue") {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Default values are not supported in column tables"));
+                                return SyncError();
+                            }
+
+                            auto defaultExpr = TExprBase(alterColumnList.Item(1));
+
+                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                defaultExpr = maybeJust.Cast().Input();
+                            }
+
+                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
+                            if (isNull) {
+                                alter_columns->set_empty_default(google::protobuf::NullValue());
+                            } else {
+                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->mutable_from_literal());
+                                if (err) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                    return SyncError();
+                                }
+                            }
+                        } else if (alterColumnAction == "dropDefault") {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Default values are not supported in column tables"));
+                                return SyncError();
+                            }
+
+                            alter_columns->set_empty_default(google::protobuf::NullValue());
                         } else if (alterColumnAction == "changeCompression") {
                             if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
                                 return SyncError();
@@ -2261,7 +2304,25 @@ public:
                                         TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
                                 }
+
                                 add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "localBloomFilter") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom filter index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                add_index->mutable_local_bloom_filter_index();
+                            } else if (type == "localBloomNgramFilter") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom ngram filter index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
+                                ngramIndex->set_case_sensitive(true);
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2306,6 +2367,8 @@ public:
                                 );
                             }
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
                                 const auto& name = indexSetting.Name();
@@ -2331,6 +2394,18 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
+                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                        FillLocalBloomFilterSetting(
+                                            localBloomFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                        FillLocalBloomNgramFilterSetting(
+                                            localBloomNgramFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
                                     default:
                                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                             << "Unknown index setting: " << name.StringValue()));
@@ -2342,8 +2417,20 @@ public:
                                     return SyncError();
                                 }
                             }
-                        }
-                        else {
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex && localBloomFilterDesc.FalsePositiveProbability) {
+                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            }
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
+                                proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
+                                proto->set_filter_size_bytes(localBloomNgramFilterDesc.FilterSizeBytes);
+                                proto->set_records_count(localBloomNgramFilterDesc.RecordsCount);
+                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
+                            }
+                        } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
                             return SyncError();
                         }
@@ -2373,8 +2460,6 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
-                            // Set layout based on index type
-                            add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_plain_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
@@ -2383,8 +2468,6 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                            // Set layout based on index type
-                            add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
@@ -2392,6 +2475,29 @@ public:
                             }
                             break;
                         }
+                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
+                                return SyncError();
+                            }
+
+                            break;
+                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
+                                return SyncError();
+                            }
+
+                            if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
+                                !add_index->local_bloom_ngram_filter_index().hashes_count() ||
+                                !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
+                                !add_index->local_bloom_ngram_filter_index().records_count()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
+                                return SyncError();
+                            }
+
+                            break;
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();
@@ -2519,6 +2625,12 @@ public:
                                     );
 
                                     add_changefeed->set_initial_scan(FromString<bool>(to_lower(value)));
+                                } else if (name == "user_sids") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_user_sids(FromString<bool>(to_lower(value)));
                                 } else if (name == "virtual_timestamps") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
@@ -2648,6 +2760,41 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "compact") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed"));
+                        return SyncError();
+                    }
+                    auto& compact = *alterTableRequest.mutable_compact();
+                    const auto& listNode = action.Value().Cast<TCoNameValueTupleList>();
+                     for (const auto& compactParam : listNode) {
+                        const auto& paramName = compactParam.Name().Value();
+                        if (paramName == "settings") {
+                            const auto& settingsList = compactParam.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& setting : settingsList) {
+                                const auto& name = setting.Name().Value();
+                                if (name == "cascade") {
+                                    auto value = FromString<bool>(to_lower(TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    )));
+
+                                    compact.set_cascade(value);
+                                } else if (name == "maxShardsInFlight") {
+                                    i32 value = FromString<i32>(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (value <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be positive"));
+                                        return SyncError();
+                                    }
+
+                                    compact.set_max_shards_in_flight(value);
+                                }
+                            }
+                        }
+                     }
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         TStringBuilder() << "Unknown alter table action: " << name));

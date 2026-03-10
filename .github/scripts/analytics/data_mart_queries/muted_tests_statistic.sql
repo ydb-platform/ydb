@@ -13,9 +13,10 @@ $prepared = (
       AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
       AND tm.is_test_chunk = 0
       AND tm.is_muted = 1
+      AND tm.state != 'Skipped'
 );
 
--- Дневная метрика
+-- Daily metric
 $daily = (
     SELECT
         date_window,
@@ -33,7 +34,7 @@ $daily = (
         owner
 );
 
--- Последняя дата в каждом месяце по группе
+-- Last date in each month per group
 $month_last_day = (
     SELECT
         ym,
@@ -49,7 +50,7 @@ $month_last_day = (
         owner
 );
 
--- Значение метрики на последнюю дату месяца
+-- Metric value on the last day of month
 $month_value = (
     SELECT
         m.ym AS ym,

@@ -655,6 +655,8 @@ private:
             path->PathId.ToProto(ev->Record.MutablePathId());
         }
 
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
         if (buildInfo.KMeans.Parent != 0) {
@@ -1117,6 +1119,9 @@ private:
         *ev->Record.MutableDataColumns() = {
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
+        if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
+            ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+        }
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
@@ -1772,7 +1777,7 @@ private:
 
         switch (buildInfo.SubState) {
         case TIndexBuildInfo::ESubState::None:
-            // Stage 1 for FLAT_RELEVANCE - build "posting" table (token-documents)
+            // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
             LOG_D("FillFulltextIndex Posting");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
@@ -1781,8 +1786,7 @@ private:
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
                 LOG_D("FillFulltextIndex Posting Done");
-                auto settings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription).GetSettings();
-                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
                     NIceDb::TNiceDb db{txc.DB};
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexStats;
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
@@ -1793,7 +1797,7 @@ private:
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexStats:
-            // Stage 2 for FLAT_RELEVANCE - build statistics table (DocCount & TotalDocLength)
+            // Stage 2 for FulltextRelevance - build statistics table (DocCount & TotalDocLength)
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
@@ -1811,7 +1815,7 @@ private:
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexDictionary:
-            // Stage 3 for FLAT_RELEVANCE - build dictionary table
+            // Stage 3 for FulltextRelevance - build dictionary table
             LOG_D("FillFulltextIndex Dictionary");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
@@ -1829,7 +1833,7 @@ private:
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexBorders:
-            // Stage 4 for FLAT_RELEVANCE - fill border values for dictionary
+            // Stage 4 for FulltextRelevance - fill border values for dictionary
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
@@ -3169,11 +3173,14 @@ public:
                     << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason());
-                Self->PersistBuildIndexForget(db, buildInfo);
+                if (!Self->PersistBuildIndexForget(db, buildInfo)) {
+                    return false;
+                }
                 EraseBuildInfo(buildInfo);
             }
 
             ReplyOnCreation(buildInfo, statusCode);
+            return true;
         };
 
         auto ifErrorMoveTo = [&] (TIndexBuildInfo::EState to) {
@@ -3199,7 +3206,9 @@ public:
             buildInfo.LockTxStatus = record.GetStatus();
             Self->PersistBuildIndexLockTxStatus(db, buildInfo);
 
-            replyOnCreation();
+            if (!replyOnCreation()) {
+                return false;
+            }
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:

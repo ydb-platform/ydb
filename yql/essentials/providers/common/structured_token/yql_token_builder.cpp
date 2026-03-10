@@ -1,11 +1,13 @@
 #include "yql_token_builder.h"
 
+#include <utility>
+
 namespace NYql {
 TStructuredTokenBuilder::TStructuredTokenBuilder() {
 }
 
-TStructuredTokenBuilder::TStructuredTokenBuilder(const TStructuredToken& data)
-    : Data_(data)
+TStructuredTokenBuilder::TStructuredTokenBuilder(TStructuredToken data)
+    : Data_(std::move(data))
 {
 }
 

@@ -840,13 +840,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(OltpNamedStatementNoSink) {
-        TNamedStatement tester;
-        tester.SetDisableSinks(true);
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(OltpNamedStatement) {
         TNamedStatement tester;
         tester.SetIsOlap(false);
@@ -882,13 +875,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             }
         }
     };
-
-    Y_UNIT_TEST(OltpMultiSinksNoSinks) {
-        TMultiSinks tester;
-        tester.SetDisableSinks(true);
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
 
     Y_UNIT_TEST(OltpMultiSinks) {
         TMultiSinks tester;

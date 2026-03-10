@@ -13,13 +13,14 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
-        }
+        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg.DiskFormat);
+        Y_ABORT_UNLESS(msg.PersistentBufferFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
+        DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
         DiskFd = std::move(msg.DiskFd);
         if (!DiskFd.IsOpen()) {
@@ -27,6 +28,8 @@ namespace NKikimr::NDDisk {
                 "TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
                 (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         }
+
+        InitPersistentBuffer(std::move(msg.PersistentBufferFormat));
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
@@ -109,6 +112,46 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::StartHandlingQueries() {
+#if defined(__linux__)
+        NPDisk::TUringRouterConfig config;
+        config.QueueDepth = MaxInFlight;
+        if (!UringRouter) {
+            if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+                UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
+                if (const auto result = UringRouter->RegisterFile(); !result) {
+                    STLOG(PRI_WARN, BS_DDISK, BSDD18,
+                        "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
+                        (DDiskId, DDiskId), (Errno, result.error()));
+                }
+
+                UringRouter->Start();
+            }
+        }
+
+        if (UringRouter) {
+            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
+            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
+            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
+            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
+            *Counters.DirectIO.FallbackPDiskCount = 0;
+            if (actualFavor != requestedFavor) {
+                STLOG(PRI_WARN, BS_DDISK, BSDD19,
+                    "TDDiskActor::StartHandlingQueries io_uring mode fallback",
+                    (DDiskId, DDiskId),
+                    (RequestedFavor, requestedFavor),
+                    (ActualFavor, actualFavor));
+            }
+            STLOG(PRI_INFO, BS_DDISK, BSDD20,
+                "TDDiskActor::StartHandlingQueries started io_uring with config",
+                (DDiskId, DDiskId),
+                (Config, UringRouter->GetConfig()));
+
+        } else {
+            *Counters.DirectIO.RegularUringCount = 0;
+            *Counters.DirectIO.FallbackUringCount = 0;
+            *Counters.DirectIO.FallbackPDiskCount = 1;
+        }
+#endif
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvHandleSingleQuery, 0, SelfId(), SelfId(), nullptr, 0));
     }
 

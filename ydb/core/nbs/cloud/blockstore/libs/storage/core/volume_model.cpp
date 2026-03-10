@@ -20,9 +20,12 @@ namespace NYdb::NBS::NStorage {
 
 namespace {
 
-void AddOrModifyChannel(const TString& poolKind, const ui32 channelId,
-                        const ui64 size, const EChannelDataKind dataKind,
-                        NKikimrBlockStore::TVolumeConfig& volumeConfig)
+void AddOrModifyChannel(
+    const TString& poolKind,
+    const ui32 channelId,
+    const ui64 size,
+    const EChannelDataKind dataKind,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     while (channelId >= volumeConfig.ExplicitChannelProfilesSize()) {
         volumeConfig.AddExplicitChannelProfiles();
@@ -40,9 +43,12 @@ void AddOrModifyChannel(const TString& poolKind, const ui32 channelId,
         volumeConfig.GetPerformanceProfileMaxWriteBandwidth());
 }
 
-void SetupVolumeChannel(const TString& poolKind, const ui32 channelId,
-                        const ui64 size, const EChannelDataKind dataKind,
-                        NKikimrBlockStore::TVolumeConfig& volumeConfig)
+void SetupVolumeChannel(
+    const TString& poolKind,
+    const ui32 channelId,
+    const ui64 size,
+    const EChannelDataKind dataKind,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     while (channelId >= volumeConfig.VolumeExplicitChannelProfilesSize()) {
         volumeConfig.AddVolumeExplicitChannelProfiles();
@@ -78,16 +84,25 @@ TPoolKinds GetPoolKinds(const NProto::TStorageServiceConfig& config)
 }
 
 // Partition channels
-void SetExplicitChannelProfiles(const NProto::TStorageServiceConfig& config,
-                                NKikimrBlockStore::TVolumeConfig& volumeConfig)
+void SetExplicitChannelProfiles(
+    const NProto::TStorageServiceConfig& config,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     const auto poolKinds = GetPoolKinds(config);
 
-    AddOrModifyChannel(poolKinds.System, 0, 128_MB, EChannelDataKind::System,
-                       volumeConfig);
+    AddOrModifyChannel(
+        poolKinds.System,
+        0,
+        128_MB,
+        EChannelDataKind::System,
+        volumeConfig);
 
-    AddOrModifyChannel(poolKinds.Log, 1, 1_MB, EChannelDataKind::Log,
-                       volumeConfig);
+    AddOrModifyChannel(
+        poolKinds.Log,
+        1,
+        1_MB,
+        EChannelDataKind::Log,
+        volumeConfig);
 }
 
 // Volume channels
@@ -97,18 +112,35 @@ void SetVolumeExplicitChannelProfiles(
 {
     const auto poolKinds = GetPoolKinds(config);
 
-    SetupVolumeChannel(poolKinds.System, 0, 1_MB, EChannelDataKind::System,
-                       volumeConfig);
-    SetupVolumeChannel(poolKinds.Log, 1, 1_MB, EChannelDataKind::Log,
-                       volumeConfig);
+    SetupVolumeChannel(
+        poolKinds.System,
+        0,
+        1_MB,
+        EChannelDataKind::System,
+        volumeConfig);
+    SetupVolumeChannel(
+        poolKinds.Log,
+        1,
+        1_MB,
+        EChannelDataKind::Log,
+        volumeConfig);
+    // Now schemeshard expects 3 channels for volume:
+    // https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/schemeshard/schemeshard_info_types.h#L2503
+    SetupVolumeChannel(
+        poolKinds.Index,
+        2,
+        1_MB,
+        EChannelDataKind::Index,
+        volumeConfig);
 }
 
 }   // namespace
 
 // ////////////////////////////////////////////////////////////////////////////////
 
-void ResizeVolume(const NProto::TStorageServiceConfig& config,
-                  NKikimrBlockStore::TVolumeConfig& volumeConfig)
+void ResizeVolume(
+    const NProto::TStorageServiceConfig& config,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     SetExplicitChannelProfiles(config, volumeConfig);
 

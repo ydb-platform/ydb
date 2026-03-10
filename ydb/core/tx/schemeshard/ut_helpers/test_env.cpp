@@ -587,10 +587,12 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
 
+    NKikimrConfig::TTliConfig tliConfig;
     IActor* kqpProxyService = NKqp::CreateKqpProxyService(
         logConfig,
         tableServiceConfig,
         queryServiceConfig,
+        tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
         nullptr, // kqp proxy shared resources
@@ -1291,7 +1293,7 @@ NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::Crea
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
-    Cdbg << Endl << "=========== RUN: "<< dispatchName << " ===========" << Endl;
+    Cdbg << Endl << "======" << TInstant::Now() << "===== RUN: "<< dispatchName << " ===========" << Endl;
 
     outActiveZone = false;
 

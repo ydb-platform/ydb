@@ -1,5 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/client/signature/dynamic.h>
 #include <yt/yt/client/signature/generator.h>
 #include <yt/yt/client/signature/signature.h>
@@ -7,6 +9,8 @@
 
 namespace NYT::NSignature {
 namespace {
+
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,12 +30,12 @@ TEST(TDynamicSignatureValidatorTest, SetUnderlying)
     auto dynamicValidator = New<TDynamicSignatureValidator>(CreateDummySignatureValidator());
     auto signature = New<TSignature>();
 
-    EXPECT_TRUE(dynamicValidator->Validate(signature).Get().Value());
+    EXPECT_TRUE(WaitForFast(dynamicValidator->Validate(signature)).Value());
 
     dynamicValidator->SetUnderlying(CreateAlwaysThrowingSignatureValidator());
 
     EXPECT_THROW_WITH_SUBSTRING(
-        dynamicValidator->Validate(signature).Get(),
+        WaitForFast(dynamicValidator->Validate(signature)).ValueOrThrow(),
         "unsupported");
 }
 

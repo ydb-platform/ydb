@@ -22,6 +22,7 @@
 #include <util/string/split.h>
 
 #include <regex>
+#include <utility>
 
 namespace NYql::NCommon {
 
@@ -111,14 +112,14 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 class TOutProcUdfResolver: public IUdfResolver {
 public:
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                        const TFileStoragePtr& fileStorage, const TString& resolverPath,
+                        TFileStoragePtr fileStorage, TString resolverPath,
                         const TString& user, const TString& group, bool filterSyscalls,
-                        const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
+                        TString udfDependencyStubPath, const TMap<TString, TString>& path2md5)
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FileStorage_(fileStorage)
-        , ResolverPath_(resolverPath)
-        , UdfDependencyStubPath_(udfDependencyStubPath)
+        , FileStorage_(std::move(fileStorage))
+        , ResolverPath_(std::move(resolverPath))
+        , UdfDependencyStubPath_(std::move(udfDependencyStubPath))
         , Path2Md5_(path2md5)
     {
         if (user) {

@@ -9,6 +9,9 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
+#include <ranges>
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -444,8 +447,8 @@ TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& pred
                     auto expanded = ExpandAndOverOr(orTerm, ctx, types);
                     if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
                         // Update orTermsToProcess with terms after expansion and repeat
-                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
-                            orTermsToProcess.push_front(std::move(*it));
+                        for (auto& it : std::ranges::reverse_view(expanded)) {
+                            orTermsToProcess.push_front(std::move(it));
                             // joinInputs update is not needed
                             // as innerAndTerm can't be newly constructed node
                         }
@@ -899,7 +902,7 @@ public:
     TJoinTreeRebuilder(const TJoinLabels& labels, TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
         TExprContext& ctx, bool rotateJoinTree)
         : JoinLabels_(labels)
-        , JoinTree_(joinTree)
+        , JoinTree_(std::move(joinTree))
         , Labels_{ label1, label2 }
         , Columns_{ column1, column2 }
         , Ctx_(ctx)
@@ -1253,7 +1256,7 @@ bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* type
 bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
     static const char Flag[] = "NormalizeEqualityFilterOverJoin";
-    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
+    return !IsOptimizerDisabled<Flag>(*types);
 }
 
 struct TExtraInputPredicates {

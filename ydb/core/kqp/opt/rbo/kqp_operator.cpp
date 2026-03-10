@@ -573,6 +573,10 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Limit: " << LimitCond.ToString(); 
 }
 
+TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
+    return {LimitCond};
+}
+
 /**
  * Sort operator
  * FIXME: This is temporary, we want to get enforcers working

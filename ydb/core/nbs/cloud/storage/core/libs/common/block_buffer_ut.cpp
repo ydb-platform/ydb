@@ -36,8 +36,9 @@ Y_UNIT_TEST_SUITE(TBlockBufferTest)
         }
     }
 
-    bool CheckBlocks(const TContent& expected,
-                     const TVector<TBlockDataRef>& actual)
+    bool CheckBlocks(
+        const TContent& expected,
+        const TVector<TBlockDataRef>& actual)
     {
         UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
 
@@ -46,14 +47,17 @@ Y_UNIT_TEST_SUITE(TBlockBufferTest)
             const auto actualBlock = actual[i];
 
             if (expectedBlock.fill) {
-                const TString expectedData(expectedBlock.size,
-                                           *expectedBlock.fill);
-                UNIT_ASSERT_VALUES_EQUAL(expectedData,
-                                         actualBlock.AsStringBuf());
+                const TString expectedData(
+                    expectedBlock.size,
+                    *expectedBlock.fill);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expectedData,
+                    actualBlock.AsStringBuf());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(nullptr, actualBlock.Data());
-                UNIT_ASSERT_VALUES_EQUAL(expectedBlock.size,
-                                         actualBlock.Size());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expectedBlock.size,
+                    actualBlock.Size());
             }
         }
 

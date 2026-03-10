@@ -114,6 +114,10 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithBody(details.template GetValue<typename TDetailsTable::Body>())
             .WithSource(source);
 
+        if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
+            builder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
+        }
+
         if constexpr (HaveLock) {
             Y_ENSURE(commited);
             builder
@@ -186,6 +190,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         TChangeRecordBuilder(result.Record)
                             .WithLockId(itQueue->second.LockId)
                             .WithLockOffset(itQueue->second.LockOffset)
+                            .WithUserSID(result.Record->GetUserSID())
                             .Build()
                     );
                 } else {

@@ -105,31 +105,31 @@ public:
 class TStubTypeVisitor: public TStubTypeVisitor5 {
 public:
     using TBase = TStubTypeVisitor5;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 class TStubTypeVisitor: public TStubTypeVisitor4 {
 public:
     using TBase = TStubTypeVisitor4;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 class TStubTypeVisitor: public TStubTypeVisitor3 {
 public:
     using TBase = TStubTypeVisitor3;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 class TStubTypeVisitor: public TStubTypeVisitor2 {
 public:
     using TBase = TStubTypeVisitor2;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #else
 class TStubTypeVisitor: public TStubTypeVisitor1 {
 public:
     using TBase = TStubTypeVisitor1;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #endif
 
@@ -561,7 +561,7 @@ public:
     TBlockTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type);
 
     explicit operator bool() const {
-        return ItemType_ != 0;
+        return ItemType_ != nullptr;
     }
     const TType* GetItemType() const {
         return ItemType_;
@@ -591,7 +591,7 @@ public:
     TLinearTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type);
 
     explicit operator bool() const {
-        return ItemType_ != 0;
+        return ItemType_ != nullptr;
     }
     const TType* GetItemType() const {
         return ItemType_;

@@ -57,7 +57,7 @@ void CheckSchemalessResult(
     while (auto batch = reader->Read(options)) {
         auto actual = batch->MaterializeRows();
         if (actual.empty()) {
-            ASSERT_TRUE(reader->GetReadyEvent().Get().IsOK());
+            ASSERT_TRUE(reader->GetReadyEvent().BlockingGet().IsOK());
             continue;
         }
 

@@ -249,11 +249,13 @@ class TDataShard
     class TTxHandleSafeStatisticsScan;
     class TTxHandleSafeBuildFulltextIndexScan;
     class TTxHandleSafeBuildFulltextDictScan;
+    class TTxHandleSafeValidateRowConditionScan;
 
     class TTxMediatorStateRestored;
 
     class TTxLockRows;
     class TLockRowsTxObserver;
+    class TLockRowsNotifyWaitGuard;
 
     void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);
@@ -843,9 +845,10 @@ class TDataShard
             struct Kind :  Column<2, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
             struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :  Column<4, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
+            struct UserSID :  Column<5, NScheme::NTypeIds::Utf8> { using Type = TString; };
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Kind, Body, Source>;
+            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID>;
         };
 
         struct ChangeSenders : Table<19> {
@@ -991,9 +994,10 @@ class TDataShard
             struct Kind :       Column<3, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
             struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
-
+            struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            
             using TKey = TableKey<LockId, LockOffset>;
-            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID>;
         };
 
         // Maps [Order ... Order+N-1] change records in the shard order
@@ -1273,6 +1277,8 @@ class TDataShard
     bool CheckLockRowsReject(TLockRowsRequestState& state);
     void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
     void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
+    void HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev);
+    void StartLockRowsBrokenWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx);
@@ -1358,6 +1364,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -3093,6 +3101,7 @@ private:
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     THashMap<TLockRowsRequestId, TLockRowsRequestState> LockRowsRequests;
+    THashMap<ui64, TLockRowsRequestState*> LockRowsWaitRequests;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
@@ -3112,7 +3121,7 @@ private:
     // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
     // Maps (MvccVersion) -> QuerySpanId for writes that may have broken locks
     // Used when InvisibleRowSkips are detected to identify the breaker
-    static constexpr size_t MaxRecentWritesForTli = 1000;
+    static constexpr size_t MaxRecentWritesForTli = 10000;
     struct TRecentWriteForTli {
         TRowVersion WriteVersion;
         ui64 QuerySpanId;
@@ -3301,6 +3310,7 @@ protected:
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             hFunc(NEvents::TDataEvents::TEvLockRows, HandleLockRowsRequest);
             hFunc(NEvents::TDataEvents::TEvLockRowsCancel, HandleLockRowsCancel);
+            hFunc(TEvLongTxService::TEvWaitingLockDeadlock, HandleLockRowsDeadlock);
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             hFunc(TEvDataShard::TEvListOperationsRequest, Handle);
             hFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
@@ -3322,6 +3332,7 @@ protected:
             HFunc(TEvDataShard::TEvFilterKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextDictRequest, Handle);
+            HFunc(TEvDataShard::TEvValidateRowConditionRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

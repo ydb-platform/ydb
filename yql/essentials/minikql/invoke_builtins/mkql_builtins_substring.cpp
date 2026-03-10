@@ -19,7 +19,6 @@ struct TSubString {
     static Value* Generate(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SubString>());
         const auto start = StartOptional
                                ? SelectInst::Create(
                                      IsEmpty(st, block, context),
@@ -33,10 +32,7 @@ struct TSubString {
                                      ConstantInt::get(GetTypeFor<ui32>(context), std::numeric_limits<ui32>::max()),
                                      GetterFor<ui32>(cn, context, block), "count", block)
                                : GetterFor<ui32>(cn, context, block);
-        const auto funType = FunctionType::get(string->getType(), {string->getType(), start->getType(), count->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-        const auto result = CallInst::Create(funType, funcPtr, {string, start, count}, "substring", block);
-        return result;
+        return EmitFunctionCall<&SubString>(string->getType(), {string, start, count}, ctx, block);
     }
 #endif
 };

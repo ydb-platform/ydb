@@ -84,7 +84,10 @@ namespace NKikimr::NSqsTopic::V1 {
         return ParseQueueUrl(GetRequest<TProtoRequest>(request).queue_url());
     }
 
-    class TGetQueueAttributesActor: public TQueueUrlHolder, public TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest> {
+    class TGetQueueAttributesActor
+        : public TQueueUrlHolder
+        , public TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest>
+        , public TCdcStreamCompatible {
     protected:
         using TBase = TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -160,11 +163,23 @@ namespace NKikimr::NSqsTopic::V1 {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
-            if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                                                std::format("The specified queue doesn't exist")));
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (ProcessCdc(response)) {
+                        return;
+                    }
+                }
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
+                                                    std::format("The specified queue doesn't exist")));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;

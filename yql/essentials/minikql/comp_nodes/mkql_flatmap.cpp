@@ -227,10 +227,11 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
             state = List->GetValue(ctx).GetListIterator();
-
-            if (!state.Next(Input->RefValue(ctx))) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            if (!state.Next(fetchResult)) {
                 state = NUdf::TUnboxedValuePod::MakeFinish();
             }
+            Input->SetValue(ctx, std::move(fetchResult));
         }
 
         if (state.IsFinish()) {
@@ -239,7 +240,9 @@ public:
 
         while (true) {
             if (auto output = Output->GetValue(ctx); output.IsFinish()) {
-                if (state.Next(Input->RefValue(ctx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (state.Next(fetchResult)) {
+                    Input->SetValue(ctx, std::move(fetchResult));
                     continue;
                 }
 
@@ -284,8 +287,9 @@ public:
         block = next;
 
         const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
-        const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenInput, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueNext(iterator, ctx, block, itemPtr);
+        });
         BranchInst::Create(work, done, status, block);
 
         block = work;
@@ -335,9 +339,11 @@ public:
         if (state.IsInvalid()) {
             state = List->GetValue(ctx).GetListIterator();
 
-            if (!state.Next(Input->RefValue(ctx))) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            if (!state.Next(fetchResult)) {
                 state = NUdf::TUnboxedValuePod::MakeFinish();
             }
+            Input->SetValue(ctx, std::move(fetchResult));
         }
 
         if (state.IsFinish()) {
@@ -345,9 +351,11 @@ public:
         }
 
         while (true) {
+            NYql::NUdf::TUnboxedValue fetchResult;
             if (const auto result = Output->FetchValues(ctx, output); EFetchResult::Finish != result) {
                 return result;
-            } else if (state.Next(Input->RefValue(ctx))) {
+            } else if (state.Next(fetchResult)) {
+                Input->SetValue(ctx, std::move(fetchResult));
                 continue;
             }
 
@@ -391,8 +399,9 @@ public:
         block = next;
 
         const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
-        const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenInput, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueNext(iterator, ctx, block, itemPtr);
+        });
         BranchInst::Create(work, done, status, block);
 
         block = work;
@@ -675,14 +684,14 @@ public:
             block = pull;
 
             if constexpr (ResultContainerOpt) {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueFetch(current, ctx, block, valuePtr);
 
                 result->addIncoming(GetYield(context), block);
                 const auto choise = SwitchInst::Create(status, good, 2U, block);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), over);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), next);
             } else {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueNext(current, ctx, block, valuePtr);
                 BranchInst::Create(good, next, status, block);
             }
 
@@ -882,14 +891,14 @@ public:
             block = pull;
 
             if constexpr (ResultContainerOpt) {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueFetch(current, ctx, block, valuePtr);
 
                 result->addIncoming(GetYield(context), block);
                 const auto choise = SwitchInst::Create(status, good, 2U, block);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), over);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), next);
             } else {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueNext(current, ctx, block, valuePtr);
                 BranchInst::Create(good, next, status, block);
             }
 
@@ -1041,11 +1050,12 @@ private:
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
         for (;;) {
-            const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = Stream.Fetch(fetchResult);
             if (NUdf::EFetchStatus::Ok != status) {
                 return status;
             }
-
+            Item->SetValue(CompCtx, std::move(fetchResult));
             if (auto newItem = NewItem->GetValue(CompCtx)) {
                 result = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                 return NUdf::EFetchStatus::Ok;
@@ -1078,7 +1088,9 @@ public:
         bool Next(NUdf::TUnboxedValue& value) final {
             for (NUdf::TUnboxedValue current = std::move(Current);; current.Clear()) {
                 if (!current) {
-                    if (Iter.Next(Item->RefValue(CompCtx))) {
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    if (Iter.Next(fetchResult)) {
+                        Item->SetValue(CompCtx, std::move(fetchResult));
                         current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
                     } else {
                         return false;
@@ -1166,10 +1178,12 @@ private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
         for (NUdf::TUnboxedValue current = std::move(Current);; current.Clear()) {
             if (!current) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
+                Item->SetValue(CompCtx, std::move(fetchResult));
                 current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
             }
 
@@ -1253,20 +1267,16 @@ protected:
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto itemPtr = new AllocaInst(valueType, 0U, "items_ptr", block);
-        new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
-
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto status = IsInputStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
-
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsInputStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
         const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
-
-        codegenItem->CreateSetValue(ctx, block, itemPtr);
 
         const auto resItem = GetNodeValue(NewItem, ctx, block);
 
@@ -1341,8 +1351,9 @@ protected:
 
         block = next;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsInputStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsInputStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
@@ -1365,7 +1376,7 @@ protected:
         BranchInst::Create(pass, block);
         block = pass;
 
-        const auto state = ResultContainerOpt ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(stateType, current, codegen, block, valuePtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(stateType, current, codegen, block, valuePtr);
+        const auto state = ResultContainerOpt ? CallBoxedValueFetch(current, ctx, block, valuePtr) : CallBoxedValueNext(current, ctx, block, valuePtr);
 
         const auto scmp = ResultContainerOpt ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, state, ConstantInt::get(stateType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), "scmp", block) : state;
 
@@ -1624,12 +1635,7 @@ public:
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
             } else {
                 const auto factory = ctx.GetFactory();
-
-                const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ExtendList<ResultContainerOpt>>());
-
-                const auto funType = FunctionType::get(list->getType(), {factory->getType(), vector->getType(), index->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                res = CallInst::Create(funType, funcPtr, {factory, vector, index}, "res", block);
+                res = EmitFunctionCall<&THolderFactory::ExtendList<ResultContainerOpt>>(list->getType(), {factory, vector, index}, ctx, block);
             }
             map->addIncoming(res, block);
             BranchInst::Create(free, done, heap, block);
@@ -1651,12 +1657,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFlatMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListFlatMapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

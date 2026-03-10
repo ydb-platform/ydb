@@ -1,0 +1,34 @@
+dstool -e <endpoint> --mon-port <mon_port> group resize --size-in-units 2 --group-ids 2181038080
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    ReadStoragePool {
+      BoxId: 18446744073709551615
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ChangeGroupSizeInUnits {
+      BoxId: 1
+      StoragePoolId: 1
+      GroupId: 2181038080
+      SizeInUnits: 2
+      ItemConfigGeneration: 1
+    }
+  }
+}

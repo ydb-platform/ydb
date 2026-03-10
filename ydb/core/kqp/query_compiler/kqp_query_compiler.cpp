@@ -699,6 +699,19 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
     return keyName;
 }
 
+void FillControlPlaneActors(NKqpProto::TKqpPhyStage& stageProto, const NDqProto::TDqIntegrationCommonSettings& settings) {
+    for (const auto& [taskParamName, controlPlaneSettings] : settings.GetStageControlPlaneActors()) {
+        NKqpProto::TKqpControlPlaneSettings protoSettings;
+        const auto& type = controlPlaneSettings.GetType();
+        protoSettings.SetType(controlPlaneSettings.GetType());
+
+        const auto [it, inserted] = stageProto.MutableStageControlPlaneActors()->emplace(taskParamName, protoSettings);
+        if (!inserted) {
+            YQL_ENSURE(type == it->second.GetType(), "Duplicate control plane actor task param: " << taskParamName << " with different type: " << it->second.GetType() << " and " << type);
+        }
+    }
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TString& database, const NMiniKQL::IFunctionRegistry& funcRegistry,
@@ -960,7 +973,7 @@ private:
 
             if (input.Maybe<TDqSource>()) {
                 auto* protoSource = stageProto.AddSources();
-                FillSource(input.Cast<TDqSource>(), protoSource, true, tablesMap, ctx);
+                FillSource(input.Cast<TDqSource>(), stageProto, protoSource, true, tablesMap, ctx);
                 protoSource->SetInputIndex(inputIndex);
             } else {
                 YQL_ENSURE(input.Maybe<TDqConnection>());
@@ -1376,6 +1389,11 @@ private:
             auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
             YQL_ENSURE(desc, "unexpected index description type");
             fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+            YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || index->Type == TIndexDescription::EType::GlobalFulltextPlain);
+            fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
+                : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                 columnProto->SetName(columnMeta->Name);
@@ -1431,11 +1449,13 @@ private:
             }
 
             {
-                TExprBase expr(settings.Query().Raw());
-                if (expr.Maybe<TCoParameter>()) {
-                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
-                } else {
-                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue());
+                for (const auto& expr: settings.Query().Maybe<TExprList>().Cast()) {
+                    auto* value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                    if (expr.Maybe<TCoParameter>()) {
+                        value->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                    } else {
+                        FillLiteralProto(expr.Cast<TCoDataCtor>(), *value->MutableLiteralValue());
+                    }
                 }
             }
 
@@ -1493,23 +1513,59 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+        } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
+            NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *sysViewProto.MutableTable());
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillColumns(settings.Columns().Cast(), *tableMeta, sysViewProto, allowSystemColumns);
+
+            auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
+            sysViewProto.SetReverse(readSettings.IsReverse());
+
+            auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();
+            if (ranges.IsValid()) {
+                auto& rangesParam = *sysViewProto.MutableRanges();
+                rangesParam.SetParamName(ranges.Cast().Name().StringValue());
+            } else if (!TCoVoid::Match(settings.RangesExpr().Raw())) {
+                YQL_ENSURE(
+                    TKqlKeyRange::Match(settings.RangesExpr().Raw()),
+                    "SysView read ranges should be parameter or KqlKeyRange, got: " << settings.RangesExpr().Cast().Ptr()->Content()
+                );
+                FillKeyRange(settings.RangesExpr().Cast<TKqlKeyRange>(), *sysViewProto.MutableKeyRange());
+            }
+
+            if (readSettings.ItemsLimit) {
+                TExprBase expr(readSettings.ItemsLimit);
+                if (expr.template Maybe<TCoUint64>()) {
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *sysViewProto.MutableItemsLimit()->MutableLiteralValue());
+                } else if (expr.template Maybe<TCoParameter>()) {
+                    sysViewProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
+                }
+            }
+
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
     }
 
-    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
+    void FillSource(const TDqSource& source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName}, dataSourceCategory)) {
+        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
-            FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);
+            FillDqInput(source.Ptr(), stageProto, protoSource, dataSourceCategory, ctx, true);
         }
     }
 
-    void FillDqInput(TExprNode::TPtr source, NKqpProto::TKqpSource* protoSource, TStringBuf dataSourceCategory, TExprContext& ctx, bool isDqSource) {
+    void FillDqInput(TExprNode::TPtr source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, TStringBuf dataSourceCategory, TExprContext& ctx, bool isDqSource) {
         // Delegate source filling to dq integration of specific provider
         const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
         YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
@@ -1543,6 +1599,14 @@ private:
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
             dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
+
+            if (settings.Is<NDqProto::TDqIntegrationCommonSettings>()) {
+                NDqProto::TDqIntegrationCommonSettings commonSettings;
+                YQL_ENSURE(settings.UnpackTo(&commonSettings));
+                settings.Swap(commonSettings.MutableSettings());
+                FillControlPlaneActors(stageProto, commonSettings);
+            }
+
             TMaybe<IDqIntegration::TSourceWatermarksSettings> watermarksSettings = dqIntegration->ExtractSourceWatermarksSettings(*source, settings, sourceType);
             if (watermarksSettings) {
                 auto& protoWatermarksSettings = *externalSource.MutableWatermarksSettings();
@@ -1572,7 +1636,7 @@ private:
         YQL_ENSURE(read.Ref().Child(dataSourceChildIndex)->IsCallable("DataSource"));
 
         const TStringBuf dataSourceCategory = read.Ref().Child(dataSourceChildIndex)->Child(0)->Content();
-        FillDqInput(read.Ptr(), stageProto.AddSources(), dataSourceCategory, ctx, false);
+        FillDqInput(read.Ptr(), stageProto, stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
     THashMap<TStringBuf, ui32> CreateColumnToOrder(

@@ -48,7 +48,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TString& runner);
+        TString runner);
 
     void SetIssueReportTarget(const TString& reportTarget);
     void SetLanguageVersion(TLangVersion version);
@@ -367,7 +367,7 @@ public:
 
 private:
     TProgram(
-        const TString& issueReportTarget,
+        TString issueReportTarget,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -376,22 +376,22 @@ private:
         TLangVersion langVer,
         TLangVersion maxLangVer,
         bool volatileResults,
-        const TUserDataTable& userDataTable,
+        TUserDataTable userDataTable,
         const TCredentials::TPtr& credentials,
-        const IModuleResolver::TPtr& modules,
-        const IUrlListerManagerPtr& urlListerManager,
+        IModuleResolver::TPtr modules,
+        IUrlListerManagerPtr urlListerManager,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
+        TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
         const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId,
+        TString filename,
+        TString sourceCode,
+        TString sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
-        const IArrowResolver::TPtr& arrowResolver,
+        IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
         TMaybe<TString> gatewaysForMerge,
@@ -443,6 +443,8 @@ private:
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TLangVersion LangVer_;
     TLangVersion MaxLangVer_;
+    TMaybe<NSQLTranslation::TSqlFlags> SqlFlags_;
+
     bool VolatileResults_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;

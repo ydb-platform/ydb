@@ -1490,14 +1490,9 @@ private:
             return nullptr;
         }
 
-        if (SessionCtx->Config().GetEnableNewRBO()) {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
-        else {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
+        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
+            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1585,7 +1580,8 @@ private:
                 if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
@@ -1903,7 +1899,7 @@ private:
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
@@ -1927,7 +1923,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;
+        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1942,7 +1938,7 @@ private:
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
 
-        finalizers.emplace_back([pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
+        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
     }
@@ -1990,15 +1986,13 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            InitSolomonProvider();
 
             TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider(finalizers);
             }
-            if (FederatedQuerySetup->SolomonGateway) {
-                InitSolomonProvider();
-            }
-            if (FederatedQuerySetup->PqGateway) {
+            if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
             }
 

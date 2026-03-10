@@ -23,36 +23,76 @@ void CreateTable(auto& session, const TString& name, ui64 partitionCount = 1) {
     auto settings = TCreateTableSettings();
     settings.PartitioningPolicy(TPartitioningPolicy().UniformPartitions(partitionCount));
 
-    session.CreateTable(name, std::move(desc), std::move(settings)).GetValueSync();
+    auto result = session.CreateTable(name, std::move(desc), std::move(settings)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 void CreateTables(TTestEnv& env, ui64 partitionCount = 1) {
-    TTableClient client(env.GetDriver());
-    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto driverConfig = TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDiscoveryMode(EDiscoveryMode::Off);
+    auto driver = TDriver(driverConfig);
 
-    CreateTable(session, "Root/Table0", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Table0` (Key, Value) VALUES
-            (0u, "Z");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    {
+        TTableClient client(driver, TClientSettings().Database("/Root"));
+        auto session = client.CreateSession().GetValueSync().GetSession();
 
-    CreateTable(session, "Root/Tenant1/Table1", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Tenant1/Table1` (Key, Value) VALUES
-            (1u, "A"),
-            (2u, "B"),
-            (3u, "C");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+        CreateTable(session, "/Root/Table0", partitionCount);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Table0` (Key, Value) VALUES
+                (0u, "Z");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
 
-    CreateTable(session, "Root/Tenant2/Table2", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Tenant2/Table2` (Key, Value) VALUES
-            (4u, "D"),
-            (5u, "E");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    {
+        TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        CreateTable(session, "/Root/Tenant1/Table1", partitionCount);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Tenant1/Table1` (Key, Value) VALUES
+                (1u, "A"),
+                (2u, "B"),
+                (3u, "C");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
+
+    {
+        TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        CreateTable(session, "/Root/Tenant2/Table2", partitionCount);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Tenant2/Table2` (Key, Value) VALUES
+                (4u, "D"),
+                (5u, "E");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
 }
 
 } // namespace
+
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path) {
+    if (!IsStartWithSlash(path)) {
+        path = CanonizePath(JoinPath({"/Root", path}));
+    }
+    auto sender = runtime.AllocateEdgeActor();
+    TAutoPtr<IEventHandle> handle;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnSetVal(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    return runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle)->GetRecord().GetPathDescription();
+}
+
+NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const std::string& query) {
+    auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return result;
+}
 
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(const TString &name, const TStoragePools &pools) {
     NKikimrSubDomains::TSubDomainSettings subdomain;
@@ -104,9 +144,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
-    if (settings.EnableRealSystemViewPaths) {
-        featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
-    }
 
     Settings->SetFeatureFlags(featureFlags);
 
@@ -163,11 +200,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    if (settings.ShowCreateTable) {
-        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
-    } else {
-        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
-    }
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);

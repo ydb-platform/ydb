@@ -1,22 +1,22 @@
--- Все PR с информацией об упавших тестах в PR-check.
+-- All PRs with information about failed tests in PR-check.
 --
--- Логика:
---   1. Берём все PR из github_data/pull_requests (дедуплицируем по последнему exported_at).
---   2. Для каждого PR ищем последний запуск PR-check за $test_lookback_days дней.
---   3. Определяем, заблокирован ли PR тестами:
---      - is_pr_blocked_by_tests_in_last_run_and_try = 1, если в последнем запуске
---        на третьей попытке (attempt = 3) есть падения.
---      - Третья попытка — финальная; если тест упал и там, значит PR заблокирован.
---   4. LEFT JOIN к детальной информации о каждом упавшем тесте:
---      full_name, job_id, branch, logs, owners и т.д.
+-- Logic:
+--   1. Take all PRs from github_data/pull_requests (deduplicate by latest exported_at).
+--   2. For each PR find the latest PR-check run within $test_lookback_days days.
+--   3. Determine if PR is blocked by tests:
+--      - is_pr_blocked_by_tests_in_last_run_and_try = 1 if the latest run
+--        has failures on the third attempt (attempt = 3).
+--      - Third attempt is final; if a test failed there, PR is blocked.
+--   4. LEFT JOIN to detailed info for each failed test:
+--      full_name, job_id, branch, logs, owners, etc.
 --
--- Результат: одна строка на каждую пару (PR, упавший тест). PR без падений тоже включены
--- (с пустыми полями теста).
+-- Result: one row per (PR, failed test) pair. PRs with no failures are included
+-- (with empty test fields).
 --
--- Параметры:
---   $test_lookback_days — окно выборки тестов (дни). Ограничивает сканирование таблицы
---     test_runs_column. PR с тестами старше этого периода не попадут в выборку.
---     По умолчанию 65 ≈ 2 месяца (запас для долгоживущих PR).
+-- Parameters:
+--   $test_lookback_days — test selection window (days). Limits scanning of
+--     test_runs_column. PRs with tests older than this period are excluded.
+--     Default 65 ≈ 2 months (buffer for long-lived PRs).
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 

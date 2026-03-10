@@ -20,6 +20,8 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/core/protos/sys_view_types.proto";
+import "ydb/core/scheme/protos/key_range.proto";
 
 enum ERequestType {
     REQUEST_TYPE_PROCESS_QUERY = 1;
@@ -169,6 +171,7 @@ message TQueryRequest {
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
+    optional bool IsWarmupCompilation = 41;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -334,6 +337,8 @@ message TCompileCacheQueryInfo {
     optional string Warnings = 8;
     optional google.protobuf.Duration CompilationDuration = 9;
     optional string MetaInfo = 10;
+    optional bool IsTruncated = 11;
+    optional string Database = 12;
 }
 
 message TSessionInfo {
@@ -845,6 +850,7 @@ message TKqpTableSinkSettings {
     repeated uint32 DefaultColumnsIds = 23;
     repeated TKqpColumnMetadataProto ReturningColumns = 24;
     optional uint64 QuerySpanId = 25;
+    optional string UserSID = 26;
 }
 
 message TReadVectorTopK {
@@ -913,7 +919,23 @@ message TKqpFullTextSourceSettings {
     optional double BFactor = 13;
     optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
+    optional string Mode = 16;
+
+    optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
 };
+
+message TKqpSysViewSourceSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto Columns = 2;
+    repeated TKqpColumnMetadataProto KeyColumns = 3;
+    optional string SysViewInfo = 4;
+    optional NKikimrSysView.TSysViewDescription SysViewDescription = 5;
+    optional string Database = 6;
+    optional string TablePath = 7;
+    optional bool Reverse = 8;
+    repeated NKikimrTx.TKeyRange KeyRanges = 9;
+    optional bytes UserToken = 10;
+}
 
 message TKqpSequencerSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;

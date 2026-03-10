@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/provider
 )
 
 YQL_LAST_ABI_VERSION()

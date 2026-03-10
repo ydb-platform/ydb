@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(Light) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(LightOverflow) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
@@ -345,8 +345,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
     }
 
     Y_UNIT_TEST(SectorRestorator) {
+        const bool enableSectorEncryption = true;
         TDiskFormat format;
-        format.Clear(true);
+        format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, LogErasureDataParts + 1);
         constexpr ui64 magic = 0x123951924;
         ui64 nonce = 1;
@@ -355,15 +356,15 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 memset(sectors[i].Begin(), 0, sectors[i].Size());
                 sectors[i].SetCanary();
                 auto *footer = sectors[i].GetDataFooter();
-                footer->Version = PDISK_DATA_VERSION;
+                footer->SetVersionAndEncryption(enableSectorEncryption);
                 footer->Nonce = nonce++;
                 NPDisk::TPDiskHashCalculator hasher(useT1haHash);
                 if (i < LogErasureDataParts) {
                     ui64 offset = format.SectorSize * i;
-                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size(), {});
                 }
             }
-            TSectorRestorator restorator(false, LogErasureDataParts, true, format);
+            TSectorRestorator restorator(false, LogErasureDataParts, true, format, {});
             restorator.Restore(sectors.Data(), 0, magic, 0, 0);
             UNIT_ASSERT_C(restorator.GoodSectorCount == LogErasureDataParts + 1,
                     "restorator.GoodSectorCount# " << restorator.GoodSectorCount);
@@ -371,8 +372,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
     }
 
     Y_UNIT_TEST(SectorRestoratorOldNewHash) {
+        const bool enableSectorEncryption = true;
         TDiskFormat format;
-        format.Clear(true);
+        format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, 3);
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
@@ -382,7 +384,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 memset(sectors[i].Begin(), 13, sectors[i].Size());
                 sectors[i].SetCanary();
                 auto *footer = sectors[i].GetDataFooter();
-                footer->Version = PDISK_DATA_VERSION;
+                footer->SetVersionAndEncryption(enableSectorEncryption);
                 footer->Nonce = nonce++;
                 NPDisk::TPDiskHashCalculator hasher(useT1haHash);
                 switch (i) {
@@ -393,12 +395,12 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                     footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
                     break;
                 case 2:
-                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size(), {});
                     break;
                 default:
                     UNIT_ASSERT(false);
                 }
-                TSectorRestorator restorator(false, 1, false, format);
+                TSectorRestorator restorator(false, 1, false, format, {});
                 restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
                 UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
                         << " GoodSectorCount# " << restorator.GoodSectorCount);

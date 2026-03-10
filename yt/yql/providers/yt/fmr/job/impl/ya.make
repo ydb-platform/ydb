@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    yql_yt_fmr_indexed_block_reader.cpp
+    yql_yt_fmr_sorting_block_reader.cpp
     yql_yt_job_impl.cpp
     yql_yt_raw_table_queue.cpp
     yql_yt_raw_table_queue_reader.cpp
@@ -23,6 +25,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/fmr/job_launcher
     yt/yql/providers/yt/fmr/table_data_service/interface
+    yt/yql/providers/yt/fmr/tvm/impl
     yt/yql/providers/yt/fmr/yt_job_service/impl
     yql/essentials/utils
     yql/essentials/utils/log

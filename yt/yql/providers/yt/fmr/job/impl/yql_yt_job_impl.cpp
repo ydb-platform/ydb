@@ -6,11 +6,15 @@
 
 #include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_yt_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
@@ -26,15 +30,25 @@ public:
         const TString& tableDataServiceDiscoveryFilePath,
         IYtJobService::TPtr ytJobService,
         TFmrUserJobLauncher::TPtr jobLauncher,
-        const TFmrJobSettings& settings
+        const TFmrJobSettings& settings,
+        const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
     )
         : TableDataServiceDiscoveryFilePath_(tableDataServiceDiscoveryFilePath)
         , YtJobService_(ytJobService)
         , JobLauncher_(jobLauncher)
         , Settings_(settings)
+        , TvmSettings_(tvmSettings)
     {
         auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
-        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
+        if (tvmSettings.Defined()) {
+            TvmClient_ = MakeFmrTvmClient({
+                .SourceTvmAlias = tvmSettings->WorkerTvmAlias,
+                .TvmPort = tvmSettings->TvmPort,
+                .TvmSecret = tvmSettings->TvmSecret
+            });
+            TableDataServiceTvmId_ = tvmSettings->TableDataServiceTvmId;
+        }
+        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, TvmClient_, TableDataServiceTvmId_);
     }
 
     virtual std::variant<TFmrError, TStatistics> Download(
@@ -192,7 +206,7 @@ public:
             std::vector<IBlockIterator::TPtr> blockIterators;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
-                    blockIterators.push_back(MakeIntrusive<TTDSBlockIterator>(
+                    blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,
                         TableDataService_,
@@ -209,7 +223,7 @@ public:
                 }
             }
 
-            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators, output.SortingColumns.SortOrders);
+            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
             ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
 
             tableDataServiceWriter->Flush();
@@ -234,11 +248,70 @@ public:
             TStringStream serializedJobStateStream(params.SerializedMapJobState);
             mapJob.Load(serializedJobStateStream);
             FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
+            mapJob.SetTvmSettings(TvmSettings_);
             return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
         };
         return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
     // TODO - figure out how to how to use cancel flag to kill map job.
+
+
+    std::variant<TFmrError, TStatistics> LocalSort(
+        const TLocalSortTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {},
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr
+    ) override {
+        auto localSortJobFunc = [&, this, cancelFlag] () -> TStatistics {
+            const auto taskTableInputRef = params.Input;
+            const auto output = params.Output;
+
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
+
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                output.TableId,
+                output.PartId,
+                TableDataService_,
+                output.SerializedColumnGroups,
+                Settings_.FmrWriterSettings,
+                output.SortingColumns
+            );
+            TMaybe<TMutex> mutex = TMutex();
+            std::vector<IBlockIterator::TPtr> blockIterators;
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    blockIterators.emplace_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                        fmrInput->TableId,
+                        fmrInput->TableRanges,
+                        TableDataService_,
+                        output.SortingColumns.Columns,
+                        output.SortingColumns.SortOrders,
+                        fmrInput->Columns,
+                        fmrInput->SerializedColumnGroups,
+                        fmrInput->IsFirstRowInclusive,
+                        fmrInput->FirstRowKeys,
+                        fmrInput->LastRowKeys
+                    ));
+                } else {
+                    auto ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
+                    auto ytReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                    blockIterators.emplace_back(MakeIntrusive<TYtBlockIterator>(
+                        ytReaders,
+                        output.SortingColumns.Columns,
+                        TYtBlockIteratorSettings(), // TODO - support parsing TYtBlockIteratorSettings from yson file.
+                        output.SortingColumns.SortOrders
+                    ));
+                }
+            }
+
+            NYT::TRawTableReaderPtr sortingReader = MakeIntrusive<TFmrSortingBlockReader>(blockIterators);
+            ParseRecords(sortingReader, tableDataServiceWriter, parseRecordSettings.LocalSortBlockCount, parseRecordSettings.LocalSortBlockSize, cancelFlag, mutex);
+
+            tableDataServiceWriter->Flush();
+            return TStatistics({{output, tableDataServiceWriter->GetStats()}});
+        };
+        return HandleFmrJob(localSortJobFunc, ETaskType::LocalSort);
+    }
 
 private:
     std::variant<TFmrError, TStatistics> HandleFmrJob(auto fmrJobFunc, ETaskType fmrJobType) {
@@ -260,15 +333,19 @@ private:
     IYtJobService::TPtr YtJobService_;
     TFmrUserJobLauncher::TPtr JobLauncher_;
     TFmrJobSettings Settings_;
+    IFmrTvmClient::TPtr TvmClient_ = nullptr;
+    ui32 TableDataServiceTvmId_ = 0;
+    TMaybe<TFmrTvmJobSettings> TvmSettings_;
 };
 
 IFmrJob::TPtr MakeFmrJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    const TFmrJobSettings& settings
+    const TFmrJobSettings& settings,
+    const TMaybe<TFmrTvmJobSettings>& workerTvmSettings
 ) {
-    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings);
+    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings, workerTvmSettings);
 }
 
 TJobResult RunJob(
@@ -276,10 +353,11 @@ TJobResult RunJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings, tvmSettings);
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -296,6 +374,8 @@ TJobResult RunJob(
             return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TSortedMergeTaskParams>) {
             return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TLocalSortTaskParams>) {
+            return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else {
             ythrow yexception() << "Unsupported task type";
         }

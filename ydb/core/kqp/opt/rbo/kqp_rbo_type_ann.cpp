@@ -143,7 +143,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
 
     } while (status == IGraphTransformer::TStatus::Repeat);
 
-    auto lambdaType = lambda->GetTypeAnn();
+    const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
         YQL_CLOG(TRACE, CoreDq) << "Could not infer lambda types, status = " << status;
         return IGraphTransformer::TStatus::Error;
@@ -206,7 +206,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
             return status;
         }
 
-        auto lambdaType = lambda->GetTypeAnn();
+        const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
@@ -315,8 +315,24 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
     auto inputType = limit->GetInput()->Type;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    auto& lambda = limit->LimitCond.Node;
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    ctx.TypeAnnTransformer.Rewind();
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status == IGraphTransformer::TStatus::Error) {
+        return status;
+    }
+
     // TODO: Add sanity checks.
     limit->Type = inputType;
     return TStatus::Ok;

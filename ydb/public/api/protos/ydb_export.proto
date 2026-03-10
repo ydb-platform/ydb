@@ -247,6 +247,12 @@ message ExportToFsSettings {
     // - Patterns are matched against the object path relative to the export's source_path.
     // - Object is excluded from export operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 8;
+
+    // Include index data or not.
+    // By default, only index metadata is uploaded and indexes are built during import — it saves space
+    // and reduces export time, but it can potentially increase the import time.
+    // Index data can be uploaded and downloaded back during import.
+    bool include_index_data = 9;
 }
 
 message ExportToFsResult {

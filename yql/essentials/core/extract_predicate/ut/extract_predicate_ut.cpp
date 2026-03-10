@@ -27,6 +27,8 @@
 #include <util/string/cast.h>
 #include <util/system/user.h>
 
+#include <utility>
+
 namespace NYql {
 
 TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
@@ -173,8 +175,8 @@ struct TRunSingleProgram {
     IOutputStream& Err;
     TVector<TString> Res;
 
-    TRunSingleProgram(const TString& src, IOutputStream& err)
-        : Src(src)
+    TRunSingleProgram(TString src, IOutputStream& err)
+        : Src(std::move(src))
         , Err(err)
     {
     }

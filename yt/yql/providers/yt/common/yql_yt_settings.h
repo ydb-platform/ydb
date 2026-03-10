@@ -88,6 +88,12 @@ enum class EConvertDynamicTablesToStatic {
     All             /* "all" */,
 };
 
+enum class EFuseMapToMapReduceMode {
+    Disable  /* "disable" */,
+    Normal   /* "normal" */,
+    Late     /* "late" */,
+};
+
 struct TYtSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
@@ -291,7 +297,8 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
-    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce;
+    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
+    NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, Static> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, Static> MaxOperationFiles;
@@ -318,6 +325,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
+    NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
     NCommon::TConfSetting<bool, Static> UseFlow;
     NCommon::TConfSetting<ui16, Static> WideFlowLimit;
     NCommon::TConfSetting<bool, Static> UseSystemColumns;

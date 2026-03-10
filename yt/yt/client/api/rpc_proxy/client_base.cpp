@@ -939,7 +939,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -993,7 +993,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1078,7 +1078,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1168,7 +1168,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 

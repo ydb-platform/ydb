@@ -227,7 +227,7 @@ namespace NKikimr {
         ui32 MaxResponseSize;
         TDuration DskTrackerInterval;
         bool BarrierValidation;
-        TDuration WhiteboardUpdateInterval;
+        TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         bool UseActorSystemTimeInBSQueue = false;
@@ -278,6 +278,9 @@ namespace NKikimr {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimit;
+
+        ///////////// CHUNK Keeper //////////////////
+        TControlWrapper EnableChunkKeeper;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

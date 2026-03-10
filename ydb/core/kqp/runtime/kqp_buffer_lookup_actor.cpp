@@ -85,6 +85,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
+
         AFL_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
@@ -97,8 +98,9 @@ public:
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
+        ReadIdToState.clear();
 
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
 
@@ -109,16 +111,26 @@ public:
         PassAway();
     }
 
+    void Unlink() override {
+        AFL_ENSURE(ReadIdToState.empty());
+
+        for (auto& [_, state] : ShardToState) {
+            state.HasPipe = false;
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+    }
+
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                default:
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                        TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
+                hFunc(TEvPrivate::TEvRetryRead, Handle);
+            default:
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             RuntimeError(
@@ -432,7 +444,6 @@ public:
 
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
-                YQL_ENSURE(Settings.TxManager->BrokenLocks());
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
@@ -609,6 +620,7 @@ public:
             return false;
         }
 
+        ++failedRead.RetryAttempts;
         auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
@@ -630,7 +642,7 @@ public:
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
-            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
     }

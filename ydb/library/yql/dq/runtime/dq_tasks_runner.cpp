@@ -762,9 +762,12 @@ public:
 
                 {
                     TStringBuf inputTypeNodeRaw(transformDesc.GetInputType());
-                    auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, entry->Env);
+                    auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, typeEnv);
                     YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
                     TType* inputType = static_cast<TType*>(inputTypeNode);
+                    auto localOutputTypeNode = NMiniKQL::DeserializeNode(entry->OutputItemTypesRaw[i], typeEnv);
+                    YQL_ENSURE(localOutputTypeNode, "Failed to deserialize transform output type");
+                    TType* localOutputType = static_cast<TType*>(localOutputTypeNode);
 
                     auto typeCheckLog = [&] () {
                         TStringStream out;
@@ -774,7 +777,7 @@ public:
                             << " , input type: " << *inputType);
                         return out.Str();
                     };
-                    YQL_ENSURE(inputType->IsSameType(*entry->OutputItemTypes[i]),  "" << typeCheckLog());
+                    YQL_ENSURE(inputType->IsSameType(*localOutputType),  "" << typeCheckLog());
                     LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
                         << transformDesc.GetType() << " with input type: " << *inputType
                         << " , output type: " << *transform->TransformOutputType);
@@ -933,8 +936,8 @@ public:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     if (Y_LIKELY(InputConsumed)) {
-                        // did smth => waiting for nothing
-                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                        // reset waiting start time after each consumed value
+                        Stats->CurrentWaitInputStartTime = now;
                     } else {
                         StartWaitingInput();
                         if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {

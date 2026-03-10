@@ -4986,7 +4986,7 @@ namespace {
         }
         else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-                "Expected either list of struct or list tuples, but got: " << *input->Head().GetTypeAnn()));
+                "Expected either list of struct or list tuples, but got list of " << itemType->GetKind() << ", type: " << *input->Head().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8679,4 +8679,3 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NYql::NTypeAnnImpl
-

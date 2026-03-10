@@ -27,12 +27,7 @@ struct TStringWith {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<StringFunc>());
-        const auto funType = FunctionType::get(string->getType(), {string->getType(), sub->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-        const auto result = CallInst::Create(funType, funcPtr, {string, sub}, "has", block);
-        return result;
+        return EmitFunctionCall<StringFunc>(string->getType(), {string, sub}, ctx, block);
     }
 #endif
 };

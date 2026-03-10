@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    event_loop.cpp
-    event_loop.h
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
     txusage_fixture.cpp
@@ -10,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/testlib/common
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic

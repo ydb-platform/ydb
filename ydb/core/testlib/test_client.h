@@ -177,7 +177,6 @@ namespace Tests {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
@@ -245,7 +244,6 @@ namespace Tests {
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
-        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
@@ -270,10 +268,6 @@ namespace Tests {
             std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> factory
         ) {
             DataStreamsAuthFactory = factory;
-            return *this;
-        }
-        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
-            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
             return *this;
         }
         TServerSettings& SetEnableOlapSink(bool withOlapSink) {
@@ -623,15 +617,15 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description);
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
         NMsgBusProxy::EResponseStatus AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {});
+        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {}, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString &parent, const TString &description, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
 
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
             const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
             const TVector<TString> indexColumns, NKikimrSchemeOp::EIndexType type,
@@ -704,9 +698,9 @@ namespace Tests {
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
 
         // ACL operations
-        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken = "");
         void TestModifyOwner(const TString& parent, const TString& name, const TString& owner);
-        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken = "");
         void TestModifyACL(const TString& parent, const TString& name, const TString& acl);
 
         NMsgBusProxy::EResponseStatus Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
@@ -855,6 +849,8 @@ namespace Tests {
         ui32 Capacity() const;
 
         void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30), bool acceptAlreadyExist = false);
+        void RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout = TDuration::Seconds(30));
+        void RemoveTenant(const TString& path, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

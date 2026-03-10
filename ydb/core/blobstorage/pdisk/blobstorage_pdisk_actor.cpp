@@ -385,7 +385,7 @@ public:
                 magicDataSize,
                 MainKey,
                 PCtx->PDiskLogPrefix,
-                Cfg->EnableFormatEncryption);
+                Cfg->EnableFormatAndMetadataEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -452,8 +452,8 @@ public:
                         options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
                         options.Metadata = metadata;
                         options.PlainDataChunks = cfg->PlainDataChunks;
-                        options.EnableFormatEncryption = cfg->EnableFormatEncryption;
-                        options.EnableSectorEncryption = cfg->EnableSectorEncryption;
+                        options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
+                        options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
@@ -859,6 +859,12 @@ public:
         PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
         Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
         PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
+        PDisk->Mon.YardConfigureScheduler.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.YardConfigureScheduler.CountResponse();
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -1605,6 +1611,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

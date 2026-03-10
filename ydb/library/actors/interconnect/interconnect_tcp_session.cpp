@@ -344,6 +344,10 @@ namespace NActors {
         LostConnectionWatchdog.Disarm();
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
+        if (Proxy->Common->Settings.MergePerHostCounters) {
+            LOG_INFO_IC_SESSION("ICS80", "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
+                Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(), Proxy->TechnicalPeerHostName.data());
+        }
 
         // arm pinger timer
         ResetFlushLogic();
@@ -596,6 +600,11 @@ namespace NActors {
             Proxy->RegisterDisconnect();
             SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
+            if (Proxy->Common->Settings.MergePerHostCounters) {
+                LOG_NOTICE_IC_SESSION("ICS81", "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
+                    Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(),
+                    Proxy->TechnicalPeerHostName.data(), reason.ToString().data());
+            }
         }
         if (XdcSocket) {
             // call shutdown but do not call close and do not free wrapper object - we need descriptor to finish ZC op

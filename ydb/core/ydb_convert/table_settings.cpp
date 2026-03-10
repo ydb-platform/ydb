@@ -2,6 +2,7 @@
 #include "table_description.h"
 #include "table_settings.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -453,8 +454,7 @@ bool FillIndexTablePartitioning(
     const Ydb::Table::TableIndex& index,
     Ydb::StatusIds::StatusCode& code, TString& error
 ) {
-    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
-        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, NKikimrSchemeOp::TTableDescription& indexImplTableDescription) {
         auto& partitionConfig = *indexImplTableDescription.MutablePartitionConfig();
 
         if (settings.has_partitioning_settings()) {
@@ -496,33 +496,37 @@ bool FillIndexTablePartitioning(
 
     switch (index.type_case()) {
     case Ydb::Table::TableIndex::kGlobalIndex:
-        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
-            return false;
-        }
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
-            return false;
-        }
         const bool prefixVectorIndex = index.index_columns().size() > 1;
+        indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::LevelTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PostingTablePosition])) {
+            return false;
+        }
         if (prefixVectorIndex) {
-            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions)) {
+            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PrefixTablePosition])) {
                 return false;
             }
         }
@@ -530,15 +534,30 @@ bool FillIndexTablePartitioning(
     }
 
     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
-        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
-        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(4);
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().dict_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DictTablePosition])) {
             return false;
         }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().docs_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DocsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().stats_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::StatsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::PostingTablePosition])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
         break;
 
     case Ydb::Table::TableIndex::TYPE_NOT_SET:

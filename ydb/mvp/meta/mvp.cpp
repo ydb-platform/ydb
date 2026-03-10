@@ -1,22 +1,28 @@
+#include "mvp.h"
+
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydbc.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/utils.h>
+
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/process_stats.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/http/http_cache.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+
+#include <google/protobuf/text_format.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
+#include <yaml-cpp/yaml.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/yexception.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <ydb/library/actors/protos/services_common.pb.h>
-#include <google/protobuf/text_format.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/library/actors/core/process_stats.h>
-#include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/library/actors/http/http_cache.h>
-#include "mvp.h"
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydbc.h>
 
 using namespace NMVP;
 
@@ -162,17 +168,29 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    if (!config["meta"]) {
+void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
+    MetaApiEndpoint = config.GetMetaApiEndpoint();
+    MetaDatabase = config.GetMetaDatabase();
+    MetaCache = config.GetMetaCache();
+    MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
+    DbUserTokenSource = config.GetDbUserTokenAccess();
+}
+
+void TMVP::TryGetMetaOptionsFromConfig() {
+    if (StartupOptions.GetYamlConfigPath().empty()) {
         return;
     }
-    auto meta = config["meta"];
-
-    MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
-    MetaDatabase = meta["meta_database"].as<std::string>("");
-    MetaCache = meta["meta_cache"].as<bool>(false);
-    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
-    DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
+    try {
+        YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+        NMvp::NMeta::TMetaAppConfig appConfig;
+        MergeYamlNodeToProto(config, appConfig);
+        if (appConfig.HasMeta()) {
+            TryGetMetaOptionsFromConfig(appConfig.GetMeta());
+        }
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 }
 
 
@@ -180,14 +198,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    if (StartupOptions.Config) {
-        try {
-            TryGetMetaOptionsFromConfig(StartupOptions.Config);
-        } catch (const YAML::Exception& e) {
-            std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-            std::exit(EXIT_FAILURE);
-        }
-    }
+    TryGetMetaOptionsFromConfig();
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

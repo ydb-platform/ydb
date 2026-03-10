@@ -399,6 +399,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     TExpression LimitCond;
 };

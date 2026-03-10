@@ -18,7 +18,9 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -137,7 +139,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        
+
         auto resultSet = result.GetResultSet(0);
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
@@ -4903,8 +4905,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TTestExtEnv env(settings);
         env.CreateDatabase("Test");
 
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        TTableClient domainClient(env.GetDriver());
+        auto domainSession = domainClient.CreateSession().GetValueSync().GetSession();
 
         {
             auto createUserSql = TStringBuilder() << R"(
@@ -4912,11 +4914,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE USER superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            auto result = domainSession.ExecuteSchemeQuery(createUserSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        auto tenantClientSettings = TClientSettings().Database("/Root/Test").DiscoveryMode(EDiscoveryMode::Off);
+        TTableClient tenantClient(env.GetDriver(), tenantClientSettings);
+        auto tenantSession = tenantClient.CreateSession().GetValueSync().GetSession();
+
         {
-            auto createUserSql = TStringBuilder() << R"(
+            auto createTableSql = TStringBuilder() << R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/Test/table` (
                     k Uint64,
@@ -4925,7 +4932,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            auto result = tenantSession.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -4934,7 +4941,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            auto result = tenantSession.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
 
             if (EnableAlterDatabase) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -4950,11 +4957,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER DATABASE `/Root/Test` OWNER TO superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            auto result = domainSession.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
 
             if (EnableAlterDatabase) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CheckOwner(session, "/Root/Test", "superuser");
+                CheckOwner(domainSession, "/Root/Test", "superuser");
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ALTER DATABASE statement is not supported");
@@ -11973,10 +11980,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(DoubleCreateResourcePoolClassifier, UseSink) {
+    Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
-        config.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
@@ -13713,6 +13719,50 @@ END DO)",
         bool createSecondaryIndex = true;
 
         TestTruncateTable(tableName, useQueryClient, createSecondaryIndex);
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompact, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto query = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    PARTITION_AT_KEYS = (250, 500, 750)
+                );)sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value)
+                    VALUES
+                        (100, "value_1"),
+                        (400, "value_2"),
+                        (700, "value_3"),
+                        (1000, "value_4");
+                )sql";
+            auto result = session.ExecuteDataQuery(upsertQuery, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        // TODO: check operation status
     }
 }
 
@@ -15461,6 +15511,252 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             "[[\"1.25\";\"1.25\";\"100\";\"100000\";\"100000000000\";2]]");
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=3",
             "[[#;#;#;#;#;3]]");
+    }
+
+    Y_UNIT_TEST(BackupReturnsOperationId) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Create backup collection (uses existing /Root/KeyValue table from TKikimrRunner)
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_backup`
+                    (TABLE `/Root/KeyValue`)
+                WITH(
+                    STORAGE = 'cluster'
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Execute BACKUP via query service (returns result sets)
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.ExecuteQuery(R"(
+            BACKUP `my_backup`
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Verify result set with operation_id
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto rs = result.GetResultSet(0);
+        TResultSetParser parser(rs);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto operationId = parser.ColumnParser("operation_id").GetUtf8();
+        UNIT_ASSERT_C(!operationId.empty(), "operation_id should not be empty");
+        // Verify operation_id is a valid number (SchemeShard txId)
+        UNIT_ASSERT_NO_EXCEPTION(FromString<ui64>(operationId));
+    }
+
+    Y_UNIT_TEST(BackupOperationIdCanBeUsedForGet) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_backup_e2e`
+                    (TABLE `/Root/KeyValue`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Full backup first (required before incremental)
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                BACKUP `my_backup_e2e`
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        Sleep(TDuration::Seconds(1));
+
+        // Incremental backup — returns operation_id usable for Get
+        auto result = queryClient.ExecuteQuery(R"(
+            BACKUP `my_backup_e2e` INCREMENTAL
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto rs = result.GetResultSet(0);
+        TResultSetParser parser(rs);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto operationId = parser.ColumnParser("operation_id").GetUtf8();
+        UNIT_ASSERT_C(!operationId.empty(), "operation_id should not be empty");
+
+        // Construct a proper TOperationId and verify it can be fetched via operation client
+        std::string opIdStr = "ydb://incbackup/11?id=" + std::string(operationId);
+        NYdb::TOperation::TOperationId opId(opIdStr);
+
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        auto backupOp = opClient.Get<NYdb::NBackup::TIncrementalBackupResponse>(opId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(backupOp.Status().GetStatus(), EStatus::SUCCESS, backupOp.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(BackupReturnsOperationIdArrowFormat) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+        config.MutableFeatureFlags()->SetEnableArrowResultSetFormat(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_backup_arrow`
+                    (TABLE `/Root/KeyValue`)
+                WITH(
+                    STORAGE = 'cluster'
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Format(NYdb::TResultSet::EFormat::Arrow);
+        auto result = queryClient.ExecuteQuery(R"(
+            BACKUP `my_backup_arrow`
+        )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto rs = result.GetResultSet(0);
+
+        auto schema = NArrow::DeserializeSchema(TString(TArrowAccessor::GetArrowSchema(rs)));
+        UNIT_ASSERT_C(schema, "Arrow schema must be deserialized");
+        UNIT_ASSERT_VALUES_EQUAL(schema->num_fields(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(schema->field(0)->name(), "operation_id");
+    }
+
+    Y_UNIT_TEST(BackupIncrementalReturnsOperationId) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_backup_inc`
+                    (TABLE `/Root/KeyValue`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Full backup first (required before incremental)
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                BACKUP `my_backup_inc`
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        Sleep(TDuration::Seconds(1));
+
+        // Now do incremental backup
+        auto result = queryClient.ExecuteQuery(R"(
+            BACKUP `my_backup_inc` INCREMENTAL
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto rs = result.GetResultSet(0);
+        TResultSetParser parser(rs);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto operationId = parser.ColumnParser("operation_id").GetUtf8();
+        UNIT_ASSERT_C(!operationId.empty(), "operation_id should not be empty");
+        UNIT_ASSERT_NO_EXCEPTION(FromString<ui64>(operationId));
+    }
+
+    Y_UNIT_TEST(RestoreReturnsOperationId) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_backup_restore`
+                    (TABLE `/Root/KeyValue`)
+                WITH(
+                    STORAGE = 'cluster'
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Run backup first (needed before restore)
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                BACKUP `my_backup_restore`
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Drop the original table before restore (restore doesn't overwrite)
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                DROP TABLE `/Root/KeyValue`;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Execute RESTORE
+        auto result = queryClient.ExecuteQuery(R"(
+            RESTORE `my_backup_restore`
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto rs = result.GetResultSet(0);
+        TResultSetParser parser(rs);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto operationId = parser.ColumnParser("operation_id").GetUtf8();
+        UNIT_ASSERT_C(!operationId.empty(), "operation_id should not be empty");
+        UNIT_ASSERT_NO_EXCEPTION(FromString<ui64>(operationId));
     }
 }
 

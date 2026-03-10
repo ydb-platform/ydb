@@ -354,15 +354,17 @@ private:
             }
 
             while (true) {
-                switch (const auto status = Stream.Fetch(result)) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                switch (const auto status = Stream.Fetch(fetchResult)) {
                     case NUdf::EFetchStatus::Ok: {
-                        ItemArg->SetValue(Ctx, NUdf::TUnboxedValue(result));
+                        ItemArg->SetValue(Ctx, NUdf::TUnboxedValue(fetchResult));
 
                         if (Chop->GetValue(Ctx).Get<bool>()) {
                             state = EState::Chop;
                             return NUdf::EFetchStatus::Finish;
                         }
 
+                        result = std::move(fetchResult);
                         return status;
                     }
 
@@ -409,12 +411,13 @@ private:
                     Stream = NUdf::TUnboxedValuePod();
                     Input->InvalidateValue(Ctx);
                 }
-
+                NYql::NUdf::TUnboxedValue fetchResult;
                 switch (auto& state = *State) {
                     case EState::Init:
-                        if (const auto status = InputStream.Fetch(ItemArg->RefValue(Ctx)); NUdf::EFetchStatus::Ok != status) {
+                        if (const auto status = InputStream.Fetch(fetchResult); NUdf::EFetchStatus::Ok != status) {
                             return status;
                         }
+                        ItemArg->SetValue(Ctx, std::move(fetchResult));
                         state = EState::Next;
                         KeyArg->SetValue(Ctx, Key->GetValue(Ctx));
                         break;
@@ -422,8 +425,9 @@ private:
                     case EState::Next:
                     case EState::Skip:
                         do {
-                            switch (const auto status = InputStream.Fetch(ItemArg->RefValue(Ctx))) {
+                            switch (const auto status = InputStream.Fetch(fetchResult)) {
                                 case NUdf::EFetchStatus::Ok:
+                                    ItemArg->SetValue(Ctx, std::move(fetchResult));
                                     break;
                                 case NUdf::EFetchStatus::Yield:
                                     state = EState::Skip;
@@ -631,8 +635,9 @@ private:
 
             block = work;
 
-            const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr);
+            const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueFetch(container, ctx, block, itemPtr);
+            });
             const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Ok)), "none", block);
 
             BranchInst::Create(exit, good, none, block);
@@ -724,7 +729,7 @@ private:
 
             block = work;
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, stream, codegen, block, valuePtr);
+            const auto status = CallBoxedValueFetch(stream, ctx, block, valuePtr);
             const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Finish)), "cond", block);
 
             BranchInst::Create(good, step, icmp, block);
@@ -753,8 +758,9 @@ private:
 
             block = init;
 
-            const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, input, codegen, block, itemPtr);
+            const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueFetch(input, ctx, block, itemPtr);
+            });
             const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Ok)), "special", block);
 
             BranchInst::Create(exit, pass, special, block);
@@ -771,9 +777,9 @@ private:
 
             block = skip;
 
-            const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, input, codegen, block, itemPtr);
-
+            const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueFetch(input, ctx, block, itemPtr);
+            });
             const auto way = SwitchInst::Create(status, test, 2U, block);
             way->addCase(ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Yield)), exit);
             way->addCase(ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Finish)), done);

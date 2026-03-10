@@ -879,8 +879,8 @@ bool IsFlatmapSuitableForPullUpOverEquiJoin(const TCoFlatMapBase& flatMap, TVect
             continue;
         }
         const auto& renames = renamesByLabel[label];
-        for (auto it = renames.begin(); it != renames.end(); ++it) {
-            if (it->first != it->second) {
+        for (const auto & rename : renames) {
+            if (rename.first != rename.second) {
                 renamesAreIdentical = false;
                 break;
             }
@@ -1036,8 +1036,8 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
             .Build();
 
         TVector<TExprNode::TPtr> args;
-        for (ui32 i = 0; i < labels.size(); ++i) {
-            TString prefix = TString::Join(labels[i], ".");
+        for (const auto& label : labels) {
+            TString prefix = TString::Join(label, ".");
             auto arg = ctx.Builder(input.Pos())
                 .List()
                    .Atom(0, prefix)

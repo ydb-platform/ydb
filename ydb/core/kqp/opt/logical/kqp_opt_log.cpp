@@ -53,7 +53,8 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TCoTopBase::Match, HNDL(PushLimitOverFullText));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
+        AddHandler(0, &TCoTop::Match, HNDL(RewriteFlatMapOverFullTextMatch));
+        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -72,29 +73,32 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
         AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 
-        AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
-        AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
-        AddHandler(2, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
+        AddHandler(2, &TCoFlatMap::Match, HNDL(RewriteFlatMapOverIndexRead));
 
-        AddHandler(3, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
+        AddHandler(3, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
+        AddHandler(3, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
+        AddHandler(3, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
 
-        AddHandler(4, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(5, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
+        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
+
+        AddHandler(5, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
+        AddHandler(5, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(6, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
 
 #undef HNDL
 
-        SetGlobal(4u);
+        SetGlobal(5u);
     }
 
 public:
@@ -270,6 +274,12 @@ protected:
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteFlatMapOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteFlatMapOverIndexRead(node, ctx, KqpCtx, *getParents());
+        DumpAppliedRule("RewriteFlatMapOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

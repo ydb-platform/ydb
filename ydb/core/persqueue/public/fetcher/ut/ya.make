@@ -2,6 +2,11 @@ UNITTEST_FOR(ydb/core/persqueue/public/fetcher)
 
 YQL_LAST_ABI_VERSION()
 
+FORK_TEST_FILES()
+SPLIT_FACTOR(20)
+
+SIZE(MEDIUM)
+
 SRCS(
     fetch_request_ut.cpp
 )

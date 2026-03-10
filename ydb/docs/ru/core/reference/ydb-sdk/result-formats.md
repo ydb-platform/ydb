@@ -194,23 +194,24 @@
 - Java
 
   ```java
-  BatchAssert ba = new BatchAssert(COLUMN_TABLE, COLUMN_BATCH);
-  String query = selectTableYql(COLUMN_TABLE_NAME);
+  String query = "SELECT * FROM example ORDER BY Key LIMIT 100;";
+
   ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
           .useApacheArrowFormat(ApacheArrowFormat.zstd())
           .build();
 
-  try (QuerySession session = client.createSession(Duration.ofSeconds(5)).join().getValue()) {
-      QueryStream stream = session.createQuery(query, TxMode.SNAPSHOT_RO, Params.empty(), settings);
-      assertStatusOK(stream.execute(new ApacheArrowCompressedPartsHandler(allocator) {
-          @Override
-          public void onNextPart(QueryResultPart part) {
-              Assert.assertTrue(part instanceof ApacheArrowQueryResultPart);
-              Assert.assertEquals(0, part.getResultSetIndex());
-              ba.assertResultSetReader(part.getResultSetReader());
-          }
-      }).join().getStatus());
-      ba.assertFinish();
+  try (RootAllocator allocator = new RootAllocator()) {
+      retryCtx.supplyResult(session -> {
+          QueryStream stream = session.createQuery(query, TxMode.SERIALIZABLE_RW, Params.empty(), settings);
+          return stream.execute(new ApacheArrowCompressedPartsHandler(allocator) {
+              @Override
+              public void onNextPart(QueryResultPart part) {
+                  ResultSetReader rs = part.getResultSetReader();
+                  System.out.printf("Record batch with %d rows and %d columns%n",
+                          rs.getRowCount(), rs.getColumnCount());
+              }
+          });
+      }).join().getStatus().expectSuccess("execute query problem");
   }
   ```
 

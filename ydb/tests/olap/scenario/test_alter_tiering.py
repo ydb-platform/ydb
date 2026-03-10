@@ -26,7 +26,7 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 
 from ydb import PrimitiveType, StatusCode
-import yatest.common
+import library.python.port_manager
 from moto.server import ThreadedMotoServer
 
 import boto3
@@ -54,7 +54,7 @@ class TestLoop:
 
 
 class S3:
-    def __init__(self, self.port_manager):
+    def __init__(self, port_manager):
         self.port_manager = port_manager
         self._server = None
 
@@ -125,12 +125,20 @@ class TieringTestBase(BaseTestSet):
             ),
         )
 
+    @classmethod
+    def setup_class(cls):
+        cls.port_manager = library.python.port_manager.PortManager()
+        super().setup_class()
+
+    @classmethod
+    def teardown_class(cls):
+        super().teardown_class()
+        cls.port_manager.release()
+
     def _setup_tiering_test(self, ctx):
         random.seed(0)
 
         LOGGER.info('Initializing test parameters')
-        if self.port_manager is None:
-            self.port_manager = yatest.common.network.PortManager()
         self.s3_endpoint = get_external_param('s3-endpoint', '')
         self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
         self.s3_access_key = os.getenv('S3_ACCESS_KEY', 'access_key')

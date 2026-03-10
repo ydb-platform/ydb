@@ -5,6 +5,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.common.s3_client import S3Mock, S3Client
 from ydb.tests.olap.common.ydb_client import YdbClient
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 
 import yatest.common
 
@@ -14,8 +15,8 @@ logger = logging.getLogger(__name__)
 class S3ImportTestBase(object):
     @classmethod
     def setup_class(cls):
-        cls._setup_ydb()
         cls._setup_s3()
+        cls._setup_ydb()
 
     @classmethod
     def teardown_class(cls):

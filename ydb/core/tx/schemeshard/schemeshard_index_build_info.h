@@ -789,8 +789,8 @@ public:
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;
             }
-            // TODO(mbkkt) more detailed progress?
-            return (100.f * (KMeans.Level - 1)) / KMeans.Levels;
+            const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
+            return 100.f * (KMeans.Level - 1 + shardProgress) / static_cast<float>(KMeans.Levels);
         }
         if (Shards) {
             return (100.f * done) / total;

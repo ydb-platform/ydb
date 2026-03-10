@@ -1243,6 +1243,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS6) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds6.sql", "stats/tpcds1000s.json", "join_order/tpcds6_1000s.json", false, true
+        );
+    }
+
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS64) {
         CanonizedJoinOrderTest(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", false, true

@@ -110,11 +110,11 @@ public:
         return TUnifiedPathId::BuildValid(InternalPathId, SchemeShardLocalPathId);
     }
 
-<<<<<<< HEAD
     const NOlap::TSnapshot& GetDropVersionVerified() const {
         AFL_VERIFY(DropVersion);
         return *DropVersion;
-=======
+    }
+
     bool CanBeUsedAt(const NOlap::TSnapshot& snapshot) const {
         if (Versions.empty()) {
             return false;
@@ -138,7 +138,6 @@ public:
             paths.insert(NColumnShard::TUnifiedPathId::BuildValid(InternalPathId, schemeShardLocalPathId));
         }
         return paths;
->>>>>>> 4f3536825e3 (Make scans do not prevent portions and tables, which they do not use, from deleting (#35624))
     }
 
     void SetDropVersion(const NOlap::TSnapshot& version) {

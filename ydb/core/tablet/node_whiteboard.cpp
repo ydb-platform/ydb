@@ -49,6 +49,10 @@ public:
             *versionCounter->GetCounter("version", false) = 1;
             TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
             *nodeCounter->GetCounter("NodeCount", false) = 1;
+            // Duplicate into a separate monitoring shard for independent scraping
+            TIntrusivePtr<NMonitoring::TDynamicCounters> versionShard = GetServiceCounters(AppData()->Counters, "ydb_version");
+            *versionShard->GetSubgroup("revision", version)->GetCounter("version", false) = 1;
+            *versionShard->GetSubgroup("NodeCount", version)->GetCounter("NodeCount", false) = 1;
         }
 
         SystemStateInfo.SetStartTime(TInstant::Now().MilliSeconds());

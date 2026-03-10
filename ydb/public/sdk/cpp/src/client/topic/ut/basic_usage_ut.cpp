@@ -1807,20 +1807,27 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto producer = client.CreateProducer(writeSettings);
         auto producerRaw = dynamic_cast<TProducer*>(producer.get());
         auto msgData = TString(10_KB, 'a');
-
-        for (ui64 i = 0; i < 3; ++i) {
-            for (const auto& partition : partitions) {
-                for (ui64 i = 0; i < 10; ++i) {
-                    TWriteMessage msg(msgData);
-                    msg.Partition(partition.GetPartitionId());
-                    UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
-                }
-                UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());    
-                UNIT_ASSERT((producerRaw->GetIdleSessionsCount() == 1 && producerRaw->GetSessionsCount() == 1) ||
-                    (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0));
-                Sleep(TDuration::Seconds(1));
+        for (const auto& partition : partitions) {
+            for (ui64 i = 0; i < 10; ++i) {
+                TWriteMessage msg(msgData);
+                msg.Partition(partition.GetPartitionId());
+                UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
             }
         }
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        size_t idleSessionsCount = 0;
+        size_t sessionsCount = 0;
+        for (int i = 0; i < 5; ++i) {
+            idleSessionsCount = producerRaw->GetIdleSessionsCount();
+            sessionsCount = producerRaw->GetSessionsCount();
+            if (idleSessionsCount == 0 && sessionsCount == 0) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(idleSessionsCount == 0 && sessionsCount == 0, "Idle session count: " << idleSessionsCount << ", sessions count: " << sessionsCount);
 
         {
             auto describeResult = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
@@ -1830,7 +1837,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 UNIT_ASSERT(stats);
                 messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
             }
-            UNIT_ASSERT_EQUAL(messagesWritten, 150);
+            UNIT_ASSERT_EQUAL(messagesWritten, 50);
         }
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
@@ -1975,32 +1982,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
-    }
-
-    Y_UNIT_TEST(Producer_GetInitSeqNo) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
-        TTopicClient client = setup.MakeClient();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
-
-        TProducerSettings writeSettings;
-        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
-        writeSettings.Codec(ECodec::RAW);
-        writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-
-        auto producer = client.CreateProducer(writeSettings);
-        auto msgData = TString(10_KB, 'a');
-
-        for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
-        }
-        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
-
-        auto producer2 = client.CreateProducer(writeSettings);
-        auto seqNo = producer->GetInitSeqNo().GetValueSync();
-        UNIT_ASSERT_EQUAL(seqNo, 100);
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 

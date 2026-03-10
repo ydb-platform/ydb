@@ -94,7 +94,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
 void TTopicWorkloadKeyedWriterProducer::Close()
 {
     if (Producer_) {
-        Y_ASSERT(Producer_->Close(TDuration::Zero()).IsSuccess());
+        Y_ASSERT(Producer_->Close(TDuration::Seconds(5)).IsSuccess());
     }
 }
 

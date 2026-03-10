@@ -37,6 +37,8 @@ private:
         FLUENT_SETTING(std::vector<std::uint32_t>, Children);
         FLUENT_SETTING_DEFAULT(bool, Locked, false);
         FLUENT_SETTING_DEFAULT(NThreading::TFuture<void>, Future, NThreading::MakeFuture());
+
+        std::optional<std::uint64_t> CachedMaxSeqNo;
     };
 
     struct TMessageInfo {
@@ -63,8 +65,13 @@ private:
         WriteSessionPtr Session;
         const std::uint32_t Partition;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
+        bool DirectToPartition = true;
+        bool Closed = false;
 
-        TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition);
+        // This field is used only when DirectToPartition is false.
+        size_t NonDirectToPartitionOwnership = 1;
+
+        TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition, bool directToPartition = true);
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<TWriteSessionWrapper>;
@@ -118,18 +125,19 @@ private:
 
     struct TSessionsWorker {
         TSessionsWorker(TProducer* producer);
+        WrappedWriteSessionPtr GetOrCreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
         void AddIdleSession(std::uint32_t partition);
-        void RemoveIdleSession(std::uint32_t partition);
         void DoWork();
         size_t GetSessionsCount() const;
         size_t GetIdleSessionsCount() const;
+        void DestroyWriteSession(std::uint32_t partition);
+        void RemoveIdleSession(std::uint32_t partition);
     
     private:
         WrappedWriteSessionPtr CreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         
         using TSessionsIndexIterator = std::unordered_map<std::uint32_t, WrappedWriteSessionPtr>::iterator;
-        void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout);
 
         std::string GetProducerId(std::uint32_t partitionId);
 
@@ -138,9 +146,7 @@ private:
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
-        std::deque<WrappedWriteSessionPtr> SessionsToRemove;
-
-        static constexpr TDuration SESSION_REMOVE_DELAY = TDuration::Seconds(5);
+        std::unordered_set<std::uint32_t> SessionsToRemove;
     };
 
     struct TMessagesWorker : public std::enable_shared_from_this<TMessagesWorker> {
@@ -159,7 +165,6 @@ private:
         const TMessageInfo& GetFrontInFlightMessage() const;
         void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);  
         std::optional<std::uint64_t> GetCurrentSeqNo() const; 
-
 
     private:
         enum class EState : std::uint8_t {
@@ -213,7 +218,7 @@ private:
         };
 
         void MoveTo(EState state);
-        void UpdateMaxSeqNo(uint64_t maxSeqNo);
+        void UpdateMaxSeqNo(std::uint32_t partitionId, std::uint64_t maxSeqNo);
         void LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock);
         void HandleDescribeResult();
 
@@ -232,6 +237,7 @@ private:
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
+        std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;
         std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
         size_t Retries = 0;
@@ -412,8 +418,6 @@ public:
 
     size_t GetIdleSessionsCount();
 
-    NThreading::TFuture<std::uint64_t> GetInitSeqNo() override;
-
     ~TProducer();
 
 private:
@@ -434,7 +438,6 @@ private:
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> ShutdownPromise;
     NThreading::TFuture<void> ShutdownFuture;
-    std::optional<NThreading::TPromise<std::uint64_t>> InitPromise;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

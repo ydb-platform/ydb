@@ -72,9 +72,10 @@ TWriteMessage TProducer::TMessageInfo::BuildMessage() const {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TWriteSessionWrapper
 
-TProducer::TWriteSessionWrapper::TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition)
+TProducer::TWriteSessionWrapper::TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition, bool directToPartition)
     : Session(std::move(session))
     , Partition(partition)
+    , DirectToPartition(directToPartition)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,6 +173,10 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
                 Producer->Partitions[child].Locked(false);
             }
             Producer->Partitions[PartitionId].Locked_ = false;
+
+            for (const auto& [partitionId, maxSeqNo] : CachedMaxSeqNos) {
+                Producer->Partitions[partitionId].CachedMaxSeqNo = maxSeqNo;
+            }
             MoveTo(EState::Done);
             break;
     }
@@ -182,7 +187,8 @@ void TProducer::TSplittedPartitionWorker::MoveTo(EState state) {
     LOG_LAZY(Producer->DbDriverState->Log, TLOG_INFO, Producer->LogPrefix() << "Moving splitted partition worker for partition " << PartitionId << " to state " << GetStateName());
 }
 
-void TProducer::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint64_t maxSeqNo) {
+void TProducer::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint32_t partitionId, std::uint64_t maxSeqNo) {
+    CachedMaxSeqNos[partitionId] = maxSeqNo;
     MaxSeqNo = std::max(MaxSeqNo, maxSeqNo);
 }
 
@@ -270,7 +276,13 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
 
     NotReadyFutures = ancestors.size();
     for (const auto& ancestor : ancestors) {
-        auto wrappedSession = Producer->SessionsWorker->GetWriteSession(ancestor, false);
+        if (Producer->Partitions[ancestor].CachedMaxSeqNo.has_value()) {
+            --NotReadyFutures;
+            UpdateMaxSeqNo(ancestor, Producer->Partitions[ancestor].CachedMaxSeqNo.value());
+            continue;
+        }
+
+        auto wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(ancestor, false);
         Y_ABORT_UNLESS(wrappedSession, "Write session not found");
         WriteSessions.push_back(wrappedSession);
 
@@ -298,7 +310,7 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
                     return;
                 }
 
-                UpdateMaxSeqNo(result.GetValue());
+                UpdateMaxSeqNo(ancestor, result.GetValue());
                 if (--NotReadyFutures == 0) {
                     MoveTo(EState::GotMaxSeqNo);   
                     gotMaxSeqNo = true;
@@ -308,6 +320,7 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
             if (gotMaxSeqNo) {
                 producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
             }
+            producerPtr->SessionsWorker->DestroyWriteSession(ancestor);
         });
         lock.lock();
         GetMaxSeqNoFutures.push_back(future);
@@ -316,6 +329,12 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
     if (ancestors.empty()) {
         LOG_LAZY(Producer->DbDriverState->Log, TLOG_INFO, Producer->LogPrefix() << "No ancestors found for partition " << PartitionId);
         MoveTo(EState::Init);
+        return;
+    }
+
+    if (NotReadyFutures == 0) {
+        MoveTo(EState::GotMaxSeqNo);
+        Producer->RunMainWorker(static_cast<std::int64_t>(PartitionId));
     }
 }
 
@@ -364,16 +383,19 @@ bool TProducer::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSessio
         }
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Received session closed event for partition " << partition);
             HandleSessionClosedEvent(std::move(*sessionClosedEvent), partition);
             return true;
         }
 
         if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Received ready to accept event for partition " << partition);
             HandleReadyToAcceptEvent(partition, std::move(*readyToAcceptEvent));
             continue;
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Received acks event for partition " << partition);
             // Producer->SessionsWorker->OnReadFromSession(wrappedSession, acksEvent->Acks.size());
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
@@ -387,16 +409,23 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::DoWork() {
     std::unique_lock lock(Lock);
 
     while (!ReadyFutures.empty()) {
-        auto idx = *ReadyFutures.begin();
-        ReadyFutures.erase(idx);
+        auto partition = *ReadyFutures.begin();
+        ReadyFutures.erase(partition);
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Running event loop for partition " << partition);
+        auto session = Producer->SessionsWorker->GetWriteSession(partition);
+        if (!session) {
+            continue;
+        }
+
         lock.unlock();
         // RunEventLoop without Lock: sub-session's WaitEvent() completion may run the Subscribe
         // callback (ReadyFutures.insert) synchronously; that callback takes Lock -> same-thread deadlock.
-        auto isSessionClosed = RunEventLoop(Producer->SessionsWorker->GetWriteSession(idx), idx);
+        auto isSessionClosed = RunEventLoop(session, partition);
         if (!isSessionClosed) {
-            SubscribeToPartition(idx);
+            SubscribeToPartition(partition);
         } else {
-            UnsubscribeFromPartition(idx);
+            Producer->SessionsWorker->DestroyWriteSession(partition);
+            session->Closed = true;
         }
         lock.lock();
     }
@@ -414,7 +443,7 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
         return;
     }
 
-    auto wrappedSession = Producer->SessionsWorker->GetWriteSession(partition);
+    auto wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(partition);
     auto newFuture = wrappedSession->Session->WaitEvent();
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     std::weak_ptr<TEventsWorker> self = shared_from_this();
@@ -683,10 +712,27 @@ TProducer::TSessionsWorker::TSessionsWorker(TProducer* producer)
     : Producer(producer)
 {}
 
+TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::GetOrCreateWriteSession(std::uint32_t partition, bool directToPartition) {
+    auto sessionIter = SessionsIndex.find(partition);
+    if (sessionIter == SessionsIndex.end()) {
+        return CreateWriteSession(partition, directToPartition);
+    }
+
+    if (!sessionIter->second->DirectToPartition && sessionIter->second->NonDirectToPartitionOwnership++ == 0) {
+        SessionsToRemove.erase(partition);
+    }
+
+    return sessionIter->second;
+}
+
 TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::GetWriteSession(std::uint32_t partition, bool directToPartition) {
     auto sessionIter = SessionsIndex.find(partition);
-    if (sessionIter == SessionsIndex.end() || !directToPartition) {
-        return CreateWriteSession(partition, directToPartition);
+    if (sessionIter == SessionsIndex.end()) {
+        return nullptr;
+    }
+
+    if (directToPartition != sessionIter->second->DirectToPartition) {
+        return nullptr;
     }
 
     return sessionIter->second;
@@ -717,30 +763,48 @@ TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession
     }
     auto writeSession = std::make_shared<TWriteSessionWrapper>(
         Producer->Client->CreateWriteSession(alteredSettings),
-        partition);
+        partition,
+        directToPartition
+    );
 
+    SessionsIndex.emplace(partition, writeSession);
     if (directToPartition) {
-        SessionsIndex.emplace(partition, writeSession);
         Producer->EventsWorker->SubscribeToPartition(partition);
     }
     return writeSession;
 }
 
-void TProducer::TSessionsWorker::DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout) {
+void TProducer::TSessionsWorker::DestroyWriteSession(std::uint32_t partition) {
+    LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Destroying write session for partition " << partition);
+    auto it = SessionsIndex.find(partition);
     if (it == SessionsIndex.end() || !it->second) {
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Write session for partition " << partition << " is not found");
         return;
     }
 
-    it->second->Session->Close(closeTimeout);
-    const auto partition = it->second->Partition;
-    if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
-        SessionsToRemove.push_back(it->second);
+    if (!it->second->DirectToPartition && --it->second->NonDirectToPartitionOwnership > 0) {
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Write session for partition " << partition << " is not destroyed, non-direct ownership: " << it->second->NonDirectToPartitionOwnership);
+        return;
     }
-    it = SessionsIndex.erase(it);
-    Producer->EventsWorker->UnsubscribeFromPartition(partition);
+
+    if (it->second->DirectToPartition) {
+        Producer->EventsWorker->UnsubscribeFromPartition(partition);
+    }
+
+    if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Adding session to sessions to remove for partition " << partition);
+        SessionsToRemove.emplace(partition);
+    } else {
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Removing session from sessions index for partition " << partition);
+        SessionsIndex.erase(it);
+    }
 }
 
 size_t TProducer::TSessionsWorker::GetSessionsCount() const {
+    for (const auto& [partition, session] : SessionsIndex) {
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Session for partition " << partition << " is " << (session->Closed ? "closed" : "open") << " " << (session->IdleSession ? " (idle)" : " (active)") << " " << (session->DirectToPartition ? " (direct)" : " (non-direct)") << " " << (session->NonDirectToPartitionOwnership > 0 ? " (non-direct ownership: " + std::to_string(session->NonDirectToPartitionOwnership) + ")" : ""));
+    }
+
     return SessionsIndex.size();
 }
 
@@ -766,6 +830,7 @@ void TProducer::TSessionsWorker::AddIdleSession(std::uint32_t partition) {
 }
 
 void TProducer::TSessionsWorker::RemoveIdleSession(std::uint32_t partition) {
+    LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Removing session from idle for partition " << partition);
     auto itIdle = IdlerSessionsIndex.find(partition);
     if (itIdle == IdlerSessionsIndex.end()) {
         return;
@@ -782,12 +847,17 @@ void TProducer::TSessionsWorker::RemoveIdleSession(std::uint32_t partition) {
 }
 
 void TProducer::TSessionsWorker::DoWork() {
+    LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Doing work for sessions worker");
     while (!SessionsToRemove.empty()) {
-        if (static_cast<std::int64_t>(SessionsToRemove.front()->Partition) == Producer->MainWorkerOwner) {
+        auto partition = *SessionsToRemove.begin();
+        if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Breaking out of sessions to remove loop because partition " << partition << " is the main worker owner");
             break;
         }
-
-        SessionsToRemove.pop_front();
+        
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, Producer->LogPrefix() << "Removing session from sessions to remove for partition " << *SessionsToRemove.begin());
+        SessionsIndex.erase(partition);
+        SessionsToRemove.erase(partition);
     }
 
     while (!IdlerSessions.empty()) {
@@ -811,7 +881,7 @@ void TProducer::TSessionsWorker::DoWork() {
         auto sessionIter = SessionsIndex.find(partition);
         if (sessionIter != SessionsIndex.end()) {
             sessionIter->second->IdleSession.reset();
-            DestroyWriteSession(sessionIter, TDuration::Zero());
+            DestroyWriteSession(partition);
         }
     }
 }
@@ -842,7 +912,9 @@ void TProducer::TMessagesWorker::HandleReadyInitSeqNoFutures() {
         Y_ABORT_UNLESS(it != InitGetMaxSeqNoFutures.end(), "Init get max seq no future not found");
         Y_ABORT_UNLESS(it->second.IsReady(), "Init get max seq no future is not ready");
 
-        CurrentSeqNo = std::max(CurrentSeqNo, it->second.GetValue());
+        auto gotMaxSeqNo = it->second.GetValue();
+        CurrentSeqNo = std::max(CurrentSeqNo, gotMaxSeqNo);
+        Producer->Partitions[partition].CachedMaxSeqNo = gotMaxSeqNo;
         InitGetMaxSeqNoFutures.erase(it);
     }
 
@@ -853,6 +925,10 @@ void TProducer::TMessagesWorker::FinishInit() {
     for (const auto& partition : Producer->Partitions) {
         if (!partition.second.IsSplitted() && !InFlightMessagesIndex.contains(partition.first)) {
             Producer->SessionsWorker->AddIdleSession(partition.first);
+        }
+
+        if (partition.second.IsSplitted()) {
+            Producer->SessionsWorker->DestroyWriteSession(partition.first);
         }
     }
 
@@ -865,7 +941,7 @@ bool TProducer::TMessagesWorker::LazyInit() {
         return true;
     }
     
-    if (Producer->SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo) {
+    if (Producer->SeqNoStrategy == ESeqNoStrategy::WithSeqNo) {
         MoveTo(EState::Ready);
         return true;
     }
@@ -887,9 +963,9 @@ bool TProducer::TMessagesWorker::LazyInit() {
         auto partitionId = partition.first;
         WrappedWriteSessionPtr wrappedSession = nullptr;
         if (partition.second.IsSplitted()) {
-            wrappedSession = Producer->SessionsWorker->GetWriteSession(partition.first, false);
+            wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(partition.first, false);
         } else {
-            wrappedSession = Producer->SessionsWorker->GetWriteSession(partition.first);
+            wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(partition.first);
         }
 
         InitWriteSessions.push_back(wrappedSession);
@@ -936,11 +1012,11 @@ void TProducer::TMessagesWorker::DoWork() {
         return;
     }
 
-    auto sessionsWorker = Producer->SessionsWorker;
     if (!LazyInit()) {
         return;
     }
 
+    auto sessionsWorker = Producer->SessionsWorker;
     auto iterateMessagesIndex = [&](std::unordered_map<std::uint32_t, std::list<MessageIter>>& messagesIndex, auto stopCondition) {
         std::vector<std::uint32_t> partitionsProcessed;
         for (auto& [partition, messages] : messagesIndex) {
@@ -954,7 +1030,7 @@ void TProducer::TMessagesWorker::DoWork() {
                     head->SeqNo.emplace(++CurrentSeqNo);
                 }
 
-                auto wrappedSession = sessionsWorker->GetWriteSession(head->Partition);
+                auto wrappedSession = sessionsWorker->GetOrCreateWriteSession(head->Partition);
                 if (!SendMessage(wrappedSession, *head)) {
                     break;
                 }
@@ -1464,7 +1540,6 @@ TProducer::TProducer(
     });
 
     RunMainWorker(-1);
-
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Producer created");
 }
 
@@ -1486,11 +1561,15 @@ std::map<std::string, std::uint32_t> TProducer::GetPartitionsIndex() const {
 }
 
 size_t TProducer::GetSessionsCount() {
+    RunMainWorker(-1);
+
     std::lock_guard lock(GlobalLock);
     return SessionsWorker->GetSessionsCount();
 }
 
 size_t TProducer::GetIdleSessionsCount() {
+    RunMainWorker(-1);
+    
     std::lock_guard lock(GlobalLock);
     return SessionsWorker->GetIdleSessionsCount();
 }
@@ -1526,22 +1605,6 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     }
 
     return TCloseResult{ .Status = ECloseStatus::Timeout };
-}
-
-NThreading::TFuture<std::uint64_t> TProducer::GetInitSeqNo() {
-    std::lock_guard lock(GlobalLock);
-    if (InitPromise) {
-        return InitPromise->GetFuture();
-    }
-
-    auto currentSeqNo = MessagesWorker->GetCurrentSeqNo();
-    if (currentSeqNo) {
-        return NThreading::MakeFuture<std::uint64_t>(*currentSeqNo);
-    }
-
-    MessagesWorker->LazyInit();
-    InitPromise = NThreading::NewPromise<std::uint64_t>();
-    return InitPromise->GetFuture();
 }
 
 void TProducer::NonBlockingClose() {
@@ -1775,8 +1838,6 @@ void TProducer::RunMainWorker(std::int64_t owner) {
         MainWorkerState.fetch_and(std::uint8_t(~Rerun), std::memory_order_acq_rel);
         bool needRerun = false;
         std::optional<NThreading::TPromise<void>> eventsPromise;
-        std::optional<std::uint64_t> initSeqNo;
-        std::optional<NThreading::TPromise<std::uint64_t>> initPromise;
 
         {
             std::unique_lock lock(GlobalLock);
@@ -1787,21 +1848,10 @@ void TProducer::RunMainWorker(std::int64_t owner) {
                 SessionsWorker->DoWork();
                 MessagesWorker->DoWork();
             }
-
-            if (InitPromise) {
-                initSeqNo = MessagesWorker->GetCurrentSeqNo();
-                if (initSeqNo) {
-                    initPromise = *InitPromise;
-                }
-            }
         }
 
         if (eventsPromise) {
             eventsPromise->TrySetValue();
-        }
-
-        if (initSeqNo && initPromise) {
-            initPromise->TrySetValue(*initSeqNo);
         }
 
         while (!FlushPromises.empty()) {

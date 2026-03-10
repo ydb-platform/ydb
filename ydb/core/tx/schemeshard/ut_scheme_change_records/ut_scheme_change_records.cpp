@@ -8,37 +8,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 using namespace NSchemeChangeRecordTestHelpers;
-
-namespace {
-
-TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> ReadSchemeChangeRecords(
-    TTestBasicRuntime& runtime)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
-        new TEvSchemeShard::TEvInternalReadSchemeChangeRecords());
-    TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(event);
-    return event->Entries;
-}
-
-struct TSchemeChangeRecordsReadResult {
-    TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> Entries;
-    ui64 MinInFlightPlanStep = 0;
-};
-
-TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(TTestBasicRuntime& runtime) {
-    auto sender = runtime.AllocateEdgeActor();
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
-        new TEvSchemeShard::TEvInternalReadSchemeChangeRecords());
-    TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(event);
-    return {event->Entries, event->MinInFlightPlanStep};
-}
-
-} // anonymous namespace
+using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecords;
+using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecordsFull;
 
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     Y_UNIT_TEST(SchemeChangeRecordsTableExists) {

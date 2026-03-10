@@ -5579,7 +5579,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
-        HFuncTraced(TEvSchemeShard::TEvInternalReadSchemeChangeRecords, Handle);
         HFuncTraced(TEvSchemeShard::TEvRegisterSubscriber, Handle);
         HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecords, Handle);
         HFuncTraced(TEvSchemeShard::TEvAckSchemeChangeRecords, Handle);

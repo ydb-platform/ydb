@@ -325,7 +325,6 @@ bool IsDrop(ETxType t) {
     }
 }
 
-
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

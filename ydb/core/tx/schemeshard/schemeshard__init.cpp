@@ -1374,19 +1374,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         {
-            ui64 actualCount = 0;
-            auto recRowset = db.Table<Schema::SchemeChangeRecords>().Range().Select();
-            if (!recRowset.IsReady()) return false;
-            while (!recRowset.EndOfSet()) {
-                ++actualCount;
-                if (!recRowset.Next()) return false;
-            }
-            if (actualCount != Self->SchemeChangeRecordCount) {
-                Self->SchemeChangeRecordCount = actualCount;
-            }
-        }
-
-        {
             ui64 isReadOnlyModeVal = 0;
             RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_IsReadOnlyMode, isReadOnlyModeVal));
             Self->IsReadOnlyMode = isReadOnlyModeVal;

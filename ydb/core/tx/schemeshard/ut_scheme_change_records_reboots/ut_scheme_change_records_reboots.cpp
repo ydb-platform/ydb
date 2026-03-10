@@ -1,25 +1,15 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_tx_infly.h>
+#include <ydb/core/tx/schemeshard/ut_scheme_change_records/ut_scheme_change_records_helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecords;
 
 namespace {
-
-TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> ReadSchemeChangeRecords(
-    TTestActorRuntime& runtime)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
-        new TEvSchemeShard::TEvInternalReadSchemeChangeRecords());
-    TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(event);
-    return event->Entries;
-}
 
 void RegisterSubscriber(TTestActorRuntime& runtime, const TString& subscriberId) {
     auto sender = runtime.AllocateEdgeActor();

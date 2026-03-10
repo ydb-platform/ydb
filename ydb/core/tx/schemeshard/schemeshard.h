@@ -122,9 +122,6 @@ namespace TEvSchemeShard {
         EvUnregisterSubscriber,
         EvUnregisterSubscriberResult,
         EvWakeupToRunSchemeChangeRecordsCleanup,
-        // Test-only:
-        EvInternalReadSchemeChangeRecords,
-        EvInternalReadSchemeChangeRecordsResult,
 
         EvEnd
     };
@@ -767,29 +764,6 @@ namespace TEvSchemeShard {
         NKikimrSchemeShard::TEvUnregisterSubscriber, EvUnregisterSubscriber> {};
     struct TEvUnregisterSubscriberResult : public TEventPB<TEvUnregisterSubscriberResult,
         NKikimrSchemeShard::TEvUnregisterSubscriberResult, EvUnregisterSubscriberResult> {};
-
-    // Test-only: non-proto-backed events for reading scheme change records in tests
-    struct TEvInternalReadSchemeChangeRecords : public TEventLocal<TEvInternalReadSchemeChangeRecords, EvInternalReadSchemeChangeRecords> {
-    };
-
-    struct TEvInternalReadSchemeChangeRecordsResult : public TEventLocal<TEvInternalReadSchemeChangeRecordsResult, EvInternalReadSchemeChangeRecordsResult> {
-        struct TEntry {
-            ui64 SequenceId = 0;
-            ui64 TxId = 0;
-            ui32 OperationType = 0;
-            ui64 PathOwnerId = 0;
-            ui64 PathLocalId = 0;
-            TString PathName;
-            ui32 ObjectType = 0;
-            ui32 Status = 0;
-            TString UserSID;
-            ui64 SchemaVersion = 0;
-            ui64 CompletedAt = 0;
-            ui64 PlanStep = 0;
-        };
-        TVector<TEntry> Entries;
-        ui64 MinInFlightPlanStep = 0;
-    };
 };
 
 }

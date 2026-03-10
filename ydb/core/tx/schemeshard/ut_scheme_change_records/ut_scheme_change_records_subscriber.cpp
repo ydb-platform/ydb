@@ -1,29 +1,12 @@
 #include "ut_scheme_change_records_helpers.h"
 
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-
 #include <util/string/printf.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 using namespace NSchemeChangeRecordTestHelpers;
-
-namespace {
-
-TVector<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult::TEntry> ReadSchemeChangeRecords(
-    TTestBasicRuntime& runtime)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
-        new TEvSchemeShard::TEvInternalReadSchemeChangeRecords());
-    TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInternalReadSchemeChangeRecordsResult>(handle);
-    UNIT_ASSERT(event);
-    return event->Entries;
-}
-
-} // anonymous namespace
+using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecords;
 
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(MockBackupSubscriberEndToEnd) {

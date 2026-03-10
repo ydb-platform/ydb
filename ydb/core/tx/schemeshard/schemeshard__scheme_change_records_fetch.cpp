@@ -108,8 +108,9 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetSequenceId(seqId);
             entry->SetTxId(rowset.GetValue<Schema::SchemeChangeRecords::TxId>());
             entry->SetOperationType(rowset.GetValue<Schema::SchemeChangeRecords::OperationType>());
-            entry->SetPathOwnerId(rowset.GetValue<Schema::SchemeChangeRecords::PathOwnerId>());
-            entry->SetPathLocalId(rowset.GetValue<Schema::SchemeChangeRecords::PathLocalId>());
+            auto* pathId = entry->MutablePathId();
+            pathId->SetOwnerId(rowset.GetValue<Schema::SchemeChangeRecords::PathOwnerId>());
+            pathId->SetLocalId(rowset.GetValue<Schema::SchemeChangeRecords::PathLocalId>());
             entry->SetPathName(rowset.GetValue<Schema::SchemeChangeRecords::PathName>());
             entry->SetObjectType(rowset.GetValue<Schema::SchemeChangeRecords::ObjectType>());
             entry->SetStatus(rowset.GetValue<Schema::SchemeChangeRecords::Status>());

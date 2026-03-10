@@ -875,8 +875,6 @@ public:
 
     ui64 GetTypeSpecificAlterVersion(TPathId pathId, NKikimrSchemeOp::EPathType pathType) const;
     void PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry);
-    NTabletFlatExecutor::ITransaction* CreateTxInternalReadSchemeChangeRecords(TEvSchemeShard::TEvInternalReadSchemeChangeRecords::TPtr& ev);
-    void Handle(TEvSchemeShard::TEvInternalReadSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxAckSchemeChangeRecords(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev);

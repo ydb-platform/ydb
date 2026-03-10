@@ -10,7 +10,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
+    TTestActorRuntime& runtime, const TString& subscriberId,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
@@ -23,7 +23,7 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
 }
 
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 afterSeqId, ui32 maxCount,
+    TTestActorRuntime& runtime, const TString& subscriberId, ui64 afterSeqId, ui32 maxCount,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
@@ -38,7 +38,7 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecor
 }
 
 inline TEvSchemeShard::TEvAckSchemeChangeRecordsResult* AckSchemeChangeRecords(
-    TTestBasicRuntime& runtime, const TString& subscriberId, ui64 upToSeqId,
+    TTestActorRuntime& runtime, const TString& subscriberId, ui64 upToSeqId,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
@@ -52,7 +52,7 @@ inline TEvSchemeShard::TEvAckSchemeChangeRecordsResult* AckSchemeChangeRecords(
 }
 
 inline TEvSchemeShard::TEvForceAdvanceSubscriberResult* ForceAdvanceSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
+    TTestActorRuntime& runtime, const TString& subscriberId,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
@@ -65,7 +65,7 @@ inline TEvSchemeShard::TEvForceAdvanceSubscriberResult* ForceAdvanceSubscriber(
 }
 
 inline TEvSchemeShard::TEvUnregisterSubscriberResult* UnregisterSubscriber(
-    TTestBasicRuntime& runtime, const TString& subscriberId,
+    TTestActorRuntime& runtime, const TString& subscriberId,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
@@ -75,6 +75,73 @@ inline TEvSchemeShard::TEvUnregisterSubscriberResult* UnregisterSubscriber(
     auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvUnregisterSubscriberResult>(handle);
     UNIT_ASSERT(result);
     return result;
+}
+
+struct TSchemeChangeRecordEntry {
+    ui64 SequenceId = 0;
+    ui64 TxId = 0;
+    ui64 PlanStep = 0;
+    ui32 OperationType = 0;
+    ui64 PathOwnerId = 0;
+    ui64 PathLocalId = 0;
+    TString PathName;
+    ui32 ObjectType = 0;
+    ui32 Status = 0;
+    TString UserSID;
+    ui64 SchemaVersion = 0;
+    ui64 CompletedAt = 0;
+};
+
+struct TSchemeChangeRecordsReadResult {
+    TVector<TSchemeChangeRecordEntry> Entries;
+    ui64 MinInFlightPlanStep = 0;
+};
+
+inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
+    TTestActorRuntime& runtime)
+{
+    const TString tempSubId = "__internal_read_sub__";
+
+    // Register temp subscriber
+    TAutoPtr<IEventHandle> regHandle;
+    RegisterSubscriber(runtime, tempSubId, regHandle);
+
+    // Fetch all records
+    TAutoPtr<IEventHandle> fetchHandle;
+    auto* fetch = FetchSchemeChangeRecords(runtime, tempSubId, 0, 1000, fetchHandle);
+
+    TSchemeChangeRecordsReadResult result;
+    result.MinInFlightPlanStep = fetch->Record.GetMinInFlightPlanStep();
+
+    for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+        const auto& proto = fetch->Record.GetEntries(i);
+        TSchemeChangeRecordEntry entry;
+        entry.SequenceId = proto.GetSequenceId();
+        entry.TxId = proto.GetTxId();
+        entry.PlanStep = proto.GetPlanStep();
+        entry.OperationType = proto.GetOperationType();
+        entry.PathOwnerId = proto.GetPathId().GetOwnerId();
+        entry.PathLocalId = proto.GetPathId().GetLocalId();
+        entry.PathName = proto.GetPathName();
+        entry.ObjectType = proto.GetObjectType();
+        entry.Status = proto.GetStatus();
+        entry.UserSID = proto.GetUserSID();
+        entry.SchemaVersion = proto.GetSchemaVersion();
+        entry.CompletedAt = proto.GetCompletedAt();
+        result.Entries.push_back(std::move(entry));
+    }
+
+    // Unregister temp subscriber
+    TAutoPtr<IEventHandle> unregHandle;
+    UnregisterSubscriber(runtime, tempSubId, unregHandle);
+
+    return result;
+}
+
+inline TVector<TSchemeChangeRecordEntry> ReadSchemeChangeRecords(
+    TTestActorRuntime& runtime)
+{
+    return ReadSchemeChangeRecordsFull(runtime).Entries;
 }
 
 } // namespace NSchemeChangeRecordTestHelpers

@@ -4,12 +4,14 @@ package NKikimrSchemeShard;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/core/scheme/protos/pathid.proto";
+
 message TEvRegisterSubscriber {
     string SubscriberId = 1;
 }
 
 message TEvRegisterSubscriberResult {
-    uint32 Status = 1;
+    optional uint32 Status = 1;
     string Reason = 2;
     uint64 CurrentSequenceId = 3;
 }
@@ -17,16 +19,15 @@ message TEvRegisterSubscriberResult {
 message TSchemeChangeRecord {
     uint64 SequenceId = 1;
     uint64 TxId = 2;
+    uint64 PlanStep = 12;
     uint32 OperationType = 3;
-    uint64 PathOwnerId = 4;
-    uint64 PathLocalId = 5;
+    NKikimrProto.TPathID PathId = 4;
     string PathName = 6;
     uint32 ObjectType = 7;
-    uint32 Status = 8;
+    optional uint32 Status = 8;
     string UserSID = 9;
     uint64 SchemaVersion = 10;
     uint64 CompletedAt = 11;
-    uint64 PlanStep = 12;
 }
 
 message TEvFetchSchemeChangeRecords {
@@ -36,7 +37,7 @@ message TEvFetchSchemeChangeRecords {
 }
 
 message TEvFetchSchemeChangeRecordsResult {
-    uint32 Status = 1;
+    optional uint32 Status = 1;
     string Reason = 2;
     repeated TSchemeChangeRecord Entries = 3;
     uint64 LastSequenceId = 4;
@@ -51,7 +52,7 @@ message TEvAckSchemeChangeRecords {
 }
 
 message TEvAckSchemeChangeRecordsResult {
-    uint32 Status = 1;
+    optional uint32 Status = 1;
     string Reason = 2;
     uint64 NewCursor = 3;
 }
@@ -61,7 +62,7 @@ message TEvForceAdvanceSubscriber {
 }
 
 message TEvForceAdvanceSubscriberResult {
-    uint32 Status = 1;
+    optional uint32 Status = 1;
     string Reason = 2;
     uint64 NewCursor = 3;
 }
@@ -71,6 +72,6 @@ message TEvUnregisterSubscriber {
 }
 
 message TEvUnregisterSubscriberResult {
-    uint32 Status = 1;
+    optional uint32 Status = 1;
     string Reason = 2;
 }

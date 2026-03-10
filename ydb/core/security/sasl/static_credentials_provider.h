@@ -51,6 +51,7 @@ public:
         const std::string& username) const;
     void UpdateDatabaseUsers(const NLoginProto::TSecurityState& securityState);
     void DeleteDatabaseUsers(const std::string& database);
+    void Clear();
 
 private:
     TStaticCredentialsProvider();

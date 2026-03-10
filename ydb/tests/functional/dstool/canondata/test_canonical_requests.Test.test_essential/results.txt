@@ -31,6 +31,7 @@ dstool
 │  ├─ check                Check groups
 │  ├─ decommit             Decommit physical group
 │  ├─ show
+<<<<<<< HEAD
 │  │  ├─ blob-info         Get blob information from group
 │  │  ├─ storage-efficiency
 │  │  │                    Estimate storage efficiency of VDisks and pools
@@ -38,6 +39,16 @@ dstool
 │  ├─ state                Change or query group state
 │  ├─ take-snapshot        Take snapshot of groups metadata
 │  ├─ list                 List groups
+=======
+│  │  ├─ blob-info                      Get blob information from group
+│  │  ├─ storage-efficiency             Estimate storage efficiency of VDisks 
+│  │  │                                 and pools
+│  │  └─ usage-by-tablets               Estimate groups usage by tablets
+│  ├─ state                             Change or query group state
+│  ├─ take-snapshot                     Take snapshot of groups metadata
+│  ├─ resize                            Change group size in units
+│  ├─ list                              List groups
+>>>>>>> 8b9e2730796 (New command dstool group resize (#35643))
 │  └─ virtual
 │     ├─ create            Create virtual group backed by BlobDepot
 │     ├─ cancel            Cancel virtual group creation/decommission

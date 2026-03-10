@@ -16,6 +16,9 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <ydb/core/kqp/common/kqp.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 #include <algorithm>
@@ -226,6 +229,74 @@ private:
         return Request->SendResult(result, status);
     }
 
+    bool TryFallbackToKqp(const NActors::TActorContext& ctx) override {
+        if (!IsTableWithFeatures) {
+            return false;
+        }
+
+        const auto* proto = GetProtoRequest(Request.get());
+        const auto& rows = proto->Getrows();
+
+        const TString paramName = "$__kqp_bulk_upsert_rows";
+
+        TString sql = TStringBuilder()
+            << "UPSERT INTO `" << GetTable() << "` SELECT * FROM AS_TABLE(" << paramName << ")";
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto& record = ev->Record;
+
+        record.MutableRequest()->SetDatabase(GetDatabase());
+        record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        record.MutableRequest()->SetQuery(sql);
+        record.MutableRequest()->SetSessionId("");
+        record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+
+        auto* txControl = record.MutableRequest()->MutableTxControl();
+        txControl->set_commit_tx(true);
+        txControl->mutable_begin_tx()->mutable_serializable_read_write();
+
+        auto& rowsParam = (*record.MutableRequest()->MutableYdbParameters())[paramName];
+        rowsParam.mutable_type()->CopyFrom(rows.type());
+        rowsParam.mutable_value()->CopyFrom(rows.value());
+
+        if (Request->GetSerializedToken()) {
+            record.SetUserToken(Request->GetSerializedToken());
+        }
+        ActorIdToProto(ctx.SelfID, record.MutableRequestActorId());
+        ActorIdToProto(ctx.SelfID, record.MutableCancelationActor());
+
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span.GetTraceId());
+        TBase::Become(&TUploadRowsRPCPublic::StateWaitKqpFallback);
+        return true;
+    }
+
+    STFUNC(StateWaitKqpFallback) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleKqpFallbackResponse);
+            HFunc(TEvents::TEvPoison, HandleKqpFallbackPoison);
+            default:
+                break;
+        }
+    }
+
+    void HandleKqpFallbackResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+        const auto status = record.GetYdbStatus();
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        for (const auto& issue : issues) {
+            RaiseIssue(issue);
+        }
+        SendResult(ctx, status);
+        Die(ctx);
+    }
+
+    void HandleKqpFallbackPoison(TEvents::TEvPoison::TPtr&, const NActors::TActorContext& ctx) {
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
+        Die(ctx);
+    }
+
     bool CheckAccess(TString& errorMessage) override {
         return ::NKikimr::NGRpcService::CheckAccess(GetTable(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
@@ -405,6 +476,10 @@ private:
             }
         }
         return Request->SendResult(result, status);
+    }
+
+    bool TryFallbackToKqp(const NActors::TActorContext&) override {
+        return false;
     }
 
     bool CheckAccess(TString& errorMessage) override {

@@ -88,6 +88,7 @@ public:
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
     FEATURE_FLAG_SETTER(EnableIndexMaterialization)
     FEATURE_FLAG_SETTER(EnableTopicsSqlIoOperations)
+    FEATURE_FLAG_SETTER(EnableBulkUpsertFallbackToKqp)
 
     #undef FEATURE_FLAG_SETTER
 };

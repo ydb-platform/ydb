@@ -43,6 +43,10 @@ private:
         ctx.Send(Sender, ev, 0, Cookie);
     }
 
+    bool TryFallbackToKqp(const NActors::TActorContext&) override {
+        return false;
+    }
+
     bool ValidateTable(TString& errorMessage) override {
         if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             errorMessage = "Only the OLAP table is supported";

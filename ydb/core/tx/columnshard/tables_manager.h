@@ -119,25 +119,9 @@ public:
         if (Versions.empty()) {
             return false;
         }
-        const NOlap::TSnapshot minVersion = *Versions.begin();
-        for (const auto& [_, pathInfo] : SchemeShardLocalPathIds) {
-            const NOlap::TSnapshot appearVersion = pathInfo.CopyVersion.value_or(minVersion);
-            if (snapshot < appearVersion) {
-                continue;
-            }
-            if (!pathInfo.DropVersion || snapshot < *pathInfo.DropVersion) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    std::set<TUnifiedPathId> GetPathIds() const {
-        std::set<NColumnShard::TUnifiedPathId> paths;
-        for (const auto& [schemeShardLocalPathId, _]: SchemeShardLocalPathIds) {
-            paths.insert(NColumnShard::TUnifiedPathId::BuildValid(InternalPathId, schemeShardLocalPathId));
-        }
-        return paths;
+        
+        const NOlap::TSnapshot appeared = *Versions.begin();
+        return appeared <= snapshot && !IsDropped(snapshot);
     }
 
     void SetDropVersion(const NOlap::TSnapshot& version) {

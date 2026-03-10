@@ -284,6 +284,7 @@ void TLocalLeaderElection::ResetState() {
     PendingAcquire = false;
     SentRequests.clear();
     RpcActor = {};
+    LastAcquireSemaphore = {};
 }
 
 void TLocalLeaderElection::CreateSemaphore() {
@@ -771,7 +772,7 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     SentRequests.erase(reqId);
     if (source.acquired()) {
         LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
-        LastAcquireSemaphore = TInstant::Now() + AcquireSemaphorePeriod;    // delay
+        LastAcquireSemaphore = TInstant::Now();    // delay
     } else {
         LOG_ROW_DISPATCHER_DEBUG("Semaphore acquire timed out");
     }

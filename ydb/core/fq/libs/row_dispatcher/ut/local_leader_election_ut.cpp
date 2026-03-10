@@ -6,6 +6,8 @@
 
 #include <ydb/core/testlib/test_client.h>
 
+#include <thread> 
+
 namespace {
 
 using namespace NKikimr;
@@ -100,6 +102,8 @@ Y_UNIT_TEST_SUITE(LocalLeaderElectionTests) {
         } else {
             currentLeader = LeaderElection3;
         }
+
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
         Server->GetRuntime()->Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
         auto coordinatorId4 = ExpectCoordinatorChanged();

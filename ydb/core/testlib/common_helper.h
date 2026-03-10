@@ -66,11 +66,24 @@ protected:
     void StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
 
     Tests::TServer& Server;
+    THolder<NYdb::TDriver> Driver;
     bool UseQueryService = false;
 public:
     THelper(TServer& server)
-        : Server(server) {
+        : Server(server)
+    {
+        TString endpoint = "localhost:" + ToString(Server.GetSettings().GrpcPort);
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/" + Server.GetSettings().DomainName);
 
+        // In simulated runtime, use async discovery mode
+        // to avoid blocking on endpoint discovery during event dispatching
+        if (!Server.GetSettings().UseRealThreads) {
+            driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        }
+
+        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
     }
 
     void SetUseQueryService(bool use = true) {

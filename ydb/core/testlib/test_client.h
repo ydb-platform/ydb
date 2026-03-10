@@ -399,7 +399,6 @@ namespace Tests {
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
-        const NYdb::TDriver& GetDriver() const;
         const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
         const NYdbGrpc::TGRpcServer& GetTenantGRpcServer(const TString& tenant) const;
         TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> GetProcessMemoryInfoProvider() const;

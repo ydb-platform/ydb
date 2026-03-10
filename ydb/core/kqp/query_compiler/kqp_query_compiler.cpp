@@ -723,7 +723,7 @@ public:
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
         , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
-        , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx, config))
+        , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
         , OptimizeCtx(optimizeCtx)
         , Config(config)

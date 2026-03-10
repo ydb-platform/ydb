@@ -1326,7 +1326,8 @@ TExprBase DqBuildHashJoin(
     IOptimizationContext& optCtx,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
-    bool useBlockHashJoin
+    bool useBlockHashJoin,
+    bool blockHashJoinLeftIsBuild
 ) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
@@ -1692,8 +1693,11 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
-                // Pass the original structured inputs, not wide flows
+                TExprNode::TListType blockFlags;
+                if (blockHashJoinLeftIsBuild) {
+                    blockFlags.push_back(ctx.NewAtom(join.Pos(), "LeftIsBuild"));
+                }
+
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
                     .RightInput(rightInputArg)
@@ -1703,6 +1707,9 @@ TExprBase DqBuildHashJoin(
                     .JoinKeys(join.JoinKeys())
                     .LeftJoinKeyNames(join.LeftJoinKeyNames())
                     .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Flags()
+                        .Add(blockFlags)
+                        .Build()
                     .Done().Ptr();
                 break;
             }

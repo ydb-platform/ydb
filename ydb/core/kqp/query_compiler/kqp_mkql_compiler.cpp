@@ -232,7 +232,7 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
     return meta;
 }
 
-TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config) {
+TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
     compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName(), TDqReadBlockWideWrap::CallableName()},
@@ -426,8 +426,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         });
 
     compiler->AddCallable("BlockHashJoinCore",
-        [&ctx, config](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 7, "BlockHashJoinCore should have 7 arguments");
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 7 || node.ChildrenSize() == 8, "BlockHashJoinCore should have 7 or 8 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -489,9 +489,13 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
 
             NMiniKQL::TBlockHashJoinSettings settings;
-            settings.LeftIsBuild = joinKind == EJoinKind::Left
-                && config
-                && config->BlockHashJoinLeftIsBuild.Get().GetOrElse(false);
+            if (node.ChildrenSize() == 8) {
+                for (const auto& flag : node.Child(7)->Children()) {
+                    if (flag->Content() == "LeftIsBuild") {
+                        settings.LeftIsBuild = true;
+                    }
+                }
+            }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
                 leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
         });

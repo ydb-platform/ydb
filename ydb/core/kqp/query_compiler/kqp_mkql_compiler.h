@@ -33,8 +33,7 @@ private:
 
 TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(
     const TKqlCompileContext& ctx,
-    NYql::TTypeAnnotationContext& typesCtx,
-    NYql::TKikimrConfiguration::TPtr config = nullptr);
+    NYql::TTypeAnnotationContext& typesCtx);
 
 } // namespace NKqp
 } // namespace NKikimr

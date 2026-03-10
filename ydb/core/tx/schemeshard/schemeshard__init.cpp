@@ -5705,7 +5705,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
-                Self->AddForcedCompactionShard(shardIdx, Self->ForcedCompactions.at(compactionId));
+                if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
+                    Self->AddForcedCompactionShard(shardIdx, *info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown forced compaction id " << compactionId
+                            << " for shardIdx: " << shardIdx
+                            << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!shardsRowset.Next()) {
                     return false;

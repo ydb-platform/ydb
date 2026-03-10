@@ -122,7 +122,7 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareDropObjectSc
 
 TTableSchema IOperationsManager::GetSchema() const {
     TReadGuard guard(Mutex);
-    Y_ABORT_UNLESS(!!ActualSchema);
+    Y_VALIDATE(ActualSchema, "Actual schema is not set");
     return *ActualSchema;
 }
 

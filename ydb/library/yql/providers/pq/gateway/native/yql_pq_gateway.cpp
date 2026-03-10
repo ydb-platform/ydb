@@ -46,10 +46,83 @@ public:
 
     void AddCluster(const NYql::TPqClusterConfig& cluster) override;
 
+<<<<<<< HEAD
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
+=======
+    void UpdateClusterConfigs(const TString& clusterName, const TString& endpoint, const TString& database, bool secure) final {
+        with_lock (Mutex) {
+            const auto foundCluster = ClusterConfigs->find(clusterName);
+            Y_ABORT_UNLESS(foundCluster != ClusterConfigs->end());
+            auto& cluster = foundCluster->second;
+            cluster.SetEndpoint(endpoint);
+            cluster.SetDatabase(database);
+            cluster.SetUseSsl(secure);
+        }
+    }
+
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {
+        ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
+        for (const auto& cfg : config->GetClusterMapping()) {
+            AddCluster(cfg);
+        }
+    }
+
+    void AddCluster(const NYql::TPqClusterConfig& cluster) final {
+        Y_ABORT_UNLESS(ClusterConfigs);
+        (*ClusterConfigs)[cluster.GetName()] = cluster;
+    }
+
+    ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+        const bool hasEndpoint = HasEndpoint(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateTopicClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
+        return CreateExternalTopicClient(driver, settings);
+    }
+
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {
+        const bool hasEndpoint = HasEndpoint(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateFederatedTopicClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for federated topic client and local topics are not allowed");
+        return CreateExternalFederatedTopicClient(driver, settings);
+    }
+
+    TTopicClientSettings GetTopicClientSettings() const final {
+        return CommonTopicClientSettings.GetOrElse({});
+    }
+
+    TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final {
+        TFederatedTopicClientSettings settings;
+
+        if (!CommonTopicClientSettings) {
+            return settings;
+        }
+
+        settings.DefaultCompressionExecutor(CommonTopicClientSettings->DefaultCompressionExecutor_);
+        settings.DefaultHandlersExecutor(CommonTopicClientSettings->DefaultHandlersExecutor_);
+
+#define COPY_OPTIONAL_SETTINGS(NAME)                        \
+    if (CommonTopicClientSettings->NAME##_) {               \
+        settings.NAME(*CommonTopicClientSettings->NAME##_); \
+    }
+
+        COPY_OPTIONAL_SETTINGS(CredentialsProviderFactory);
+        COPY_OPTIONAL_SETTINGS(SslCredentials);
+        COPY_OPTIONAL_SETTINGS(DiscoveryMode);
+
+#undef COPY_OPTIONAL_SETTINGS
+
+        return settings;
+    }
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
 
 private:
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const;

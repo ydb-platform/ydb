@@ -1867,7 +1867,7 @@ private:
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
@@ -1891,7 +1891,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;
+        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1901,6 +1901,13 @@ private:
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+<<<<<<< HEAD
+=======
+
+        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
+            return pqGateway->CloseSession(sessionId);
+        });
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1941,14 +1948,25 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+<<<<<<< HEAD
+=======
+            InitSolomonProvider();
+
+            TVector<std::function<TFuture<void>()>> finalizers;
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider();
             }
+<<<<<<< HEAD
             if (FederatedQuerySetup->SolomonGateway) {
                 InitSolomonProvider();
             }
             if (FederatedQuerySetup->PqGateway) {
                 InitPqProvider();
+=======
+            if (FederatedQuerySetup->PqGatewayFactory) {
+                InitPqProvider(finalizers);
+>>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
             }
             TypesCtx->StreamLookupJoin = Config->EnableDqSourceStreamLookupJoin;
         }

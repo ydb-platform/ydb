@@ -24,3 +24,8 @@ items:
     path: transfer/toc_p.yaml
 - name: Импорт и экспорт данных в колоночные таблицы
   href: import-export-column-tables.md
+- name: Потоковые запросы
+  href: streaming_queries/index.md
+  include:
+    mode: link
+    path: streaming_queries/toc_p.yaml

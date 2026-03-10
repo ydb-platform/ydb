@@ -16,10 +16,17 @@
 - [Время жизни и вытеснение](ttl.md)
 - [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
+<<<<<<< HEAD
 - [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)
 {% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
 - [Оптимизатор запросов](optimizer.md)
 - [Федеративные запросы](federated_query/index.md)
+=======
+- [Асинхронная репликация](async-replication.md)
+- [Режим bridge](./bridge.md)
+- [Трансфер данных](./transfer.md)
+- [Потоковые запросы](streaming-query.md)
+>>>>>>> ffea58c6bef (YQ-4502 add streaming_queries docs (#25701))
 
 ## См. также {#see-also}
 

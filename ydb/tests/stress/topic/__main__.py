@@ -22,9 +22,9 @@ if __name__ == '__main__':
         logging.basicConfig(
             filename=args.log_file,
             filemode='a',
-            format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+            format='%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s',
             datefmt='%H:%M:%S',
-            level=logging.INFO
+            level=logging.DEBUG
         )
 
     workload = YdbTopicWorkload(

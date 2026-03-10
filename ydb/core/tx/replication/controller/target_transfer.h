@@ -9,7 +9,7 @@ public:
     struct TTransferConfig : public TConfigBase {
         using TPtr = std::shared_ptr<TTransferConfig>;
 
-        TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath);
+        TTransferConfig(const TString& srcPath, const TString& dstPath, const NKikimrReplication::TReplicationConfig& cfg);
         
         const TString& GetTransformLambda() const;
         const TString& GetRunAsUser() const;

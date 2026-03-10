@@ -465,7 +465,7 @@ public:
         THashSet<TInternalPathId> result;
         for (auto& [dropSnapshot, tableIds] : PathsToDrop) {
             // new transactions may come to any snapshot younger than minReadSnapshot, so we cannot drop there anything
-            if (snapshotHolders.GetMinReadSnapshot() < dropSnapshot) {
+            if (snapshotHolders.GetMinSnapshotForNewReads() < dropSnapshot) {
                 break;
             }
             for (const auto& tableId : tableIds) {

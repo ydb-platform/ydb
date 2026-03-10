@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
 
     Y_UNIT_TEST(PortionsCouldBeUsedAfterMinReadSnapshot) {
         // time        0--1--------------------------------10---11
-        //                                                 ^ minReadSnapshot
+        //                                                 ^ minSnapshotForNewReads
         // p1             [.....................................)
         // p2                                                   [11....................20)
         // p3             [................................)
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
 
     Y_UNIT_TEST(TxCouldUseAPortions) {
         // time      0--1---------5-------------10-------------20
-        //                        ^ tx                         ^ minReadSnapshot
+        //                        ^ tx                         ^ minSnapshotForNewReads
         // portion1     [.......................)
         // portion2              [5.............)
         const TSnapshotHolders holders(Step(20), { Step(5) });
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
 
     Y_UNIT_TEST(TxsCouldNotUsePortions) {
         // time        0--1-----4-5-6-----10----12-13----18----20
-        //                        ^ tx1         ^ tx2          ^ minReadSnapshot
+        //                        ^ tx1         ^ tx2          ^ minSnapshotForNewReads
         // portion1       [1......5)
         // portion2                 [6....10)
         // portion3                                [13..18)

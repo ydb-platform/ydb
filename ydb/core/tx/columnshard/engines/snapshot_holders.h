@@ -6,23 +6,33 @@
 
 namespace NKikimr::NOlap {
 
+/**
+The life looks like this:
+time ---------[----------------------------------------]--------->
+        ^scan1  ^minSnapshotForNewReads  ^scan2 ^scan3   ^now
+
+In this class, we need only minSnapshotForNewReads and scan1.
+We do not need scan2 and scan3 because we consider the whole range [minSnapshotForNewReads, now] as "in flight",
+because any number of new scans may come there.
+*/
 class TSnapshotHolders {
-    const TSnapshot MinReadSnapshot;
-    // Sorted from older to younger.
+    // It is the oldest snapshot new scans can start at
+    const TSnapshot MinSnapshotForNewReads;
+    // Sorted from older to younger
     const std::vector<TSnapshot> TxInFlight;
 
 public:
-    TSnapshotHolders(TSnapshot minReadSnapshot, std::vector<TSnapshot> txInFlight)
-        : MinReadSnapshot(std::move(minReadSnapshot))
+    TSnapshotHolders(TSnapshot minSnapshotForNewReads, std::vector<TSnapshot> txInFlight)
+        : MinSnapshotForNewReads(std::move(minSnapshotForNewReads))
         , TxInFlight(std::move(txInFlight)) {
         AFL_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
         if (!TxInFlight.empty()) {
-            AFL_VERIFY(TxInFlight.back() < MinReadSnapshot);
+            AFL_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
         }
     }
 
-    TSnapshot GetMinReadSnapshot() const {
-        return MinReadSnapshot;
+    TSnapshot GetMinSnapshotForNewReads() const {
+        return MinSnapshotForNewReads;
     }
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
@@ -34,7 +44,7 @@ public:
     template <class TIsRemovedFor, class TIsVisible>
     bool CouldUse(const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const {
         // The object can be used by new scans.
-        if (!isRemovedFor(MinReadSnapshot)) {
+        if (!isRemovedFor(MinSnapshotForNewReads)) {
             return true;
         }
 

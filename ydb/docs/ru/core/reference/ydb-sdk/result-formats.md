@@ -32,7 +32,7 @@
 
   ### Конвертация YQL-типов в формате Arrow
 
-  Типы данных YQL конвертируются в типы Apache Arrow по следующим правилам.
+  [Типы данных YQL](../../yql/reference/types/index.md) конвертируются в типы Apache Arrow по следующим правилам.
 
   #### Числовые типы
 
@@ -88,34 +88,37 @@
 
   {% endnote %}
 
-  #### Сингулярные типы
-
-  | Тип YQL | Тип Arrow |
-  |---------|-----------|
-  | `Null` | `null` |
-  | `Void` | `struct<>` |
-  | `EmptyList` | `struct<>` |
-  | `EmptyDict` | `struct<>` |
-
-  #### Составные типы
+  #### Контейнерные типы
 
   | Тип YQL | Тип Arrow | Примечание |
   |---------|-----------|------------|
-  | `Optional<T>` | `struct<opt: T>` | Если тип `T` является `Variant`, `Optional`, `Pg` или сингулярным |
-  | `Optional<T>` | `T` | Для остальных типов, по умолчанию nullable в Apache Arrow |
   | `List<T>` | `list<item: T>` | |
   | `Tuple<T1, T2, ...>` | `struct<field0: T1, field1: T2, ...>` | |
   | `Struct<name: T, ...>` | `struct<name: T, ...>` | |
   | `Dict<K, V>` | `list<struct<key: K, payload: V>>` | |
+  | `Set<T>` | `list<struct<key: T, payload: struct<>>>` | Является `Dict<T, Void>` |
   | `Variant<T1, ..., Tn>` | `dense_union<field0: T1, ...>` | Для n <= 128 |
   | `Variant<T1, ..., Tn>` | `dense_union<dense_union<field0: T1, ...>, ...>` | Для 128 < n <= 16384 |
-  | `Tagged<T>` | `T` |  Раскрытие типа |
+  | `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<name1: T1, ...>` | Для n <= 128 |
+  | `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<dense_union<name1: T1, ...>, ...>` | Для 128 < n <= 16384 |
 
   {% note warning %}
 
-  Тип `Variant` в YQL можно представить как тип Arrow, если количество перечисленных типов в `Variant` не превышает 16384 (128 * 128). В противном случае представление типа в этом формате не поддерживается.
+  Типы `Variant` над кортежем и над структурой не представимы в формате Apache Arrow, если количество дочерних типов превышает 16384 (128 * 128).
 
   {% endnote %}
+
+  #### Опциональные и специальные типы
+
+  | Тип YQL | Тип Arrow | Примечание |
+  |---------|-----------|------------|
+  | `Null` | `null` | Сингулярный тип |
+  | `Void` | `struct<>` | Сингулярный тип |
+  | `EmptyList` | `struct<>` | Сингулярный тип |
+  | `EmptyDict` | `struct<>` | Сингулярный тип |
+  | `Tagged<T>` | `T` |  Раскрытие с потерей именования |
+  | `Optional<T>` | `struct<opt: T>` | Если тип `T` является `Variant`, `Optional`, `Pg` или сингулярным |
+  | `Optional<T>` | `T` | Для остальных типов |
 
   #### Типы семейства pg
 

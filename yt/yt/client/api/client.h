@@ -2,6 +2,7 @@
 
 #include "accounting_client.h"
 #include "admin_client.h"
+#include "ban_client.h"
 #include "connection.h"
 #include "chaos_client.h"
 #include "cypress_client.h"
@@ -84,6 +85,7 @@ struct IClient
     , public IDistributedTableClient
     , public IDistributedFileClient
     , public IShuffleClient
+    , public IBanClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.

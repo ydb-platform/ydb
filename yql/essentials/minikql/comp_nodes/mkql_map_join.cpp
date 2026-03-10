@@ -569,7 +569,7 @@ public:
 
         block = hasi;
 
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), subiter, ctx.Codegen, block, itemPtr);
+        const auto status = CallBoxedValueNext(subiter, ctx, block, itemPtr);
         BranchInst::Create(full, skip, status, block);
 
         {
@@ -1219,7 +1219,7 @@ public:
 
         block = hasi;
         const auto curr = new LoadInst(valueType, currentPtr, "curr", block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), subiter, ctx.Codegen, block, itemPtr);
+        const auto status = CallBoxedValueNext(subiter, ctx, block, itemPtr);
         BranchInst::Create(full, skip, status, block);
 
         {
@@ -1620,7 +1620,7 @@ private:
         BranchInst::Create(loop, block);
 
         block = loop;
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, stream, codegen, block, itemPtr);
+        const auto status = CallBoxedValueFetch(stream, ctx, block, itemPtr);
         ReturnInst::Create(context, status, stop);
 
         const auto stat = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, fsok, "stat", block);
@@ -1787,7 +1787,7 @@ private:
 
         {
             block = hasi;
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), subiter, codegen, block, itemPtr);
+            const auto status = CallBoxedValueNext(subiter, ctx, block, itemPtr);
             BranchInst::Create(full, skip, status, block);
         }
 
@@ -1823,7 +1823,7 @@ private:
 
         {
             block = loop;
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, stream, codegen, block, currentArg);
+            const auto status = CallBoxedValueFetch(stream, ctx, block, currentArg);
             ReturnInst::Create(context, status, stop);
 
             const auto stat = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, fsok, "stat", block);

@@ -496,6 +496,12 @@ void TExternalComputationNode::InvalidateValue(TComputationContext& ctx) const {
     }
 }
 
+void TExternalComputationNode::CollectInvalidationIndexes(std::set<ui32>& out) const {
+    for (const auto& p : InvalidationSet_) {
+        out.insert(p.first);
+    }
+}
+
 bool TComputationValueBaseNotSupportedStub::HasFastListLength() const {
     ThrowNotSupported(__func__);
     return false;

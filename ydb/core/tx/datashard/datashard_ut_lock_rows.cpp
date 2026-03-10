@@ -14,7 +14,7 @@ namespace {
         NActors::TActorId Sender;
         ui64 Id;
 
-        friend bool operator==(const TRequestId&, const TRequestId&) = default;
+        friend std::strong_ordering operator<=>(const TRequestId&, const TRequestId&) = default;
     };
 } // namespace
 
@@ -130,8 +130,9 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             , Sender(Runtime.AllocateEdgeActor(pipe.GetNodeIndex()))
         {}
 
-        template<class TCallback>
-        ui64 SendRequest(const TLockHandle& lock, const TTableId& tableId, TSerializedCellMatrix keys, const TCallback& callback) {
+        using TRequestModifyCallback = std::function<void(NEvents::TDataEvents::TEvLockRows*)>;
+
+        ui64 SendRequest(const TLockHandle& lock, const TTableId& tableId, TSerializedCellMatrix keys, TRequestModifyCallback callback = {}) {
             ui64 requestId = NextRequestId++;
             auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(requestId);
             req->Record.SetLockId(lock.GetLockId());
@@ -141,13 +142,11 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             req->Record.AddColumnIds(1);
             req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
             req->SetCellMatrix(keys.ReleaseBuffer());
-            callback(req.get());
+            if (callback) {
+                callback(req.get());
+            }
             Pipe.Send(Sender, req.release());
             return requestId;
-        }
-
-        ui64 SendRequest(const TLockHandle& lock, const TTableId& tableId, TSerializedCellMatrix keys) {
-            return SendRequest(lock, tableId, std::move(keys), [](auto*){});
         }
 
         void SendCancel(ui64 requestId) {
@@ -215,15 +214,19 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             }
         }
 
-        TString ToString() const {
-            TVector<TWaitGraphEdge> edges;
+        TString ToString(bool withRequestIds = false) const {
+            TVector<std::pair<TWaitGraphEdge, TRequestId>> edges;
             for (auto& pr : *this) {
-                edges.push_back(pr.second);
+                edges.emplace_back(pr.second, pr.first);
             }
             std::sort(edges.begin(), edges.end());
             TStringBuilder sb;
-            for (auto& edge : edges) {
-                sb << edge.LockId << " -> " << edge.OtherLockId << "\n";
+            for (auto& pr : edges) {
+                sb << pr.first.LockId << " -> " << pr.first.OtherLockId;
+                if (withRequestIds) {
+                    sb << " (" << pr.second.Id << ")";
+                }
+                sb << "\n";
             }
             return sb;
         }
@@ -915,6 +918,173 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         // Finally remove lock 2, it must unblock req5
         lock2.Reset();
         lockRows.ExpectResult(req5);
+    }
+
+    Y_UNIT_TEST(RuntimeLockChainRemoval) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+
+        // Lock key 1 by lock 1, this will be used as a blocker for requests
+        auto req1 = lockRows.SendRequest(lock1, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Send multiple requests to lock key 1 by lock 2
+        auto req2 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        auto req3 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        auto req4 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+
+        // Waiting edge from 234 to 123 should have been added once
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (2)\n");
+
+        // Lock key 1 by lock 3, it will be further blocked
+        auto req5 = lockRows.SendRequest(lock3, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (2)\n"
+            "345 -> 234 (3)\n");
+
+        // Cancel req3 (middle of the chain)
+        // We expect wait graph not to change in any way
+        lockRows.SendCancel(req3);
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (2)\n"
+            "345 -> 234 (3)\n");
+
+        // Add a new tail for lock 2 requests
+        // We expect wait graph not to change in any way
+        auto req6 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (2)\n"
+            "345 -> 234 (3)\n");
+
+        // Cancel req2 (current head of the chain)
+        // Since req4 has its predecessor changed it will wake up and add a replacement 234 -> 123 edge
+        lockRows.SendCancel(req2);
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (4)\n"
+            "345 -> 234 (3)\n");
+
+        // Cancel req6 (current tail of the chain)
+        // We expect wait graph not to change since req5 predecessor didn't change
+        lockRows.SendCancel(req6);
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "234 -> 123 (4)\n"
+            "345 -> 234 (3)\n");
+
+        // Finally cancel req4
+        // We expect req5 to wake up and change wait edge to 345 -> 123
+        lockRows.SendCancel(req4);
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(true),
+            "345 -> 123 (5)\n");
+
+        Y_UNUSED(req5);
+    }
+
+    Y_UNIT_TEST(BadRequests) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1, this will be used as a blocker for requests
+        auto req1 = lockRows.SendRequest(lock1, tableId, TKeysBuilder().Add(1).Build());
+        auto res1 = lockRows.ExpectResult(req1);
+
+        // Lock key 1 by lock2, this will be enqueued as an awaiter
+        auto req2 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "234 -> 123\n");
+
+        // Try using duplicate request id, request must fail once, along with the original
+        lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build(), [&](auto* req) {
+            req->Record.SetRequestId(req2);
+        });
+        lockRows.ExpectResult(req2, NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST);
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(waitGraph.ToString(), "");
+
+        // Using optimistic lock mode is unsupported
+        ui64 req4 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build(), [&](auto* req) {
+            req->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+        });
+        lockRows.ExpectResult(req4, NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST);
+
+        // Alter table, adding a column
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                ALTER TABLE `/Root/table` ADD COLUMN value2 int;
+            )"),
+            "SUCCESS");
+
+        // Using an outdated tableId should fail
+        ui64 req5 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req5, NKikimrDataEvents::TEvLockRowsResult::STATUS_SCHEME_CHANGED);
+
+        // Using an updated tableId should succeed
+        // Note that alter has broken lock 1 and key will be locked by lock 2
+        tableId = ResolveTableId(server, sender, "/Root/table");
+        ui64 req6 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req6);
+        UNIT_ASSERT_VALUES_EQUAL(waitGraph.ToString(), "");
+
+        // Try locking key 1 by lock 1, specifying a previously returned existing locks
+        ui64 req7 = lockRows.SendRequest(lock1, tableId, TKeysBuilder().Add(1).Build(), [&](auto* req) {
+            *req->Record.MutableExistingLocks() = res1->Record.GetLocks();
+        });
+        lockRows.ExpectResult(req7, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)

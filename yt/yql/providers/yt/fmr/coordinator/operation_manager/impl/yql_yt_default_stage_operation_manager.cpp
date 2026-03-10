@@ -7,28 +7,31 @@
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_merge/yql_yt_sorted_merge_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map/yql_yt_map_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_upload/yql_yt_sorted_upload_stage_operation_manager.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sort/yql_yt_sort_stage_operation_manager.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NFmr {
 
-IFmrStageOperationManager::TPtr MakeStageOperationManager(ETaskType taskType) {
-    switch (taskType) {
-        case ETaskType::Upload:
-            return MakeUploadStageOperationManager();
-        case ETaskType::Download:
-            return MakeDownloadStageOperationManager();
-        case ETaskType::Merge:
-            return MakeMergeStageOperationManager();
-        case ETaskType::SortedMerge:
-            return MakeSortedMergeStageOperationManager();
-        case ETaskType::Map:
-            return MakeMapStageOperationManager();
-        case ETaskType::SortedUpload:
-            return MakeSortedUploadStageOperationManager();
+IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operationType, TIntrusivePtr<IRandomProvider> randomProvider) {
+    switch (operationType) {
+        case EOperationType::Upload:
+            return MakeUploadStageOperationManager(randomProvider);
+        case EOperationType::Download:
+            return MakeDownloadStageOperationManager(randomProvider);
+        case EOperationType::Merge:
+            return MakeMergeStageOperationManager(randomProvider);
+        case EOperationType::SortedMerge:
+            return MakeSortedMergeStageOperationManager(randomProvider);
+        case EOperationType::Map:
+            return MakeMapStageOperationManager(randomProvider);
+        case EOperationType::SortedUpload:
+            return MakeSortedUploadStageOperationManager(randomProvider);
+        case EOperationType::Sort:
+            return MakeSortStageOperationManager(randomProvider);
         default:
-            YQL_ENSURE(false, "Unknown task type for stage operation manager");
+            ythrow yexception() << "Unknown operation type for stage operation manager";
     }
 }
 
-}
+} // namespace NYql::NFmr

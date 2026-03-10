@@ -32,6 +32,7 @@ SRCS(
     ut_counters.cpp
     ut_labeled.cpp
     ut_registry.cpp
+    ut_show_create.cpp
 )
 
 END()

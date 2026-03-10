@@ -147,8 +147,10 @@ namespace NTypeAnnImpl {
     bool EnsureNoItemTypeConflicts(
         TStringBuf name,
         const TExprNode::TPtr& container,
-        TExprContext& ctx)
+        TExprContext& ctx,
+        bool& isUniversal)
     {
+        isUniversal = false;
         YQL_ENSURE(container->ChildrenSize() != 0);
 
         size_t lhsIndex = 0;
@@ -160,6 +162,10 @@ namespace NTypeAnnImpl {
         for (; rhsIndex < container->ChildrenSize(); ++rhsIndex) {
             rhsType = container->Child(rhsIndex)->GetTypeAnn();
             if (lhsType != rhsType) {
+                if (lhsType->HasUniversal() || rhsType->HasUniversal()) {
+                    isUniversal = true;
+                    return true;
+                }
                 break;
             }
         }
@@ -3981,7 +3987,8 @@ namespace NTypeAnnImpl {
         }
 
         if constexpr (IsStrict) {
-            if (!EnsureNoItemTypeConflicts("List", input, ctx.Expr)) {
+            bool isUniversal;
+            if (!EnsureNoItemTypeConflicts("List", input, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -6779,7 +6786,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if constexpr (IsStrict) {
-            if (!EnsureNoItemTypeConflicts("Dict", input, ctx.Expr)) {
+            bool isUniversal;
+            if (!EnsureNoItemTypeConflicts("Dict", input, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -10222,6 +10230,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (!EnsureComputable(*input->Child(0), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureType(*input->Child(2), ctx.Expr)) {

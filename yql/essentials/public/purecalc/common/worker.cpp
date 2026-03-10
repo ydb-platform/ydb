@@ -17,6 +17,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
@@ -169,8 +170,26 @@ TWorkerGraph::TWorkerGraph(
 
     ComputationGraph = ComputationPattern->Clone(
         computationPatternOpts.ToComputationOptions(*RandomProvider, *TimeProvider));
-
     ComputationGraph->Prepare();
+    TVector<NKikimr::NMiniKQL::IComputationExternalNode*> externalNodes;
+    // Here is a problem, because invalidation of SelfNodes and Caches is not enough.
+    // We must invalidate all nodes that "depend" on SelfNodes.
+    // By "depend" we mean that these nodes somehow by some code flow can store values from SelfNodes.
+    // But now there is no way to do this.
+    //
+    // So here we invalidate all external nodes to prevent only small subset of problems that we found by tests.
+    for (const auto& node : ComputationGraph->GetNodes()) {
+        if (dynamic_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get())) {
+            externalNodes.push_back(static_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get()));
+        }
+    }
+    for (auto* selfNode : SelfNodes) {
+        if (selfNode) {
+            externalNodes.push_back(selfNode);
+        }
+    }
+
+    ExternalNodeInvalidator = NKikimr::NMiniKQL::TComputationExternalNodeInvalidator(externalNodes);
 
     // Scoped alloc acquires itself on construction. We need to release it before returning control to user.
     // Note that scoped alloc releases itself on destruction so it is no problem if the above code throws.
@@ -345,11 +364,7 @@ void TWorker<TBase>::Release() {
 template <typename TBase>
 void TWorker<TBase>::Invalidate() {
     auto& ctx = Graph_.ComputationGraph->GetContext();
-    for (const auto* selfNode : Graph_.SelfNodes) {
-        if (selfNode) {
-            selfNode->InvalidateValue(ctx);
-        }
-    }
+    Graph_.ExternalNodeInvalidator.InvalidateMutables(ctx);
     Graph_.ComputationGraph->InvalidateCaches();
 }
 

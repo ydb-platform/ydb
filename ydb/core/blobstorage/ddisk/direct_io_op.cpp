@@ -9,7 +9,6 @@
 #include <cerrno>
 
 namespace NKikimr::NDDisk {
-#if defined(__linux__)
 
 static constexpr size_t MaxRwCount = 0x7ffff000ULL; // INT_MAX & PAGE_MASK on 4K pages, ~ 2 GiB
 
@@ -79,6 +78,7 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
     // otherwise we might loop forever on the short path
     if (Y_UNLIKELY(result == 0 && operationBytes > 0)) {
         result = -EIO;
+        SetResult(result);
     }
 
     if (Y_UNLIKELY(result < 0)) {
@@ -124,13 +124,13 @@ void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
     delete this;
 }
 
-void TDDiskActor::TDirectIoOpBase::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) {
+void TDDiskActor::TDirectIoOpBase::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
     std::unique_ptr<IEventBase> reply;
     const auto opType = GetOperationType();
     if (status == TReplyStatus::OK) {
         switch (opType) {
         case TUringOperationBase::EREAD: {
-            TRope data(std::move(AlignedDataHolder));
+            TRope data = ExtractData();
             reply = std::make_unique<TEvReadResult>(
                 TReplyStatus::OK, std::nullopt, std::move(data));
             Counters.Interface.Read.Reply(true, GetTotalSize());
@@ -169,8 +169,9 @@ void TDDiskActor::TDirectIoOpBase::Reply(NActors::TActorSystem* actorSystem, TRe
     actorSystem->Send(h.release());
 }
 
-void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset) {
+void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
     Y_ABORT_UNLESS(data.size() <= MaxRwCount);
+    Data.reset();
 
     // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
     // TODO: should we check page size? And for large writes and huge pages should properly align?
@@ -184,44 +185,68 @@ void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset) {
 
     SetOperationType(EWRITE);
     PrepareIov(AlignedDataHolder.GetDataMut(), data.size(), offset);
+
+    ChunkIdx = chunkIdx;
+    ChunkOffsetInBytes = chunkOffset;
 }
 
-void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset) {
+void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
     Y_ABORT_UNLESS(size <= MaxRwCount);
+    Data.reset();
 
     AlignedDataHolder = TRcBuf::UninitializedPageAligned(size);
     SetOperationType(EREAD);
     PrepareIov(AlignedDataHolder.GetDataMut(), size, offset);
+
+    ChunkIdx = chunkIdx;
+    ChunkOffsetInBytes = chunkOffset;
+}
+
+TRope TDDiskActor::TDirectIoOpBase::ExtractData() {
+    if (Data) {
+        return std::move(*Data);
+    }
+
+    return TRope(std::move(AlignedDataHolder));
+}
+
+void TDDiskActor::TDirectIoOpBase::SetResult(i32 result, TRope&& data) {
+    SetResult(result);
+    Data = std::move(data);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDDiskActor::TPersistentBufferPartIoOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) {
+void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
     std::unique_ptr<IEventBase> reply;
     TString reason;
     const auto opType = GetOperationType();
     const i32 result = GetResult();
     if (status == TReplyStatus::OVERLOADED) {
         reason = "io_uring SQ ring full (short I/O retry)";
-    }
-    if (result < 0) {
-        status = UringErrorToStatus(result, opType);
-        const char* opName = opType == TUringOperationBase::EREAD
-            ? "read"
-            : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
-        reason = TStringBuilder()
-            << opName
-            << " failed: " << strerror(-result)
-            << " (errno " << (-result) << ")";
+    } else if (status != TReplyStatus::OK) {
+        if (result < 0) {
+            const char* opName = opType == TUringOperationBase::EREAD
+                ? "read"
+                : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
+            reason = TStringBuilder()
+                << opName
+                << " failed: " << strerror(-result)
+                << " (errno " << (-result) << ")";
+        } else {
+            reason = "I/O failed";
+        }
     }
 
     switch (opType) {
-        case TUringOperationBase::EREAD:
+        case TUringOperationBase::EREAD: {
+            TRope data = ExtractData();
             reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(
-                GetCookie(), PartCookie, status, reason, ExtractAlignedDataHolder());
+                GetCookie(), PartCookie, status, std::move(reason), std::move(data));
             break;
+        }
         case TUringOperationBase::EWRITE:
             reply = std::make_unique<TEvPrivate::TEvWritePersistentBufferPart>(
                 GetCookie(), PartCookie, status, reason, IsErase);
@@ -233,6 +258,31 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
     actorSystem->Send(GetDDiskId(), reply.release());
 }
 
-#endif // defined(__linux__)
+void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
+    TString reason;
+    const i32 result = GetResult();
+
+    if (status == TReplyStatus::OVERLOADED) {
+        reason = "io_uring SQ ring full (short I/O retry)";
+    } else if (status != TReplyStatus::OK) {
+        if (result < 0) {
+            reason = TStringBuilder()
+                << "write failed: " << strerror(-result)
+                << " (errno " << (-result) << ")";
+        } else {
+            reason = "write failed";
+        }
+    }
+
+    actorSystem->Send(
+        GetDDiskId(),
+        new TEvPrivate::TEvInternalSyncWriteResult(
+            SyncId,
+            RequestId,
+            SegmentBegin,
+            SegmentEnd,
+            status,
+            std::move(reason)));
+}
 
 } // NKikimr::NDDisk

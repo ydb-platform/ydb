@@ -6,6 +6,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
 #include "yql_yt_coordinator_impl.h"
 
 namespace NYql::NFmr {
@@ -84,7 +85,7 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        auto stageManager = MakeStageOperationManager(request.TaskType);
+        auto stageManager = MakeStageOperationManager(request.OperationType, RandomProvider_);
 
         Operations_[operationId] = TOperationInfo{
             .TaskIds = {},
@@ -151,11 +152,14 @@ public:
             .FmrResources = operationInfo.FmrResources,
             .FmrOperationSpec = fmrOperationSpec,
             .PartIdsForTables = PartIdsForTables_,
-            .PartIdStats = PartIdStats_,
-            .GenerateId = [this]() { return GenerateId(); },
+            .PartIdStats = PartIdStats_
         });
         if (generateResult.Error) {
             return generateResult.Error;
+        }
+
+        for (auto& [tableId, partIds]: generateResult.PartIdsToUpdate) {
+            PartIdsForTables_[tableId].insert(PartIdsForTables_[tableId].end(), partIds.begin(), partIds.end());
         }
 
         for (auto& generatedTask: generateResult.Tasks) {
@@ -324,14 +328,13 @@ public:
                 if (isOperationCompleted) {
                     auto& opInfo = Operations_[operationId];
                     if (opInfo.StageManager) {
-                        auto advanceResult = opInfo.StageManager->AdvanceToNextStage(TAdvanceStageContext{
-                            .OperationId = operationId,
-                        });
+                        auto advanceResult = opInfo.StageManager->AdvanceToNextStage();
                         if (advanceResult.Error) {
                             opInfo.OperationStatus = EOperationStatus::Failed;
                             opInfo.ErrorMessages.emplace_back(*advanceResult.Error);
                         } else if (advanceResult.HasNextStage) {
                             opInfo.TaskIds.clear();
+                            opInfo.OutputTableIds.clear();
                             auto stageError = ExecuteCurrentStage(operationId);
                             if (stageError) {
                                 opInfo.OperationStatus = EOperationStatus::Failed;
@@ -476,7 +479,7 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        auto stageManager = MakeStageOperationManager(request.TaskType);
+        auto stageManager = MakeStageOperationManager(request.OperationType, RandomProvider_);
 
         auto prepareResult = stageManager->PrepareOperationStage(TPrepareOperationStageContext{
             .OperationParams = request.OperationParams,
@@ -695,90 +698,35 @@ private:
     }
 
     TMaybe<TFmrError> SetNewPartIdsForTask(TTask::TPtr task, const TString& taskId) {
-        // TODO - remove code duplication
-        TString newPartId = GenerateId();
 
-        auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
-        auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
-        auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams);
-        auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
-        if (downloadTaskParams) {
-            TString tableId = downloadTaskParams->Output.TableId;
-            downloadTaskParams->Output.PartId = newPartId;
-            PartIdsForTables_[tableId].emplace_back(newPartId);
-        } else if (mergeTaskParams) {
-            TString tableId = mergeTaskParams->Output.TableId;
-            mergeTaskParams->Output.PartId = newPartId;
-            PartIdsForTables_[tableId].emplace_back(newPartId);
-        } else if (sortedMergeTaskParams) {
-            if (sortedMergeTaskParams->Output.PartId.empty()) {
-                return TFmrError{
-                    .Component = EFmrComponent::Coordinator,
-                    .Reason = EFmrErrorReason::RestartQuery,
-                    .ErrorMessage = "SortedMerge task has empty output PartId, fallback to native gateway is required",
-                    .TaskId = taskId,
-                    .OperationId = Tasks_[taskId].OperationId
-                };
-            }
-            TString tableId = sortedMergeTaskParams->Output.TableId;
-            TString partId = sortedMergeTaskParams->Output.PartId;
-            auto& partIds = PartIdsForTables_[tableId];
-            if (std::find(partIds.begin(), partIds.end(), partId) == partIds.end()) {
-                return TFmrError{
-                    .Component = EFmrComponent::Coordinator,
-                    .Reason = EFmrErrorReason::RestartQuery,
-                    .ErrorMessage = "SortedMerge task output PartId is missing in coordinator part list, fallback to native gateway is required",
-                    .TaskId = taskId,
-                    .OperationId = Tasks_[taskId].OperationId
-                };
-            }
-        } else if (mapTaskParams) {
-            for (auto& fmrTableOutputRef: mapTaskParams->Output) {
-                TString tableId = fmrTableOutputRef.TableId;
-                fmrTableOutputRef.PartId = newPartId;
-                PartIdsForTables_[tableId].emplace_back(newPartId);
-            }
+        TGetNewPartIdsForTaskContext context{
+            .Task = task,
+            .TaskId = taskId,
+            .OperationId = Tasks_[taskId].OperationId,
+            .PartIdsForTables = PartIdsForTables_
+        };
+
+        TGetNewPartIdsForTaskResult result = Operations_[context.OperationId].StageManager->GetNewPartIdsForTask(context);
+
+        if (result.Error) {
+            return result.Error;
         }
+
+        for (auto& [tableId, partIds]: result.NewPartIdsForTables) {
+            PartIdsForTables_[tableId].insert(PartIdsForTables_[tableId].end(), partIds.begin(), partIds.end());
+        }
+
         return Nothing();
     }
 
     std::vector<TPartIdInfo> CollectPreviousPartIdsForTask(TTask::TPtr task) {
-        // TODO - remove code duplication, templates?
-        std::vector<TPartIdInfo> groupsToClear; // (TableId, PartId)
-
-        auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
-        auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
-        auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams);
-        auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
-
-        if (downloadTaskParams) {
-            TString tableId = downloadTaskParams->Output.TableId;
-            if (!downloadTaskParams->Output.PartId.empty() && PartIdStats_.contains(downloadTaskParams->Output.PartId)) {
-                auto prevPartId = downloadTaskParams->Output.PartId;
-                groupsToClear.emplace_back(tableId, prevPartId);
-            }
-        } else if (mergeTaskParams) {
-            TString tableId = mergeTaskParams->Output.TableId;
-            if (!mergeTaskParams->Output.PartId.empty() && PartIdStats_.contains(mergeTaskParams->Output.PartId)) {
-                auto prevPartId = mergeTaskParams->Output.PartId;
-                groupsToClear.emplace_back(tableId, prevPartId);
-            }
-        } else if (sortedMergeTaskParams) {
-            TString tableId = sortedMergeTaskParams->Output.TableId;
-            if (!sortedMergeTaskParams->Output.PartId.empty() && PartIdStats_.contains(sortedMergeTaskParams->Output.PartId)) {
-                auto prevPartId = sortedMergeTaskParams->Output.PartId;
-                groupsToClear.emplace_back(tableId, prevPartId);
-            }
-        } else if (mapTaskParams) {
-            for (auto& fmrTableOutputRef: mapTaskParams->Output) {
-                TString tableId = fmrTableOutputRef.TableId;
-                if (!fmrTableOutputRef.PartId.empty() && PartIdStats_.contains(fmrTableOutputRef.PartId)) {
-                    auto prevPartId = fmrTableOutputRef.PartId;
-                    groupsToClear.emplace_back(tableId, prevPartId);
-                }
-            }
-        }
-        return groupsToClear;
+        GetPartIdsForTaskContext context{
+            .Task = task,
+            .PartIdStats = PartIdStats_
+        };
+        TString operationId = Tasks_[task->TaskId].OperationId;
+        const auto& stageManager = Operations_[operationId].StageManager;
+        return stageManager->GetPartIdsForTask(context);
     }
 
     std::vector<TString> GetTableGroupsToClear(const std::vector<TPartIdInfo>& groupsToClear) {
@@ -852,7 +800,6 @@ private:
         }
         return tableStats;
     }
-
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 

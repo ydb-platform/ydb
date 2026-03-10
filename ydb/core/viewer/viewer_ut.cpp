@@ -15,7 +15,6 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
-#include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1702,7 +1701,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
 
-        driverCfg.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         driverCfg.SetAuthToken("root@builtin");
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 

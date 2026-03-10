@@ -75,6 +75,7 @@ private:
 
     void Restart(TString&& error);
 
+    void ScheduleProcessing();
     void ProcessEventQueue();
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
@@ -121,6 +122,9 @@ private:
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
     std::deque<TResult> PendingPurgeQueue;
+
+    bool ProcessingScheduled = false;
+    TInstant NextProcessingTime;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;

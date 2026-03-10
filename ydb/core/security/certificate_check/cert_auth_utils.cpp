@@ -513,7 +513,7 @@ TProps TProps::AsCA() {
     props.Unit = "UtTest";
     props.CommonName = "testCA";
 
-    props.AltNames = {"IP:127.0.0.1", "DNS:localhost"};
+    props.AltNames = {"IP:127.0.0.1", "IP:::1", "DNS:localhost"};
 
     props.BasicConstraints = "critical,CA:TRUE";
     props.AuthorityKeyIdentifier = "keyid:always,issuer";

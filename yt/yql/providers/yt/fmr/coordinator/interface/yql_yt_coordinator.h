@@ -22,7 +22,7 @@ struct THeartbeatResponse {
 };
 
 struct TStartOperationRequest {
-    ETaskType TaskType;
+    EOperationType OperationType;
     TOperationParams OperationParams;
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
@@ -41,7 +41,7 @@ struct TStartOperationResponse {
 };
 
 struct TPrepareOperationRequest {
-    ETaskType TaskType;
+    EOperationType OperationType;
     TOperationParams OperationParams;
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
     TMaybe<NYT::TNode> FmrOperationSpec;

@@ -9,9 +9,12 @@ public:
     explicit TTestWithTabletReboots(bool killOnCommit = false)
         : TTestWithReboots(killOnCommit)
     {}
-    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
-        TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching) override {
+        TDatashardLogBatchingSwitch logBatchingSwitch(allowLogBatching);
         RunWithTabletReboots(testScenario);
+    }
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
+        Run(testScenario, false /* without batching */);
     }
 };
 
@@ -20,9 +23,12 @@ public:
     explicit TTestWithPipeResets(bool killOnCommit = false)
         : TTestWithReboots(killOnCommit)
     {}
-    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
-        TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching) override {
+        TDatashardLogBatchingSwitch logBatchingSwitch(allowLogBatching);
         RunWithPipeResets(testScenario);
+    }
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
+        Run(testScenario, false /* without batching */);
     }
 };
 

@@ -1032,7 +1032,7 @@ Y_UNIT_TEST(CreateObjectIfNotExists) {
 }
 
 Y_UNIT_TEST(CreateObjectWithFeaturesStrings) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE OBJECT secretId (TYPE SECRET) WITH (Key1=\"Value1\", K2='V2', K3=V3, K4='', K5=`aaa`, K6='a\\'aa');");
+    NYql::TAstParseResult res = SqlToYql(R"(USE plato; CREATE OBJECT secretId (TYPE SECRET) WITH (Key1="Value1", K2='V2', K3=V3, K4='', K5=`aaa`, K6='a\'aa');)");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -3021,7 +3021,7 @@ Y_UNIT_TEST(EscapedIdentifierAsLambdaArg) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(lambda '(\"$foo bar\" \"$x\")";
+    auto expected = R"((lambda '("$foo bar" "$x"))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3030,7 +3030,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType)))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3039,7 +3039,7 @@ Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '"foo"))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3048,7 +3048,7 @@ Y_UNIT_TEST(UdfSyntaxSugarRunNoType) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '"" (Void)))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3057,7 +3057,7 @@ Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '"foo" (Void)))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3066,7 +3066,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '"foo" (String '"55")))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3075,16 +3075,16 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs2) {
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '"foo" '((Int32 '"32") (String '"no") (AsStruct '('"SomeFloat" (Double '"1e-9"))))))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarOptional) {
-    auto req = "SELECT Udf(DateTime::FromString, String?, Int32??, Tuple<Int32, Float>, \"foo\" as TypeConfig, Void() As RunConfig)(\"2022-01-01\");";
+    auto req = R"(SELECT Udf(DateTime::FromString, String?, Int32??, Tuple<Int32, Float>, "foo" as TypeConfig, Void() As RunConfig)("2022-01-01");)";
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = R"((SqlCall '"DateTime2.FromString" '((PositionalArgs (String '"2022-01-01")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '"foo" (Void)))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3874,7 +3874,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
         UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
     };
 
-    TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+    TWordCountHive elementStat({TString(R"('indexName '"idx")")});
     VerifyProgram(result, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
 }
@@ -3895,7 +3895,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueSync) {
         UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
     };
 
-    TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+    TWordCountHive elementStat({TString(R"('indexName '"idx")")});
     VerifyProgram(result, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
 }
@@ -3933,7 +3933,7 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
         UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
     };
 
-    TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+    TWordCountHive elementStat({TString(R"('indexName '"idx")")});
     VerifyProgram(result, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
 }
@@ -3949,7 +3949,7 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
         UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
     };
 
-    TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+    TWordCountHive elementStat({TString(R"('indexName '"idx")")});
     VerifyProgram(result, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
 }
@@ -5294,7 +5294,7 @@ Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) {
 }
 
 Y_UNIT_TEST(InvalidHexInStringLiteral) {
-    NYql::TAstParseResult res = SqlToYql("select \"foo\\x1\\xfe\"");
+    NYql::TAstParseResult res = SqlToYql(R"(select "foo\x1\xfe")");
     UNIT_ASSERT(!res.IsOk());
     TString a1 = Err2Str(res);
     TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value near byte 7\n";
@@ -5334,7 +5334,7 @@ Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
 }
 
 Y_UNIT_TEST(InvalidStringFromTable) {
-    NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
+    NYql::TAstParseResult res = SqlToYql(R"(select "FOO""BAR from plato.foo)");
     UNIT_ASSERT(!res.IsOk());
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unexpected character : syntax error...\n\n");
@@ -5959,7 +5959,7 @@ Y_UNIT_TEST(SelectFlattenByUnnamedExpr) {
 }
 
 Y_UNIT_TEST(UseInOnStrings) {
-    NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";");
+    NYql::TAstParseResult res = SqlToYql(R"(select * from plato.Input where "foo" in "foovalue";)");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - "
                                       "expecting tuple, list, dict or single column table source\n");
@@ -6075,6 +6075,20 @@ Y_UNIT_TEST(GroupingSetByExprWithoutAlias2) {
                                          "cast(key as uint32), subkey);");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:1: Error: Unnamed expressions are not supported in GROUPING SETS. Please use '<expr> AS <name>'.\n");
+}
+
+Y_UNIT_TEST(GroupingSetSmartParenthesisContext) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        SELECT * FROM plato.x GROUP BY
+            b,
+            c,
+            CASE
+                WHEN ListHas(a, ('a',)) THEN [(a, 'a', 'b', )]
+                ELSE a
+            END AS a
+        ;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
 Y_UNIT_TEST(CubeByExprWithoutAlias) {
@@ -6452,19 +6466,19 @@ Y_UNIT_TEST(DiscoveryModeForbidden) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: range is not allowed in Discovery mode, code: 4600\n");
 
-    res = SqlToYqlWithMode("insert into plato.Output select * from plato.like(\"\", \"Input%\")", NSQLTranslation::ESqlMode::DISCOVERY);
+    res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.like("", "Input%"))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: like is not allowed in Discovery mode, code: 4600\n");
 
-    res = SqlToYqlWithMode("insert into plato.Output select * from plato.regexp(\"\", \"Input.\")", NSQLTranslation::ESqlMode::DISCOVERY);
+    res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.regexp("", "Input."))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: regexp is not allowed in Discovery mode, code: 4600\n");
 
-    res = SqlToYqlWithMode("insert into plato.Output select * from plato.filter(\"\", ($name) -> { return find($name, \"Input\") is not null; })", NSQLTranslation::ESqlMode::DISCOVERY);
+    res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.filter("", ($name) -> { return find($name, "Input") is not null; }))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: filter is not allowed in Discovery mode, code: 4600\n");
 
-    res = SqlToYqlWithMode("select Path from plato.folder(\"\") where Type == \"table\"", NSQLTranslation::ESqlMode::DISCOVERY);
+    res = SqlToYqlWithMode(R"(select Path from plato.folder("") where Type == "table")", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: folder is not allowed in Discovery mode, code: 4600\n");
 }
@@ -7449,7 +7463,7 @@ Y_UNIT_TEST(JsonValueArgumentCount) {
 }
 
 Y_UNIT_TEST(JsonValueJsonPathMustBeLiteralString) {
-    NYql::TAstParseResult res = SqlToYql("$jsonPath = \"strict $.key\"; select JSON_VALUE(CAST(@@{\"key\": 1238}@@ as Json), $jsonPath);");
+    NYql::TAstParseResult res = SqlToYql(R"($jsonPath = "strict $.key"; select JSON_VALUE(CAST(@@{"key": 1238}@@ as Json), $jsonPath);)");
 
     UNIT_ASSERT(!res.IsOk());
 #if ANTLR_VER == 3
@@ -7460,7 +7474,7 @@ Y_UNIT_TEST(JsonValueJsonPathMustBeLiteralString) {
 }
 
 Y_UNIT_TEST(JsonValueTranslation) {
-    NYql::TAstParseResult res = SqlToYql("select JSON_VALUE(CAST(@@{\"key\": 1238}@@ as Json), \"strict $.key\");");
+    NYql::TAstParseResult res = SqlToYql(R"(select JSON_VALUE(CAST(@@{"key": 1238}@@ as Json), "strict $.key");)");
 
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -7479,7 +7493,7 @@ Y_UNIT_TEST(JsonValueTranslation) {
 Y_UNIT_TEST(JsonValueReturningSection) {
     for (const auto& typeName : {"Bool", "Int64", "Double", "String"}) {
         NYql::TAstParseResult res = SqlToYql(
-            TStringBuilder() << "select JSON_VALUE(CAST(@@{\"key\": 1238}@@ as Json), \"strict $.key\" RETURNING " << typeName << ");");
+            TStringBuilder() << R"(select JSON_VALUE(CAST(@@{"key": 1238}@@ as Json), "strict $.key" RETURNING )" << typeName << ");");
 
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -10127,7 +10141,7 @@ Y_UNIT_TEST(BacktickMatching) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     UNIT_ASSERT(res.Issues.Size() == 0);
 
-    req = "select 1 as `a``b`, 2 as ````, 3 as `\\x60a\\x60`, 4 as ```b```, 5 as `\\`c\\``";
+    req = R"(select 1 as `a``b`, 2 as ````, 3 as `\x60a\x60`, 4 as ```b```, 5 as `\`c\``)";
     res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));

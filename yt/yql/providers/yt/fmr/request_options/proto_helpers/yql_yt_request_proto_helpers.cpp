@@ -636,6 +636,46 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
     return mapTaskParams;
 }
 
+NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams) {
+    NProto::TSortOperationParams protoSortOperationParams;
+    for (size_t i = 0; i < sortOperationParams.Input.size(); ++i) {
+        auto inputTable = OperationTableRefToProto(sortOperationParams.Input[i]);
+        auto* curInput = protoSortOperationParams.AddInput();
+        curInput->Swap(&inputTable);
+    }
+    auto outputTable = FmrTableRefToProto(sortOperationParams.Output);
+    protoSortOperationParams.MutableOutput()->Swap(&outputTable);
+    return protoSortOperationParams;
+}
+
+TSortOperationParams SortOperationParamsFromProto(const NProto::TSortOperationParams& protoSortOperationParams) {
+    TSortOperationParams sortOperationParams{
+        .Input = {},
+        .Output = FmrTableRefFromProto(protoSortOperationParams.GetOutput())
+    };
+    for (size_t i = 0; i < protoSortOperationParams.InputSize(); ++i) {
+        TOperationTableRef inputTable = OperationTableRefFromProto(protoSortOperationParams.GetInput(i));
+        sortOperationParams.Input.emplace_back(inputTable);
+    }
+    return sortOperationParams;
+}
+
+NProto::TLocalSortTaskParams LocalSortTaskParamsToProto(const TLocalSortTaskParams& localSortTaskParams) {
+    NProto::TLocalSortTaskParams protoLocalSortTaskParams;
+    auto inputTables = TaskTableInputRefToProto(localSortTaskParams.Input);
+    protoLocalSortTaskParams.MutableInput()->Swap(&inputTables);
+    auto outputTable = FmrTableOutputRefToProto(localSortTaskParams.Output);
+    protoLocalSortTaskParams.MutableOutput()->Swap(&outputTable);
+    return protoLocalSortTaskParams;
+}
+
+TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskParams& protoLocalSortTaskParams) {
+    TLocalSortTaskParams localSortTaskParams;
+    localSortTaskParams.Input = TaskTableInputRefFromProto(protoLocalSortTaskParams.GetInput());
+    localSortTaskParams.Output = FmrTableOutputRefFromProto(protoLocalSortTaskParams.GetOutput());
+    return localSortTaskParams;
+}
+
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams) {
     NProto::TOperationParams protoOperationParams;
     if (auto* uploadOperationParamsPtr = std::get_if<TUploadOperationParams>(&operationParams)) {
@@ -656,6 +696,9 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* SortedMergeOperationParamsPtr = std::get_if<TSortedMergeOperationParams>(&operationParams)) {
         NProto::TSortedMergeOperationParams protoSortedMergeOperationParams = SortedMergeOperationParamsToProto(*SortedMergeOperationParamsPtr);
         protoOperationParams.MutableSortedMergeOperationParams()->Swap(&protoSortedMergeOperationParams);
+    } else if (auto* SortOperationParamsPtr = std::get_if<TSortOperationParams>(&operationParams)) {
+        NProto::TSortOperationParams protoSortOperationParams = SortOperationParamsToProto(*SortOperationParamsPtr);
+        protoOperationParams.MutableSortOperationParams()->Swap(&protoSortOperationParams);
     }
     return protoOperationParams;
 }
@@ -673,6 +716,8 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return SortedUploadOperationParamsFromProto(protoOperationParams.GetSortedUploadOperationParams());
     } else if (protoOperationParams.HasSortedMergeOperationParams()) {
         return SortedMergeOperationParamsFromProto(protoOperationParams.GetSortedMergeOperationParams());
+    } else if (protoOperationParams.HasSortOperationParams()) {
+        return SortOperationParamsFromProto(protoOperationParams.GetSortOperationParams());
     }
     return TOperationParams();
 }
@@ -718,6 +763,9 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* SortedMergeTaskParamsPtr = std::get_if<TSortedMergeTaskParams>(&taskParams)) {
         NProto::TSortedMergeTaskParams protoSortedMergeTaskParams = SortedMergeTaskParamsToProto(*SortedMergeTaskParamsPtr);
         protoTaskParams.MutableSortedMergeTaskParams()->Swap(&protoSortedMergeTaskParams);
+    } else if (auto* LocalSortTaskParamsPtr = std::get_if<TLocalSortTaskParams>(&taskParams)) {
+        NProto::TLocalSortTaskParams protoLocalSortTaskParams = LocalSortTaskParamsToProto(*LocalSortTaskParamsPtr);
+        protoTaskParams.MutableLocalSortTaskParams()->Swap(&protoLocalSortTaskParams);
     }
     return protoTaskParams;
 }
@@ -736,6 +784,8 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = SortedUploadTaskParamsFromProto(protoTaskParams.GetSortedUploadTaskParams());
     } else if (protoTaskParams.HasSortedMergeTaskParams()) {
         taskParams = SortedMergeTaskParamsFromProto(protoTaskParams.GetSortedMergeTaskParams());
+    } else if (protoTaskParams.HasLocalSortTaskParams()) {
+        taskParams = LocalSortTaskParamsFromProto(protoTaskParams.GetLocalSortTaskParams());
     }
     return taskParams;
 }

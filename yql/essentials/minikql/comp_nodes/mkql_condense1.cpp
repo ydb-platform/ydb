@@ -262,7 +262,8 @@ public:
             }
 
             while (true) {
-                const auto status = Stream.Fetch(State.Item->RefValue(Ctx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
                 }
@@ -270,6 +271,8 @@ public:
                 if (status == NUdf::EFetchStatus::Finish) {
                     break;
                 }
+
+                State.Item->SetValue(Ctx, std::move(fetchResult));
 
                 if (ESqueezeState::Idle == State.Stage) {
                     State.Stage = ESqueezeState::Work;
@@ -427,8 +430,9 @@ private:
 
         block = loop;
 
-        const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueFetch(container, ctx, block, itemPtr);
+        });
 
         const auto ychk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Yield)), "ychk", block);
 

@@ -7,10 +7,9 @@
 #include <util/string/builder.h>
 #include <vector>
 
-#include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/distributed_session.h>
 #include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
-#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 
@@ -30,6 +29,17 @@ enum class ETaskStatus {
     InProgress,
     Failed,
     Completed
+};
+
+enum EOperationType {
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6,
+    Sort = 7
 };
 
 enum class ETaskType {
@@ -80,12 +90,6 @@ public:
 };
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
-
-struct TSortingColumns {
-    std::vector<TString> Columns;
-    std::vector<ESortOrder> SortOrders;
-    bool operator==(const TSortingColumns&) const = default;
-};
 
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
@@ -407,13 +411,18 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
+struct TSortOperationParams {
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
 struct TLocalSortTaskParams {
     TTaskTableInputRef Input;
     TFmrTableOutputRef Output;
 };
 
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams>;
 
 using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams>;
 

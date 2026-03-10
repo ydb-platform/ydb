@@ -192,7 +192,9 @@ protected:
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
-                while (Iter.Next(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                while (Iter.Next(fetchResult)) {
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                     if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                         value = Item->GetValue(CompCtx);
                         return true;
@@ -260,11 +262,13 @@ protected:
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             for (;;) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
 
+                Item->SetValue(CompCtx, std::move(fetchResult));
                 if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                     result = Item->GetValue(CompCtx);
                     return NUdf::EFetchStatus::Ok;
@@ -330,8 +334,9 @@ protected:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
@@ -391,7 +396,9 @@ protected:
                 if (!Limit) {
                     return false;
                 }
-                while (Iter.Next(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                while (Iter.Next(fetchResult)) {
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                     if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                         value = Item->GetValue(CompCtx);
                         --Limit;
@@ -468,10 +475,12 @@ protected:
             }
 
             for (;;) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
+                Item->SetValue(CompCtx, std::move(fetchResult));
 
                 if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                     result = Item->GetValue(CompCtx);
@@ -553,8 +562,9 @@ protected:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 

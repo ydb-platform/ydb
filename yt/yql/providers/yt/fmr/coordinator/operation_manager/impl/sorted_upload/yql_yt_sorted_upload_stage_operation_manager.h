@@ -5,19 +5,6 @@
 
 namespace NYql::NFmr {
 
-class TSortedUploadStageOperationManager: public TFmrStageOperationManagerBase {
-public:
-    void OnTaskCompleted(const TStatistics& stats) override;
-    std::vector<TString> GetOperationResult() override;
+IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider);
 
-protected:
-    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) override;
-    TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) override;
-
-private:
-    std::vector<TString> FragmentResultsYson_;
-};
-
-IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager();
-
-}
+} // namespace NYql::NFmr

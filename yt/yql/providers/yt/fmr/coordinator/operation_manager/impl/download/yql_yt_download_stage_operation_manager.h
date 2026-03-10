@@ -5,13 +5,6 @@
 
 namespace NYql::NFmr {
 
-class TDownloadStageOperationManager: public TFmrStageOperationManagerBase {
-public:
-protected:
-    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) override;
-    TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) override;
-};
+IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider);
 
-IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager();
-
-}
+} // namespace NYql::NFmr

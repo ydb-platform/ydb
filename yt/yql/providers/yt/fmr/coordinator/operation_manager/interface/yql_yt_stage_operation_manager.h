@@ -1,10 +1,9 @@
 
 #pragma once
 
-#include <functional>
-
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 
 namespace NYql::NFmr {
 
@@ -16,6 +15,7 @@ struct TGeneratedTaskInfo {
 struct TGenerateTasksResult {
     std::vector<TGeneratedTaskInfo> Tasks;
     std::vector<TFmrResourceTaskInfo> FmrResourceTasks;
+    std::unordered_map<TFmrTableId, std::vector<TString>> PartIdsToUpdate;
     TMaybe<TFmrError> Error;
 };
 
@@ -25,26 +25,38 @@ struct TPrepareStageResult {
 };
 
 struct TPrepareOperationStageContext {
-    TOperationParams OperationParams;
-    NYT::TNode FmrOperationSpec;
-    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    const TOperationParams& OperationParams;
+    const NYT::TNode& FmrOperationSpec;
+    const std::unordered_map<TFmrTableId, TClusterConnection>& ClusterConnections;
     const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables;
     const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats;
     IYtCoordinatorService::TPtr YtCoordinatorService;
 };
 
 struct TGenerateTasksContext {
-    TPartitionResult PartitionResult;
-    TOperationParams OperationParams;
-    std::vector<TFmrResourceOperationInfo> FmrResources;
-    NYT::TNode FmrOperationSpec;
-    std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables;
+    const TPartitionResult& PartitionResult;
+    const TOperationParams& OperationParams;
+    const std::vector<TFmrResourceOperationInfo>& FmrResources;
+    const NYT::TNode& FmrOperationSpec;
+    const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables;
     const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats;
-    std::function<TString()> GenerateId;
 };
 
-struct TAdvanceStageContext {
-    TString OperationId;
+struct TGetNewPartIdsForTaskContext {
+    TTask::TPtr Task;
+    const TString TaskId;
+    const TString OperationId;
+    const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables;
+};
+
+struct GetPartIdsForTaskContext {
+    TTask::TPtr Task;
+    const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats;
+};
+
+struct TGetNewPartIdsForTaskResult {
+    std::unordered_map<TFmrTableId, std::vector<TString>> NewPartIdsForTables;
+    TMaybe<TFmrError> Error;
 };
 
 struct TAdvanceStageResult {
@@ -70,7 +82,15 @@ public:
 
     virtual std::vector<TString> GetOperationResult() { return {}; }
 
-    virtual TAdvanceStageResult AdvanceToNextStage(const TAdvanceStageContext& context) = 0;
+    virtual TGetNewPartIdsForTaskResult GetNewPartIdsForTask(
+        const TGetNewPartIdsForTaskContext& /* context */
+    ) { return {}; }
+
+    virtual std::vector<TPartIdInfo> GetPartIdsForTask(
+        const GetPartIdsForTaskContext& /* context */
+    ) { return {}; }
+
+    virtual TAdvanceStageResult AdvanceToNextStage() = 0;
 };
 
-}
+} // namespace NYql::NFmr

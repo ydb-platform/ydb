@@ -729,6 +729,19 @@ def invoke_wipe_request(request):
     return invoke_bsc_request(request)
 
 
+<<<<<<< HEAD
+=======
+def invoke_nbs_request(request_type, request):
+    return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
+
+
+def print_nbs_request_result(args, request, response):
+    success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    print_status(args, success, error_reason)
+
+
+>>>>>>> ff2e8aa11d8 (Fix confusing dstool error message (#35652))
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
 def fetch_base_config_and_storage_pools(retrieveDevices=False, virtualGroupsOnly=False, cache=True):
     request = kikimr_bsconfig.TConfigRequest(Rollback=True)
@@ -1290,19 +1303,7 @@ def print_result(format: str, status: str, description: str = None, file=None):
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
-
-
-def print_status_if_verbose(args, success, error_reason):
-    format = getattr(args, 'format', 'pretty')
-    verbose = getattr(args, 'verbose', False)
-    if success:
-        print_result(format, 'success')
-    else:
-        if verbose:
-            print_result(format, 'error', error_reason)
-        else:
-            print_result(format, 'error', 'add --verbose for more info')
+    print_status(args, success, error_reason)
 
 
 def print_status_if_not_quiet(args, success, error_reason):

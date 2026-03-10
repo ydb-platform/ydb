@@ -392,9 +392,6 @@ bool TProducer::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSessio
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            // for (auto& ack : acksEvent->Acks) {
-            //     LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Received ack for message with seq no: " << ack.SeqNo << " and partition: " << partition);
-            // }
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
         }
@@ -411,7 +408,6 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::DoWork() {
         ReadyFutures.erase(partition);
         auto session = Producer->SessionsWorker->GetWriteSession(partition);
         if (!session) {
-            // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Write session not found for partition: " << partition);
             continue;
         }
 
@@ -518,10 +514,6 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         TWriteSessionEvent::TAcksEvent ackEvent;
 
         if (expectedSeqNo.has_value()) {
-            if (acksQueue.front().SeqNo != expectedSeqNo.value()) {
-                LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo << " for partition " << partition);
-            }
-
             Y_ENSURE(acksQueue.front().SeqNo == expectedSeqNo.value(), TStringBuilder() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo << " for partition " << partition);
         }
     
@@ -717,7 +709,6 @@ TProducer::TSessionsWorker::TSessionsWorker(TProducer* producer)
 TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::GetOrCreateWriteSession(std::uint32_t partition, bool directToPartition) {
     auto sessionIter = SessionsIndex.find(partition);
     if (sessionIter == SessionsIndex.end()) {
-        // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Creating write session for partition: " << partition);
         return CreateWriteSession(partition, directToPartition);
     }
 
@@ -801,7 +792,6 @@ void TProducer::TSessionsWorker::DestroyWriteSession(std::uint32_t partition) {
     if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
         SessionsToRemove.emplace(partition);
     } else {
-        // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Destroying write session in-place for partition: " << partition);
         SessionsIndex.erase(it);
     }
 }
@@ -815,7 +805,6 @@ size_t TProducer::TSessionsWorker::GetIdleSessionsCount() const {
 }
 
 void TProducer::TSessionsWorker::AddIdleSession(std::uint32_t partition) {
-    // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Adding idle session for partition: " << partition);
     auto wrappedSession = SessionsIndex.find(partition);
     if (wrappedSession == SessionsIndex.end()) {
         return;
@@ -833,7 +822,6 @@ void TProducer::TSessionsWorker::AddIdleSession(std::uint32_t partition) {
 }
 
 void TProducer::TSessionsWorker::RemoveIdleSession(std::uint32_t partition) {
-    // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Removing idle session for partition: " << partition);
     auto itIdle = IdlerSessionsIndex.find(partition);
     if (itIdle == IdlerSessionsIndex.end()) {
         return;
@@ -854,23 +842,25 @@ void TProducer::TSessionsWorker::RemoveIdleSession(std::uint32_t partition) {
 }
 
 void TProducer::TSessionsWorker::DoWork() {
-    while (!SessionsToRemove.empty()) {
-        auto partition = *SessionsToRemove.begin();
+    for (auto it = SessionsToRemove.begin(); it != SessionsToRemove.end();) {
+        auto partition = *it;
         if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
-            break;
+            ++it;
+            continue;
         }
-        
+
         SessionsIndex.erase(partition);
-        SessionsToRemove.erase(partition);
+        it = SessionsToRemove.erase(it);
     }
 
-    while (!ClosedSessionsToRemove.empty()) {
-        auto session = ClosedSessionsToRemove.front();
+    for (auto it = ClosedSessionsToRemove.begin(); it != ClosedSessionsToRemove.end();) {
+        auto session = *it;
         if (static_cast<std::int64_t>(session->Partition) == Producer->MainWorkerOwner) {
-            break;
+            ++it;
+            continue;
         }
 
-        ClosedSessionsToRemove.pop_front();
+        it = ClosedSessionsToRemove.erase(it);
     }
 
     while (!IdlerSessions.empty()) {
@@ -882,7 +872,7 @@ void TProducer::TSessionsWorker::DoWork() {
         auto expiredIdleSession = *it;
         const auto partition = expiredIdleSession->Session->Partition;
         if (Producer->Partitions[partition].Locked_) {
-            continue;
+            break;
         }
 
         // Remove idle tracking first to keep containers consistent even if the session
@@ -893,11 +883,9 @@ void TProducer::TSessionsWorker::DoWork() {
         auto sessionIter = SessionsIndex.find(partition);
         if (sessionIter != SessionsIndex.end()) {
             if (sessionIter->second.get() != expiredIdleSession->Session) {
-                // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Ignoring stale idle session marker for partition: " << partition);
                 continue;
             }
             sessionIter->second->IdleSession.reset();
-            // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Destroying write session for partition due to idle session expiration deadline: " << partition);
             DestroyWriteSession(partition);
         }
     }
@@ -1051,8 +1039,6 @@ void TProducer::TMessagesWorker::DoWork() {
                 if (!SendMessage(wrappedSession, *head)) {
                     break;
                 }
-
-                // LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Sent message with seq no: " << head->SeqNo.value() << " to partition: " << head->Partition);
 
                 Producer->Metrics.AddWriteLag((TInstant::Now() - head->CreateTimestamp.value_or(TInstant::Now())).MilliSeconds());
                 head->Sent = true;
@@ -1512,16 +1498,17 @@ TProducer::TProducer(
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
-            for (size_t i = 0; i < Partitions.size(); ++i) {
-                if (i > 0 && Partitions[i].FromBound_.empty() && !Partitions[i].ToBound_.has_value()) {
+            for (size_t i = 0; i < partitions.size(); ++i) {
+                const auto& partition = partitions[i];
+                if (i > 0 && !partition.GetFromBound().has_value() && !partition.GetToBound().has_value()) {
                     ythrow TContractViolation("Unbounded partition is not supported for Bound partition chooser strategy");
                 }
 
-                if (!Partitions[i].Children_.empty()) {
+                if (!partition.GetChildPartitionIds().empty()) {
                     continue;
                 }
 
-                PartitionsIndex[Partitions[i].FromBound_] = Partitions[i].PartitionId_;
+                PartitionsIndex[partition.GetFromBound().value_or("")] = partition.GetPartitionId();
             }
             break;
         case TProducerSettings::EPartitionChooserStrategy::Hash:
@@ -2055,7 +2042,6 @@ TInstant TProducer::GetCloseDeadline() {
 }
 
 void TProducer::HandleAutoPartitioning(std::uint32_t partition) {
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "HandleAutoPartitioning: " << partition);
     auto splittedPartitionWorker = std::make_shared<TSplittedPartitionWorker>(this, partition);
     SplittedPartitionWorkers.try_emplace(partition, splittedPartitionWorker);
 }

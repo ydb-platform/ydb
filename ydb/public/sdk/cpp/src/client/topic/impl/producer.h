@@ -147,7 +147,7 @@ private:
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
         std::unordered_set<std::uint32_t> SessionsToRemove;
-        std::deque<WrappedWriteSessionPtr> ClosedSessionsToRemove;
+        std::list<WrappedWriteSessionPtr> ClosedSessionsToRemove;
     };
 
     struct TMessagesWorker : public std::enable_shared_from_this<TMessagesWorker> {

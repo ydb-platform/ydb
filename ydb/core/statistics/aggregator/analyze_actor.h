@@ -162,7 +162,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     void HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
-    void Handle(TEvents::TEvPoison::TPtr& ev);
 
 public:
     TAnalyzeActor(
@@ -185,7 +184,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
-            hFunc(TEvents::TEvPoison, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
@@ -194,14 +193,14 @@ public:
             hFunc(TEvPrivate::TEvRequestTableDistribution, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(TEvents::TEvPoison, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAnalyzeScanResult, Handle);
-            hFunc(TEvents::TEvPoison, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 };

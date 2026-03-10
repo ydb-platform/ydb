@@ -211,7 +211,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
         auto keyDesc = MakeHolder<TKeyDesc>(
-            PathId, range, TKeyDesc::ERowOperation::Unknown,TVector<NScheme::TTypeInfo>{}, TVector<TKeyDesc::TColumnOp>{});
+            PathId, range, TKeyDesc::ERowOperation::Unknown, KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
 
         auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         resolveRequest->DatabaseName = DatabaseName;
@@ -285,7 +285,7 @@ void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
 }
 
 void TAnalyzeActor::TryScheduleHiveRetry(const TStringBuf& issue) {
-    if (HiveRetryCount > MaxHiveRetryCount) {
+    if (HiveRetryCount >= MaxHiveRetryCount) {
         FinishWithFailure(
             TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             NYql::TIssue(issue));
@@ -515,16 +515,13 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     }
 }
 
-void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
+void TAnalyzeActor::PassAway() {
     for (const auto& [id, info] : ScanActorsInFlight){
         Send(id, new TEvents::TEvPoison());
     }
 
-    PassAway();
-}
-
-void TAnalyzeActor::PassAway() {
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+
     TActorBootstrapped::PassAway();
 }
 

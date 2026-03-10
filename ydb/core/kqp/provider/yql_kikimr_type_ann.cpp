@@ -1326,15 +1326,6 @@ private:
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (!localBloomNgramFilterDescription.NgramSize ||
-                        !localBloomNgramFilterDescription.HashesCount ||
-                        !localBloomNgramFilterDescription.FilterSizeBytes ||
-                        !localBloomNgramFilterDescription.RecordsCount) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
-                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
             }

@@ -16,9 +16,8 @@ public:
 
 private:
     ui32 NGrammSize = 3;
-    ui32 FilterSizeBytes = 512;
     ui32 HashesCount = 2;
-    ui32 RecordsCount = 10000;
+    double FalsePositiveProbability = 0.001;
     bool CaseSensitive = true;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 

@@ -447,13 +447,12 @@ message TRequestedBloomFilter {
 
 message TRequestedBloomNGrammFilter {
     optional uint32 NGrammSize = 1;
-    optional uint32 FilterSizeBytes = 2;
-    optional uint32 HashesCount = 3;
+    optional uint32 HashesCount = 3 [default = 2];
     optional string ColumnName = 4;
-    optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
     optional bool CaseSensitive = 8 [default = true];
+    optional double FalsePositiveProbability = 9 [default = 0.001];
 }
 
 message TRequestedMaxIndex {
@@ -490,13 +489,12 @@ message TBloomFilter {
 
 message TBloomNGrammFilter {
     optional uint32 NGrammSize = 1;
-    optional uint32 FilterSizeBytes = 2;
-    optional uint32 HashesCount = 3;
+    optional uint32 HashesCount = 3 [default = 2];
     optional uint32 ColumnId = 4;
-    optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
     optional bool CaseSensitive = 8 [default = true];
+    optional double FalsePositiveProbability = 9 [default = 0.001];
 }
 
 message TMaxIndex {

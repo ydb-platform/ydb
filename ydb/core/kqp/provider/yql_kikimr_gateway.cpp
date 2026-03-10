@@ -490,6 +490,17 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
+    if (name == "false_positive_probability") {
+        double fpValue = 0;
+        if (!TryFromString<double>(value, fpValue)) {
+            error = TStringBuilder() << "Invalid false_positive_probability value: " << value;
+            return;
+        }
+
+        desc.FalsePositiveProbability = fpValue;
+        return;
+    }
+
     if (name == "hashes_count") {
         ui32 uiValue = 0;
         if (!TryFromString<ui32>(value, uiValue)) {
@@ -498,28 +509,6 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         }
 
         desc.HashesCount = uiValue;
-        return;
-    }
-
-    if (name == "filter_size_bytes") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
-            return;
-        }
-
-        desc.FilterSizeBytes = uiValue;
-        return;
-    }
-
-    if (name == "records_count") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid records_count value: " << value;
-            return;
-        }
-
-        desc.RecordsCount = uiValue;
         return;
     }
 

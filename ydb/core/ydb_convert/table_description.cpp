@@ -1075,10 +1075,15 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
-                ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count());
-                ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter_index().filter_size_bytes());
-                ngram->SetRecordsCount(index.local_bloom_ngram_filter_index().records_count());
-                ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().case_sensitive());
+                ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count()
+                    ? index.local_bloom_ngram_filter_index().hashes_count()
+                    : 2);
+                ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().has_case_sensitive()
+                    ? index.local_bloom_ngram_filter_index().case_sensitive()
+                    : true);
+                ngram->SetFalsePositiveProbability(index.local_bloom_ngram_filter_index().has_false_positive_probability()
+                    ? index.local_bloom_ngram_filter_index().false_positive_probability()
+                    : 0.001);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

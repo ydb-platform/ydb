@@ -785,13 +785,13 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
-            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                        "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_a, TYPE=BLOOM_NGRAMM_FILTER,
-            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"a"'}}`);
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                        "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"a"'}}`);
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
@@ -973,13 +973,13 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
-            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                        "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_a, TYPE=BLOOM_NGRAMM_FILTER,
-            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"a"'}}`);
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                        "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"a"'}}`);
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)

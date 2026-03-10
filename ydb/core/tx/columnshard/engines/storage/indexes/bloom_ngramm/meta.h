@@ -1,4 +1,7 @@
 #pragma once
+
+#include "const.h"
+
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
@@ -15,18 +18,16 @@ private:
     std::shared_ptr<arrow::Schema> ResultSchema;
     bool CaseSensitive = true;
     ui32 NGrammSize = 3;
-    ui32 FilterSizeBytes = 512;
-    ui32 RecordsCount = 10000;
+    double FalsePositiveProbability = 0.001;
     ui32 HashesCount = 2;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);
         std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("", arrow::boolean()) };
         ResultSchema = std::make_shared<arrow::Schema>(fields);
+        AFL_VERIFY(FalsePositiveProbability > 0 && FalsePositiveProbability < 1);
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
-        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
-        AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
     }
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
@@ -57,6 +58,7 @@ protected:
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
         AFL_VERIFY(proto.HasBloomNGrammFilter());
         auto& bFilter = proto.GetBloomNGrammFilter();
+
         {
             auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
             if (conclusion.IsFail()) {
@@ -64,33 +66,34 @@ protected:
                 return false;
             }
         }
-        if (bFilter.HasRecordsCount()) {
-            RecordsCount = bFilter.GetRecordsCount();
-            if (!TConstants::CheckRecordsCount(RecordsCount)) {
-                return false;
-            }
-        }
+
         if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
             return false;
         }
+
         if (bFilter.HasCaseSensitive()) {
             CaseSensitive = bFilter.GetCaseSensitive();
         }
-        HashesCount = bFilter.GetHashesCount();
-        if (!TConstants::CheckHashesCount(HashesCount)) {
-            return false;
-        }
+
         NGrammSize = bFilter.GetNGrammSize();
         if (!TConstants::CheckNGrammSize(NGrammSize)) {
             return false;
         }
-        FilterSizeBytes = bFilter.GetFilterSizeBytes();
-        if (!TConstants::CheckFilterSizeBytes(FilterSizeBytes)) {
+
+        FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+        if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
             return false;
         }
+
+        HashesCount = bFilter.GetHashesCount();
+        if (!TConstants::CheckHashesCount(HashesCount)) {
+            return false;
+        }
+
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
         }
+
         AddColumnId(bFilter.GetColumnId());
         Initialize();
         return true;
@@ -99,12 +102,8 @@ protected:
         auto* filterProto = proto.MutableBloomNGrammFilter();
         TBase::SerializeToProtoImpl(*filterProto);
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
-        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
-        AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
-        AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
-        filterProto->SetRecordsCount(RecordsCount);
         filterProto->SetNGrammSize(NGrammSize);
-        filterProto->SetFilterSizeBytes(FilterSizeBytes);
+        filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
         filterProto->SetHashesCount(HashesCount);
         filterProto->SetColumnId(GetColumnId());
         filterProto->SetCaseSensitive(CaseSensitive);
@@ -117,13 +116,12 @@ protected:
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
-        const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount, const ui32 filterSizeBytes, const ui32 nGrammSize,
-        const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
+        const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 hashesCount, const ui32 nGrammSize,
+        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
         , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
-        , FilterSizeBytes(filterSizeBytes)
-        , RecordsCount(recordsCount)
+        , FalsePositiveProbability(falsePositiveProbability)
         , HashesCount(hashesCount)
     {
         Initialize();

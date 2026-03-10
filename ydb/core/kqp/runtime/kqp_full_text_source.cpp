@@ -22,8 +22,9 @@
  *     remaining frequent tokens via point lookups, avoiding full scans of large
  *     posting lists.
  *  7. For matched documents, optionally read document lengths from the docs table
- *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK min-heap
- *     so only the highest-scoring documents survive.
+ *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK buffer
+ *     with amortized O(1) nth_element compaction so only the highest-scoring
+ *     documents survive.
  *  8. Fetch full row data from the main table (unless "covered" -- all requested
  *     columns are already available from the index key).
  *  9. Stream result rows to the compute actor via ResultQueue / NotifyCA().
@@ -2049,8 +2050,9 @@ public:
  *     ScheduleL2Read() or FetchDocumentDetails().
  *
  *   Phase 4 - Fetch: FetchDocumentDetails() reads document lengths (if BM25),
- *     computes scores, maintains a TopK heap (if LIMIT), and finally reads
- *     full rows from the main table (unless covered).
+ *     computes scores, maintains a TopK buffer with amortized O(1) nth_element
+ *     compaction (if LIMIT), and finally reads full rows from the main table
+ *     (unless covered).
  *
  *   Phase 5 - Deliver: Matched rows are pushed to ResultQueue and the compute
  *     actor is notified via TEvNewAsyncInputDataArrived.  The compute actor
@@ -2129,21 +2131,32 @@ private:
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     i64 Limit = -1;  // User-specified LIMIT; -1 means unlimited.
 
-    // Min-heap element for TopK selection when LIMIT + relevance are active.
+    // Element for TopK selection when LIMIT + relevance are active.
     struct TTopKDocumentInfo {
         double Score;
         TDocumentInfo::TPtr DocumentInfo;
-
-        bool operator<(const TTopKDocumentInfo& other) const {
-            return Score > other.Score;
-        }
     };
 
     TIntrusivePtr<TQueryCtx> QueryCtx;  // BM25 scoring context (created after stats are loaded)
 
-    // TopK min-heap for selecting the highest-scoring documents when LIMIT is set.
-    // Uses operator< comparing Score descending so pop_heap removes the lowest score.
+    // TopK buffer for selecting the highest-scoring documents when LIMIT is set.
+    // Uses an amortized O(1) approach: documents are appended to the buffer,
+    // and when the buffer exceeds threshold, std::nth_element is used to compact
+    // it down to the top Limit entries. This avoids O(log K) per-insert heap overhead.
     std::vector<TTopKDocumentInfo> TopKQueue;
+
+    // Compact TopKQueue down to at most Limit entries by keeping only the
+    // highest-scoring documents.  Uses std::nth_element (O(n) average).
+    void CompactTopK(size_t threshold) {
+        if (TopKQueue.size() >= threshold) {
+            auto nth = TopKQueue.begin() + Limit;
+            std::nth_element(TopKQueue.begin(), nth, TopKQueue.end(),
+                [](const TTopKDocumentInfo& a, const TTopKDocumentInfo& b) {
+                    return a.Score > b.Score;
+                });
+            TopKQueue.resize(Limit);
+        }
+    }
 
     bool ResolveInProgress = true;   // True while SchemeCache resolve is pending
     bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
@@ -2221,7 +2234,7 @@ private:
 
     // Route matched documents through the remaining pipeline stages:
     //   1. If relevance mode and documents lack doc_length -> read from docs table.
-    //   2. If LIMIT + relevance -> insert into TopK heap; drain when merge is done.
+    //   2. If LIMIT + relevance -> insert into TopK buffer; compact with nth_element when buffer is full; drain when merge is done.
     //   3. If documents are "covered" -> push directly to ResultQueue.
     //   4. Otherwise -> enqueue main table reads for full row data.
     void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {
@@ -2239,24 +2252,19 @@ private:
         if (Limit > 0 && MainTableReader->GetWithRelevance()) {
             for(auto& doc: docInfos) {
                 TopKQueue.emplace_back(doc->GetBM25Score(QueryCtx.GetRef()), std::move(doc));
-                std::push_heap(TopKQueue.begin(), TopKQueue.end());
-                if (TopKQueue.size() > (size_t)Limit) {
-                    std::pop_heap(TopKQueue.begin(), TopKQueue.end());
-                    TopKQueue.pop_back();
-                }
             }
-
+            CompactTopK(static_cast<size_t>(Limit) * 2);
             docInfos.clear();
         }
 
         if (Limit > 0 && !TopKQueue.empty() && L1MergeAlgo->Done() && (!L2MergeAlgo || L2MergeAlgo->Done())) {
             YQL_ENSURE(docInfos.empty());
+            CompactTopK(static_cast<size_t>(Limit) + 1);
             docInfos.reserve(TopKQueue.size());
-            while (!TopKQueue.empty()) {
-                auto&[score, documentInfo] = TopKQueue.back();
+            for (auto& [score, documentInfo] : TopKQueue) {
                 docInfos.emplace_back(std::move(documentInfo));
-                TopKQueue.pop_back();
             }
+            TopKQueue.clear();
         }
 
         if (!docInfos.empty() && docInfos.back()->IsCovered(MainTableCovered)) {

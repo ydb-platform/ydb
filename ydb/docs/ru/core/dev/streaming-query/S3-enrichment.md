@@ -2,7 +2,14 @@
 
 Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты.
 
-В [потоковых запросах](../../concepts/streaming-query.md) можно присоединить к потоку данные, хранимые в S3, с помощью конструкции `JOIN`. Поток должен быть слева, справочник из S3 — справа. Справочник полностью загружается в память при запуске запроса. Если данные в S3 изменились, для получения актуальной версии справочника необходимо перезапустить запрос.
+В [потоковых запросах](../../concepts/streaming-query.md) можно присоединить к потоку данные, хранимые в S3, с помощью конструкции `JOIN`. Поток должен быть слева, справочник из S3 — справа.
+
+
+{% note warning %}
+
+Справочник полностью загружается в память при запуске запроса. Если данные в S3 изменились, для получения актуальной версии справочника необходимо перезапустить запрос — удалить его с помощью [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) и создать заново с помощью [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+
+{% endnote %}
 
 Справочник хранится в S3 и подключается через [внешний источник данных](../../concepts/query_execution/federated_query/s3/external_data_source.md).
 
@@ -17,7 +24,7 @@ CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
 -- Источник данных YDB для чтения/записи топиков
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     SOURCE_TYPE = "Ydb",
-    LOCATION = "<location>",
+    LOCATION = "<ydb_endpoint>",
     DATABASE_NAME = "<db_name>",
     AUTH_METHOD = "TOKEN",
     TOKEN_SECRET_NAME = "secrets/ydb_token"
@@ -26,10 +33,16 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 -- Источник данных S3 для чтения справочника
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
-    LOCATION = "https://storage.yandexcloud.net/my_public_bucket/",
+    LOCATION = "<s3_endpoint>",
     AUTH_METHOD = "NONE"
 )
 ```
+
+Где:
+
+- `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135` для Yandex Cloud.
+- `<db_name>` — путь к базе данных {{ ydb-short-name }}, например `/Root/database`.
+- `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>` для Yandex Cloud.
 
 ## Создание потокового запроса
 

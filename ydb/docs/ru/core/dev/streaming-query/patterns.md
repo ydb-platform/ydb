@@ -1,10 +1,10 @@
 # Типичные шаблоны потоковых запросов
 
-Минимальные примеры для быстрого старта.
+В этом разделе собраны минимальные примеры [потоковых запросов](../../concepts/streaming-query.md) для наиболее распространённых сценариев. Сначала описан базовый шаблон чтения данных из топика, затем — варианты полноценной работы с данными: обработка данных и запись результатов в топик в формате JSON, в топик в виде строки и в таблицу. Каждый пример можно использовать как отправную точку для собственных задач.
 
-## Чтение JSON из топика {#topic-read-json}
+## Чтение данных из топика {#topic-read}
 
-Запрос читает события из топика в формате JSON. Блок `WITH` указывает формат данных и схему — какие поля ожидаются в каждом сообщении и их типы. Каждое сообщение в топике должно содержать один JSON-объект.
+Чтение данных из топика выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` указывает формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы. Этот шаблон используется во всех последующих примерах.
 
 {% note info %}
 
@@ -15,29 +15,24 @@
 - `ydb_source` — заранее созданный `external data source`;
 - `input_topic` - топик, откуда производится чтение данных;
 - `output_topic` - топик, куда производится запись результатов;
-- `ydb_table` — таблица {{ydb-short-name}}, куда производится запись результатов.
+- `output_table` — таблица {{ydb-short-name}}, куда производится запись результатов.
 
 {% endnote %}
 
-```sql
-CREATE STREAMING QUERY read_json_example AS
-DO BEGIN
+Следующий фрагмент показывает чтение событий из топика в формате JSON. Он используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
 
--- ydb_source — external data source для работы с топиками
-UPSERT INTO ydb_table
+```yql
 SELECT
     *
 FROM
     ydb_source.input_topic
 WITH (
-    FORMAT = json_each_row,  -- Каждое сообщение — один JSON-объект
-    SCHEMA = (               -- Ожидаемые поля и их типы
+    FORMAT = json_each_row,
+    SCHEMA = (
         Id Uint64 NOT NULL,
         Name Utf8 NOT NULL
     )
 );
-
-END DO
 ```
 
 Подробнее о форматах: [{#T}](streaming-query-formats.md).
@@ -46,7 +41,7 @@ END DO
 
 Запрос читает события из входного топика, формирует JSON-объект из отдельных полей и записывает результат в выходной топик. Функция `AsStruct` создаёт структуру из указанных полей, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
 
-```sql
+```yql
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
@@ -70,13 +65,19 @@ WITH (
 END DO
 ```
 
-Подробнее о функциях: [AsStruct](../../yql/reference/builtins/basic#asstruct), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson).
+Подробнее о функциях:
+
+- [AsStruct](../../yql/reference/builtins/basic#as-container)
+- [Yson::From](../../yql/reference/udf/list/yson#ysonfrom)
+- [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson)
+- [Unwrap](../../yql/reference/builtins/basic#unwrap)
+- [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Запись в топик (строка) {#topic-utf8}
 
 Запрос читает события из входного топика и записывает в выходной топик одно поле в виде строки. Для записи в топик строк `SELECT` должен возвращать одну колонку типа `String` или `Utf8`.
 
-```sql
+```yql
 CREATE STREAMING QUERY write_utf8_example AS
 DO BEGIN
 
@@ -109,7 +110,7 @@ END DO
 
 {% endnote %}
 
-```sql
+```yql
 CREATE STREAMING QUERY write_table_example AS
 DO BEGIN
 

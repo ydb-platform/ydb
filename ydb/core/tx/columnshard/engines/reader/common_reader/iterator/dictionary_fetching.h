@@ -1,6 +1,8 @@
 #pragma once
 #include "constructor.h"
 
+#include <util/stream/output.h>
+
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
@@ -71,16 +73,20 @@ private:
     std::optional<TString> StorageId;
 
     void DoOnDataCollected(TFetchingResultContext& context) override {
+        ui32 totalRecords = 0;
         NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
         for (auto&& i : ColumnChunks) {
             AFL_VERIFY(i.GetDictionaryArray());
+            totalRecords += i.GetDictionaryArray()->length();
             compositeBuilder.AddChunk(std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetDictionaryArray()));
         }
+        Cerr << "!!! VLAD TDictionaryFetchLogic::DoOnDataCollected entity_id=" << GetEntityId() << " chunks=" << ColumnChunks.size() << " total_records=" << totalRecords << Endl;
         context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
     }
 
     void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
         AFL_VERIFY(!!StorageId);
+        Cerr << "!!! VLAD TDictionaryFetchLogic::DoOnDataReceived entity_id=" << GetEntityId() << " chunks=" << ColumnChunks.size() << " blobs_total_size=" << blobs.GetTotalBlobsSize() << Endl;
         for (auto&& i : ColumnChunks) {
             if (!!i.GetDictionaryBlobRangeOptional()) {
                 i.SetDictionaryBlob(blobs.ExtractVerified(*StorageId, *i.GetDictionaryBlobRangeOptional()));
@@ -93,6 +99,7 @@ private:
         auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         AFL_VERIFY(columnChunks.size());
         StorageId = source->GetColumnStorageId(GetEntityId());
+        Cerr << "!!! VLAD TDictionaryFetchLogic::DoStart entity_id=" << GetEntityId() << " context_records_count=" << context.GetRecordsCount() << " column_chunks=" << columnChunks.size() << Endl;
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);

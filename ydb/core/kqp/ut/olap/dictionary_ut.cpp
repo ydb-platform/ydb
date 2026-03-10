@@ -164,6 +164,62 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
+    // SELECT SOME(message) FROM table GROUP BY message uses dictionary-only fetch for the key column:
+    // the optimizer marks the GroupBy key (message) for dictionary-only; the source then reads only the
+    // dictionary blob per chunk (no positions). Each chunk yields one array of distinct values; GroupBy
+    // runs on that (possibly multi-chunk) array. For SOME(message) the aggregate argument is the same
+    // column, so per group there is a single value and SOME(value)=value. Result: one row per distinct message.
+    TString scriptGroupBySomeDictionary = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8,
+            other Uint64,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES (1u, 1u, 'a', 4u), (2u, 2u, 'b', 3u), (3u, 3u, 'a', 2u), (4u, 4u, 'c', 1u);
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"]];[["b"];["b"]];[["c"];["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(pk), pk FROM `/Root/ColumnTable` GROUP BY pk ORDER BY pk;
+        EXPECTED: [[1u;1u];[2u;2u];[3u;3u];[4u;4u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE other > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(pk) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"];1u];[["b"];["b"];2u];[["c"];["c"];4u]]
+    )";
+    Y_UNIT_TEST(GroupBySomeDictionary) {
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
+    }
+
     // Loop 10 times: insert, wait compaction, insert, change schema, insert, set actualization, insert, wait actualization
     // lc-buckets with 2 layers: Zero (portions_live_duration 1s) + OneLayer.
     TString scriptDictCompactionAndActualization = R"(

@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
@@ -19,6 +20,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
+#include <util/stream/output.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -184,6 +187,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
         i->Start(readActions, contextFetch);
     }
     if (readActions.IsEmpty()) {
+        Cerr << "!!! VLAD DoStartFetchImpl_no_read_actions fetchers_count=" << fetchersExt.size() << " source_idx=" << GetSourceIdx() << Endl;
         for (auto&& i : fetchersExt) {
             NBlobOperations::NRead::TCompositeReadBlobs blobs;
             i->OnDataReceived(readActions, blobs);
@@ -192,6 +196,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
         }
         return false;
     }
+    Cerr << "!!! VLAD DoStartFetchImpl_async_blob_read fetchers_count=" << fetchersExt.size() << " source_idx=" << GetSourceIdx() << Endl;
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
         AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
@@ -345,6 +350,12 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    if (addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+        GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
+            NArrow::NAccessor::IChunkedArray::EType::Dictionary && UsageClass == TPKRangeFilter::EUsageClass::FullUsage) {
+        Cerr << "!!! VLAD DoStartFetchData_dict_only column_id=" << addr.GetColumnId() << " source_idx=" << GetSourceIdx() << Endl;
+        return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
+    }
     if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
@@ -360,7 +371,10 @@ void TPortionDataSource::DoAssembleAccessor(
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
+        Cerr << "!!! VLAD DoAssembleAccessor_fetcher_found column_id=" << columnId << " source_idx=" << GetSourceIdx() << Endl;
         fetcher->OnDataCollected(fetchContext);
+    } else {
+        Cerr << "!!! VLAD DoAssembleAccessor_no_fetcher column_id=" << columnId << " source_idx=" << GetSourceIdx() << Endl;
     }
 }
 

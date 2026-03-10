@@ -13,7 +13,7 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int) -> None:
-        query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"
+        query_name = f"test_watermarks_{shared_reading}{tasks}"
         source_name = entity_name(query_name)
         self.init_topics(source_name, partitions_count=tasks)
         self.create_source(kikimr, source_name, shared_reading)

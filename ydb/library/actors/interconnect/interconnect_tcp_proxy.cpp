@@ -585,7 +585,7 @@ namespace NActors {
     void TInterconnectProxyTCP::EnqueueSessionEvent(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
-        if (ev->Flags & IEventHandle::FlagFailFastWhenDisconnected) {
+        if (InErrorState) {
             return DropSessionEvent(ev);
         }
 

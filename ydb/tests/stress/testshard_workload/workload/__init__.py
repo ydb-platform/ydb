@@ -7,7 +7,8 @@ import os
 import stat
 import time
 from typing import Optional
-import urllib
+import urllib.request
+import urllib.error
 from library.python import resource
 
 
@@ -175,16 +176,15 @@ class TestShardStatsCollector:
         events = []
         stress_util_name = 'ydb.tests.stress.testshard_workload.workload'
 
-        def create_event(operation: str, type: str, count: int):
+        def create_event(operation: str, event_type: str, count: int):
             """Helper function to create a single event with count."""
             if count <= 0:
                 return
             e = ErrorEvent()
             e.stress_util_name = stress_util_name
             e.operation = operation
-            e.type = type
+            e.type = event_type
             e.kind = 'query'
-            # Add the event multiple times (will be aggregated by _send_to_server_many)
             for _ in range(count):
                 events.append(e)
 

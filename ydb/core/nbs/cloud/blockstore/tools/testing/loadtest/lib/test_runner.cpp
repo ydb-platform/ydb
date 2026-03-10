@@ -328,7 +328,7 @@ void TTestRunner::ProcessCompletedRequests(
 
     if (FAILED(request->Error.GetCode())) {
         ++TestResults.RequestsFailed;
-        
+
         if (TestResults.Status != NProto::TEST_STATUS_FAILURE) {
             STORAGE_ERROR(
                 LoggingTag << "Request failed with error: "

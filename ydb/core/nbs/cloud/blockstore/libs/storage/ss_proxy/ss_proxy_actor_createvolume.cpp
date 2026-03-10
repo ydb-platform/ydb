@@ -231,8 +231,8 @@ void TCreateVolumeActor::DescribeVolumeAfterCreate(const TActorContext& ctx)
         "Volume %s: sending describe request after create",
         VolumeConfig.GetDiskId().Quote().data());
 
-    auto request =
-        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(VolumeConfig.GetDiskId());
+    auto request = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(
+        VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(
         ctx,

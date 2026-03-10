@@ -15,7 +15,6 @@ class TestYdbWorkload(StressFixture):
             ],
             table_service_config={
                 "allow_olap_data_query": True,
-                "enable_oltp_sink": True,
                 "enable_batch_updates": True,
             }
         )

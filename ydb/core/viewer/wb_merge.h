@@ -31,6 +31,12 @@ public:
         ::google::protobuf::Message& protoTo,
         const ::google::protobuf::Message& protoFrom,
         const ::google::protobuf::FieldDescriptor* field)>;
+    using TMergeFieldsMap = std::unordered_map<TWhiteboardMergerBase::TMergerKey, TWhiteboardMergerBase::TMergerValue>;
+
+    class TRegistrator {
+    public:
+        explicit TRegistrator(TMergeFieldsMap&& fields);
+    };
 
     template <typename PropertyType>
     static void ProtoMergeField(
@@ -69,8 +75,6 @@ public:
             const ::google::protobuf::FieldDescriptor* field);
 
     static void ProtoMerge(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom);
-
-    static void SetMergeField(TMergerKey key, TMergerValue value);
 };
 
 template<typename ResponseType>

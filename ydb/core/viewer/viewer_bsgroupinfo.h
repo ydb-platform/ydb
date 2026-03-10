@@ -1,4 +1,5 @@
 #pragma once
+
 #include "json_wb_req.h"
 
 namespace NKikimr::NViewer {
@@ -24,11 +25,6 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse> {
         return "GroupID";
     }
 
-    static void InitMerger() {
-        const auto* field = NKikimrWhiteboard::TBSGroupStateInfo::descriptor()->FindFieldByName("Latency");
-        TWhiteboardMergerBase::SetMergeField(field, &TWhiteboardMergerBase::ProtoMaximizeEnumField);
-    }
-
     static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
             TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(result, responses);
@@ -36,6 +32,9 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse> {
             TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
         }
     }
+
+private:
+    static const TWhiteboardMergerBase::TRegistrator Registrator;
 };
 
 template <>
@@ -48,4 +47,4 @@ struct TWhiteboardMergerComparator<NKikimrWhiteboard::TBSGroupStateInfo> {
 
 using TJsonBSGroupInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>;
 
-}
+} // namespace NKikimr::NViewer

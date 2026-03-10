@@ -389,8 +389,8 @@ bool TTablesManager::HasPreset(const ui32 presetId) const {
     return SchemaPresetsIds.contains(presetId);
 }
 
-const TTableInfo& TTablesManager::GetTable(const TInternalPathId pathId) const {
-    Y_ABORT_UNLESS(HasTable(pathId));
+const TTableInfo& TTablesManager::GetTable(const TInternalPathId pathId, const bool withDeleted) const {
+    Y_ABORT_UNLESS(HasTable(pathId, withDeleted));
     return Tables.at(pathId);
 }
 

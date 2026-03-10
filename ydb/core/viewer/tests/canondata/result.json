@@ -1716,8 +1716,7 @@
                 "type": "TRANSFER"
             },
             "source_path": "TestTransferSourceTopic",
-            "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n",
-            "stats": {}
+            "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
         },
         "table_result": {
             "status": "SUCCESS",

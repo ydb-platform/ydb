@@ -254,7 +254,7 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     return changes;
 }
 
-std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const TSnapshot& snapshot,
+std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
     const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
@@ -267,37 +267,45 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     bool limitExceeded = false;
     const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
-    const TInstant snapshotInstant = snapshot.GetPlanInstant();
+    const TInstant minPlanStepForNewReads = snapshotHolders.GetMinSnapshotForNewReads().GetPlanInstant();
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
-        if (it->first > snapshotInstant) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())(
-                "current_snapshot_ts", it->first.MilliSeconds());
+        auto& [removePlanStep, portions] = *it;
+        if (minPlanStepForNewReads < removePlanStep) {
+            // no point to proceed, we do not delete portions that are younger than minReadSnapshot
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("min_snapshot_for_new_reads", snapshotHolders.GetMinSnapshotForNewReads().DebugString())("remove_planstep", removePlanStep.MilliSeconds());
             break;
         }
-        for (ui32 i = 0; i < it->second.size();) {
-            if (dataLocksManager->IsLocked(it->second[i], NDataLocks::ELockCategory::Cleanup)) {
+        for (ui32 i = 0; i < portions.size();) {
+            auto portion = portions[i];
+            if (dataLocksManager->IsLocked(portion, NDataLocks::ELockCategory::Cleanup)) {
                 ++skipLocked;
                 ++i;
                 continue;
             }
+<<<<<<< HEAD
             AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
+=======
+            if (snapshotHolders.CouldUsePortion(portion)) {
+                ++i;
+                continue;
+            }
+>>>>>>> 4f3536825e3 (Make scans do not prevent portions and tables, which they do not use, from deleting (#35624))
             ++portionsCount;
-            chunksCount += it->second[i]->GetApproxChunksCount(it->second[i]->GetSchema(GetVersionedIndex())->GetColumnsCount());
-            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
-            } else {
+            chunksCount += portion->GetApproxChunksCount(portion->GetSchema(GetVersionedIndex())->GetColumnsCount());
+            if ((portionsCount >= maxPortionsCount || chunksCount >= maxChunksCount) && changes->GetPortionsToDrop().size() > 0) {
                 limitExceeded = true;
                 break;
             }
-            changes->AddPortionToDrop(it->second[i]);
-            if (i + 1 < it->second.size()) {
-                it->second[i] = std::move(it->second.back());
+            changes->AddPortionToDrop(portion);
+            if (i + 1 < portions.size()) {
+                portions[i] = std::move(portions.back());
             }
-            it->second.pop_back();
+            portions.pop_back();
         }
         if (limitExceeded) {
             break;
         }
-        if (it->second.empty()) {
+        if (portions.empty()) {
             it = CleanupPortions.erase(it);
         } else {
             ++it;

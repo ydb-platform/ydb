@@ -5,6 +5,7 @@
 #include "changes/abstract/settings.h"
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
+#include "snapshot_holders.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -14,7 +15,6 @@
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
-
 namespace NKikimr::NColumnShard {
 class TTiersManager;
 }   // namespace NKikimr::NColumnShard
@@ -151,7 +151,7 @@ public:
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept = 0;
-    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
+    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,

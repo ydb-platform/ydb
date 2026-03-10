@@ -280,19 +280,41 @@ public:
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder(HashesCount, CaseSensitive);
+    ui64 ngramCount = 0;
+    TNGrammBuilder countBuilder(1, CaseSensitive);
+    auto countNgram = [&](const ui64) -> decltype(auto) {
+        ++ngramCount;
+    };
 
-    ui32 size = FilterSizeBytes * 8;
-    if ((size & (size - 1)) == 0) {
-        ui32 recordsCountBase = RecordsCount;
-        while (recordsCountBase < recordsCount && size * 2 <= TConstants::MaxFilterSizeBytes) {
-            size <<= 1;
-            recordsCountBase *= 2;
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& r : reader) {
+            GetDataExtractor()->VisitAll(
+                r.GetCurrentChunk(),
+                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                    countBuilder.FillNGrammHashes(NGrammSize, arr, countNgram);
+                },
+                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                    auto view = data.GetScalarOptional();
+                    if (!view.has_value()) {
+                        return;
+                    }
+
+                    countBuilder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, countNgram);
+                });
         }
-    } else {
-        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1)  / RecordsCount));
+
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
-    size = std::max<ui32>(16, size);
+
+    const ui64 maxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
+    const double itemsCount = static_cast<double>(std::max<ui64>(ngramCount, 10));
+    const double hashesCount = static_cast<double>(HashesCount);
+    const double requestedBitsSizeDouble =
+        std::ceil((-hashesCount * itemsCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / hashesCount)));
+    const ui64 requestedBitsSize = std::max<ui64>(16, static_cast<ui64>(requestedBitsSizeDouble));
+    const ui32 size = std::min<ui64>(maxBitsSize, std::bit_ceil(requestedBitsSize));
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
             AFL_VERIFY(reader.GetColumnsCount() == 1);

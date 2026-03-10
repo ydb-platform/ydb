@@ -73,10 +73,9 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
+        ui32 NgramSize = 3;
+        ui32 HashesCount = 2;
+        double FalsePositiveProbability = 0.001;
         bool CaseSensitive = true;
     };
 

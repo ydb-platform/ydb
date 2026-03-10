@@ -826,23 +826,23 @@ public:
         PassAway();
     }
 
+    // Mixed-version compatibility: old node may return no-body response without terminating CRLFCRLF.
+    void NormalizeNoBodyResponseHeaders(TString& responseTxt) const {
+        NHttp::THttpResponseParser parser(responseTxt);
+        const bool noBodyExpected = !parser.ExpectedBody();
+        const bool hasIncompleteHeaders = parser.HasHeaders() && !parser.HasCompletedHeaders();
+        if (hasIncompleteHeaders && noBodyExpected && !responseTxt.EndsWith("\r\n\r\n")) {
+            if (!responseTxt.EndsWith("\r\n")) {
+                responseTxt += "\r\n";
+            }
+            responseTxt += "\r\n";
+        }
+    }
+
     void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
         if (ev->Get()->Record.HasHttpResponse()) {
             TString responseTxt = ev->Get()->Record.GetHttpResponse();
-            NHttp::THttpResponseParser initialRawParser(responseTxt);
-            const bool initialRawResponseNoBodyExpected = Event->Get()->Request->Method == "HEAD" || !initialRawParser.ExpectedBody();
-            const bool initialRawResponseHasIncompleteHeaders = initialRawParser.HasHeaders() && !initialRawParser.HasCompletedHeaders();
-            if (initialRawResponseHasIncompleteHeaders && initialRawResponseNoBodyExpected) {
-                // Mixed-version compatibility: old node may return no-body response without terminating CRLFCRLF.
-                if (!responseTxt.EndsWith("\r\n\r\n")) {
-                    if (!responseTxt.EndsWith("\r\n")) {
-                        responseTxt += "\r\n";
-                    }
-                    responseTxt += "\r\n";
-                }
-            }
-
-            NHttp::THttpResponseParser rawParser(responseTxt);
+            NormalizeNoBodyResponseHeaders(responseTxt);
             NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
 
             if (responseObj->Status == "301" || responseObj->Status == "302") {
@@ -860,19 +860,6 @@ public:
                     responseObj = response;
                 }
             }
-
-            // const bool rawResponseNoBodyExpected = Event->Get()->Request->Method == "HEAD" || !rawParser.ExpectedBody();
-            // const bool rawResponseHasIncompleteHeaders = rawParser.HasHeaders() && !rawParser.HasCompletedHeaders();
-            // if (rawResponseHasIncompleteHeaders && rawResponseNoBodyExpected) {
-            //     // Mixed-version compatibility: older nodes may return a no-body response text
-            //     // without completed headers. Rebuild it into a finalized response object before send.
-            //     NHttp::THeaders headers(responseObj->Headers);
-            //     if (responseObj->Body.empty()) {
-            //         responseObj = Event->Get()->Request->CreateResponse(responseObj->Status, responseObj->Message, headers);
-            //     } else {
-            //         responseObj = Event->Get()->Request->CreateResponse(responseObj->Status, responseObj->Message, headers, responseObj->Body);
-            //     }
-            // }
 
             Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj), 0, Event->Cookie);
 

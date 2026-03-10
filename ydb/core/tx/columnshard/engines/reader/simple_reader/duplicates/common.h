@@ -104,8 +104,8 @@ public:
         return TPortionBorderView(portionId, EBorder::LAST);
     }
 
-    bool operator<(const TPortionBorderView& other) const {
-        return std::tie(PortionId, Border) < std::tie(other.PortionId, other.Border);
+    bool operator==(const TPortionBorderView& other) const {
+        return std::tie(PortionId, Border) == std::tie(other.PortionId, other.Border);
     }
 
     explicit operator size_t() const {
@@ -164,8 +164,8 @@ public:
         return End;
     }
 
-    bool operator<(const TIntervalBordersView& other) const {
-        return std::tie(Begin, End) < std::tie(other.Begin, other.End);
+    bool operator==(const TIntervalBordersView& other) const {
+        return std::tie(Begin, End) == std::tie(other.Begin, other.End);
     }
 
     explicit operator size_t() const {

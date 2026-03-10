@@ -41,24 +41,20 @@ struct TTestCtx : public TTestCtxBase {
 
         constexpr ui32 steps = 1000;
         for (ui32 step = 0; step < steps; ++step) {
-            ui32 action = Random(0, 4);
+            ui32 action = Random(0, 32);
 
-            switch (action) {
-            case 0:
+            if (action < 10) {
                 AllocateChunk();
-                break;
-            case 1:
+            } else if (action < 20) {
                 if (TotalAllocated > 0) {
                     FreeChunk();
-                    break;
                 }
-                [[fallthrough]];
-            case 2:
+            } else if (action < 30) {
                 Discover();
-                break;
-            case 3:
+            } else if (action < 31) {
                 RestartVDisk();
-                break;
+            } else {
+                DropChunkKeeper();
             }
         }
     }
@@ -165,6 +161,23 @@ struct TTestCtx : public TTestCtxBase {
         AllocateEdgeActorOnSpecificNode(ChunkKeeperId.NodeId());
         GetGroupStatus(GroupId);
         UpdateChunkKeeperId();
+    }
+
+    void DropChunkKeeper() {
+        ADD_TO_HISTORY("Drop ChunkKeeper");
+        Env->SetIcbControl(ChunkKeeperId.NodeId(), "VDiskControls.EnableChunkKeeper", 0);
+        Env->StopNode(ChunkKeeperId.NodeId());
+        Env->StartNode(ChunkKeeperId.NodeId());
+        Env->Sim(TDuration::Seconds(15));
+        Env->SetIcbControl(ChunkKeeperId.NodeId(), "VDiskControls.EnableChunkKeeper", 1);
+        Env->StopNode(ChunkKeeperId.NodeId());
+        Env->StartNode(ChunkKeeperId.NodeId());
+        Env->Sim(TDuration::Seconds(15));
+        AllocateEdgeActorOnSpecificNode(ChunkKeeperId.NodeId());
+        GetGroupStatus(GroupId);
+        UpdateChunkKeeperId();
+        Chunks.clear();
+        TotalAllocated = 0;
     }
 
     template<class T>

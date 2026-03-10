@@ -282,14 +282,10 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-<<<<<<< HEAD
-            AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
-=======
             if (snapshotHolders.CouldUsePortion(portion)) {
                 ++i;
                 continue;
             }
->>>>>>> 4f3536825e3 (Make scans do not prevent portions and tables, which they do not use, from deleting (#35624))
             ++portionsCount;
             chunksCount += portion->GetApproxChunksCount(portion->GetSchema(GetVersionedIndex())->GetColumnsCount());
             if ((portionsCount >= maxPortionsCount || chunksCount >= maxChunksCount) && changes->GetPortionsToDrop().size() > 0) {

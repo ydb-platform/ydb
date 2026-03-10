@@ -24,6 +24,10 @@ private:
             , PortionId(portionId) {
         }
 
+        bool operator==(const TPortionKey& other) const {
+            return std::tie(PathId, PortionId) == std::tie(other.PathId, other.PortionId);
+        }
+
         auto operator<=>(const TPortionKey& other) const {
             return std::tie(PathId, PortionId) <=> std::tie(other.PathId, other.PortionId);
         }

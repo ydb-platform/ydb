@@ -227,7 +227,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
     }
 }
 
-void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash) {
+void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash) {
     const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_);
     const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
@@ -262,10 +262,10 @@ void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::
         YQL_CLOG(INFO, ProviderYt) << "...total output tables=" << loggedTable;
     }
 
-    SetCache(outTablePaths, outTableSpecs, tmpFolder, settings, opHash);
+    SetCache(outTablePaths, outTableSpecs, tmpFolder, settings, opHash, outputHash);
 }
 
-void TExecContextBaseSimple::SetCache(const TVector<TString>&, const TVector<NYT::TNode>&, const TString&, const TYtSettings::TConstPtr&, const TString&) {
+void TExecContextBaseSimple::SetCache(const TVector<TString>&, const TVector<NYT::TNode>&, const TString&, const TYtSettings::TConstPtr&, const TString&, const TMaybe<TString>&) {
     // Cache item should only be set for native gateway, not fmr
     return;
 }

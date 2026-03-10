@@ -732,6 +732,10 @@ namespace {
         }
 
         if (input->ChildrenSize() > 2U) {
+            if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
             const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
             const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
@@ -2232,7 +2236,7 @@ namespace {
         }
 
         if (!input->Head().GetTypeAnn()) {
-            YQL_ENSURE(input->Type() == TExprNode::Lambda);
+            YQL_ENSURE(input->Head().Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
                 << "Expected (optional) list, but got lambda"));
             return IGraphTransformer::TStatus::Error;
@@ -3606,6 +3610,10 @@ namespace {
 
     IGraphTransformer::TStatus UnorderedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

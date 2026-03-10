@@ -37,23 +37,26 @@ public:
     }
 
     void RaiseIssueForEmptyScope();
+    void Mute();
+    void Unmute();
 
 private:
+    struct TIssueHash {
+        ui64 operator()(const TIssuePtr& p) const {
+            return p->Hash();
+        }
+    };
+
+    struct TIssueEqual {
+        bool operator()(const TIssuePtr& l, const TIssuePtr& r) const {
+            return *l == *r;
+        }
+    };
+
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
     TIssuePtr CheckUniqAndLimit(TIssuePtr issue);
     void LeaveAllScopes();
     bool HasOpenScopes() const;
-
-    struct TIssueHash {
-        ui64 operator()(const TIssuePtr& p) {
-            return p->Hash();
-        }
-    };
-    struct TIssueEqual {
-        bool operator()(const TIssuePtr& l, const TIssuePtr& r) {
-            return *l == *r;
-        }
-    };
     TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
     TIssues CompletedIssues_;
     TMaybe<TString> WarningToErrorTreatMessage_;
@@ -61,6 +64,7 @@ private:
     std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
     std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
     size_t IssueLimit_ = 0;
+    bool IsMuted_ = false;
 };
 
 class TIssueScopeGuard: private TNonCopyable {

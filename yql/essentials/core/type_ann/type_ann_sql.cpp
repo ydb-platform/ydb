@@ -2071,7 +2071,7 @@ IGraphTransformer::TStatus SqlReplaceUnknownWrapper(const TExprNode::TPtr& input
 
     const auto typeAnn = input->Head().GetTypeAnn();
 
-    if (typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
+    if (typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
         if (typeAnn->Cast<TPgExprType>()->GetId() == NPg::UnknownOid) {
             const auto* newType = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("text").TypeId);
             output = ctx.Expr.Builder(input->Pos())

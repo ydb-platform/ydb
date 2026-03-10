@@ -101,6 +101,16 @@ public:
         }
     }
 
+    std::vector<NOlap::TSnapshot> GetLiveSnapshots(const NOlap::TSnapshot until) const {
+        std::vector<NOlap::TSnapshot> result;
+        for (auto&& [snapshot, _] : SnapshotsLive) {
+            if (snapshot >= until) break;
+
+            result.push_back(snapshot);
+        }
+        return result;
+    }
+
     bool LoadFromDatabase(NTable::TDatabase& db);
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(

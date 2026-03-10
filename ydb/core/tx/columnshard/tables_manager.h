@@ -110,9 +110,35 @@ public:
         return TUnifiedPathId::BuildValid(InternalPathId, SchemeShardLocalPathId);
     }
 
+<<<<<<< HEAD
     const NOlap::TSnapshot& GetDropVersionVerified() const {
         AFL_VERIFY(DropVersion);
         return *DropVersion;
+=======
+    bool CanBeUsedAt(const NOlap::TSnapshot& snapshot) const {
+        if (Versions.empty()) {
+            return false;
+        }
+        const NOlap::TSnapshot minVersion = *Versions.begin();
+        for (const auto& [_, pathInfo] : SchemeShardLocalPathIds) {
+            const NOlap::TSnapshot appearVersion = pathInfo.CopyVersion.value_or(minVersion);
+            if (snapshot < appearVersion) {
+                continue;
+            }
+            if (!pathInfo.DropVersion || snapshot < *pathInfo.DropVersion) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::set<TUnifiedPathId> GetPathIds() const {
+        std::set<NColumnShard::TUnifiedPathId> paths;
+        for (const auto& [schemeShardLocalPathId, _]: SchemeShardLocalPathIds) {
+            paths.insert(NColumnShard::TUnifiedPathId::BuildValid(InternalPathId, schemeShardLocalPathId));
+        }
+        return paths;
+>>>>>>> 4f3536825e3 (Make scans do not prevent portions and tables, which they do not use, from deleting (#35624))
     }
 
     void SetDropVersion(const NOlap::TSnapshot& version) {
@@ -335,13 +361,24 @@ public:
         return PathsToDrop;
     }
 
-    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::TSnapshot& minReadSnapshot) const {
+    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::TSnapshotHolders& snapshotHolders) const {
         THashSet<TInternalPathId> result;
-        for (auto&& i : PathsToDrop) {
-            if (minReadSnapshot < i.first) {
+        for (auto& [dropSnapshot, tableIds] : PathsToDrop) {
+            // new transactions may come to any snapshot younger than minReadSnapshot, so we cannot drop there anything
+            if (snapshotHolders.GetMinSnapshotForNewReads() < dropSnapshot) {
                 break;
             }
-            result.insert(i.second.begin(), i.second.end());
+            for (const auto& tableId : tableIds) {
+                auto& table = GetTable(tableId, true);
+                if (!snapshotHolders.CouldUse(
+                    // isRemovedFor
+                    [&dropSnapshot](const NOlap::TSnapshot& heldSnapshot) { return dropSnapshot <= heldSnapshot;},
+                    // isVisibleAt
+                    [&table](const NOlap::TSnapshot& heldSnapshot) { return table.CanBeUsedAt(heldSnapshot); }
+                )) {
+                    result.insert(tableId);
+                }
+            }
         }
         return result;
     }
@@ -421,7 +458,7 @@ public:
     void Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tabletSchemeShardLocalPathId, const TTabletStorageInfo* info);
     bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info);
 
-    const TTableInfo& GetTable(const TInternalPathId pathId) const;
+    const TTableInfo& GetTable(const TInternalPathId pathId, const bool withDeleted = false) const;
     ui64 GetMemoryUsage() const;
     TInternalPathId GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(

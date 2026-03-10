@@ -1274,8 +1274,6 @@ public:
                                 "Transaction execution settings have been changed (EnableOltpSink).");
                 return false;
             }
-
-            AFL_ENSURE(QueryState->TxCtx->EnableOltpSink);
         } else {
             AFL_ENSURE(checkSchemeTx());
         }

@@ -156,7 +156,7 @@ TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) 
     metaProto.SetColumnRawBytes(100);
     metaProto.SetColumnBlobBytes(100);
     metaProto.SetIndexRawBytes(0);
-    metaProto.SetIndexBlobBytes(0);1);
+    metaProto.SetIndexBlobBytes(0);
     metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(0);
     metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(0);
     

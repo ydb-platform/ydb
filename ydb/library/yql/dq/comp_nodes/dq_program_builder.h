@@ -5,6 +5,11 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+struct TBlockHashJoinSettings {
+    bool LeftIsBuild = false;
+    ui64 MemoryLimit = 0;
+};
+
 class TDqProgramBuilder : public TProgramBuilder {
   public:
     TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
@@ -20,7 +25,7 @@ class TDqProgramBuilder : public TProgramBuilder {
                                  const TArrayRef<const ui32>& leftKeyColumns,
                                  const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& leftRenames,
                                  const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                 bool leftIsBuild = false);
+                                 TBlockHashJoinSettings settings = {});
 
     TRuntimeNode DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
                                   const TArrayRef<const ui32>& leftKeyColumns,

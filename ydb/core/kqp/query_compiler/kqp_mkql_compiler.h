@@ -17,25 +17,24 @@ public:
     TKqlCompileContext(const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData>& tablesData,
         const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::IFunctionRegistry& funcRegistry,
-        NYql::TKikimrConfiguration::TPtr config = nullptr)
+        const NMiniKQL::IFunctionRegistry& funcRegistry)
         : Cluster_(cluster)
         , TablesData_(tablesData)
-        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry))
-        , Config_(config) {}
+        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry)) {}
 
     NMiniKQL::TKqpProgramBuilder& PgmBuilder() const { return *PgmBuilder_; }
     const NYql::TKikimrTableMetadata& GetTableMeta(const NYql::NNodes::TKqpTable& table) const;
-    NYql::TKikimrConfiguration::TPtr Config() const { return Config_; }
 
 private:
     TString Cluster_;
     TIntrusivePtr<NYql::TKikimrTablesData> TablesData_;
     THolder<NMiniKQL::TKqpProgramBuilder> PgmBuilder_;
-    NYql::TKikimrConfiguration::TPtr Config_;
 };
 
-TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
+TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(
+    const TKqlCompileContext& ctx,
+    NYql::TTypeAnnotationContext& typesCtx,
+    NYql::TKikimrConfiguration::TPtr config = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

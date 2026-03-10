@@ -232,7 +232,7 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
     return meta;
 }
 
-TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx) {
+TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
     compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName(), TDqReadBlockWideWrap::CallableName()},
@@ -426,7 +426,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         });
 
     compiler->AddCallable("BlockHashJoinCore",
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+        [&ctx, config](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             YQL_ENSURE(node.ChildrenSize() == 7, "BlockHashJoinCore should have 7 arguments");
 
             // Compile input streams
@@ -488,11 +488,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             }();
 
 
-            bool leftIsBuild = joinKind == EJoinKind::Left
-                && ctx.Config()
-                && ctx.Config()->BlockHashJoinLeftIsBuild.Get().GetOrElse(false);
+            NMiniKQL::TBlockHashJoinSettings settings;
+            settings.LeftIsBuild = joinKind == EJoinKind::Left
+                && config
+                && config->BlockHashJoinLeftIsBuild.Get().GetOrElse(false);
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, leftIsBuild);
+                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

@@ -112,17 +112,8 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
         if (Empty()){
-            return;
-        }
-        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
-        });
-    }
-
-    void LookupAndTrack(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
-        if (Empty()) {
             return;
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {

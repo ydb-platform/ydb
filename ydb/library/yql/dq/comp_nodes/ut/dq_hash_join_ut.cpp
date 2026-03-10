@@ -53,7 +53,7 @@ struct TJoinTestData {
     std::optional<ui64> JoinMemoryConstraint = std::nullopt;
     int BlockSize = 128;
     bool SliceBlocks = false;
-    bool LeftIsBuild = false;
+    TBlockHashJoinSettings JoinSettings;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -253,13 +253,13 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LeftJoinTestDataLeftIsBuild() {
     auto td = LeftJoinTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinWithMatchesTestDataLeftIsBuild() {
     auto td = LeftJoinWithMatchesTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
@@ -377,19 +377,19 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTwoKeysTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingTwoKeysTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingMultiKeyTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
@@ -503,7 +503,7 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LargeBothSidesLeftSpillingTestDataLeftIsBuild() {
     auto td = LargeBothSidesLeftSpillingTestData();
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
@@ -522,7 +522,7 @@ TJoinTestData EmptyRightInnerTestData() {
 [[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestDataLeftIsBuild() {
     auto td = LargeBothSidesLeftSpillingTestData();
     td.SliceBlocks = true;
-    td.LeftIsBuild = true;
+    td.JoinSettings.LeftIsBuild = true;
     return td;
 }
 
@@ -848,7 +848,7 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     }
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller,
-        testData.LeftIsBuild);
+        testData.JoinSettings);
     if (testData.JoinMemoryConstraint) {
         testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
                                                  testData.Setup->Alloc.GetUsed());

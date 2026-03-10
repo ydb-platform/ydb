@@ -1,5 +1,6 @@
 #pragma once
 #include "dq_hash_join_table.h"
+#include "dq_program_builder.h"
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
@@ -358,7 +359,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
-            bool trackUsed = (Kind == EJoinKind::Left) && self.LeftIsBuild_;
+            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild;
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
                 ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
             }
@@ -452,12 +453,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts, bool leftIsBuild = false)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TBlockHashJoinSettings settings = {})
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
-        , LeftIsBuild_(leftIsBuild)
+        , Settings_(settings)
     {
     }
 
@@ -485,15 +486,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
-                if (LeftIsBuild_) {
-                    // LeftIsBuild: Build=left, Probe=right. Track used build tuples.
-                    table.LookupAndTrack(tuple, [&](TSingleTuple tableMatch) {
+                if (Settings_.LeftIsBuild) {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     });
-                    // Unmatched probe (right) tuples are irrelevant for LEFT JOIN
                 } else {
-                    // Old mode: Build=right, Probe=left
                     table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
@@ -610,7 +608,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
                     if constexpr (Kind == EJoinKind::Left) {
-                        if (LeftIsBuild_) {
+                        if (Settings_.LeftIsBuild) {
                             for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
                                 if (!state.Spiller.IsBucketSpilled(index)) {
                                     TTable* table = std::get_if<TTable>(&state.Spiller.GetState().Buckets[index]);
@@ -724,7 +722,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        bool trackUsed = (Kind == EJoinKind::Left) && LeftIsBuild_;
+                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild;
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
@@ -741,7 +739,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (Kind == EJoinKind::Left) {
-                            if (LeftIsBuild_) {
+                            if (Settings_.LeftIsBuild) {
                                 table->Table.ForEachUnused([&](TSingleTuple buildTuple) {
                                     consume(buildTuple);
                                 });
@@ -774,7 +772,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
-    bool LeftIsBuild_ = false;
+    TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

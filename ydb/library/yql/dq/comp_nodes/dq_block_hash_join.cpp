@@ -26,7 +26,7 @@ struct TDqBlockJoinContext {
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
-    bool LeftIsBuild = false;
+    TBlockHashJoinSettings Settings;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
     // program's TTypeEnvironment.  This avoids creating TOptionalType objects
     // at runtime (inside DoCalculate) whose lifetime depends on the
@@ -96,7 +96,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                               const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
         : Renames_(&meta->Renames)
         , Converters_(converters)
-        , LeftIsBuild_(meta->LeftIsBuild)
+        , LeftIsBuild_(meta->Settings.LeftIsBuild)
     {
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
             TVector<arrow::Datum> nulls;
@@ -230,7 +230,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->LeftIsBuild) ? userTypes.Probe : userTypes.Build;
+        const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild) ? userTypes.Probe : userTypes.Build;
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes);
     }
 
@@ -251,7 +251,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    meta->LeftIsBuild)
+                    meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
         {}
@@ -404,10 +404,17 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
 
     if (callable.GetInputsCount() == 8) {
-        const auto leftIsBuildNode = callable.GetInput(7);
-        meta.LeftIsBuild = AS_VALUE(TDataLiteral, leftIsBuildNode)->AsValue().Get<ui32>() != 0;
+        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
+        MKQL_ENSURE(settingsTuple->GetValuesCount() >= 1, "settings tuple must have at least flags element");
+
+        const ui32 flags = AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>();
+        meta.Settings.LeftIsBuild = (flags & 1) != 0;
+
+        if (settingsTuple->GetValuesCount() >= 2) {
+            meta.Settings.MemoryLimit = AS_VALUE(TDataLiteral, settingsTuple->GetValue(1))->AsValue().Get<ui64>();
+        }
     }
-    if (joinKind == EJoinKind::Left && meta.LeftIsBuild) {
+    if (joinKind == EJoinKind::Left && meta.Settings.LeftIsBuild) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
         for (auto& rename : meta.Renames) {
@@ -419,7 +426,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
     }
 
-    const ESide nullableSide = meta.LeftIsBuild ? ESide::Probe : ESide::Build;
+    const ESide nullableSide = meta.Settings.LeftIsBuild ? ESide::Probe : ESide::Build;
     for (ESide side : EachSide) {
         for (int index = 0; index < std::ssize(meta.InputTypes.SelectSide(side)) - 1; ++index) {
             TType* thisType = meta.InputTypes.SelectSide(side)[index]->GetItemType();
@@ -439,7 +446,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     } else if (joinKind == LeftSemi) {
         return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
     } else if (joinKind == Left) {
-        if (meta.LeftIsBuild) {
+        if (meta.Settings.LeftIsBuild) {
             return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, {.Build = leftStream, .Probe = rightStream});
         } else {
             return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});

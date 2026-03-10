@@ -1,4 +1,46 @@
 {
+<<<<<<< HEAD
+=======
+    "test_canonical_requests.Test.test_capacity_metrics": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.2"
+        },
+        0,
+        0,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.3"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.4"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.5"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.6"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.7"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.8"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.9"
+        }
+    ],
+>>>>>>> 8b9e2730796 (New command dstool group resize (#35643))
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"

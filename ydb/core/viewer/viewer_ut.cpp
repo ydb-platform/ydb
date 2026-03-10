@@ -1022,7 +1022,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
     }
 
-    Y_UNIT_TEST(NodesLocationFallsBackToInterconnectWhenSystemStateMissing)
+    Y_UNIT_TEST(NodesDcRackFallbackToInterconnect)
     {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?direct=1&fields_required=DC,Rack HTTP/1.1\r\n\r\n", endpoint, {});
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -1072,10 +1072,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT(nodes.front().GetMap().contains("Disconnected"));
         UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("Disconnected").GetBooleanSafe(), true);
 
-        const auto& location = nodes.front().GetMap().at("SystemState").GetMap().at("Location").GetMap();
-        UNIT_ASSERT_VALUES_EQUAL(location.at("DataCenter").GetStringSafe(), "az-2");
-        UNIT_ASSERT_VALUES_EQUAL(location.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
-        UNIT_ASSERT_VALUES_EQUAL(location.at("Unit").GetStringSafe(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("DataCenter").GetStringSafe(), "az-2");
+        UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
+        UNIT_ASSERT(!nodes.front().GetMap().contains("SystemState"));
     }
 
     Y_UNIT_TEST(LevenshteinDistance)

@@ -131,16 +131,13 @@ public:
         const auto [credsLookupResult, userHashInitParams] = TStaticCredentialsProvider::GetInstance()
             .GetUserHashInitParams(Database, AuthcId);
 
-        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
-        // in this case we didn't have any user hashes in scram format
         if (credsLookupResult == TStaticCredentialsProvider::UnknownDatabase) {
-            std::string error = "UnknownDatabase or SchemeShard works on old version";
+            std::string error = "UnknownDatabase";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
+                ", " << "Authentication failed: " << error
             );
-            // Needs change to NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST after migration
-            SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
+            SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
             return CleanupAndDie(ctx);
         } else if (credsLookupResult == TStaticCredentialsProvider::UnknownUser) {
             std::stringstream error;
@@ -150,6 +147,18 @@ public:
                 ", " << "Authentication failed: " << error.str();
             );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
+            return CleanupAndDie(ctx);
+        }
+
+        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
+        // in this case we didn't have any user hashes in scram format
+        if (userHashInitParams.empty()) {
+            std::string error = "SchemeShard works on old version ans doesn't support SASL SCRAM";
+            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << error
+            );
+            SendError(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             return CleanupAndDie(ctx);
         }
 

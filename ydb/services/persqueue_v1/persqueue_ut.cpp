@@ -3266,9 +3266,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 3);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 1);
 
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
@@ -3341,7 +3341,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(info_half1.BlobsFromCache > 0);
             UNIT_ASSERT(info_half2.BlobsFromCache > 0);
-            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 1); //Because of async compaction
+            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 0);
             UNIT_ASSERT_VALUES_EQUAL(info_half2.BlobsFromDisk, 0);
         }
     }
@@ -7392,6 +7392,179 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(DefaultMeteringMode) {
         DefaultMeteringMode(false);
         DefaultMeteringMode(true);
+    }
+
+    Y_UNIT_TEST(ConsumerAdvancedMonitoringSettings) {
+        TServerSettings settings = PQSettings(0);
+        {
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
+        }
+        NPersQueue::TTestServer server(settings);
+        server.EnableLogs({ NKikimrServices::PERSQUEUE });
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
+        {
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+        }
+        {
+            CreateTopicRequest request;
+            CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            auto props = request.mutable_settings();
+            props->set_partitions_count(1);
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+            {
+                auto& attributes = *props->mutable_attributes();
+                NJson::TJsonMap consumers;
+                consumers["consumer2"]["metrics_level"] = 2;
+                consumers["consumer2"]["monitoring_project_id"] = "project2";
+                consumers["consumer3"]["metrics_level"] = 3;
+                consumers["consumer3"]["monitoring_project_id"] = "project3";
+                attributes["_advanced_monitoring"] = WriteJson(consumers, false, false, true);
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer1");
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer2");
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer3");
+            }
+            grpc::ClientContext rcontext;
+            auto status = pqStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        {
+            auto res = server.AnnoyingClient->DescribeTopic({"rt3.dc1--acc--some-topic"});
+            Cerr << res.DebugString();
+            for (const auto& consumer : res.GetTopicInfo().at(0).GetConfig().GetConsumers()) {
+                if (consumer.GetName() == "consumer1") {
+                    UNIT_ASSERT(!consumer.HasMetricsLevel());
+                    UNIT_ASSERT(!consumer.HasMonitoringProjectId());
+                } else if (consumer.GetName() == "consumer2") {
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMetricsLevel(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMonitoringProjectId(), "project2");
+                } else if (consumer.GetName() == "consumer3") {
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMetricsLevel(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMonitoringProjectId(), "project3");
+                } else {
+                    UNIT_FAIL("Unknown consumer " << consumer.GetName());
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTopicInfo().at(0).GetConfig().ConsumersSize(), 3);
+        }
+        // remove consumer2 from adv settings
+        {
+            AlterTopicRequest request;
+            AlterTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            auto props = request.mutable_settings();
+            props->set_partitions_count(1);
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+            {
+                auto& attributes = *props->mutable_attributes();
+                NJson::TJsonMap consumers;
+                consumers["consumer3"]["metrics_level"] = 2;
+                consumers["consumer3"]["monitoring_project_id"] = "new-project3";
+                attributes["_advanced_monitoring"] = WriteJson(consumers, false, false, true);
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer1");
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer2");
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer3");
+            }
+            grpc::ClientContext rcontext;
+            auto status = pqStub->AlterTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        {
+            auto res = server.AnnoyingClient->DescribeTopic({"rt3.dc1--acc--some-topic"});
+            Cerr << res.DebugString();
+            for (const auto& consumer : res.GetTopicInfo().at(0).GetConfig().GetConsumers()) {
+                if (consumer.GetName() == "consumer1" || consumer.GetName() == "consumer2") {
+                    UNIT_ASSERT(!consumer.HasMetricsLevel());
+                    UNIT_ASSERT(!consumer.HasMonitoringProjectId());
+
+                } else if (consumer.GetName() == "consumer3") {
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMetricsLevel(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(consumer.GetMonitoringProjectId(), "new-project3");
+                } else {
+                    UNIT_FAIL("Unknown consumer " << consumer.GetName());
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTopicInfo().at(0).GetConfig().ConsumersSize(), 3);
+        }
+
+        struct TSubcase {
+            TStringBuf Json;
+            TStringBuf ErrorMessage;
+        };
+        const TSubcase invalidSubcases[]{
+            {R"-({"consumer4":{}})-", "unknown consumer"},
+            {R"-("json")-", "not a map"},
+            {R"-()-", "not a valid json"},
+            {R"-(json)-", "not a valid json"},
+            {R"-({"consumer3":{"metrics_level":"foo","monitoring_project_id":"bar"}})-", "non-integer"},
+            {R"-({"consumer3":{"metrics_level":3,"monitoring_project_id":null}})-", "non-string"},
+        };
+        for (const auto& subcase : invalidSubcases) {
+            AlterTopicRequest request;
+            AlterTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            auto props = request.mutable_settings();
+            props->set_partitions_count(1);
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+            {
+                auto& attributes = *props->mutable_attributes();
+                attributes["_advanced_monitoring"] = subcase.Json;
+            }
+            {
+                auto rr = props->add_read_rules();
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
+                rr->set_consumer_name("consumer1");
+            }
+
+            grpc::ClientContext rcontext;
+            auto status = pqStub->AlterTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT_C(status.ok(), subcase.Json);
+            CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, subcase.Json);
+            UNIT_ASSERT_STRING_CONTAINS_C(response.operation().issues(0).message(), subcase.ErrorMessage, subcase.Json);
+        }
     }
 
     Y_UNIT_TEST(TClusterTrackerTest) {

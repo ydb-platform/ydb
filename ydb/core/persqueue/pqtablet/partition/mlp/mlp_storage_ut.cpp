@@ -112,7 +112,7 @@ struct TUtils {
 
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
         // Clear batch
-        auto batch = Storage.GetBatch();
+        auto batch = Storage.ExtractBatch();
         Y_UNUSED(batch);
 
         NKikimrPQ::TMLPStorageSnapshot snapshot;
@@ -125,7 +125,7 @@ struct TUtils {
 
     NKikimrPQ::TMLPStorageWAL CreateWAL() {
         NKikimrPQ::TMLPStorageWAL wal;
-        Storage.GetBatch().SerializeTo(wal);
+        Storage.ExtractBatch().SerializeTo(wal);
         Cerr << "CREATE" << Endl;
         Cerr << "> STORAGE DUMP: " << Storage.DebugString() << Endl;
         Cerr << "> WAL: " << wal.ShortDebugString() << Endl;
@@ -1467,7 +1467,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         auto r = storage.Commit(3);
         UNIT_ASSERT(r);
 
-        auto batch = storage.GetBatch();
+        auto batch = storage.ExtractBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1);
         batch.SerializeTo(wal);
@@ -1594,7 +1594,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
         storage.AddMessage(3, true, 5, writeTimestamp3);
         storage.AddMessage(7, true, 5, writeTimestamp7);
 
-        auto batch = storage.GetBatch();
+        auto batch = storage.ExtractBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 2);
         batch.SerializeTo(wal);
     }
@@ -1692,7 +1692,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampSign, 0);
         }
 
-        auto batch = storage.GetBatch();
+        auto batch = storage.ExtractBatch();
         batch.SerializeTo(wal);
     }
 
@@ -2586,6 +2586,65 @@ Y_UNIT_TEST(SkipAddByRetentionPolicy) {
     utils.TimeProvider->Tick(TDuration::Seconds(5));
 
     utils.AssertLoad();
+}
+
+Y_UNIT_TEST(MarkDLQMoved_unexpected) {
+    TUtils utils;
+    utils.Storage.SetRetentionPeriod(TDuration::Seconds(10));
+    utils.AddMessage(3);
+
+    utils.Next(TDuration::Seconds(1));
+    utils.Next(TDuration::Seconds(1));
+    utils.Next(TDuration::Seconds(1));
+
+    Cerr << utils.Storage.DebugString() << Endl;
+
+    // Move message to DLQ
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
+    utils.Storage.ProccessDeadlines();
+
+    Cerr << utils.Storage.DebugString() << Endl;
+
+    {
+        auto messages = utils.Storage.GetDLQMessages();
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].Offset, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].SeqNo, 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].SeqNo, 3);
+    }
+
+    utils.Storage.Compact();
+    utils.Storage.Commit(2);
+
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 1,
+            .SeqNo = 1
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 2,
+            .SeqNo = 2
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 1,
+            .SeqNo = 1
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
+    {
+        auto result = utils.Storage.MarkDLQMoved({
+            .Offset = 3,
+            .SeqNo = 3
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, true);
+    }
 }
 
 }

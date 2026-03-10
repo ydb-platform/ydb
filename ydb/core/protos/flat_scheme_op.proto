@@ -386,7 +386,7 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
-    optional string ColumnFamilyName = 9;
+    optional string ColumnFamilyName = 9 [deprecated = true];
 }
 
 message TOlapColumnDescription {
@@ -553,6 +553,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
         optional uint64 Concurrency = 6;
+        optional uint64 CompactionTaskMemoryLimit = 7;
+        optional uint64 CompactionTaskPortionsCountLimit = 8;
     }
 
     message TOneLayer {
@@ -942,6 +944,10 @@ message TColumnTableDescription {
     optional bool Temporary = 14;
     
     optional bool IsRestore = 15;
+    
+    optional string CopyFromTable = 16;
+    
+    optional bool IsBackup = 17;
 }
 
 message TAlterColumnTable {
@@ -1064,6 +1070,7 @@ message TCdcStreamDescription {
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
+    optional bool UserSIDs = 13;
 }
 
 message TCreateCdcStream {

@@ -3,6 +3,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 
@@ -484,7 +485,7 @@ public:
 
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
-            const auto& performanceParams = NPDisk::DevicePerformance.at(Impl.DeviceType);
+            const auto& performanceParams = NPDisk::TDevicePerformanceParams::Get(Impl.DeviceType);
             const ui64 seekTimeUs = (performanceParams.SeekTimeNs + 1000) / 1000 - 1;
             const ui64 readSpeedBps = performanceParams.FirstSectorReadBytesPerSec;
             const ui64 writeSpeedBps = performanceParams.FirstSectorWriteBytesPerSec;
@@ -496,6 +497,16 @@ public:
                 owner->OwnerRound, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, false,
                 Impl.AppendBlockSize, TString());
             res->StartingPoints = owner->StartingPoints;
+            NPDisk::TDiskFormat format;
+            format.Clear(false);
+            res->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
+                delete ptr;
+            });
+
+            NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
+            res->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
+                delete ptr;
+            });
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
         }

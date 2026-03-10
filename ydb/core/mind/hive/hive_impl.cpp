@@ -28,27 +28,6 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
 namespace NKikimr {
 namespace NHive {
 
-// For balancing, only nodes in the same "segment" are compared
-// This function defines which parameters are used to define segments
-auto GetNodeSegment(const TNodeInfo* node) {
-    return std::forward_as_tuple(node->GetServicedDomain(), node->BridgePileId);
-}
-
-struct TEqualNodeSegment {
-    bool operator()(const TNodeInfo* lhs, const TNodeInfo* rhs) const {
-        bool result = GetNodeSegment(lhs) == GetNodeSegment(rhs);
-        return result;
-    }
-};
-
-struct THashNodeSegment {
-    size_t operator()(const TNodeInfo* node) const {
-        return std::hash<decltype(GetNodeSegment(node))>{}(GetNodeSegment(node));
-    }
-};
-
-using TNodeSegments = std::unordered_multiset<const TNodeInfo*, THashNodeSegment, TEqualNodeSegment>;
-
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
     if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
@@ -1520,6 +1499,7 @@ TNodeInfo& THive::GetNode(TNodeId nodeId) {
     if (it == Nodes.end()) {
         it = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first;
         TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Add(1);
+        UpdateNodeSegments(&it->second);
     }
     return it->second;
 }
@@ -1655,6 +1635,7 @@ void THive::DeleteTablet(TTabletId tabletId) {
 
 void THive::DeleteNode(TNodeId nodeId) {
     TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
+    RemoveNodeFromSegments(nodeId);
     Nodes.erase(nodeId);
 }
 
@@ -2374,7 +2355,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     THiveStats stats = {};
     stats.Values.reserve(std::distance(begin, end));
     for (auto it = begin; it != end; ++it) {
-        const auto* node = *it;
+        const auto* node = &*it;
         if (node->IsAlive() && !node->Down) {
             auto nodeValues = NormalizeRawValues(node->ResourceValues, node->GetResourceMaximumValues());
             stats.Values.emplace_back(node->Id, node->GetNodeUsage(nodeValues), nodeValues);
@@ -2415,7 +2396,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
 }
 
 THive::THiveStats THive::GetStats() const {
-    auto getNode = [](const decltype(Nodes)::value_type& p) { return &p.second; };
+    auto getNode = [](const decltype(Nodes)::value_type& p) -> const TNodeInfo& { return p.second; };
     auto nodesRange = Nodes | std::views::transform(getNode);
     return GetStats(nodesRange.begin(), nodesRange.end());
 }
@@ -2428,6 +2409,29 @@ double THive::GetScatter() const {
 double THive::GetUsage() const {
     THiveStats stats = GetStats();
     return stats.MaxUsage;
+}
+
+void THive::RemoveNodeFromSegments(TNodeInfo* node) {
+    auto it = NodeSegments.find(node->GetSegment());
+    if (it == NodeSegments.end()) {
+        return;
+    }
+
+    it->second.Remove(node);
+    if (it->second.Empty()) {
+        NodeSegments.erase(it);
+    }
+}
+ 
+void THive::RemoveNodeFromSegments(TNodeId nodeId) {
+    if (auto* node = FindNode(nodeId)) {
+        RemoveNodeFromSegments(node);
+    }
+}
+
+void THive::UpdateNodeSegments(TNodeInfo* node) {
+    RemoveNodeFromSegments(node);
+    NodeSegments[node->GetSegment()].PushBack(node);
 }
 
 std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedValues& scatterByResource) const {
@@ -2471,11 +2475,6 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         return;
     }
 
-    TNodeSegments nodeSegments;
-    for (const auto& [_, node] : Nodes) {
-        nodeSegments.insert(&node);
-    }
-
     std::optional<TBalancerSettings> settings;
     std::bitset<EBalancerTypeSize> balancersStarted;
     const auto maybeStartBalancer = [&settings, &balancersStarted, this]() -> bool {
@@ -2511,13 +2510,13 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         });
     }
 
-    auto it = nodeSegments.begin();
-    while (it != nodeSegments.end()) {
-        auto [segmentBegin, segmentEnd] = nodeSegments.equal_range(*it);
-        Y_ENSURE(segmentBegin != nodeSegments.end());
-        it = segmentEnd;
-        THiveStats stats = GetStats(segmentBegin, segmentEnd);
-        BLOG_D("ProcessTabletBalancer [" << GetNodeSegment(*segmentBegin) << "] "
+    for (const auto& [segmentId, nodes] : NodeSegments) {
+        if (nodes.Empty()) {
+            continue;
+        }
+
+        THiveStats stats = GetStats(nodes.begin(), nodes.end());
+        BLOG_D("ProcessTabletBalancer [" << segmentId << "] "
                << " MaxUsage=" << Sprintf("%.9f", stats.MaxUsage) << " on #" << stats.MaxUsageNodeId
                << " MinUsage=" << Sprintf("%.9f", stats.MinUsage) << " on #" << stats.MinUsageNodeId
                << " Scatter=" << Sprintf("%.9f", stats.Scatter));
@@ -2572,7 +2571,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             }
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
-            std::transform(segmentBegin, segmentEnd, std::back_inserter(nodeIds), [](const TNodeInfo* node) { return node->Id; });
+            std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
             BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
                        << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
             settings.emplace(TBalancerSettings{

@@ -5,7 +5,7 @@ namespace NKikimr::NKqp::NOpt {
 
 struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
 
-    TRBORelOptimizerNode(TVector<TString> labels, NYql::TOptimizerStatistics stats, std::shared_ptr<IOperator> op) :
+    TRBORelOptimizerNode(TVector<TString> labels, NYql::TOptimizerStatistics stats, TIntrusivePtr<IOperator> op) :
         TRelOptimizerNode(labels[0], std::move(stats)),
         _Labels(labels),
         Op(op)
@@ -33,7 +33,7 @@ struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
     }
 
     TVector<TString> _Labels;
-    std::shared_ptr<IOperator> Op;
+    TIntrusivePtr<IOperator> Op;
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {

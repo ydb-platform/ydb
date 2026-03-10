@@ -465,12 +465,16 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
     auto* msg = ev->Get();
     ui64 lockId = msg->LockId;
-    TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId);
+    TInstant lockTimestamp = msg->LockTimestamp;
+    TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId << " LockTimestamp# " << lockTimestamp);
 
     Y_ABORT_UNLESS(lockId, "Unexpected registration of a zero LockId");
 
     auto& lock = Locks[lockId];
     ++lock.RefCount;
+    if (lockTimestamp && !lock.Timestamp) {
+        lock.Timestamp = lockTimestamp;
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) {
@@ -550,7 +554,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
             Send(ev->Sender,
                 new TEvLongTxService::TEvLockStatus(
                     lockId, lockNode,
-                    NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
+                    NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED,
+                    lock.Timestamp),
                 0, ev->Cookie);
             lock.RepliedSubscribers[ev->Sender] = ev->Cookie;
             return;
@@ -597,18 +602,21 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
         ev->InterconnectSession, ev->Sender,
         new TEvLongTxService::TEvLockStatus(
             lockId, lockNode,
-            NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
+            NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED,
+            lock.Timestamp),
         0, ev->Cookie);
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
-    auto& record = ev->Get()->Record;
+    auto* msg = ev->Get();
+    auto& record = msg->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
     auto lockStatus = record.GetStatus();
+    auto lockTimestamp = msg->GetLockTimestamp();
     TXLOG_DEBUG("Received TEvLockStatus from " << ev->Sender
             << " for LockId# " << lockId << " LockNode# " << lockNode
-            << " LockStatus# " << lockStatus);
+            << " LockStatus# " << lockStatus << " LockTimestamp# " << lockTimestamp);
 
     auto* node = ProxyNodes.FindPtr(lockNode);
     if (!node || node->State != EProxyState::Connected) {
@@ -642,9 +650,12 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     // Special handling for successful lock subscriptions
     if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
+        if (lockTimestamp && !lock.Timestamp) {
+            lock.Timestamp = lockTimestamp;
+        }
         for (auto& pr : lock.NewSubscribers) {
             Send(pr.first,
-                new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
+                new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus, lock.Timestamp),
                 0, pr.second);
             lock.RepliedSubscribers[pr.first] = pr.second;
         }
@@ -1051,6 +1062,14 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
     }
 
     node.Locks.erase(lockId);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
+    Y_UNUSED(ev);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
+    Y_UNUSED(ev);
 }
 
 } // namespace NLongTxService

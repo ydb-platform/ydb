@@ -45,8 +45,7 @@
         }
 #endif
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IFunctionTypeInfoBuilder;
 
@@ -82,7 +81,7 @@ inline TStaticSymbols GetStaticSymbols();
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionDescriptor {
 public:
-    typedef TUniquePtr<IFunctionDescriptor> TPtr;
+    using TPtr = TUniquePtr<IFunctionDescriptor>;
 
     virtual ~IFunctionDescriptor() = default;
 
@@ -103,7 +102,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IFunctionsSink, 8);
 
-typedef IFunctionsSink IFunctionNamesSink;
+using IFunctionNamesSink = IFunctionsSink;
 
 //////////////////////////////////////////////////////////////////////////////
 // IUdfModule
@@ -154,7 +153,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
 
-typedef void (*TBackTraceCallback)();
+using TBackTraceCallback = void (*)();
 
 using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
 using TAbiVersionFunctionPtr = ui32 (*)();
@@ -195,8 +194,7 @@ static inline void AddToStaticUdfRegistry() {
     AddToStaticUdfRegistry<THead2, TTail...>();
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 extern "C" YQL_UDF_API void Register(NYql::NUdf::IRegistrator& registrator, ui32 flags);
 extern "C" YQL_UDF_API ui32 AbiVersion();
@@ -205,8 +203,7 @@ extern "C" YQL_UDF_API void BindSymbols(const NYql::NUdf::TStaticSymbols& symbol
 #endif
 extern "C" YQL_UDF_API void SetBackTraceCallback(NYql::NUdf::TBackTraceCallback callback);
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #ifndef BUILD_UDF
 
@@ -230,5 +227,4 @@ Y_PRAGMA_DIAGNOSTIC_POP
 
 #endif
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

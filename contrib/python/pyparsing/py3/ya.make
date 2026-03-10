@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(pyparsing)
 
-VERSION(3.3.1)
+VERSION(3.3.2)
 
 LICENSE(MIT)
 
@@ -32,6 +32,7 @@ PY_SRCS(
     pyparsing/tools/cvt_pyparsing_pep8_names.py
     pyparsing/unicode.py
     pyparsing/util.py
+    pyparsing/warnings.py
 )
 
 RESOURCE_FILES(

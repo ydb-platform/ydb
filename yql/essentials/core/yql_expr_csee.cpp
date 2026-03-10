@@ -540,7 +540,7 @@ namespace {
         std::unordered_multimap<ui64, TExprNode*>& uniqueNodes,
         std::unordered_multimap<ui64, TExprNode*>& incompleteNodes,
         TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore,
-        const TNodeSet& reachable) {
+        TMaybe<TNodeSet>& reachable, const TExprNode& root) {
 
         if (node.Type() == TExprNode::Argument) {
             return nullptr;
@@ -555,13 +555,13 @@ namespace {
 
         if (node.Type() == TExprNode::Lambda) {
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
+                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore, reachable, root)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
         } else {
             for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
+                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore, reachable, root)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
@@ -580,10 +580,8 @@ namespace {
                     continue;
                 }
 
-                if (!reachable.contains(iter->second)) {
-                    iter = nodesSet.erase(iter);
-                    continue;
-                }
+                if (iter->second == &node)
+                    return nullptr;
 
                 if (!EqualNodes(node, *iter->second, coStore)) {
 #ifndef NDEBUG
@@ -596,8 +594,18 @@ namespace {
                     continue;
                 }
 
-                if (iter->second == &node)
-                    return nullptr;
+                if (!reachable) {
+                    reachable.ConstructInPlace();
+                    VisitExpr(root, [&](const TExprNode& node) {
+                        Y_UNUSED(node);
+                        return true;
+                    }, *reachable);
+                }
+
+                if (!reachable->contains(iter->second)) {
+                    iter = nodesSet.erase(iter);
+                    continue;
+                }
 
                 find.first->second = iter->second;
                 if (node.Type() == TExprNode::Atom) {
@@ -650,16 +658,12 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
 {
     YQL_PROFILE_SCOPE(DEBUG, forSubGraph ? "EliminateCommonSubExpressionsForSubGraph" : "EliminateCommonSubExpressions");
     output = input;
-    TNodeSet reachable;
-    VisitExpr(*output, [&](const TExprNode& node) {
-        reachable.emplace(&node);
-        return true;
-    });
+    TMaybe<TNodeSet> reachable;
 
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable);
+    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
     YQL_ENSURE(forSubGraph || !newNode);
     if (!renames.empty()) {
         TNodeSet visited;

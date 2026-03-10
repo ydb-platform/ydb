@@ -7,6 +7,7 @@
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
@@ -28,11 +29,9 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TColumnSchema ColumnFromYson(const std::string& yson)
+TColumnSchema ColumnFromYson(std::string_view yson)
 {
-    auto maybeDeletedColumn = ConvertTo<TMaybeDeletedColumnSchema>(TYsonStringBuf(yson));
-    YT_VERIFY(!maybeDeletedColumn.Deleted());
-    return static_cast<TColumnSchema>(maybeDeletedColumn);
+    return ConvertTo<TConstrainedColumnSchema>(TYsonStringBuf(yson));
 }
 
 TEST(TTableSchemaTest, ColumnTypeV1Deserialization)

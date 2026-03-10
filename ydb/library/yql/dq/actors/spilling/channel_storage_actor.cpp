@@ -66,7 +66,7 @@ public:
 
     void Bootstrap() {
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_ << "_" << CreateGuidAsString(),
-            SelfId(), true);
+            SelfId(), true, ESpillingType::Channel);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqChannelStorageActor::WorkState);
     }

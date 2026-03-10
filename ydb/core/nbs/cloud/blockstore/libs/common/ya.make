@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    block_range_map.cpp
     block_range.cpp
 )
 
@@ -10,3 +11,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

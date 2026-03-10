@@ -128,7 +128,10 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
-    SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
+    auto* spaceWatcherRawPtr = SpaceWatcher.release();
+    SpaceWatcherId = RegisterWithSameMailbox(spaceWatcherRawPtr);
+    // Actor System will keep this object
+    SpaceWatcher = std::unique_ptr<TSpaceWatcher, std::function<void(TSpaceWatcher*)>>(spaceWatcherRawPtr, [](auto*){});
     ScanDiagnosticsActorId = Register(new NDiagnostics::TScanDiagnosticsActor());
     ActorsToStop.push_back(ScanDiagnosticsActorId);
     Limits.RegisterControls(icb);
@@ -418,27 +421,29 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("There are stats for tables", tables.size());
     ev->Record.ClearTables();
     for (const auto& [internalPathId, table] : tables) {
-        const auto& schemeShardLocalPathId = table.GetPathId().SchemeShardLocalPathId;
-        auto* periodicTableStats = ev->Record.AddTables();
-        periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(schemeShardLocalPathId.GetRawValue());
+        for (const auto& unifiedPathId : table.GetPathIds()) {
+            const auto& schemeShardLocalPathId = unifiedPathId.SchemeShardLocalPathId;
+            auto* periodicTableStats = ev->Record.AddTables();
+            periodicTableStats->SetDatashardId(TabletID());
+            periodicTableStats->SetTableLocalId(schemeShardLocalPathId.GetRawValue());
 
-        periodicTableStats->SetShardState(2);
-        if (ev->Record.HasGeneration()) {
-            periodicTableStats->SetGeneration(ev->Record.GetGeneration());
-        }
-        periodicTableStats->SetRound(StatsReportRound);
-        periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
-        periodicTableStats->SetStartTime(StartTime().MilliSeconds());
-
-        if (executor) {
-            if (auto* resourceMetrics = executor->GetResourceMetrics()) {
-                resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+            periodicTableStats->SetShardState(2);
+            if (ev->Record.HasGeneration()) {
+                periodicTableStats->SetGeneration(ev->Record.GetGeneration());
             }
-        }
+            periodicTableStats->SetRound(StatsReportRound);
+            periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
+            periodicTableStats->SetStartTime(StartTime().MilliSeconds());
 
-        tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Add stats for table, tableLocalID", schemeShardLocalPathId);
+            if (executor) {
+                if (auto* resourceMetrics = executor->GetResourceMetrics()) {
+                    resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+                }
+            }
+
+            tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Add stats for table, tableLocalID", schemeShardLocalPathId);
+        }
     }
 }
 

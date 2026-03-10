@@ -137,7 +137,7 @@ enum ESimpleCounters {
     COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
     COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
 
-    COUNTER_COMPACTION_QUEUE_SIZE = 114                   [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
 
     COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
     COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
@@ -149,10 +149,10 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxDropReplicationCascade = 122  [(CounterOpts) = {Name: "InFlightOps/DropReplicationCascade"}];
 
-    COUNTER_COMPACTION_QUEUE_SIZE_SH = 123                [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
-    COUNTER_COMPACTION_QUEUE_SIZE_DELETES = 124           [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
-    COUNTER_COMPACTION_QUEUE_RUNNING = 125                [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
-    COUNTER_COMPACTION_QUEUE_WAITING_REPEAT = 126         [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_SH = 123     [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_DELETES = 124 [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_RUNNING = 125     [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_WAITING_REPEAT = 126 [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
     COUNTER_SHARDS_WITH_BORROWED_DATA = 127               [(CounterOpts) = {Name: "TableShardsWithBorrowedData"}];
     COUNTER_SHARDS_WITH_LOANED_DATA = 128                 [(CounterOpts) = {Name: "TableShardsWithLoanedData"}];
 
@@ -272,6 +272,15 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
 
     COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
+
+    COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214 [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
+    COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215 [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
+    
+    COUNTER_IN_FLIGHT_OPS_TxReadOnlyCopyColumnTable = 216 [(CounterOpts) = {Name: "InFlightOps/ReadOnlyCopyColumnTable"}];
+
+    COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE = 217    [(CounterOpts) = {Name: "ForcedCompactionOperationsQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE = 218    [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 }
 
 enum ECumulativeCounters {
@@ -444,6 +453,14 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 
     COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
+    
+    COUNTER_FINISHED_OPS_TxReadOnlyCopyColumnTable = 134 [(CounterOpts) = {Name: "FinishedOps/ReadOnlyCopyColumnTable"}];
+
+    COUNTER_FORCED_COMPACTION_OK = 135            [(CounterOpts) = {Name: "ForcedCompactionOk"}];
+    COUNTER_FORCED_COMPACTION_FAILED = 136        [(CounterOpts) = {Name: "ForcedCompactionFailed"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT = 137       [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
+    COUNTER_FORCED_COMPACTION_NOT_NEEDED = 138    [(CounterOpts) = {Name: "ForcedCompactionNotNeeded"}];
+    COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
 }
 
 enum EPercentileCounters {
@@ -699,4 +716,11 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+
+    TXTYPE_CANCEL_FORCED_COMPACTION = 110   [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
+    TXTYPE_CREATE_FORCED_COMPACTION = 111   [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
+    TXTYPE_FORGET_FORCED_COMPACTION = 112   [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
+    TXTYPE_GET_FORCED_COMPACTION = 113      [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
+    TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
+    TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
 }

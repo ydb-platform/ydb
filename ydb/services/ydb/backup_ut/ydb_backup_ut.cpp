@@ -207,8 +207,8 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
     }; \
     static TTestRegistration##N testRegistration##N; \
     void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-    
-    
+
+
 #define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
     struct TTestCase##N : public TCurrentTestCase { \
         ENUM_TYPE Value; \
@@ -367,7 +367,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -383,7 +382,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -836,7 +834,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
@@ -847,7 +845,7 @@ void TestRestoreTableWithIndex(
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
@@ -2079,7 +2077,7 @@ bool DontTestThisType(Ydb::Type::PrimitiveTypeId type, const bool isOlap = false
         case Ydb::Type_PrimitiveTypeId_INTERVAL:
         case Ydb::Type_PrimitiveTypeId_DYNUMBER:
         case Ydb::Type_PrimitiveTypeId_BOOL:
-            return isOlap; // these types aren't supported for column tables    
+            return isOlap; // these types aren't supported for column tables
         case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -3730,6 +3728,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+            runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
         }
 
         TKikimrWithGrpcAndRootSchema& GetServer() {
@@ -3781,13 +3780,17 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             NYdb::NScheme::ESchemeEntryType::Transfer,
             NYdb::NScheme::ESchemeEntryType::ExternalDataSource,
             NYdb::NScheme::ESchemeEntryType::ExternalTable,
+            NYdb::NScheme::ESchemeEntryType::SysView,
         }, entry.Type) && entry.Name != "replica"; // Hack to avoid replica table export
     }
 
     void RecursiveListSourceToItems(TSchemeClient& schemeClient, const TString& source, const TString& destination,
         NExport::TExportToS3Settings& exportSettings
     ) {
-        const auto listSettings = NConsoleClient::TRecursiveListSettings().Filter(FilterSupportedSchemeObjects);
+        const auto listSettings = NConsoleClient::TRecursiveListSettings()
+            .Filter(FilterSupportedSchemeObjects)
+            .SkipSys(false);
+
         const auto sourceListing = NConsoleClient::RecursiveList(schemeClient, source, listSettings);
         UNIT_ASSERT_C(sourceListing.Status.IsSuccess(), sourceListing.Status.GetIssues());
 
@@ -4194,6 +4197,20 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestSystemViewBackupRestore() {
+        TS3TestEnv testEnv;
+        TSchemeClient schemeClient(testEnv.GetDriver());
+        constexpr const char* sysView = "/Root/.sys/partition_stats";
+
+        TestReplaceSystemViewACL(
+            sysView,
+            testEnv.GetTableSession(),
+            schemeClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {".sys/partition_stats"})
+        );
+    }
+
     void TestChangefeedBackupRestore() {
         TS3TestEnv testEnv;
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
@@ -4399,6 +4416,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestTransferBackupRestore(ESecretType::SecretTypeOld);
                 TestTransferBackupRestore(ESecretType::SecretTypeScheme);
                 break;
+            case EPathTypeSysView:
+                TestSystemViewBackupRestore();
+                break;
             case EPathTypeExternalTable:
                 return TestExternalTableBackupRestore();
             case EPathTypeExternalDataSource: {
@@ -4421,8 +4441,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
-            case EPathTypeSysView:
-                break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:

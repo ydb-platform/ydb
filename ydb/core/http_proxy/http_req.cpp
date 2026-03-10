@@ -1089,6 +1089,9 @@ namespace NKikimr::NHttpProxy {
                 , ProtoCall(protoCall)
                 , Method(method)
             {
+                if (Signature && Signature->Empty()) {
+                    Signature.Reset();
+                }
             }
 
             TStringBuilder LogPrefix() const {
@@ -1385,10 +1388,17 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (HttpContext.IamToken.empty() && Signature) {
+                if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
+                    if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                        return ReplyWithMessageQueueError(
+                            ctx,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.HttpStatusCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.ErrorCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.DefaultMessage);
+                    }
                     SendGrpcRequestNoDriver(ctx);
                 }
 
@@ -1512,6 +1522,7 @@ namespace NKikimr::NHttpProxy {
                                                           NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(CreateQueue);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
@@ -1520,6 +1531,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 

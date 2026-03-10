@@ -68,12 +68,24 @@ ELSE()
         ReadTzDate32
         ReadTzDatetime64
         ReadTzTimestamp64
+        ReadTzDateNative
+        ReadTzDatetimeNative
+        ReadTzTimestampNative
+        ReadTzDate32Native
+        ReadTzDatetime64Native
+        ReadTzTimestamp64Native
         WriteTzDate
         WriteTzDatetime
         WriteTzTimestamp
         WriteTzDate32
         WriteTzDatetime64
         WriteTzTimestamp64
+        WriteTzDateNative
+        WriteTzDatetimeNative
+        WriteTzTimestampNative
+        WriteTzDate32Native
+        WriteTzDatetime64Native
+        WriteTzTimestamp64Native
         GetWrittenBytes
         FillZero
     )

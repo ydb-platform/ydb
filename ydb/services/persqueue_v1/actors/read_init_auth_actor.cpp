@@ -115,7 +115,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
-    topicsIter->second.PartitionGraph = entry.PQGroupInfo->PartitionGraph;
+    topicsIter->second.SetPartitionGraph(entry.PQGroupInfo->PartitionGraph);
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -293,7 +293,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.FolderId,
             holder.MeteringMode,
             holder.Partitions,
-            holder.PartitionGraph
+            holder.GetPartitionGraph()
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

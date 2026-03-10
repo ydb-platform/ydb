@@ -103,14 +103,8 @@ public:
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/capabilities",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
@@ -123,60 +117,64 @@ public:
                 .RelPath = "monitoring",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .AuthMode = TMon::EAuthMode::Disabled,
             });
+            const bool requireCountersAuth = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
+                .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
-            mon->RegisterActorPage({
-                .RelPath = "healthcheck",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false, // auth is checked inside handler
+            // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked in handler.
+            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            mon->RegisterActorHandler({
+                .Path = "/healthcheck",
+                .Handler = ctx.SelfID,
+                .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
+                // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
@@ -215,12 +213,21 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    mon->RegisterActorHandler({
-                        .Path = name,
-                        .Handler = ctx.SelfID,
-                        .UseAuth = true,
-                        .AllowedSIDs = databaseAllowedSIDs,
-                    });
+                    if (name == "/viewer/capabilities") {
+                        // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Disabled,
+                        });
+                    } else {
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Enforce,
+                            .AllowedSIDs = databaseAllowedSIDs,
+                        });
+                    }
                 }
             }
         }
@@ -237,7 +244,7 @@ public:
     TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) override;
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
-    TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
+    TString GETHTTPACCESSDENIED(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
@@ -604,6 +611,9 @@ private:
             }
             lastModified = GetCompileTime().ToRfc822String();
         }
+        if (type.empty()) {
+            type = "text/html";
+        }
         if (!blob.empty()) {
             if (name == "/index.html" || name == "/v2/index.html") { // we send root's index in such format that it could be embedded into existing web interface
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(static_cast<const char*>(blob.data()), blob.size())));
@@ -684,10 +694,6 @@ private:
         }
         if (path.StartsWith("/counters/hosts")) {
             Register(new TCountersHostsList(this, ev));
-            return;
-        }
-        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
-            Register(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
@@ -773,6 +779,10 @@ private:
                 Send(sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest()));
                 return;
             }
+        }
+        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
+            Register(new TJsonHealthCheck(this, ev));
+            return;
         }
         Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(GetHTTPNOTFOUND(ev->Get()))));
     }
@@ -880,9 +890,11 @@ TString TViewer::GetHTTPBADREQUEST(const TRequestState& request, TString content
     return res;
 }
 
-TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
+namespace {
+
+TString BuildHttpAuthErrorResponse(TViewer* viewer, const TRequestState& request, TStringBuf statusLine, TString contentType, TString response) {
     TStringBuilder res;
-    res << "HTTP/1.1 403 Forbidden\r\n"
+    res << "HTTP/1.1 " << statusLine << "\r\n"
         << "Connection: Close\r\n";
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
@@ -890,14 +902,22 @@ TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentT
     if (response) {
         res << "Content-Length: " << response.size() << "\r\n";
     }
-    FillCORS(res, request);
-    FillTraceId(res, request);
+    viewer->FillCORS(res, request);
+    viewer->FillTraceId(res, request);
     res << "\r\n";
     if (response) {
         res << response;
     }
     return res;
 }
+
+} // namespace
+
+TString TViewer::GETHTTPACCESSDENIED(const TRequestState& request, TString contentType, TString response) {
+    TStringBuf statusLine = request.GetUserTokenObject().empty() ? "401 Unauthorized" : "403 Forbidden";
+    return BuildHttpAuthErrorResponse(this, request, statusLine, std::move(contentType), std::move(response));
+}
+
 
 TString TViewer::GetHTTPNOTFOUND(const TRequestState& request) {
     TStringBuilder res;

@@ -382,9 +382,9 @@ void TSolomonRegistry::Collect(IInvokerPtr offloadInvoker)
         offloadFutures.push_back(future);
     }
 
-    // Use blocking Get(), because we want to lock current thread while data structure is updating.
+    // Use BlockingGet(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
-        future.Get();
+        future.BlockingGet();
     }
 
     ProjectionCount_.Update(*projectionCount);
@@ -561,8 +561,12 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors()
     return DumpSensors(TTagSet{});
 }
 
-TTagIdSet TSolomonRegistry::EncodeTagSet(const TTagSet& tagSet)
+TTagIdSet TSolomonRegistry::EncodeTagSet(const TTagSet& tags)
 {
+    auto tagSet = tags;
+    for (const auto& [dynamicTag, _] : tagSet.DynamicTags()) {
+        tagSet.ApplyDynamicTag(dynamicTag);
+    }
     return TTagIdSet(tagSet, TagRegistry_.Encode(tagSet));
 }
 

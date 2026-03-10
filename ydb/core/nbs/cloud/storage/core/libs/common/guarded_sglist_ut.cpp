@@ -170,18 +170,24 @@ Y_UNIT_TEST_SUITE(TGuardedSgListTest)
             UNIT_ASSERT(guard);
             const auto& sgList = guard.Get();
             UNIT_ASSERT(sgList.size() == 6);
-            UNIT_ASSERT_EQUAL(sgList[0].AsStringBuf(),
-                              TString(DefaultBlockSize, 'a'));
-            UNIT_ASSERT_EQUAL(sgList[1].AsStringBuf(),
-                              TString(DefaultBlockSize, 'a'));
-            UNIT_ASSERT_EQUAL(sgList[2].AsStringBuf(),
-                              TString(DefaultBlockSize, 'b'));
-            UNIT_ASSERT_EQUAL(sgList[3].AsStringBuf(),
-                              TString(DefaultBlockSize, 'c'));
-            UNIT_ASSERT_EQUAL(sgList[4].AsStringBuf(),
-                              TString(DefaultBlockSize, 'c'));
-            UNIT_ASSERT_EQUAL(sgList[5].AsStringBuf(),
-                              TString(DefaultBlockSize, 'c'));
+            UNIT_ASSERT_EQUAL(
+                sgList[0].AsStringBuf(),
+                TString(DefaultBlockSize, 'a'));
+            UNIT_ASSERT_EQUAL(
+                sgList[1].AsStringBuf(),
+                TString(DefaultBlockSize, 'a'));
+            UNIT_ASSERT_EQUAL(
+                sgList[2].AsStringBuf(),
+                TString(DefaultBlockSize, 'b'));
+            UNIT_ASSERT_EQUAL(
+                sgList[3].AsStringBuf(),
+                TString(DefaultBlockSize, 'c'));
+            UNIT_ASSERT_EQUAL(
+                sgList[4].AsStringBuf(),
+                TString(DefaultBlockSize, 'c'));
+            UNIT_ASSERT_EQUAL(
+                sgList[5].AsStringBuf(),
+                TString(DefaultBlockSize, 'c'));
         }
 
         sgList2.Close();
@@ -306,14 +312,13 @@ Y_UNIT_TEST_SUITE(TGuardedSgListWithThreadsTest)
         template <typename F>
         void Add(F f)
         {
-            Workers.push_back(
-                SystemThreadFactory()->Run(
-                    [this, f = std::move(f)]()
-                    {
-                        while (AtomicGet(ShouldStart) != 1) {
-                        }
-                        f();
-                    }));
+            Workers.push_back(SystemThreadFactory()->Run(
+                [this, f = std::move(f)]()
+                {
+                    while (AtomicGet(ShouldStart) != 1) {
+                    }
+                    f();
+                }));
         }
 
         void Start()

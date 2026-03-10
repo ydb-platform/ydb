@@ -162,7 +162,7 @@ static_assert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t GetDataWeight(EValueType type)
+inline i64 GetDataWeight(EValueType type)
 {
     switch (type) {
         case EValueType::Null:
@@ -188,7 +188,7 @@ inline size_t GetDataWeight(EValueType type)
     }
 }
 
-inline size_t GetDataWeight(const TUnversionedValue& value)
+inline i64 GetDataWeight(const TUnversionedValue& value)
 {
     if (IsStringLikeType(value.Type)) {
         return value.Length;
@@ -251,9 +251,10 @@ TFingerprint GetFarmFingerprint(TUnversionedRow row);
 size_t GetUnversionedRowByteSize(ui32 valueCount);
 
 //! Returns the storage-invariant data weight of a given row.
-size_t GetDataWeight(TUnversionedRow row);
+i64 GetDataWeight(TUnversionedRow row);
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows);
+//! Returns the sum of data weights of rows.
+i64 GetDataWeight(TRange<TUnversionedRow> rows);
 
 ////////////////////////////////////////////////////////////////////////////////
 

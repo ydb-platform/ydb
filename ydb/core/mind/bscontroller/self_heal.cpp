@@ -632,9 +632,7 @@ namespace NKikimr::NBsController {
             geom.ResizeGroup(groupDefinition);
 
             for (const auto& [vdiskId, vdisk] : vdisks) {
-                if (!vdisk.Decommitted) {
-                    groupDefinition[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = vdisk.Location.ComprisingPDiskId();
-                }
+                groupDefinition[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = vdisk.Location.ComprisingPDiskId();
             }
 
             return std::move(groupDefinition);

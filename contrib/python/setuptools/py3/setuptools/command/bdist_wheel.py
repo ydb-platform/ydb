@@ -449,8 +449,7 @@ class bdist_wheel(Command):
 
         if not self.keep_temp:
             log.info(f"removing {self.bdist_dir}")
-            if not self.dry_run:
-                _shutil.rmtree(self.bdist_dir)
+            _shutil.rmtree(self.bdist_dir)
 
     def write_wheelfile(
         self, wheelfile_base: str, generator: str = f"setuptools ({__version__})"

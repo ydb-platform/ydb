@@ -20,6 +20,8 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/core/protos/sys_view_types.proto";
+import "ydb/core/scheme/protos/key_range.proto";
 
 enum ERequestType {
     REQUEST_TYPE_PROCESS_QUERY = 1;
@@ -169,6 +171,7 @@ message TQueryRequest {
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
+    optional bool IsWarmupCompilation = 41;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -334,6 +337,8 @@ message TCompileCacheQueryInfo {
     optional string Warnings = 8;
     optional google.protobuf.Duration CompilationDuration = 9;
     optional string MetaInfo = 10;
+    optional bool IsTruncated = 11;
+    optional string Database = 12;
 }
 
 message TSessionInfo {
@@ -843,6 +848,9 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
     repeated uint32 DefaultColumnsIds = 23;
+    repeated TKqpColumnMetadataProto ReturningColumns = 24;
+    optional uint64 QuerySpanId = 25;
+    optional string UserSID = 26;
 }
 
 message TReadVectorTopK {
@@ -874,6 +882,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
     optional TReadVectorTopK VectorTopK = 19;
+    optional uint64 QuerySpanId = 20;
 }
 
 message TKqpFullTextSourceSettings {
@@ -908,9 +917,25 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
-    optional string QueryMode = 14;
+    optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
+    optional string Mode = 16;
+
+    optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
 };
+
+message TKqpSysViewSourceSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto Columns = 2;
+    repeated TKqpColumnMetadataProto KeyColumns = 3;
+    optional string SysViewInfo = 4;
+    optional NKikimrSysView.TSysViewDescription SysViewDescription = 5;
+    optional string Database = 6;
+    optional string TablePath = 7;
+    optional bool Reverse = 8;
+    repeated NKikimrTx.TKeyRange KeyRanges = 9;
+    optional bytes UserToken = 10;
+}
 
 message TKqpSequencerSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
@@ -1055,4 +1080,16 @@ message TStreamingQueryState {
     optional bool Run = 9;
     optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+}
+
+// Cross-node lookup of QuerySpanId -> QueryText for TLI logging.
+// Used when the victim's SessionActor needs to look up the breaker's query text
+// from the node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated).
+message TEvLookupQueryTextRequest {
+    optional uint64 QuerySpanId = 1;
+}
+
+message TEvLookupQueryTextResponse {
+    optional uint64 QuerySpanId = 1;
+    optional string QueryText = 2;
 }

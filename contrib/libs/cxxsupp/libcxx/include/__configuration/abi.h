@@ -30,8 +30,20 @@
 #elif _LIBCPP_ABI_FORCE_MICROSOFT
 #  define _LIBCPP_ABI_MICROSOFT
 #else
+// Windows uses the Microsoft ABI
 #  if defined(_WIN32) && defined(_MSC_VER)
 #    define _LIBCPP_ABI_MICROSOFT
+
+// 32-bit ARM uses the Itanium ABI with a few differences (array cookies, etc),
+// and so does 64-bit ARM on Apple platforms.
+#  elif defined(__arm__) || (defined(__APPLE__) && defined(__aarch64__))
+#    define _LIBCPP_ABI_ITANIUM_WITH_ARM_DIFFERENCES
+
+// Non-Apple 64-bit ARM uses the vanilla Itanium ABI
+#  elif defined(__aarch64__)
+#    define _LIBCPP_ABI_ITANIUM
+
+// We assume that other architectures also use the vanilla Itanium ABI too
 #  else
 #    define _LIBCPP_ABI_ITANIUM
 #  endif
@@ -57,8 +69,6 @@
 // because it changes the mangling of the virtual function located in the vtable, which
 // changes how it gets signed.
 #  define _LIBCPP_ABI_BAD_FUNCTION_CALL_GOOD_WHAT_MESSAGE
-// Enable optimized version of __do_get_(un)signed which avoids redundant copies.
-#  define _LIBCPP_ABI_OPTIMIZED_LOCALE_NUM_GET
 // Give reverse_iterator<T> one data member of type T, not two.
 // Also, in C++17 and later, don't derive iterator types from std::iterator.
 #  define _LIBCPP_ABI_NO_ITERATOR_BASES

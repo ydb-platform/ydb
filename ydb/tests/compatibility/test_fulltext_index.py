@@ -92,27 +92,25 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
         table_name = f"table_{text_type}"
         index_name = f"idx_{index_type}_{tokenizer}"
         queries = []
-        utf8 = ''
-        if text_type == 'utf8':
-            utf8 = 'Utf8'
         for i in range(self.query_count):
-            query = ' '.join(self.good_queries[table_name][i])
+            query = self.good_queries[table_name][i]
             queries.append([
                 True, f"""
-                SELECT `pk`, `text`
+                SELECT `key`, `text`
                 FROM `{table_name}`
                 VIEW `{index_name}`
-                WHERE FullText::Contains{utf8}(`text`, "{query}")
+                WHERE FulltextMatch(`text`, "{query}")
                 LIMIT {self.limit};
                 """
             ])
             if index_type == 'fulltext_relevance':
                 queries.append([
                     True, f"""
-                    SELECT `pk`, `text`, FullText::Relevance{utf8}(`text`, "{query}") as `rel`
+                    SELECT `key`, `text`, FulltextScore(`text`, "{query}") as `rel`
                     FROM `{table_name}`
                     VIEW `{index_name}`
-                    ORDER BY `rel`
+                    WHERE FulltextScore(`text`, "{query}") > 0
+                    ORDER BY `rel` DESC
                     LIMIT {self.limit};
                     """
                 ])

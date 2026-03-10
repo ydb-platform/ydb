@@ -11,19 +11,21 @@
 
 #include <util/generic/scope.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
 class TSubqueryNode: public INode {
 public:
-    TSubqueryNode(TSourcePtr&& source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped)
+    TSubqueryNode(TSourcePtr&& source, TString alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped)
         : INode(source->GetPos())
         , Source_(std::move(source))
-        , Alias_(alias)
+        , Alias_(std::move(alias))
         , InSubquery_(inSubquery)
         , EnsureTupleSize_(ensureTupleSize)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
     {
         YQL_ENSURE(!Alias_.empty());
     }
@@ -149,7 +151,7 @@ public:
 private:
     TNodePtr Source_;
     TString Alias_;
-    bool IsUsed_;
+    bool IsUsed_ = false;
 
     TNodePtr Node_;
 };
@@ -160,11 +162,17 @@ TNodePtr BuildYqlSubquery(TNodePtr source, TString alias) {
 
 class TSourceNode: public INode {
 public:
-    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables)
+    TSourceNode(
+        TPosition pos,
+        TSourcePtr&& source,
+        bool checkExist,
+        bool isInlineScalar,
+        bool isPure)
         : INode(pos)
         , Source_(std::move(source))
         , CheckExist_(checkExist)
-        , WithTables_(withTables)
+        , IsInlineScalar_(isInlineScalar)
+        , IsPure_(isPure)
     {
     }
 
@@ -173,16 +181,28 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
+        if (IsInlineScalar_ &&
+            !ctx.EnsureBackwardCompatibleFeatureAvailable(
+                Source_->GetPos(),
+                "Inline subquery",
+                MakeLangVersion(2025, 04)))
+        {
+            return false;
+        }
+
         if (AsInner_) {
             Source_->UseAsInner();
         }
+
         if (!Source_->Init(ctx, src)) {
             return false;
         }
+
         Node_ = Source_->Build(ctx);
         if (!Node_) {
             return false;
         }
+
         if (src) {
             if (IsSubquery()) {
                 /// should be not used?
@@ -200,19 +220,31 @@ public:
             }
             src->AddDependentSource(Source_);
         }
-        if (Node_ && WithTables_) {
-            TTableList tableList;
-            Source_->GetInputTables(tableList);
 
-            TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
-            if (!inputTables->Init(ctx, Source_.Get())) {
-                return false;
+        TTableList tableList;
+        Source_->GetInputTables(tableList);
+
+        if (IsPure_ && !tableList.empty()) {
+            TSet<TPosition> positions = {Pos_};
+            for (const auto& table : tableList) {
+                if (table.Keys) {
+                    positions.emplace(table.Keys->GetPos());
+                }
             }
-
-            auto blockContent = inputTables;
-            blockContent = L(blockContent, Y("return", Node_));
-            Node_ = Y("block", Q(blockContent));
+            for (const auto& pos : positions) {
+                ctx.Error(pos) << "Reading a table in a pure context";
+            }
+            return false;
         }
+
+        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+        if (!inputTables->Init(ctx, Source_.Get())) {
+            return false;
+        }
+
+        auto blockContent = inputTables;
+        blockContent = L(blockContent, Y("return", Node_));
+        Node_ = Y("block", Q(blockContent));
 
         return true;
     }
@@ -231,7 +263,12 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TSourceNode(Pos_, Source_->CloneSource(), CheckExist_, WithTables_);
+        return new TSourceNode(
+            Pos_,
+            Source_->CloneSource(),
+            CheckExist_,
+            IsInlineScalar_,
+            IsPure_);
     }
 
 protected:
@@ -239,10 +276,22 @@ protected:
     TNodePtr Node_;
     bool CheckExist_;
     bool WithTables_;
+    bool IsInlineScalar_;
+    bool IsPure_;
 };
 
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables) {
-    return new TSourceNode(pos, std::move(source), checkExist, withTables);
+TNodePtr BuildSourceNode(
+    TPosition pos,
+    TSourcePtr source,
+    bool checkExist,
+    bool isInlineScalar,
+    bool isPure) {
+    return new TSourceNode(
+        pos,
+        std::move(source),
+        /*checkExist=*/checkExist,
+        /*isInlineScalar=*/isInlineScalar,
+        /*isPure=*/isPure);
 }
 
 class TFakeSource: public ISource {
@@ -350,9 +399,9 @@ TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom, bool inSubquery) {
 
 class TNodeSource: public ISource {
 public:
-    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource)
+    TNodeSource(TPosition pos, TNodePtr node, bool wrapToList, bool wrapByTableSource)
         : ISource(pos)
-        , Node_(node)
+        , Node_(std::move(node))
         , WrapToList_(wrapToList)
         , WrapByTableSource_(wrapByTableSource)
     {
@@ -591,8 +640,7 @@ public:
     TNodePtr Build(TContext& ctx) final {
         TNodePtr block;
         auto muxArgs = Y();
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (auto& source : Sources_) {
             auto input = source->Build(ctx);
             auto ref = ctx.MakeName("src");
             muxArgs->Add(ref);
@@ -632,10 +680,10 @@ TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources) {
 
 class TSubqueryRefNode: public IRealSource {
 public:
-    TSubqueryRefNode(const TNodePtr& subquery, const TString& alias, int tupleIndex)
+    TSubqueryRefNode(const TNodePtr& subquery, TString alias, int tupleIndex)
         : IRealSource(subquery->GetPos())
         , Subquery_(subquery)
-        , Alias_(alias)
+        , Alias_(std::move(alias))
         , TupleIndex_(tupleIndex)
     {
         YQL_ENSURE(subquery->GetSource());
@@ -736,10 +784,10 @@ bool IsSubqueryRef(const TSourcePtr& source) {
     return dynamic_cast<const TSubqueryRefNode*>(source.Get()) != nullptr;
 }
 
-class TYqlSubqueryRefNode final: public INode {
+class TYqlSubqueryRefNode final: public IRealSource {
 public:
     TYqlSubqueryRefNode(TNodePtr subquery, TString ref)
-        : INode(subquery->GetPos())
+        : IRealSource(subquery->GetPos())
         , Subquery_(std::move(subquery))
         , Ref_(std::move(ref))
     {
@@ -762,8 +810,22 @@ public:
         return Node_->Translate(ctx);
     }
 
+    TNodePtr Build(TContext& ctx) final {
+        Y_UNUSED(ctx);
+        return Node_;
+    }
+
+    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
+        Y_UNUSED(ctx, column);
+        return true;
+    }
+
     TPtr DoClone() const final {
         return new TYqlSubqueryRefNode(Subquery_, Ref_);
+    }
+
+    ISource* GetSource() final {
+        return this;
     }
 
 private:
@@ -927,11 +989,11 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString
 
 class TInnerSource: public IProxySource {
 public:
-    TInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label)
+    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label)
         : IProxySource(pos, nullptr)
-        , Node_(node)
-        , Service_(service)
-        , Cluster_(cluster)
+        , Node_(std::move(node))
+        , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
     {
         SetLabel(label);
     }
@@ -1066,7 +1128,9 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
     return new TInnerSource(pos, node, service, cluster, label);
 }
 
-static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
+namespace {
+
+bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
     if (assume && !expr->IsPlainColumn()) {
         ctx.Error(expr->GetPos()) << "Only column names can be used in " << sqlConstruction;
         return false;
@@ -1090,6 +1154,8 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
     return true;
 }
 
+} // namespace
+
 /// \todo move to reduce.cpp? or mapreduce.cpp?
 class TReduceSource: public IRealSource {
 public:
@@ -1101,7 +1167,7 @@ public:
                   TVector<TNodePtr>&& args,
                   TNodePtr udf,
                   TNodePtr having,
-                  const TWriteSettings& settings,
+                  TWriteSettings settings,
                   const TVector<TSortSpecificationPtr>& assumeOrderBy,
                   bool listCall)
         : IRealSource(pos)
@@ -1110,9 +1176,9 @@ public:
         , OrderBy_(std::move(orderBy))
         , Keys_(std::move(keys))
         , Args_(std::move(args))
-        , Udf_(udf)
-        , Having_(having)
-        , Settings_(settings)
+        , Udf_(std::move(udf))
+        , Having_(std::move(having))
+        , Settings_(std::move(settings))
         , AssumeOrderBy_(assumeOrderBy)
         , ListCall_(listCall)
     {
@@ -1363,11 +1429,11 @@ bool InitAndGetGroupKey(TContext& ctx, const TNodePtr& expr, ISource* src, TStri
 
 class TCompositeSelect: public IRealSource {
 public:
-    TCompositeSelect(TPosition pos, TSourcePtr source, TSourcePtr originalSource, const TWriteSettings& settings)
+    TCompositeSelect(TPosition pos, TSourcePtr source, TSourcePtr originalSource, TWriteSettings settings)
         : IRealSource(pos)
         , Source_(std::move(source))
         , OriginalSource_(std::move(originalSource))
-        , Settings_(settings)
+        , Settings_(std::move(settings))
     {
         YQL_ENSURE(Source_);
     }
@@ -1597,18 +1663,18 @@ public:
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
-        const TString& groupBySuffix,
+        TString groupBySuffix,
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
-        const TWinSpecs& winSpecs,
+        TWinSpecs winSpecs,
         TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
         bool forceWithout,
         bool selectStream,
-        const TWriteSettings& settings,
+        TWriteSettings settings,
         TColumnsSets&& uniqueSets,
         TColumnsSets&& distinctSets)
         : IRealSource(pos)
@@ -1617,17 +1683,17 @@ public:
         , GroupBy_(groupBy)
         , AssumeSorted_(assumeSorted)
         , CompactGroupBy_(compactGroupBy)
-        , GroupBySuffix_(groupBySuffix)
+        , GroupBySuffix_(std::move(groupBySuffix))
         , OrderBy_(orderBy)
-        , Having_(having)
-        , WinSpecs_(winSpecs)
+        , Having_(std::move(having))
+        , WinSpecs_(std::move(winSpecs))
         , Terms_(terms)
         , Without_(without)
         , ForceWithout_(forceWithout)
         , Distinct_(distinct)
-        , LegacyHoppingWindowSpec_(legacyHoppingWindowSpec)
+        , LegacyHoppingWindowSpec_(std::move(legacyHoppingWindowSpec))
         , SelectStream_(selectStream)
-        , Settings_(settings)
+        , Settings_(std::move(settings))
         , UniqueSets_(std::move(uniqueSets))
         , DistinctSets_(std::move(distinctSets))
     {
@@ -2455,16 +2521,16 @@ public:
         TVector<TNodePtr>&& terms,
         bool listCall,
         bool processStream,
-        const TWriteSettings& settings,
+        TWriteSettings settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy)
         : IRealSource(pos)
         , Source_(std::move(source))
-        , With_(with)
+        , With_(std::move(with))
         , WithExtFunction_(withExtFunction)
         , Terms_(std::move(terms))
         , ListCall_(listCall)
         , ProcessStream_(processStream)
-        , Settings_(settings)
+        , Settings_(std::move(settings))
         , AssumeOrderBy_(assumeOrderBy)
     {
     }
@@ -2930,12 +2996,12 @@ TSourcePtr BuildSelectCore(
 
 class TSelectOp: public IRealSource {
 public:
-    TSelectOp(TPosition pos, TVector<TSourcePtr>&& sources, const TString& op, bool quantifierAll, const TWriteSettings& settings)
+    TSelectOp(TPosition pos, TVector<TSourcePtr>&& sources, TString op, bool quantifierAll, TWriteSettings settings)
         : IRealSource(pos)
         , Sources_(std::move(sources))
-        , Operator_(op)
+        , Operator_(std::move(op))
         , QuantifierAll_(quantifierAll)
-        , Settings_(settings)
+        , Settings_(std::move(settings))
     {
     }
 
@@ -3047,9 +3113,9 @@ TSourcePtr BuildSelectOp(
 
 class TOverWindowSource: public IProxySource {
 public:
-    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource)
+    TOverWindowSource(TPosition pos, TString windowName, ISource* origSource)
         : IProxySource(pos, origSource)
-        , WindowName_(windowName)
+        , WindowName_(std::move(windowName))
     {
         Source_->SetLabel(origSource->GetLabel());
     }
@@ -3149,7 +3215,7 @@ public:
     TSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake)
         : IProxySource(pos, source.Get())
         , Source_(std::move(source))
-        , SkipTake_(skipTake)
+        , SkipTake_(std::move(skipTake))
     {
     }
 
@@ -3302,7 +3368,7 @@ public:
         , Source_(std::move(source))
         , WriteResult_(writeResult)
         , InSubquery_(inSubquery)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
     {
         YQL_ENSURE(Source_, "Invalid source node");
         FakeSource_ = BuildFakeSource(pos);

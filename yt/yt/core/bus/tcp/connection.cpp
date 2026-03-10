@@ -895,12 +895,6 @@ void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>&
 
 void TTcpConnection::OnEvent(EPollControl control)
 {
-    auto multiplexingBand = MultiplexingBand_.load();
-    if (multiplexingBand != ActualMultiplexingBand_) {
-        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
-        ActualMultiplexingBand_ = multiplexingBand;
-    }
-
     EPollControl action;
     {
         auto rawPendingControl = PendingControl_.load(std::memory_order::acquire);
@@ -947,6 +941,12 @@ void TTcpConnection::OnEvent(EPollControl control)
     }
 
     YT_LOG_TRACE("Event processing started");
+
+    // Update execution pool if needed.
+    if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
+        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
+        ActualMultiplexingBand_ = multiplexingBand;
+    }
 
     // Proceed with pending ssl handshake prior to reads or writes.
     if (PendingSslHandshake_) {

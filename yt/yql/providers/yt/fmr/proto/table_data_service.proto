@@ -2,6 +2,14 @@ syntax = "proto3";
 
 package NYql.NFmr.NProto;
 
+message TTableDataServicePutResponse {
+    bool Success = 1;
+}
+
+message TTableDataServiceGetResponse {
+    optional bytes Data = 1;
+}
+
 message TTableDataServiceGroupDeletionRequest {
     repeated string Groups = 1;
 }

@@ -13,9 +13,134 @@
 #include <util/generic/queue.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstdint>
 #include <cstring>
+#include <memory>
 
 namespace NKikimr {
+
+namespace {
+
+constexpr size_t SimulatedBufferSizeBytes = 128ull << 20; // 128 MiB
+constexpr size_t SimulatedBufferAlignment = 4096;
+
+class TAlignedPayloadChunk : public IContiguousChunk {
+    std::unique_ptr<char, decltype(&free)> Owner;
+    char* Ptr = nullptr;
+    size_t Size = 0;
+
+public:
+    TAlignedPayloadChunk(std::unique_ptr<char, decltype(&free)>&& owner, char* ptr, size_t size)
+        : Owner(std::move(owner))
+        , Ptr(ptr)
+        , Size(size)
+    {}
+
+    IContiguousChunk::TPtr Clone() override {
+        auto storage = std::unique_ptr<char, decltype(&free)>(static_cast<char*>(std::malloc(Size)), &free);
+        Y_ABORT_UNLESS(storage, "Failed to allocate payload clone");
+        std::memcpy(storage.get(), Ptr, Size);
+        return new TAlignedPayloadChunk(std::move(storage), storage.get(), Size);
+    }
+
+    TContiguousSpan GetData() const override {
+        return {Ptr, Size};
+    }
+
+    TMutableContiguousSpan UnsafeGetDataMut() override {
+        return {Ptr, Size};
+    }
+
+    size_t GetOccupiedMemorySize() const override {
+        return Size;
+    }
+
+    size_t GetCapacity() const {
+        return Size;
+    }
+};
+
+class TSimulatedDDiskActor : public TActorBootstrapped<TSimulatedDDiskActor> {
+    std::unique_ptr<char, decltype(&free)> Allocation{nullptr, &free};
+    char* RawBuffer = nullptr;
+    TReallyFastRng32 Rng{Now().GetValue()};
+
+public:
+    static constexpr size_t WriteAlignment = SimulatedBufferAlignment;
+    static constexpr size_t BufferSize = SimulatedBufferSizeBytes;
+
+    TSimulatedDDiskActor() {
+        const size_t allocSize = SimulatedBufferSizeBytes + SimulatedBufferAlignment - 1;
+        void* ptr = std::malloc(allocSize);
+        Y_ABORT_UNLESS(ptr, "Failed to allocate simulated DDisk buffer");
+        Allocation.reset(static_cast<char*>(ptr));
+        const uintptr_t addr = reinterpret_cast<uintptr_t>(Allocation.get());
+        const uintptr_t aligned = (addr + SimulatedBufferAlignment - 1) & ~(SimulatedBufferAlignment - 1);
+        RawBuffer = reinterpret_cast<char*>(aligned);
+        Y_ABORT_UNLESS(RawBuffer && aligned + SimulatedBufferSizeBytes <= addr + allocSize,
+            "Failed to align simulated DDisk buffer");
+        // Fault-in pages to ensure backing memory is committed.
+        for (size_t offset = 0; offset < SimulatedBufferSizeBytes; offset += SimulatedBufferAlignment) {
+            RawBuffer[offset] = 0;
+        }
+    }
+
+    void Bootstrap(const TActorContext& /*ctx*/) {
+        Become(&TSimulatedDDiskActor::StateFunc);
+    }
+
+    void Handle(NDDisk::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+        const TRope& payload = ev->Get()->GetPayload(0);
+        const size_t payloadSize = payload.size();
+        const size_t maxOffset = BufferSize > payloadSize ? BufferSize - payloadSize : 0;
+        const size_t slots = maxOffset / WriteAlignment;
+        const size_t offset = slots ? (Rng() % (slots + 1)) * WriteAlignment : 0;
+        CopyPayload(payload, RawBuffer + offset);
+
+        auto reply = std::make_unique<NDDisk::TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+    }
+
+    void HandleRead(NDDisk::TEvRead::TPtr& ev, const TActorContext& ctx) {
+        const auto& selector = ev->Get()->Record.GetSelector();
+        const size_t size = selector.GetSize();
+        const size_t maxOffset = BufferSize > size ? BufferSize - size : 0;
+        const size_t slots = maxOffset / WriteAlignment;
+        const size_t offset = slots ? (Rng() % (slots + 1)) * WriteAlignment : 0;
+
+        TRope data(TRcBuf::Uninitialized(size));
+        auto it = data.Begin();
+        std::memcpy(const_cast<char*>(it.ContiguousData()), RawBuffer + offset, size);
+
+        auto reply = std::make_unique<NDDisk::TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
+            std::nullopt, std::move(data));
+        ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+    }
+
+    void HandlePoison(const TActorContext& ctx) {
+        Die(ctx);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        HFunc(NDDisk::TEvWrite, Handle)
+        HFunc(NDDisk::TEvRead, HandleRead)
+        CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
+    )
+
+private:
+    static void CopyPayload(const TRope& payload, char* dest) {
+        auto it = payload.Begin();
+        size_t remaining = payload.size();
+        while (remaining) {
+            const size_t chunkSize = std::min(remaining, it.ContiguousSize());
+            std::memcpy(dest, it.ContiguousData(), chunkSize);
+            dest += chunkSize;
+            remaining -= chunkSize;
+            it += chunkSize;
+        }
+    }
+};
 
 class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTestActor> {
     static constexpr ui32 WriteSizeBytes = 4096;
@@ -46,6 +171,7 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
         ui32 Size;
         TInstant StartTime;
         bool IsInit = false;
+        bool IsBackgroundRead = false;
     };
 
     struct TRequestStat {
@@ -73,6 +199,12 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     ui32 DDiskSlotId = 0;
     TActorId DDiskServiceId;
     NDDisk::TQueryCredentials Credentials;
+    bool Simulate = false;
+    ui32 SimulateActorsCount = 1;
+    TVector<TActorId> SimulatedServiceIds;
+    bool SimulatedServiceStopped = false;
+    ui64 NextSimulatedServiceIdx = 0;
+    bool Finished = false;
     bool Connected = false;
     bool DisconnectSent = false;
     bool TestStarted = false;
@@ -81,12 +213,14 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     ui64 TotalWeight = 0;
 
     ui32 CurrentInitArea = 0;
-    TString ZeroData;
     bool Initializing = false;
     ui32 InitInFlightMax = 0;
 
     TReallyFastRng32 Rng;
-    TString RandomData;
+    TRope RandomData;
+    TRope ZeroData;
+    bool AlignSourceData = true;
+    ui32 BackgroundReadRatio = 0; // percentage of background read requests (0-100)
 
     TString WriteSizeInfo = ToString(WriteSizeBytes);
     TString SequentialInfo = "unknown";
@@ -157,6 +291,16 @@ public:
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes % WriteSizeBytes == 0,
             "ExpectedChunkSize must be divisible by WriteSizeBytes");
 
+        Simulate = cmd.HasSimulate() ? cmd.GetSimulate() : false;
+        SimulateActorsCount = cmd.GetSimulateActorsCount();
+        if (Simulate && SimulateActorsCount == 0) {
+            SimulateActorsCount = 1;
+        }
+        AlignSourceData = !cmd.HasAlignSourceData() || cmd.GetAlignSourceData();
+
+        BackgroundReadRatio = cmd.GetBackgroundReadRatio();
+        Y_ABORT_UNLESS(BackgroundReadRatio <= 100, "BackgroundReadRatio must be in [0, 100]");
+
         ui64 nextBaseChunk = 0;
         ui64 accumWeight = 0;
         for (const auto& area : cmd.GetAreas()) {
@@ -220,7 +364,17 @@ public:
         Become(&TDDiskWriterLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("DDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
-        SendRequest(ctx, std::make_unique<NDDisk::TEvConnect>(Credentials));
+        if (Simulate) {
+            SimulatedServiceIds.reserve(SimulateActorsCount);
+            for (ui32 i = 0; i < SimulateActorsCount; ++i) {
+                SimulatedServiceIds.push_back(ctx.Register(new TSimulatedDDiskActor()));
+            }
+            DDiskServiceId = SimulatedServiceIds.front();
+            Connected = true;
+            PrepareDataAndStart(ctx);
+        } else {
+            SendRequest(ctx, std::make_unique<NDDisk::TEvConnect>(Credentials));
+        }
     }
 
     void Handle(NDDisk::TEvConnectResult::TPtr& ev, const TActorContext& ctx) {
@@ -229,21 +383,19 @@ public:
             TStringStream str;
             str << "ddisk connect failed, Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus());
             LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
-            Die(ctx);
+            FinishAndDie(ctx, str.Str());
             return;
         }
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
 
-        RandomData = TString::Uninitialized(WriteSizeBytes);
-        for (ui32 i = 0; i < WriteSizeBytes; ++i) {
-            RandomData[i] = Rng();
-        }
+        PrepareDataAndStart(ctx);
+    }
 
-        ZeroData = TString::Uninitialized(WriteSizeBytes);
-        memset(ZeroData.Detach(), 0, ZeroData.size());
+    void PrepareDataAndStart(const TActorContext& ctx) {
+        RandomData = BuildPayload(false);
+        ZeroData = BuildPayload(true);
 
         for (auto& area : Areas) {
             const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
@@ -278,6 +430,30 @@ public:
         }
     }
 
+    TRope BuildPayload(bool zeroFill) {
+        const size_t size = WriteSizeBytes;
+        const size_t allocSize = size + SimulatedBufferAlignment;
+        auto storage = std::unique_ptr<char, decltype(&free)>(static_cast<char*>(std::malloc(allocSize)), &free);
+        Y_ABORT_UNLESS(storage, "Failed to allocate payload buffer");
+        char* base = storage.get();
+        uintptr_t aligned = (reinterpret_cast<uintptr_t>(base) + SimulatedBufferAlignment - 1) & ~(SimulatedBufferAlignment - 1);
+        if (!AlignSourceData) {
+            // force misalignment
+            ++aligned;
+        }
+        Y_ABORT_UNLESS(aligned + size <= reinterpret_cast<uintptr_t>(base) + allocSize);
+        char* ptr = reinterpret_cast<char*>(aligned);
+        if (zeroFill) {
+            std::memset(ptr, 0, size);
+        } else {
+            for (size_t i = 0; i < size; ++i) {
+                ptr[i] = Rng();
+            }
+        }
+        IContiguousChunk::TPtr chunk = new TAlignedPayloadChunk(std::move(storage), ptr, size);
+        return TRope(chunk);
+    }
+
     bool HasPendingInit() const {
         for (const auto& area : Areas) {
             if (area.InitType == NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_ZEROES_FIRST_BLOCK) {
@@ -298,7 +474,10 @@ public:
     TAreaInfo& PickAreaByWeight() {
         Y_DEBUG_ABORT_UNLESS(TotalWeight, "TotalWeight must be non-zero");
         const ui64 w = (ui64(Rng()) << 32 | Rng()) % TotalWeight;
-        auto it = std::prev(std::upper_bound(Areas.begin(), Areas.end(), w, TAreaInfo::TFindByWeight()));
+        auto it = std::upper_bound(Areas.begin(), Areas.end(), w, TAreaInfo::TFindByWeight());
+        if (it == Areas.end()) {
+            it = std::prev(Areas.end());
+        }
         return *it;
     }
 
@@ -311,23 +490,40 @@ public:
         CheckDie(ctx);
     }
 
+    void FinishAndDie(const TActorContext& ctx, const TString& status = "OK") {
+        if (Finished) {
+            return;
+        }
+        Finished = true;
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
+        Die(ctx);
+    }
+
     void CheckDie(const TActorContext& ctx) {
         if (!MaxInFlight && !InFlight) {
+            if (Simulate) {
+                if (!SimulatedServiceStopped) {
+                    SimulatedServiceStopped = true;
+                    for (auto& id : SimulatedServiceIds) {
+                        ctx.Send(id, new TEvents::TEvPoisonPill);
+                    }
+                }
+                FinishAndDie(ctx);
+                return;
+            }
             if (Connected && !DisconnectSent) {
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 Credentials.Serialize(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
             } else {
-                ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK"));
-                Die(ctx);
+                FinishAndDie(ctx);
             }
         }
     }
 
     void Handle(NDDisk::TEvDisconnectResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK"));
-        Die(ctx);
+        FinishAndDie(ctx);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -414,14 +610,23 @@ public:
             Report->Size = size;
 
             const TInstant now = TAppData::TimeProvider->Now();
-            const ui64 requestIdx = NewTRequestInfo(size, now, false);
             const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
             const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
-            auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials, NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size),
-                NDDisk::TWriteInstruction(0));
-            ev->AddPayload(TRope(RandomData));
-            SendRequest(ctx, std::move(ev), requestIdx);
-            ++Write_RequestsSent;
+
+            const bool isBackgroundRead = BackgroundReadRatio > 0 && (Rng() % 100) < BackgroundReadRatio;
+            const ui64 requestIdx = NewTRequestInfo(size, now, false, isBackgroundRead);
+
+            if (isBackgroundRead) {
+                auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
+                    NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
+                SendRequest(ctx, std::move(ev), requestIdx);
+            } else {
+                auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
+                    NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
+                ev->AddPayload(TRope(RandomData));
+                SendRequest(ctx, std::move(ev), requestIdx);
+                ++Write_RequestsSent;
+            }
             ++InFlight;
         }
 
@@ -498,9 +703,17 @@ public:
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit) {
+    void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& msg = ev->Get()->Record;
+        const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        const ui64 requestIdx = ev->Cookie;
+        FinishRequest(ctx, requestIdx, ok);
+        CheckDie(ctx);
+    }
+
+    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit, bool isBackgroundRead = false) {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit});
+        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit, isBackgroundRead});
         return requestIdx;
     }
 
@@ -512,7 +725,7 @@ public:
         }
         const TRequestInfo& request = it->second;
 
-        if (!request.IsInit) {
+        if (!request.IsInit && !request.IsBackgroundRead) {
             if (ok) {
                 ++Write_OK;
             } else {
@@ -541,7 +754,12 @@ public:
 
     template<typename TRequest>
     void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request, ui64 cookie = 0) {
-        ctx.Send(DDiskServiceId, request.release(), 0, cookie);
+        if (Simulate && !SimulatedServiceIds.empty()) {
+            const ui64 idx = NextSimulatedServiceIdx++ % SimulatedServiceIds.size();
+            ctx.Send(SimulatedServiceIds[idx], request.release(), 0, cookie);
+        } else {
+            ctx.Send(DDiskServiceId, request.release(), 0, cookie);
+        }
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -620,10 +838,13 @@ public:
         HFunc(NDDisk::TEvConnectResult, Handle)
         HFunc(NDDisk::TEvDisconnectResult, Handle)
         HFunc(NDDisk::TEvWriteResult, Handle)
+        HFunc(NDDisk::TEvReadResult, Handle)
         HFunc(TEvUpdateMonitoring, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
     )
 };
+
+} // namespace
 
 IActor *CreateDDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskWriteLoad& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {

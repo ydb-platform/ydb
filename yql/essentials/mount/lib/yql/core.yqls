@@ -305,6 +305,7 @@ def signature(script, name):
         (let type (Apply RemoveOptionalType (TypeOf str)))
         (let all (ListExtract (StructTypeComponents (TypeHandle type)) 'Name))
         (let fields (ListMap fields (lambda '(f) (Ensure f (SqlIn all f '()) (Concat (String '"Member not found: ") f)))))
+        (let all (Seq fields all))
         (let items (ListNotNull (ListMap all (lambda '(f) (block '(
             (let atom (AtomCode f))
             (let predicate (SqlIn fields f '()))

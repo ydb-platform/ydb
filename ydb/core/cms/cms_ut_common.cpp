@@ -603,6 +603,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     appConfig.MutableFeatureFlags()->SetEnableSingleCompositeActionGroup(options.EnableSingleCompositeActionGroup);
     appConfig.MutableFeatureFlags()->SetEnableCmsLocksPriority(options.EnableCmsLocksPriority);
+    appConfig.MutableFeatureFlags()->SetEnableCmsSmartAvailabilityMode(options.EnableCmsSmartAvailabilityMode);
     runtime.AddLocalService(
         MakeConfigsDispatcherID(
             runtime.GetNodeId(0)),
@@ -626,6 +627,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
     runtime.GetAppData().FeatureFlags.SetEnableCmsLocksPriority(options.EnableCmsLocksPriority);
+    runtime.GetAppData().FeatureFlags.SetEnableCmsSmartAvailabilityMode(options.EnableCmsSmartAvailabilityMode);
 
     if (options.IsBridgeMode) {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {

@@ -1,13 +1,18 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/unittest/tests_data.h>
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
-#include <util/system/tempfile.h>
 #include "http.h"
 #include "http_proxy.h"
 
-
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/http/ut/tls_client_connection.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/resource/resource.h>
+#include <util/system/tempfile.h>
+#include <util/system/condvar.h>
+#include <thread>
+#include <atomic>
 
 enum EService : NActors::NLog::EComponent {
     MIN,
@@ -181,19 +186,143 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(response->Body, "this\r\n is test.");
     }
 
+    Y_UNIT_TEST(TestStreamingCompress1) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("deflate");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = "something very long to compress with deflate algorithm.";
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("deflate");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress2) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = "something very long to compress with deflate algorithm.";
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress3) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data = " to compress with deflate algorithm. ";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            compressedData.push_back(compressContext.Compress({}, true));
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
+    Y_UNIT_TEST(TestStreamingCompress4) {
+        NHttp::TCompressContext compressContext;
+        compressContext.InitCompress("gzip");
+        std::vector<TString> compressedData;
+        TString originalData;
+        {
+            TString data = "something very long";
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data;
+            for (size_t j = 0; j < 100000; ++j) {
+                data.append(1, 'A' + (rand() % 26)); // random character from A-Z
+            }
+            compressedData.push_back(compressContext.Compress(data, false));
+            originalData += data;
+        }
+        {
+            TString data;
+            for (size_t j = 0; j < 500000; ++j) {
+                data.append(1, 'a' + (rand() % 26)); // random character from a-z
+            }
+            compressedData.push_back(compressContext.Compress(data, true));
+            originalData += data;
+        }
+        NHttp::TCompressContext decompressContext;
+        decompressContext.InitDecompress("gzip");
+        TString decompressedData;
+        for (const auto& chunk : compressedData) {
+            decompressedData += decompressContext.Decompress(chunk);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(originalData, decompressedData);
+    }
+
     Y_UNIT_TEST(CreateCompressedResponse) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        std::vector<TString> compressContentTypes = {"text/plain"};
+        std::shared_ptr<NHttp::TPrivateEndpointInfo> endpoint(std::make_shared<NHttp::TPrivateEndpointInfo>(compressContentTypes));
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(endpoint, {});
         EatPartialString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
+        response->Set("Content-Type", "text/plain");
         TString compressedBody = "something very long to compress with deflate algorithm. something very long to compress with deflate algorithm.";
-        response->EnableCompression();
+        UNIT_ASSERT(response->EnableCompression());
         size_t size1 = response->Size();
         response->SetBody(compressedBody);
         size_t size2 = response->Size();
         size_t compressedBodySize = size2 - size1;
-        UNIT_ASSERT_VALUES_EQUAL("deflate", response->ContentEncoding);
+        UNIT_ASSERT_VALUES_EQUAL("gzip", response->ContentEncoding);
         UNIT_ASSERT(compressedBodySize < compressedBody.size());
         NHttp::THttpOutgoingResponsePtr response2 = response->Duplicate(request);
+        UNIT_ASSERT_VALUES_EQUAL(response->Headers, response2->Headers);
         UNIT_ASSERT_VALUES_EQUAL(response->Body, response2->Body);
         UNIT_ASSERT_VALUES_EQUAL(response->ContentLength, response2->ContentLength);
         UNIT_ASSERT_VALUES_EQUAL(response->Size(), response2->Size());
@@ -1096,7 +1225,9 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
-        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        NHttp::TEvHttpProxy::TEvAddListeningPort* addPortEvent = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPortEvent->CompressContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPortEvent), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
@@ -1165,7 +1296,9 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
-        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        NHttp::TEvHttpProxy::TEvAddListeningPort* addPortEvent = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPortEvent->CompressContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPortEvent), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
@@ -1349,4 +1482,197 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response2->Response->Status, "200");
     }
+}
+
+Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
+    // Backend that does not save anything and only signals
+    // when a given substring is written to the log to avoid Sleep().
+    class TSignalingLogBackend : public TLogBackend {
+    public:
+        TSignalingLogBackend(TStringBuf expectedSubstring)
+            : ExpectedSubstring_(expectedSubstring)
+        {
+        }
+
+        void WriteData(const TLogRecord& rec) override {
+            if (TStringBuf(rec.Data, rec.Len).Contains(ExpectedSubstring_)) {
+                Seen_.store(true);
+                TGuard<TMutex> g(Mutex_);
+                CondVar_.Signal();
+            }
+        }
+
+        void ReopenLog() override {}
+
+        void WaitFor(TDuration timeout) {
+            TGuard<TMutex> g(Mutex_);
+            CondVar_.WaitT(Mutex_, timeout, [this] { return Seen_.load(); });
+        }
+
+        bool Seen() const { return Seen_.load(); }
+
+    private:
+        TStringBuf ExpectedSubstring_;
+        std::atomic<bool> Seen_{false};
+        TMutex Mutex_;
+        TCondVar CondVar_;
+    };
+
+    struct TMtlsTestSetup {
+        TAutoPtr<TLogBackend> LogBackend;
+        NKikimr::TCertAndKey CaCertAndKey;
+        NKikimr::TCertAndKey ServerCertAndKey;
+        NKikimr::TCertAndKey ClientCertAndKey;
+        NKikimr::TCertAndKey UntrustedCaCertAndKey;
+        NKikimr::TCertAndKey UntrustedClientCertAndKey;
+        TTempFileHandle CaCertFile;
+        TTempFileHandle ServerCertFile;
+        TTempFileHandle ServerKeyFile;
+        TTempFileHandle ClientCertFile;
+        TTempFileHandle ClientKeyFile;
+        TTempFileHandle UntrustedCaCertFile;
+        TTempFileHandle UntrustedClientCertFile;
+        TTempFileHandle UntrustedClientKeyFile;
+        NActors::TTestActorRuntimeBase ActorSystem;
+        TPortManager PortManager;
+        TIpPort Port;
+        NActors::TActorId ProxyId;
+        NActors::TActorId ServerId;
+
+        TMtlsTestSetup(
+            const bool useRealThreads = false,
+            const bool secureConnection = true,
+            TAutoPtr<TLogBackend> customLogBackend = nullptr
+        )
+            : ActorSystem(1, useRealThreads)
+        {
+            if (customLogBackend) {
+                LogBackend = std::move(customLogBackend);
+            }
+            // Generate certificates
+            CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
+            ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
+            ClientCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsClient());
+
+            NKikimr::TProps untrustedCaProps = NKikimr::TProps::AsCA();
+            untrustedCaProps.CommonName = "Untrusted " + untrustedCaProps.CommonName;
+            UntrustedCaCertAndKey = NKikimr::GenerateCA(untrustedCaProps);
+
+            NKikimr::TProps untrustedClientProps = NKikimr::TProps::AsClient();
+            untrustedClientProps.CommonName = "Untrusted " + untrustedClientProps.CommonName;
+            UntrustedClientCertAndKey = NKikimr::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
+
+            // Write certificates to files
+            CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());
+            ServerCertFile.Write(ServerCertAndKey.Certificate.c_str(), ServerCertAndKey.Certificate.size());
+            ServerKeyFile.Write(ServerCertAndKey.PrivateKey.c_str(), ServerCertAndKey.PrivateKey.size());
+            ClientCertFile.Write(ClientCertAndKey.Certificate.c_str(), ClientCertAndKey.Certificate.size());
+            ClientKeyFile.Write(ClientCertAndKey.PrivateKey.c_str(), ClientCertAndKey.PrivateKey.size());
+            UntrustedCaCertFile.Write(UntrustedCaCertAndKey.Certificate.c_str(), UntrustedCaCertAndKey.Certificate.size());
+            UntrustedClientCertFile.Write(UntrustedClientCertAndKey.Certificate.c_str(), UntrustedClientCertAndKey.Certificate.size());
+            UntrustedClientKeyFile.Write(UntrustedClientCertAndKey.PrivateKey.c_str(), UntrustedClientCertAndKey.PrivateKey.size());
+
+            if (LogBackend) {
+                ActorSystem.SetLogBackend(LogBackend);
+            }
+            ActorSystem.Initialize();
+
+            NActors::IActor* proxy = NHttp::CreateHttpProxy();
+            ProxyId = ActorSystem.Register(proxy);
+
+            Port = PortManager.GetTcpPort();
+            THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(Port);
+            if (secureConnection) {
+                add->Secure = true;
+                add->CertificateFile = ServerCertFile.Name();
+                add->PrivateKeyFile = ServerKeyFile.Name();
+                add->CaFile = CaCertFile.Name(); // enables mTLS
+            }
+            ActorSystem.Send(new NActors::IEventHandle(ProxyId, ActorSystem.AllocateEdgeActor(), add.Release()), 0, true);
+            TAutoPtr<NActors::IEventHandle> handle;
+            ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+            ServerId = ActorSystem.AllocateEdgeActor();
+            ActorSystem.Send(new NActors::IEventHandle(ProxyId, ServerId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", ServerId)), 0, true);
+        }
+    };
+
+    Y_UNIT_TEST(ValidClientCertificate) {
+        TMtlsTestSetup setup;
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
+            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
+            // client thread blocked waiting for response from server.
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.ClientCertFile.Name(), setup.ClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request1->Request->URL, "/test");
+        UNIT_ASSERT(!request1->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(UntrustedClientCertificate) {
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
+
+        {
+            // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend));
+
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
+        }
+
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened for untrusted client");
+    }
+
+    Y_UNIT_TEST(NoClientCertificate) {
+        TMtlsTestSetup setup;
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
+            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
+            // client thread blocked waiting for response from server.
+            NHttp::NTest::SendTlsRequest(setup.Port, "", "", setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(request->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(NotSecureConnection) {
+        TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ false);
+
+        NActors::TActorId clientId = setup.ActorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(setup.Port) + "/test");
+        setup.ActorSystem.Send(new NActors::IEventHandle(setup.ProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(request->Request->MTlsClientCertificate.empty());
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 OK\r\nConnection: Close\r\n\r\n");
+        setup.ActorSystem.Send(new NActors::IEventHandle(handle->Sender, setup.ServerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+    }
+
 }

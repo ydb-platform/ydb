@@ -27,8 +27,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TType* ExtractDictTypeFromMutDic(const TExprNode& node, TMkqlBuildContext& ctx) {
     auto tag = node.GetTypeAnn()->Cast<TLinearExprType>()->GetItemType()->Cast<TResourceExprType>()->GetTag();
@@ -757,7 +756,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
         }
 
-        if (isStatePersistable && RuntimeVersion >= 49U) {
+        if (isStatePersistable) {
             return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
@@ -3163,5 +3162,4 @@ TRuntimeNode MkqlBuildExpr(const TExprNode& node, TMkqlBuildContext& ctx) {
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

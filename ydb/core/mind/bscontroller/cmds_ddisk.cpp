@@ -54,6 +54,7 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumDDiskGroups();
         storagePool.DefaultGroupSizeInUnits = 1; // cmd.GetDefaultGroupSizeInUnits();
         storagePool.DDisk = true;
+        storagePool.RandomizeGroupMapping = false;
 
         for (const auto &item : cmd.GetPDiskFilter()) {
             TStoragePoolInfo::TPDiskFilter filter;

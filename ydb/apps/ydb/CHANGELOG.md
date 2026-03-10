@@ -1,3 +1,7 @@
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+
+## 2.29.0 ##
+
 * Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
 * Improved the `ydb init` and `ydb config profile` commands with interactive menus.
 * Added download progress bar to the `ydb update` command.

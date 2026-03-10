@@ -20,8 +20,9 @@
 #include <arrow/compute/exec_internal.h>
 #include <arrow/util/bitmap_ops.h>
 
-namespace NYql {
-namespace NUdf {
+#include <utility>
+
+namespace NYql::NUdf {
 
 using TExec = arrow::Status (*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
@@ -82,12 +83,12 @@ private:
 class TSimpleArrowUdfImpl: public TBoxedValue {
 public:
     TSimpleArrowUdfImpl(const TVector<const TType*> argBlockTypes, const TType* outputType, bool onlyScalars,
-                        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name,
+                        TExec exec, IFunctionTypeInfoBuilder& builder, TString name,
                         arrow::compute::NullHandling::type nullHandling)
         : OnlyScalars_(onlyScalars)
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
-        , Name_(name)
+        , Name_(std::move(name))
         , OutputType_(outputType)
         , NullDatum_(arrow::Datum(std::make_shared<arrow::NullScalar>()))
     {
@@ -665,8 +666,7 @@ public:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 #define BEGIN_ARROW_UDF_IMPL(udfNameBlocks, signatureFunc, optArgc, isStrict)                           \
     class udfNameBlocks {                                                                               \

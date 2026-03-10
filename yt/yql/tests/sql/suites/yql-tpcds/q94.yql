@@ -1,0 +1,52 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: muted */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Ensure(0, FALSE, 'muted: flaky: Error: Name not found: count')
+
+/*
+SELECT
+    Count(DISTINCT ws_order_number) AS `order count`,
+    Sum(ws_ext_ship_cost) AS `total shipping cost`,
+    Sum(ws_net_profit) AS `total net profit`
+FROM
+    plato.web_sales AS ws1
+,
+    plato.date_dim
+,
+    plato.customer_address
+,
+    plato.web_site
+WHERE
+    d_date BETWEEN CAST('1999-5-01' AS Date) AND (
+        CAST('1999-5-01' AS Date) + DateTime::IntervalFromDays(60)
+    )
+    AND ws1.ws_ship_date_sk == d_date_sk
+    AND ws1.ws_ship_addr_sk == ca_address_sk
+    AND ca_state == 'TX'
+    AND ws1.ws_web_site_sk == web_site_sk
+    AND web_company_name == 'pri'
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            plato.web_sales AS ws2
+        WHERE
+            ws1.ws_order_number == ws2.ws_order_number
+            AND ws1.ws_warehouse_sk != ws2.ws_warehouse_sk
+    )
+    AND NOT EXISTS (
+        SELECT
+            *
+        FROM
+            plato.web_returns AS wr1
+        WHERE
+            ws1.ws_order_number == wr1.wr_order_number
+    )
+ORDER BY
+    Count(DISTINCT ws_order_number)
+LIMIT 100;
+*/;

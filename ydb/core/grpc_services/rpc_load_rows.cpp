@@ -74,13 +74,23 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
         case arrow::Type::FIXED_SIZE_BINARY: {
-            if (tableColumnType && tableColumnType->GetTypeId() == NScheme::NTypeIds::Decimal) {
-                Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-                decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
-                decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
-                return true;
+            if (!tableColumnType || dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+                break;
             }
 
+            switch (tableColumnType->GetTypeId()) {
+                case NScheme::NTypeIds::Decimal: {
+                    Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                    decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
+                    decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
+                    return true;
+                }
+
+                case NScheme::NTypeIds::Uuid: {
+                    toType.set_type_id(Ydb::Type::UUID);
+                    return true;
+                }
+            }
             break;
         }
         case arrow::Type::BOOL:
@@ -152,12 +162,21 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
+static TString GetUserSID(const IRequestOpCtx* request) {
+    if (request == nullptr ) {
+        return BUILTIN_ACL_NO_USER_SID;
+    }
+    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+}
+
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
-                NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
+            GetUserSID(request),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+            NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
     {
@@ -313,7 +332,9 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(), 
+            GetUserSID(request),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
     {

@@ -10,7 +10,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/file.h>
 
-int Run(int argc, char* argv[]) {
+int Run(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
@@ -132,7 +132,7 @@ int Run(int argc, char* argv[]) {
     return errors;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {

@@ -140,7 +140,7 @@ private:
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
@@ -152,6 +152,9 @@ private:
     void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
+
+    void PassAway() final;
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -159,6 +162,10 @@ private:
     void ScanNextDatashardRange();
     void SaveStatisticsToTable();
     void DeleteStatisticsFromTable();
+
+    void DispatchFinishTraversalTx(
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
+        NYql::TIssues issues = NYql::TIssues());
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
@@ -208,7 +215,7 @@ private:
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
-            hFunc(TEvStatistics::TEvFinishTraversal, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeActorResult, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
@@ -220,6 +227,7 @@ private:
             hFunc(TEvPrivate::TEvSendAnalyze, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeCancel, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -284,7 +292,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
-    std::vector<TStatisticsItem> StatisticsToSave;
+    std::deque<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -361,6 +369,8 @@ private: // stored in local db
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
+    TActorId AnalyzeActorId;
+    TActorId SaveQueryActorId;
 
     size_t GlobalTraversalRound = 1;
 
@@ -407,6 +417,7 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
+        bool RequestingActorReattached = false; // True if the requesting actor reached this tablet instance
         TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;

@@ -6,11 +6,14 @@ namespace NKikimr {
 
 TCertStorage::TCertStorage()
     : CaCertAndKey(GenerateCA(TProps::AsCA()))
-    , ServerCertAndKey(GenerateSignedCert(CaCertAndKey, TProps::AsClientServer()))
+    , ServerCertAndKey(GenerateSignedCert(CaCertAndKey, TProps::AsServer()))
+    , ClientCertAndKey(GenerateSignedCert(CaCertAndKey, TProps::AsClientServer()))
 {
     CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());
     ServerCertFile.Write(ServerCertAndKey.Certificate.c_str(), ServerCertAndKey.Certificate.size());
     ServerKeyFile.Write(ServerCertAndKey.PrivateKey.c_str(), ServerCertAndKey.PrivateKey.size());
+    ClientCertFile.Write(ClientCertAndKey.Certificate.c_str(), ClientCertAndKey.Certificate.size());
+    ClientKeyFile.Write(ClientCertAndKey.PrivateKey.c_str(), ClientCertAndKey.PrivateKey.size());
 }
 
 TString TCertStorage::GetCaCertFileName() const {
@@ -23,6 +26,14 @@ TString TCertStorage::GetServerCertFileName() const {
 
 TString TCertStorage::GetServerKeyFileName() const {
     return ServerKeyFile.Name();
+}
+
+TString TCertStorage::GetClientCertFileName() const {
+    return ClientCertFile.Name();
+}
+
+TString TCertStorage::GetClientKeyFileName() const {
+    return ClientKeyFile.Name();
 }
 
 void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions) {
@@ -40,6 +51,8 @@ void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldap
         useTls->SetEnable(useStartTls);
         useTls->SetCaCertFile(ldapClientOptions.CaCertFile);
         useTls->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::DEMAND);
+        useTls->SetCertFile(ldapClientOptions.CertFile);
+        useTls->SetKeyFile(ldapClientOptions.KeyFile);
     };
 
     switch (ldapClientOptions.Type) {
@@ -111,6 +124,13 @@ void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication
     InitLdapSettings(ldapSettings, ldapPort, ldapClientOptions);
     auto extendedSettings = ldapSettings->MutableExtendedSettings();
     extendedSettings->SetEnableNestedGroupsSearch(false);
+}
+
+void InitLdapSettingsWithSaslExternalBind(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions) {
+    InitLdapSettings(ldapSettings, ldapPort, ldapClientOptions);
+    ldapSettings->SetBindDn("");
+    ldapSettings->SetBindPassword("");
+    ldapSettings->MutableExtendedSettings()->SetEnableSaslExternalBind(true);
 }
 
 } // NKikimr

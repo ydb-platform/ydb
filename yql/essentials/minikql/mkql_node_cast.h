@@ -8,8 +8,7 @@
 #define AS_TYPE(type, node) ::NKikimr::NMiniKQL::AsType<type>((node), __LOCATION__)
 #define AS_CALLABLE(name, node) ::NKikimr::NMiniKQL::AsCallable(TStringBuf(name), node, __LOCATION__)
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename T>
 T* AsValue(TRuntimeNode node, const TSourceLocation& location);
@@ -30,5 +29,4 @@ TCallable* AsCallable(
     TRuntimeNode node,
     const TSourceLocation& location);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

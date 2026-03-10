@@ -107,4 +107,20 @@ bool IsOnlySubExpr(const TRule_select_subexpr& node) {
            node.GetRule_select_subexpr_intersect1().GetBlock2().size() == 0;
 }
 
+bool IsOnlySelect(const TRule_select_stmt& rule) {
+    return rule.GetBlock2().size() == 0 &&
+           rule.GetRule_select_stmt_intersect1().GetBlock2().size() == 0;
+}
+
+const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {
+    switch (rule.GetAltCase()) {
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
+            return rule.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
+            return rule.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+}
+
 } // namespace NSQLTranslationV1

@@ -6,10 +6,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetail {
+namespace NKikimr::NMiniKQL::NDetail {
 
 using NYql::SwapBytes;
 
@@ -178,16 +175,16 @@ Y_FORCE_INLINE void EncodeString(TVector<ui8>& output, TStringBuf value) {
 
     while (!value.empty()) {
         union {
-            ui8 Buffer[BlockSize + 1];
-            ui64 Buffer64[BlockSizeUi64];
+            ui8 Buffer[BlockSize + 1];    // NOLINT(modernize-avoid-c-arrays)
+            ui64 Buffer64[BlockSizeUi64]; // NOLINT(modernize-avoid-c-arrays)
         };
 
         part = std::min(value.size(), BlockSize);
         if (part == BlockSize) {
             std::memcpy(Buffer + 1, value.data(), BlockSize);
         } else {
-            for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                Buffer64[i] = 0;
+            for (ui64& it : Buffer64) {
+                it = 0;
             }
             std::memcpy(Buffer + 1, value.data(), part);
         }
@@ -196,8 +193,8 @@ Y_FORCE_INLINE void EncodeString(TVector<ui8>& output, TStringBuf value) {
         Buffer[0] = BlockCode;
 
         if (Desc) {
-            for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                Buffer64[i] ^= std::numeric_limits<ui64>::max();
+            for (ui64& it : Buffer64) {
+                it ^= std::numeric_limits<ui64>::max();
             }
         }
 
@@ -221,8 +218,8 @@ Y_FORCE_INLINE TStringBuf DecodeString(TStringBuf& input, TVector<ui8>& value) {
 
     while (code == BlockCode) {
         union {
-            ui8 Buffer[BlockSize + 1];
-            ui64 Buffer64[BlockSizeUi64];
+            ui8 Buffer[BlockSize + 1];    // NOLINT(modernize-avoid-c-arrays)
+            ui64 Buffer64[BlockSizeUi64]; // NOLINT(modernize-avoid-c-arrays)
         };
 
         EnsureInputSize(input, BlockSize + 1);
@@ -230,8 +227,8 @@ Y_FORCE_INLINE TStringBuf DecodeString(TStringBuf& input, TVector<ui8>& value) {
         input.Skip(BlockSize + 1);
 
         if (Desc) {
-            for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                Buffer64[i] ^= std::numeric_limits<ui64>::max();
+            for (ui64& it : Buffer64) {
+                it ^= std::numeric_limits<ui64>::max();
             }
         }
 
@@ -243,7 +240,4 @@ Y_FORCE_INLINE TStringBuf DecodeString(TStringBuf& input, TVector<ui8>& value) {
     auto end = (const char*)value.end() - BlockSize + code;
     return TStringBuf(begin, end - begin);
 }
-} // namespace NDetail
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL::NDetail

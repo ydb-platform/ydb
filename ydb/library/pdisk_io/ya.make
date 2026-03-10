@@ -1,6 +1,7 @@
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(aio.h)
+GENERATE_ENUM_SERIALIZATION(uring_router.h)
 
 IF (OS_LINUX)
     PEERDIR(
@@ -10,6 +11,7 @@ IF (OS_LINUX)
     SRCS(
         aio_linux.cpp
         file_params_linux.cpp
+        uring_router.cpp
     )
 ELSE(OS_LINUX)
     SRCS(
@@ -49,8 +51,14 @@ SRCS(
     drivedata.h
     sector_map.cpp
     sector_map.h
+    uring_operation.h
+    uring_operation.cpp
     wcache.cpp
     wcache.h
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

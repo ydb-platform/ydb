@@ -11,6 +11,8 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
+#include <utility>
+
 namespace {
 
 using namespace NKikimr;
@@ -49,16 +51,16 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
         TUdfModuleLoader(
             TUdfModulesMap& modulesMap,
             THashSet<TString>* newModules,
-            const TString& libraryPath,
+            TString libraryPath,
             const TUdfModuleRemappings& remappings,
             ui32 abiVersion,
-            const TString& customUdfPrefix = {})
+            TString customUdfPrefix = {})
             : ModulesMap_(modulesMap)
             , NewModules_(newModules)
-            , LibraryPath_(libraryPath)
+            , LibraryPath_(std::move(libraryPath))
             , Remappings_(remappings)
             , AbiVersion_(NUdf::AbiVersionToStr(abiVersion))
-            , CustomUdfPrefix_(customUdfPrefix)
+            , CustomUdfPrefix_(std::move(customUdfPrefix))
         {
         }
 
@@ -476,8 +478,7 @@ private:
 
 } // namespace
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
 {
@@ -491,14 +492,14 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
         for (auto d : dirs) {
             TDirIterator dir(d, TDirIterator::TOptions(FTS_LOGICAL).SetMaxLevel(10));
 
-            for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
+            for (const auto& file : dir) {
                 // skip entries with empty name, and all non-files
                 // all valid symlinks are already dereferenced, provided by FTS_LOGICAL
-                if (file->fts_pathlen == file->fts_namelen || file->fts_info != FTS_F) {
+                if (file.fts_pathlen == file.fts_namelen || file.fts_info != FTS_F) {
                     continue;
                 }
 
-                TString path(file->fts_path);
+                TString path(file.fts_path);
                 TString fileName = GetBaseName(path);
 
                 // skip non shared libraries
@@ -572,5 +573,4 @@ void FillStaticModules(IMutableFunctionRegistry& registry) {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

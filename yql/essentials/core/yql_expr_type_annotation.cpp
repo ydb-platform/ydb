@@ -6896,9 +6896,12 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
     if (name == "count" || name == "count_all" || name == "min" || name == "max" || name == "some") {
         return input->GetTypeAnn();
     } else if (name == "avg" || name == "sum") {
-        auto itemType = input->Content().StartsWith("AggBlock") ?
-            input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType() :
-            input->Child(2)->GetTypeAnn();
+        const TTypeAnnotationNode* itemType;
+        if (input->Content().StartsWith("AggBlock")) {
+            itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        } else {
+            itemType = input->Child(2)->GetTypeAnn();
+        }
         if (input->Content().EndsWith("State")) {
             return itemType;
         }
@@ -7499,12 +7502,12 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 
             returnType = *inputArrayType;
         }
     } else if (returnType == NPg::AnyElementOid) {
-        for (ui32 i = 0; i < argTypes.size(); ++i) {
-            if (!argTypes[i]) {
+        for (const ui32 argType : argTypes) {
+            if (!argType) {
                 continue;
             }
 
-            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            const auto& typeDesc = NPg::LookupType(argType);
             if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
                 returnType = typeDesc.ElementTypeId;
                 return;

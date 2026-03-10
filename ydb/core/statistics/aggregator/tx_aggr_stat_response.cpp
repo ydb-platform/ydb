@@ -57,6 +57,11 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         if (Record.FailedTabletsSize() == 0 ||
             Self->TraversalRound >= Self->MaxTraversalRoundCount)
         {
+            for (auto& [tag, sketch] : Self->CountMinSketches) {
+                TString strSketch(sketch->AsStringBuf());
+                Self->StatisticsToSave.emplace_back(
+                    tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+            }
             Self->SaveStatisticsToTable();
             return true;
         }

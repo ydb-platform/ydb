@@ -251,7 +251,7 @@ int CompareKeyRowsAcrossYsonBlocks(
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlock,
     const TRowIndexMarkup& rhsRow,
-    const TVector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders
 ) {
     Y_ENSURE(lhsRow.size() == rhsRow.size(), "Row sizes mismatch");
     Y_ENSURE(lhsRow.size() - 1 == sortOrders.size(), "SortOrders mismatch");

@@ -595,6 +595,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 result->Record.SetPathDropTxId(shardResult->GetPathDropTxId());
             }
 
+            if (shardResult->HasOperationId()) {
+                result->Record.SetSchemeShardOperationId(shardResult->GetOperationId());
+            }
+
             for (const auto& issue : shardResult->GetIssues()) {
                 auto newIssue = result->Record.AddIssues();
                 newIssue->CopyFrom(issue);
@@ -1747,6 +1751,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kCreateUser:
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
@@ -1755,6 +1760,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kModifyUser:
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));

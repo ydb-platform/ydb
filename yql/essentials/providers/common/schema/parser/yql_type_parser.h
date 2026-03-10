@@ -9,12 +9,11 @@
 #include <util/generic/strbuf.h>
 #include <util/stream/output.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TYqlTypeYsonSaverBase {
 public:
-    typedef NYson::TYsonConsumerBase TConsumer;
+    using TConsumer = NYson::TYsonConsumerBase;
 
     TYqlTypeYsonSaverBase(TConsumer& writer, bool extendedForm)
         : Writer_(writer)
@@ -45,7 +44,7 @@ protected:
 
 template <typename TDerived>
 class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
-    typedef TYqlTypeYsonSaverImpl<TDerived> TSelf;
+    using TSelf = TYqlTypeYsonSaverImpl<TDerived>;
 
 public:
     TYqlTypeYsonSaverImpl(TConsumer& writer, bool extendedForm)
@@ -506,5 +505,4 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
 
 bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

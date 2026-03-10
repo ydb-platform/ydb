@@ -7,6 +7,27 @@ namespace NActors {
 
     namespace NDetail {
 
+        class TAsyncEventAwaiter;
+
+        class TAsyncEventAwaiterQueue {
+        public:
+            void Add(TAsyncEventAwaiter*);
+            void Remove(TAsyncEventAwaiter*);
+            TAsyncEventAwaiter* PopFront();
+
+            explicit operator bool() const noexcept {
+                return bool(Queue_);
+            }
+
+            size_t GetSize() const noexcept {
+                return Count_;
+            }
+
+        private:
+            TIntrusiveList<TAsyncEventAwaiter> Queue_;
+            size_t Count_ = 0;
+        };
+
         class [[nodiscard]] TAsyncEventAwaiter
             : public TIntrusiveListItem<TAsyncEventAwaiter>
             , private TActorRunnableItem::TImpl<TAsyncEventAwaiter>
@@ -16,9 +37,15 @@ namespace NActors {
         public:
             static constexpr bool IsActorAwareAwaiter = true;
 
-            TAsyncEventAwaiter(TIntrusiveList<TAsyncEventAwaiter>& list) noexcept
-                : List(list)
+            TAsyncEventAwaiter(TAsyncEventAwaiterQueue& queue) noexcept
+                : Queue(queue)
             {}
+
+            ~TAsyncEventAwaiter() {
+                if (Waiting()) {
+                    Queue.Remove(this);
+                }
+            }
 
             TAsyncEventAwaiter(TAsyncEventAwaiter&&) = delete;
             TAsyncEventAwaiter(const TAsyncEventAwaiter&) = delete;
@@ -34,13 +61,13 @@ namespace NActors {
             }
 
             void await_suspend(std::coroutine_handle<> continuation) noexcept {
-                List.PushBack(this);
+                Queue.Add(this);
                 Continuation = continuation;
             }
 
             bool await_cancel(std::coroutine_handle<>) noexcept {
-                if (!TIntrusiveListItem<TAsyncEventAwaiter>::Empty()) {
-                    TIntrusiveListItem<TAsyncEventAwaiter>::Unlink();
+                if (Waiting()) {
+                    Queue.Remove(this);
                     return true;
                 }
                 // Already scheduled to resume
@@ -49,6 +76,10 @@ namespace NActors {
 
             bool await_resume() noexcept {
                 return Resumed;
+            }
+
+            bool Waiting() const {
+                return !TIntrusiveListItem<TAsyncEventAwaiter>::Empty();
             }
 
             void Resume() {
@@ -67,9 +98,49 @@ namespace NActors {
             }
 
         private:
-            TIntrusiveList<TAsyncEventAwaiter>& List;
+            TAsyncEventAwaiterQueue& Queue;
             std::coroutine_handle<> Continuation;
             bool Resumed;
+        };
+
+        inline void TAsyncEventAwaiterQueue::Add(TAsyncEventAwaiter* awaiter) {
+            Queue_.PushBack(awaiter);
+            Count_++;
+        }
+
+        inline void TAsyncEventAwaiterQueue::Remove(TAsyncEventAwaiter* awaiter) {
+            Queue_.Remove(awaiter);
+            Count_--;
+        }
+
+        inline TAsyncEventAwaiter* TAsyncEventAwaiterQueue::PopFront() {
+            Y_ASSERT(Queue_ && Count_ > 0);
+            TAsyncEventAwaiter* awaiter = Queue_.PopFront();
+            Count_--;
+            return awaiter;
+        }
+
+        template<class TCallback>
+        class [[nodiscard]] TAsyncEventAwaiterWithCallback
+            : public TAsyncEventAwaiter
+        {
+        public:
+            TAsyncEventAwaiterWithCallback(TAsyncEventAwaiterQueue& queue, TCallback&& callback) noexcept
+                : TAsyncEventAwaiter(queue)
+                , Callback(std::forward<TCallback>(callback))
+            {}
+
+            TAsyncEventAwaiterWithCallback& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
+            void await_suspend(std::coroutine_handle<> continuation) {
+                TAsyncEventAwaiter::await_suspend(continuation);
+                std::forward<TCallback>(Callback)();
+            }
+
+        private:
+            TCallback&& Callback;
         };
 
     } // namespace NDetail
@@ -77,37 +148,48 @@ namespace NActors {
     class TAsyncEvent {
     public:
         TAsyncEvent() = default;
-        TAsyncEvent(TAsyncEvent&&) = default;
 
-        TAsyncEvent& operator=(TAsyncEvent&& rhs) noexcept {
-            if (this != &rhs) [[likely]] {
-                while (!Awaiters.Empty()) {
-                    auto* awaiter = Awaiters.PopFront();
-                    awaiter->Detach();
-                }
-                Awaiters = std::move(rhs.Awaiters);
-            }
-            return *this;
-        }
+        TAsyncEvent(TAsyncEvent&&) = delete;
+        TAsyncEvent(const TAsyncEvent&) = delete;
+        TAsyncEvent& operator=(TAsyncEvent&&) = delete;
+        TAsyncEvent& operator=(const TAsyncEvent&) = delete;
 
         ~TAsyncEvent() {
-            while (!Awaiters.Empty()) {
-                auto* awaiter = Awaiters.PopFront();
+            while (Queue) {
+                auto* awaiter = Queue.PopFront();
                 awaiter->Detach();
             }
         }
 
+        /**
+         * Resumes when the event is notified or destroyed
+         */
         NDetail::TAsyncEventAwaiter Wait() noexcept {
-            return NDetail::TAsyncEventAwaiter(Awaiters);
+            return NDetail::TAsyncEventAwaiter(Queue);
+        }
+
+        /**
+         * Resumes when the event is notified or destroyed
+         *
+         * The callback is called immediately after registering an awaiter,
+         * which allows e.g. updating the number of awaiters in counters.
+         */
+        template<class TCallback>
+        NDetail::TAsyncEventAwaiterWithCallback<TCallback> Wait(TCallback&& callback) noexcept {
+            return NDetail::TAsyncEventAwaiterWithCallback<TCallback>(Queue, std::forward<TCallback>(callback));
         }
 
         bool HasAwaiters() const noexcept {
-            return !Awaiters.Empty();
+            return bool(Queue);
+        }
+
+        size_t AwaitersCount() const noexcept {
+            return Queue.GetSize();
         }
 
         bool NotifyOne() noexcept {
-            if (!Awaiters.Empty()) {
-                auto* awaiter = Awaiters.PopFront();
+            if (Queue) {
+                auto* awaiter = Queue.PopFront();
                 awaiter->Resume();
                 return true;
             }
@@ -116,8 +198,8 @@ namespace NActors {
 
         bool NotifyAll() noexcept {
             bool result = false;
-            while (!Awaiters.Empty()) {
-                auto* awaiter = Awaiters.PopFront();
+            while (Queue) {
+                auto* awaiter = Queue.PopFront();
                 awaiter->Resume();
                 result = true;
             }
@@ -125,7 +207,7 @@ namespace NActors {
         }
 
     private:
-        TIntrusiveList<NDetail::TAsyncEventAwaiter> Awaiters;
+        NDetail::TAsyncEventAwaiterQueue Queue;
     };
 
 } // namespace NActors

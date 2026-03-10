@@ -1506,7 +1506,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
     }
 
     PQ_ENSURE(BlobEncoder.NewHeadKey.Size == 0);
-    BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+    BlobEncoder.NewHeadKey = {key, res.second, PendingWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
 
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());

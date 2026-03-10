@@ -198,7 +198,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
-    auto values = TSqlIntoValues(Ctx_, Mode_).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
+    auto values = TSqlIntoValues(*this).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
     if (!values) {
         return nullptr;
     }
@@ -245,9 +245,9 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                Ctx_.Error(pos) << "REPLACE is not available before language version " << FormatLangVersion(requiredLangVer);
+            if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                    pos, "REPLACE", MakeLangVersion(2025, 4)))
+            {
                 return false;
             }
         }

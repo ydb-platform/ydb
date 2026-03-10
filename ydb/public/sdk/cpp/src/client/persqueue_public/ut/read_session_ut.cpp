@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
@@ -599,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateExternalThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }
@@ -1904,14 +1905,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                    0);
 
         std::atomic<bool> ready = true;
+        std::atomic<bool> abandoned = false;
 
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
 
         TDeferredActions actions;
 

@@ -24,12 +24,14 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
-        TMaybe<TString> Token;
-        TMaybe<TString> SecretKey;
-        TString QueueUrl;
-        TMaybe<TString> Account;
-        TMaybe<TString> Region;
-        TMaybe<TString> QueueEndpoint;
+        TMaybe<TString> AwsSessionToken;
+        TMaybe<TString> AwsSecretKey;
+        TString Topic;
+        TString Consumer;
+        TMaybe<TString> QueueName;
+        TMaybe<TString> AwsAccessKeyId;
+        TMaybe<TString> AwsRegion;
+        TString Endpoint;
         ui64 MaxUniqueMessages;
         ui32 BatchSize;
         ui32 MessageSize;
@@ -37,19 +39,20 @@ namespace NYdb::NConsoleClient {
         ui32 WorkersCount;
         ui32 RequestTimeoutMs;
         bool UseXmlAPI;
-        bool SetSubjectToken;
-        bool ValidateFifo;
+        bool ValidateMessagesOrder;
 
         void InitAwsSdk();
         void DestroyAwsSdk();
         void InitStatsCollector(size_t writerCount, size_t readerCount);
-        void InitSqsClient();
+        void InitSqsClient(const TClientCommand::TConfig& config);
         void DestroySqsClient();
+        TString GetQueueUrl(TString topic, TString consumer, TMaybe<TString> queueName = Nothing()) const;
 
     private:
         Aws::SDKOptions AwsOptions;
 
         TString GetQueueEndpointFromUrl(const TString& queueUrl) const;
+        TString BuildQueueName(TString topic, TString consumer, TMaybe<TString> queueName = Nothing()) const;
 
     protected:
         bool AnyErrors() const;

@@ -8,6 +8,10 @@ namespace NSQLTranslationV1 {
 using namespace NYql;
 using namespace NSQLv1Generated;
 
+class TSqlTranslation;
+
+// Do not use it to get a positon for a SQL hint.
+// Use TContext::TokenPosition instead.
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -107,7 +111,7 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
-TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
@@ -121,6 +125,21 @@ struct TSymbolNameWithPos {
     TPosition Pos;
 };
 
+enum class ESmartParenthesis {
+    Default,
+    GroupBy,
+    InStatement,
+    SqlLambdaParams,
+};
+
+enum class EExpr {
+    Regular,
+    GroupBy,
+    SqlLambdaParams,
+};
+
+ESmartParenthesis ToSmartParenthesis(EExpr mode);
+
 class TSqlTranslation: public TTranslation {
 protected:
     TSqlTranslation(TContext& ctx, NSQLTranslation::ESqlMode mode)
@@ -131,18 +150,18 @@ protected:
         YQL_ENSURE(ctx.Settings.Mode == mode);
     }
 
+    TSqlTranslation(const TSqlTranslation&) = default;
+
 public:
     void SetYqlSelectProduced(bool value) noexcept {
         IsYqlSelectProduced_ = value;
     }
 
-protected:
-    enum class EExpr {
-        Regular,
-        GroupBy,
-        SqlLambdaParams,
-    };
+    void SetPure(bool isPure) noexcept {
+        IsPure_ = isPure;
+    }
 
+protected:
     TNodeResult NamedExpr(
         const TRule_expr& exprTree,
         const TRule_an_id_or_type* nameTree,
@@ -198,6 +217,7 @@ protected:
     bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
     bool FillIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::TIndexSettings& indexSettings);
     bool AddIndexSetting(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::TIndexSettings& indexSettings);
+    bool AddCompactSetting(const TIdentifier& id, const TRule_compact_setting_value& value, TCompactEntry& compactEntry);
     TString GetIndexSettingStringValue(const TRule_index_setting_value& node);
     template <typename T>
     std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
@@ -306,7 +326,8 @@ protected:
 
     TNodePtr YqlSelectOrLegacy(
         std::function<TNodeResult()> yqlSelect,
-        std::function<TNodePtr()> legacy);
+        std::function<TNodePtr()> legacy,
+        TMaybe<TPosition> position = Nothing());
 
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
@@ -324,6 +345,7 @@ private:
 protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
+    bool IsPure_ = false;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

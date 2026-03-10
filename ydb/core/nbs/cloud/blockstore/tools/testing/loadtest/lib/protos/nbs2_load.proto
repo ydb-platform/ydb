@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 
 package NYdb.NBS.NProto;
 // option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos";
+option java_package = "ru.yandex.ydb.core.nbs.tools.loadtest.proto";
 
 // Load type
 
@@ -130,4 +131,10 @@ message TTestResults
 
     // Number of requests completed
     uint64 RequestsCompleted = 11;
+
+    // Avg iops
+    uint64 Iops = 12;
+
+    // Avg throughput
+    uint64 ThroughputMbs = 13;
 }

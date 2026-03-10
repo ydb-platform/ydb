@@ -8,24 +8,26 @@
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 #include <arrow/array/builder_primitive.h>
 
+#include <utility>
+
 namespace {
 
 #define Y_UNIT_TEST_ADD_BLOCK_TEST(N, MODE)             \
     TCurrentTest::AddTest(#N ":BlockEngineMode=" #MODE, \
                           static_cast<void (*)(NUnitTest::TTestContext&)>(&N<NYql::EBlockEngineMode::MODE>), false);
 
-#define Y_UNIT_TEST_BLOCKS(N)                         \
-    template <NYql::EBlockEngineMode BlockEngineMode> \
-    void N(NUnitTest::TTestContext&);                 \
-    struct TTestRegistration##N {                     \
-        TTestRegistration##N() {                      \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)    \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)       \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)      \
-        }                                             \
-    };                                                \
-    static TTestRegistration##N testRegistration##N;  \
-    template <NYql::EBlockEngineMode BlockEngineMode> \
+#define Y_UNIT_TEST_BLOCKS(N)                                                                  \
+    template <NYql::EBlockEngineMode BlockEngineMode>                                          \
+    void N(NUnitTest::TTestContext&);                                                          \
+    struct TTestRegistration##N {                                                              \
+        TTestRegistration##N() {                                                               \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)                                             \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)                                                \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)                                               \
+        }                                                                                      \
+    };                                                                                         \
+    static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace)*/ \
+    template <NYql::EBlockEngineMode BlockEngineMode>                                          \
     void N(NUnitTest::TTestContext&)
 
 NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode) {
@@ -64,9 +66,9 @@ struct TVectorConsumer: public NYql::NPureCalc::IConsumer<T*> {
     size_t Index = 0;
 
 public:
-    TVectorConsumer(TVector<U>& items, const TConverter& converter)
+    TVectorConsumer(TVector<U>& items, TConverter converter)
         : Data(items)
-        , Converter(converter)
+        , Converter(std::move(converter))
     {
     }
 

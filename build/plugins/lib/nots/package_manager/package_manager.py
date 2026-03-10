@@ -157,6 +157,7 @@ class PackageManager(object):
         script_path,
         module_path=None,
         sources_root=None,
+        inject_peers=False,
         verbose=False,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
@@ -166,6 +167,7 @@ class PackageManager(object):
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
         self.nodejs_bin_path = nodejs_bin_path
         self.script_path = script_path
+        self.inject_peers = inject_peers
         self.verbose = verbose
 
     @classmethod
@@ -319,10 +321,12 @@ class PackageManager(object):
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._get_pnpm_store()
-        virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME) if use_legacy_pnpm_virtual_store else None
+        virtual_store_dir = (
+            self._nm_path(VIRTUAL_STORE_DIRNAME) if self.inject_peers or use_legacy_pnpm_virtual_store else None
+        )
         global_virtual_store_dir = os.path.join(store_dir, "v10", "links")
 
-        self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir)
+        self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir, self.inject_peers)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
         self._restore_original_lockfile(original_lf_path, virtual_store_dir)
@@ -353,7 +357,9 @@ class PackageManager(object):
     """
 
     @timeit
-    def _run_pnpm_install(self, store_dir: str, cwd: str, local_cli: bool, virtual_store_dir: str | None):
+    def _run_pnpm_install(
+        self, store_dir: str, cwd: str, local_cli: bool, virtual_store_dir: str | None, inject_peers: bool
+    ):
         # Use fcntl to lock a temp file
 
         def execute_install_cmd():
@@ -378,6 +384,11 @@ class PackageManager(object):
                 install_cmd.extend(["--virtual-store-dir", virtual_store_dir])
             else:
                 install_cmd.extend(["--config.enableGlobalVirtualStore=true"])
+
+            if inject_peers:
+                install_cmd.extend(
+                    ["--config.injectWorkspacePackages=true", "--config.sharedWorkspaceLockfile=false", "--filter", "."]
+                )
 
             self._exec_command(install_cmd, cwd=cwd)
 
@@ -519,10 +530,11 @@ class PackageManager(object):
         if not local_cli:
             lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
 
-        for dep_path in dep_paths:
-            pre_lf_path = build_pre_lockfile_path(dep_path)
-            if os.path.isfile(pre_lf_path):
-                lf.merge(self.load_lockfile(pre_lf_path))
+        if self.inject_peers is False:
+            for dep_path in dep_paths:
+                pre_lf_path = build_pre_lockfile_path(dep_path)
+                if os.path.isfile(pre_lf_path):
+                    lf.merge(self.load_lockfile(pre_lf_path))
 
         lf.write()
 

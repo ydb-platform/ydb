@@ -18,8 +18,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 using namespace NNodes;
 
@@ -4986,7 +4986,7 @@ namespace {
         }
         else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-                "Expected either list of struct or list tuples, but got: " << *input->Head().GetTypeAnn()));
+                "Expected either list of struct or list tuples, but got list of " << itemType->GetKind() << ", type: " << *input->Head().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -5865,7 +5865,12 @@ namespace {
                     rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
                 }
             } else if (suffix == "Combine" || suffix == "CombineState" || suffix == "MergeState") {
-                auto stateType = isAggApply ? AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr) : child->Child(1)->Child(3)->GetTypeAnn();
+                TCheckedDerefPtr<const TTypeAnnotationNode> stateType;
+                if (isAggApply) {
+                    stateType = AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr);
+                } else {
+                    stateType = child->Child(1)->Child(3)->GetTypeAnn();
+                }
                 if (child->Head().IsList()) {
                     for (const auto& x : child->Head().Children()) {
                         rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(x->Content(), stateType));
@@ -8673,5 +8678,4 @@ namespace {
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputRowType));
         return IGraphTransformer::TStatus::Ok;
     }
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl

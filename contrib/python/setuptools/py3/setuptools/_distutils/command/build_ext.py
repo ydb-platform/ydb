@@ -326,7 +326,6 @@ class build_ext(Command):
         self.compiler = new_compiler(
             compiler=self.compiler,
             verbose=self.verbose,
-            dry_run=self.dry_run,
             force=self.force,
         )
         customize_compiler(self.compiler)

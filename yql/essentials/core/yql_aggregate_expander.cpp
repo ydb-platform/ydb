@@ -397,9 +397,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
     if (!NonDistinctColumns_.empty()) {
         partialAgg = GeneratePartialAggregateForNonDistinct(keyExtractor, pickleTypeNode);
     }
-    for (ui32 index = 0; index < DistinctFields_.size(); ++index) {
-        auto distinctField = DistinctFields_[index];
-
+    for (auto distinctField : DistinctFields_) {
         bool needDistinctPickle = EffectiveCompact_ ? false : needPickle;
         auto distinctGrouper = GenerateDistinctGrouper(distinctField, keyItemTypes, needDistinctPickle);
 
@@ -2513,7 +2511,12 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         }
 
         bool isAggApply = originalTrait->IsCallable("AggApply");
-        auto serializedStateType = isAggApply ? AggApplySerializedStateType(originalTrait, Ctx_) : originalTrait->Child(3)->GetTypeAnn();
+        TCheckedDerefPtr<const TTypeAnnotationNode> serializedStateType;
+        if (isAggApply) {
+            serializedStateType = AggApplySerializedStateType(originalTrait, Ctx_);
+        } else {
+            serializedStateType = originalTrait->Child(3)->GetTypeAnn();
+        }
         if (many) {
             serializedStateType = Ctx_.MakeType<TOptionalExprType>(serializedStateType);
         }
@@ -2663,8 +2666,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         streams.push_back(SerializeIdxSet(NonDistinctColumns_));
     }
 
-    for (ui32 index = 0; index < DistinctFields_.size(); ++index) {
-        auto distinctField = DistinctFields_[index];
+    for (auto distinctField : DistinctFields_) {
         auto& indicies = Distinct2Columns_[distinctField->Content()];
         TExprNode::TListType allKeyColumns = KeyColumns_->ChildrenList();
         allKeyColumns.push_back(distinctField);

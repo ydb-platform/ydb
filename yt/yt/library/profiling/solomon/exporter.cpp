@@ -178,8 +178,8 @@ void TSolomonExporter::TransferSensors()
 
     std::vector<TIntrusivePtr<TRemoteProcess>> deadProcesses;
     for (const auto& [dumpFuture, process] : remoteFutures) {
-        // Use blocking Get(), because we want to lock current thread while data structure is updating.
-        auto result = dumpFuture.Get();
+        // Use BlockingGet(), because we want to lock current thread while data structure is updating.
+        auto result = dumpFuture.BlockingGet();
 
         if (result.IsOK()) {
             try {
@@ -436,6 +436,8 @@ bool TSolomonExporter::ReadSensors(
     ValidateSummaryPolicy(readOptions.SummaryPolicy);
 
     readOptions.MarkAggregates |= Config_->MarkAggregates;
+    readOptions.EnableSolomonAggregates |= Config_->EnableSolomonAggregates;
+    readOptions.ExportGlobalsAsMemOnly |= Config_->ExportGlobalsAsMemOnly;
     if (!readOptions.Host && Config_->Host) {
         readOptions.Host = Config_->Host;
     }
@@ -561,7 +563,7 @@ void TSolomonExporter::DoHandleShard(
             auto cacheGuard = Guard(CacheLock_);
 
             auto cacheHitIt = ResponseCache_.find(*cacheKey);
-            if (cacheHitIt != ResponseCache_.end() && !(cacheHitIt->second.IsSet() && !cacheHitIt->second.Get().IsOK())) {
+            if (cacheHitIt != ResponseCache_.end() && !(cacheHitIt->second.IsSet() && !cacheHitIt->second.GetOrCrash().IsOK())) {
                 YT_LOG_DEBUG("Replying from cache");
 
                 ResponseCacheHit_.Increment();
@@ -650,6 +652,7 @@ void TSolomonExporter::DoHandleShard(
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
         options.EnableSolomonAggregates = Config_->EnableSolomonAggregates;
+        options.ExportGlobalsAsMemOnly = Config_->ExportGlobalsAsMemOnly;
         options.ReportTimestampsForRateMetrics = Config_->ReportTimestampsForRateMetrics;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;

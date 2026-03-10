@@ -230,6 +230,14 @@ private:
 };
 
 struct TGlobalIndexSettings {
+    static constexpr const int VectorKMeansTreeLevelTablePosition = 0;
+    static constexpr const int VectorKMeansTreePostingTablePosition = 1;
+    static constexpr const int VectorKMeansTreePrefixTablePosition = 2;
+    static constexpr const int FulltextRelevanceDictTablePosition = 0;
+    static constexpr const int FulltextRelevanceDocsTablePosition = 1;
+    static constexpr const int FulltextRelevanceStatsTablePosition = 2;
+    static constexpr const int FulltextRelevancePostingTablePosition = 3;
+
     using TUniformOrExplicitPartitions = std::variant<std::monostate, uint64_t, TExplicitPartitions>;
 
     TPartitioningSettings PartitioningSettings;
@@ -305,12 +313,6 @@ public:
 
 struct TFulltextIndexSettings {
 public:
-    enum class ELayout {
-        Unspecified = 0,
-        Flat,
-        FlatRelevance,
-    };
-
     enum class ETokenizer {
         Unspecified = 0,
         Whitespace,
@@ -337,7 +339,6 @@ public:
         std::optional<TAnalyzers> Analyzers;
     };
 
-    std::optional<ELayout> Layout;
     std::vector<TColumnAnalyzers> Columns;
 
     static TFulltextIndexSettings FromProto(const Ydb::Table::FulltextIndexSettings& proto);
@@ -458,6 +459,8 @@ public:
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
     // Initial scan will output the current state of the table first
     TChangefeedDescription& WithInitialScan();
+    // Enable UserSIDs
+    TChangefeedDescription& WithUserSIDs();
     // Attributes
     TChangefeedDescription& AddAttribute(const std::string& key, const std::string& value);
     TChangefeedDescription& SetAttributes(const std::unordered_map<std::string, std::string>& attrs);
@@ -473,6 +476,7 @@ public:
     bool GetSchemaChanges() const;
     const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
+    bool GetUserSIDs() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
@@ -502,6 +506,7 @@ private:
     std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
+    bool UserSIDs_ = false;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
     std::optional<TInitialScanProgress> InitialScanProgress_;
@@ -808,8 +813,8 @@ private:
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
     // fulltext
-    void AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
-    void AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
 
     // default
     void AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
@@ -1054,6 +1059,8 @@ public:
     // fulltext
     TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
     TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
+    TTableBuilder& AddFulltextRelevanceIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
+    TTableBuilder& AddFulltextRelevanceIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
 
     // default
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);

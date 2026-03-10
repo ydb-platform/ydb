@@ -223,12 +223,15 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.K1Factor = tuple.Value().Cast().Ptr();
-        } else if (name == TKqpReadTableFullTextIndexSettings::QueryModeSettingName) {
+        } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
-            settings.QueryMode = tuple.Value().Cast().Ptr();
+            settings.DefaultOperator = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Mode = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -269,10 +272,10 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
             .Done());
     }
 
-    if (QueryMode) {
+    if (DefaultOperator) {
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(QueryModeSettingName)
-            .Value(QueryMode)
+            .Name().Build(DefaultOperatorSettingName)
+            .Value(DefaultOperator)
             .Done());
     }
 
@@ -281,6 +284,13 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
             .Name().Build(MinimumShouldMatchSettingName)
             .Value(MinimumShouldMatch)
             .Done());
+    }
+
+    if (Mode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(ModeSettingName)
+        .Value(Mode)
+        .Done());
     }
 
     return Build<TCoNameValueTupleList>(ctx, pos)
@@ -833,18 +843,18 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done();
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& list) {
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TCoNameValueTupleList& list) {
     for (const auto& tuple : list) {
         auto name = tuple.Name().Value();
-        if (name == VectorTopDistinctSettingName) {
+        if (name == VectorTopColumnSettingName) {
             return true;
         }
     }
     return false;
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node) {
-    return TKqpStreamLookupSettings::HasVectorTopDistinct(node.Settings());
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTopColumn(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {

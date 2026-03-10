@@ -91,17 +91,13 @@ class WorkloadFulltextIndex(WorkloadBase):
         """
         self.client.query(delete_sql, False)
 
-    def _select_contains(self, index_name, table_path, utf8=False):
-        if utf8:
-            utf8 = "Utf8"
-        else:
-            utf8 = ""
+    def _select_contains(self, index_name, table_path):
         query = ' '.join(fulltext.get_random_words(3))
         select_sql = f"""
             SELECT `pk`, `text`
             FROM `{table_path}`
             VIEW `{index_name}`
-            WHERE FullText::Contains{utf8}(`text`, "{query}")
+            WHERE FulltextMatch(`text`, "{query}")
             LIMIT {self.limit};
         """
         res = self.client.query(select_sql, False)
@@ -111,16 +107,13 @@ class WorkloadFulltextIndex(WorkloadBase):
         logger.info(f"Selected {n} rows using contains")
         return n
 
-    def _select_relevance(self, index_name, table_path, utf8=False):
-        if utf8:
-            utf8 = "Utf8"
-        else:
-            utf8 = ""
+    def _select_relevance(self, index_name, table_path):
         query = ' '.join(fulltext.get_random_words(3))
         select_sql = f"""
-            SELECT `pk`, `text`, FullText::Relevance{utf8}(`text`, "{query}") as `rel`
+            SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
             FROM `{table_path}`
             VIEW `{index_name}`
+            WHERE FulltextScore(`text`, "{query}") > 0
             ORDER BY `rel`
             LIMIT {self.limit};
         """
@@ -137,7 +130,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             prev = rel
         return n
 
-    def _wait_index_ready(self, index_name, table_path, utf8):
+    def _wait_index_ready(self, index_name, table_path):
         start_time = time.time()
         while time.time() - start_time < 60:
             time.sleep(5)
@@ -145,7 +138,6 @@ class WorkloadFulltextIndex(WorkloadBase):
                 res = self._select_contains(
                     index_name=index_name,
                     table_path=table_path,
-                    utf8=utf8,
                 )
                 if res == 0:
                     continue
@@ -172,26 +164,23 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._wait_index_ready(
             table_path=table_path,
             index_name=index_name,
-            utf8=utf8,
         )
         n = 0
         for i in range(0, self.query_count):
-            # select from index with Fulltext::Contains
+            # select from index with FulltextMatch
             n += self._select_contains(
                 index_name=index_name,
                 table_path=table_path,
-                utf8=utf8,
             )
         if n == 0:
             raise Exception(f"No rows selected with {self.query_count} contains queries")
         if index_type == 'fulltext_relevance':
             n = 0
             for i in range(0, self.query_count):
-                # select from index with Fulltext::Relevance
+                # select from index with FulltextScore
                 n += self._select_relevance(
                     index_name=index_name,
                     table_path=table_path,
-                    utf8=utf8,
                 )
             if n == 0:
                 raise Exception(f"No rows selected with {self.query_count} relevance queries")
@@ -213,7 +202,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._delete_rows(
             table_path=table_path,
             min_key=self.row_count-3,
-            max_key=self.row_count,
+            max_key=self.row_count+3,
         )
         # sometimes replace the index
         if random.randint(0, 1) == 0:

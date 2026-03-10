@@ -10,10 +10,15 @@
 #include "object_processing.h"
 #include "antlr_token.h"
 #include "secret_settings.h"
+
+#include <yql/essentials/sql/v1/proto_parser/token.h>
+
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
+
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+
 #ifdef GetMessage
     #undef GetMessage
 #endif
@@ -47,8 +52,10 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
 }
 
-static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
-                                          const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
+namespace {
+
+bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
+                                   const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
@@ -124,9 +131,9 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
-                                     const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
-                                     const TStringBuf& tablePathPrefix)
+bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
+                              const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
+                              const TStringBuf& tablePathPrefix)
 {
     if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
@@ -145,8 +152,8 @@ static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
-                                   const TRule_replication_target& in, TTranslation& ctx)
+bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
+                            const TRule_replication_target& in, TTranslation& ctx)
 {
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
@@ -154,16 +161,16 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
     return true;
 }
 
-static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-                                        const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
+bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
+                                 const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
 {
     // TODO(ilnaz): support other actions
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false,
                                     tablePathPrefix);
 }
 
-static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
-                                  const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
+bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
+                           const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
@@ -189,7 +196,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             "batch_size_bytes",
             "directory",
             "metrics_level",
-        };
+            "v_cpu_rate_limit"};
+
         for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
             settings.insert(names.Name);
             settings.insert(names.Path);
@@ -264,8 +272,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool TransferSettings(std::map<TString, TNodePtr>& out,
-                             const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
+bool TransferSettings(std::map<TString, TNodePtr>& out,
+                      const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
 {
     if (!TransferSettingsEntry(out, in.GetRule_transfer_settings_entry1(), ctx, create)) {
         return false;
@@ -283,6 +291,8 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
 
     return true;
 }
+
+} // namespace
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
     TString internalStatementName;
@@ -327,13 +337,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
             TNodePtr node = YqlSelectOrLegacy(
                 [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                    return BuildYqlSelectStatement(*this, stmt);
                 },
                 [&]() -> TNodePtr {
                     Ctx_.BodyPart();
 
                     TPosition pos;
-                    TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(stmt, pos);
+                    TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
                     if (!source) {
                         return nullptr;
                     }
@@ -344,7 +354,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(Beginning(stmt)));
 
             if (!node) {
                 return false;
@@ -514,7 +525,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TSourcePtr tableSource = nullptr;
             if (isCreateTableAs) {
-                tableSource = TSqlAsValues(Ctx_, Mode_).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
+                tableSource = TSqlAsValues(*this).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
                 if (!tableSource) {
                     return false;
                 }
@@ -566,7 +577,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore7: {
             Ctx_.BodyPart();
-            TSqlIntoTable intoTable(Ctx_, Mode_);
+            TSqlIntoTable intoTable(*this);
             TNodePtr block(intoTable.Build(core.GetAlt_sql_stmt_core7().GetRule_into_table_stmt1()));
             if (!block) {
                 return false;
@@ -746,13 +757,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
             TNodePtr node = YqlSelectOrLegacy(
                 [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                    return BuildYqlSelectStatement(*this, stmt);
                 },
                 [&]() -> TNodePtr {
                     Ctx_.BodyPart();
 
                     TPosition pos;
-                    TSourcePtr source = TSqlValues(Ctx_, Mode_).Build(stmt, pos, {}, TPosition());
+                    TSourcePtr source = TSqlValues(*this).Build(stmt, pos, {}, TPosition());
 
                     if (!source) {
                         return nullptr;
@@ -764,7 +775,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
                         Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
                         Ctx_.Scoped);
-                });
+                },
+                Ctx_.TokenPosition(stmt.GetToken1()));
 
             if (!node) {
                 return false;
@@ -1222,7 +1234,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), expr, true, prefixPath)) {
                 return false;
             }
@@ -1484,9 +1496,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "CREATE VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "CREATE VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -1556,9 +1567,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "DROP VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "DROP VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -1589,7 +1599,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), expr, prefixPath)) {
                 return false;
             }
@@ -2018,7 +2028,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (node.GetBlock10().HasRule_transfer_settings3() &&
                 !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true, prefixPath)) {
                 return false;
@@ -2049,7 +2059,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TNodePtr> settings;
             std::optional<TString> transformLambda;
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
@@ -2408,7 +2418,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
     TNodePtr defaultValue;
     if (stmt.HasBlock5()) {
-        TSqlExpression sqlExpr(Ctx_, Mode_);
+        TSqlExpression sqlExpr(*this);
         auto exprOrId = sqlExpr.LiteralExpr(stmt.GetBlock5().GetRule_literal_value2());
         if (!exprOrId) {
             return false;
@@ -2639,6 +2649,36 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             const auto& alterRule = node.GetAlt_alter_table_action19().GetRule_alter_table_alter_column_set_compression1();
 
             if (!AlterTableAlterColumnSetCompression(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction20: {
+            // COMPACT WITH (...)
+            const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_compact1();
+
+            if (!AlterTableCompact(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction21: {
+            // ALTER COLUMN id SET DEFAULT expr
+            const auto& alterRule = node.GetAlt_alter_table_action21().GetRule_alter_table_alter_column_set_default1();
+
+            if (!AlterTableAlterColumnSetDefault(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction22: {
+            // ALTER COLUMN id DROP DEFAULT
+            const auto& alterRule = node.GetAlt_alter_table_action22().GetRule_alter_table_alter_column_drop_default1();
+
+            if (!AlterTableAlterColumnDropDefault(alterRule, params)) {
                 return false;
             }
 
@@ -3018,8 +3058,39 @@ bool TSqlQuery::AlterTableAlterColumnSetCompression(const TRule_alter_table_alte
     return true;
 }
 
+bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+
+    const auto& defaultValueRule = node.GetRule_default_value5();
+    TSqlExpression expr(*this);
+    auto defaultExpr = Unwrap(expr.Build(defaultValueRule.GetRule_expr2()));
+    if (!defaultExpr) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .DefaultExpr = std::move(defaultExpr),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropDefault,
+    });
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
-    TSqlExpression expr(Ctx_, Mode_);
+    TSqlExpression expr(*this);
     return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
 }
 
@@ -3036,7 +3107,7 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
         case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
             // SET
             const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!ChangefeedSettings(rule, expr, params.AlterChangefeeds.back().Settings, true)) {
                 return false;
             }
@@ -3052,6 +3123,27 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
 
 void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
     params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+}
+
+bool TSqlQuery::AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params) {
+    auto& compactEntry = params.Compact.Emplace();
+    if (!node.HasBlock2()) {
+        return true;
+    }
+
+    const auto& settingsNode = node.GetBlock2().GetRule_with_compact_settings1();
+    const auto& firstEntry = settingsNode.GetRule_compact_setting_entry3();
+    if (!AddCompactSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_compact_setting_value3(), compactEntry)) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_compact_setting_entry2();
+        if (!AddCompactSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_compact_setting_value3(), compactEntry)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 namespace {
@@ -3184,7 +3276,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             }
 
             TSet<TString> names;
-            SubstParameters(first->first, Nothing(), &names);
+            try {
+                SubstParameters(first->first, Nothing(), &names);
+            } catch (const NYql::TErrorException& e) {
+                ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+                return {};
+            }
+
             for (const auto& name : names) {
                 auto namedNode = query.GetNamedNode(name);
                 if (!namedNode) {
@@ -3253,7 +3351,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         TSet<TString> names;
-        SubstParameters(urlLiteral.first, Nothing(), &names);
+        try {
+            SubstParameters(urlLiteral.first, Nothing(), &names);
+        } catch (const NYql::TErrorException& e) {
+            ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+            return {};
+        }
+
         for (const auto& name : names) {
             auto namedNode = query.GetNamedNode(name);
             if (!namedNode) {
@@ -3685,14 +3789,8 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        const NYql::TLangVersion langVer = YqlSelectLangVersion();
-        if (!IsBackwardCompatibleFeatureAvailable(
-                ctx.Settings.LangVer,
-                langVer,
-                ctx.Settings.BackportMode))
-        {
-            query.Error() << "YqlSelect is not available before "
-                          << FormatLangVersion(langVer);
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(), "YqlSelect", YqlSelectLangVersion())) {
             return Nothing();
         }
 
@@ -3714,6 +3812,26 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             return Nothing();
         }
 
+        return TNodePtr();
+    }),
+
+    TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(),
+                "FailOnNonPersistableFlattenAndAggrExprs",
+                MakeLangVersion(2025, 03)))
+        {
+            return Nothing();
+        }
+
+        if (!values.empty()) {
+            query.Error() << "Expected no pragma arguments";
+            return Nothing();
+        }
+
+        ctx.FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Force;
         return TNodePtr();
     }),
 
@@ -4047,7 +4165,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
                 const auto& alt = stmt.GetBlock5().GetAlt1();
 
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-                TSqlExpression sqlExpr(Ctx_, Mode_);
+                TSqlExpression sqlExpr(*this);
                 auto whereExpr = Unwrap(sqlExpr.Build(alt.GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
@@ -4059,7 +4177,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             case TRule_delete_stmt_TBlock5::kAlt2: {
                 const auto& alt = stmt.GetBlock5().GetAlt2();
 
-                auto values = TSqlIntoValues(Ctx_, Mode_).Build(alt.GetRule_into_values_source2(), "DELETE ON");
+                auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "DELETE ON");
                 if (!values) {
                     return nullptr;
                 }
@@ -4119,7 +4237,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
 
             if (alt.HasBlock3()) {
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-                TSqlExpression sqlExpr(Ctx_, Mode_);
+                TSqlExpression sqlExpr(*this);
                 auto whereExpr = Unwrap(sqlExpr.Build(alt.GetBlock3().GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
@@ -4137,7 +4255,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         case TRule_update_stmt_TBlock4::kAlt2: {
             const auto& alt = stmt.GetBlock4().GetAlt2();
 
-            auto values = TSqlIntoValues(Ctx_, Mode_).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
+            auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
             if (!values) {
                 return nullptr;
             }
@@ -4169,7 +4287,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
 bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values) {
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-    TSqlExpression sqlExpr(Ctx_, Mode_);
+    TSqlExpression sqlExpr(*this);
     if (!Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()))) {
         return false;
     }
@@ -4199,7 +4317,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     const TPosition pos(Ctx_.Pos());
     auto parenthesis = stmt.GetRule_smart_parenthesis3();
 
-    TNodePtr node = TSqlExpression(Ctx_, Mode_).BuildSourceOrNode(parenthesis);
+    TNodePtr node = TSqlExpression(*this).BuildSourceOrNode(parenthesis);
     if (TSourcePtr source = MoveOutIfSource(node)) {
         return BuildWriteValues(pos, "UPDATE", targetList, std::move(source));
     } else if (TTupleNode* tuple = dynamic_cast<TTupleNode*>(node.Get())) {
@@ -4250,11 +4368,31 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
         size_t statementNumber = 0;
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
-        if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+        auto checkExplainToken = [&](const auto& stmt) -> bool {
+            if (stmt.HasBlock1()) {
+                auto const& provider = Ctx_.Scoped->CurrService;
+                if (provider == YdbProviderName || provider == KikimrProviderName) {
+                    Ctx_.Error() << "EXPLAIN is not supported by " << Ctx_.Scoped->CurrService << " provider.";
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const auto& firstStmt = statements.GetRule_sql_stmt2();
+        if (!checkExplainToken(firstStmt)) {
+            return nullptr;
+        }
+
+        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
         for (auto block : statements.GetBlock3()) {
-            if (!Statement(blocks, block.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+            const auto& stmt = block.GetRule_sql_stmt2();
+            if (!checkExplainToken(stmt)) {
+                return nullptr;
+            }
+            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
                 return nullptr;
             }
         }

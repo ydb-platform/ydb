@@ -58,3 +58,36 @@ def onvalidate_in_dirs(unit, *args):
                     f"{pfx}'{pat}' in [[imp]]DIRS[[rst]] argument is prohibited. Seen [[unimp]]{dir}[[rst]]"
                 )
                 unit.set([files_var, ""])
+
+
+def on_assert_no_yamake(unit, *args):
+    """
+    @usage: _ASSERT_NO_YAMAKE(<files> [MSG <message>])
+
+    Check that no ya.make files are found in <files> list.
+    Macro is primarily targeted to recursive globs validation and so made internal as `_GLOB` macro is.
+
+    - Optional MSG allows overriding the reason
+    - Macro is incompatible with `_LATE_GLOB`
+
+    @example:
+    ```
+    macro NO_MODULES_INSIDE() {
+        _GLOB(YAMAKES **/ya.make EXCLUDE ya.make)
+        _ASSERT_NO_YAMAKE($YAMAKES MSG no modules expected inside the current one)
+    }
+    ```
+    """
+
+    if args:
+        if 'MSG' in args:
+            pos = args.index('MSG')
+            files, msg = args[:pos], args[pos + 1 :]
+            msg = ' '.join(msg)
+        else:
+            files, msg = args, 'prohibited from recursive glob match'
+
+        found = next((f for f in files if f.endswith('ya.make')), None)
+        if found:
+            error_msg = "unexpected ya.make: '[[imp]]{}[[rst]]' - {}".format(found, msg)
+            ymake.report_configure_error(error_msg)

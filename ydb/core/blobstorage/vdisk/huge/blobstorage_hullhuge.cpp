@@ -214,6 +214,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
                         partsPtr, Cookie, true, GetWritePriority(), false);
+            if (AppData()->FeatureFlags.GetEnableBlobIdInSectorChecksum()) {
+                ev->BlobId = Item->LogoBlobId;
+            }
             ev->Orbit = std::move(Item->Orbit);
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release(), 0, 0, Span.GetTraceId());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);
@@ -786,7 +789,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 return;
             }
 
-            // check what if we issue a new huge hull keeper entry point -- would it allow us to
+            // check that if we issue a new huge hull keeper entry point -- would it allow us to
             // move the FirstLsnToKeep barrier forward? if so, try to issue an entry point, otherwise exit
             const ui64 pendingLsn = State.PendingWrites.empty() ? Max<ui64>() : State.PendingWrites.begin()->first;
             const ui64 minInFlightLsn = Min(pendingLsn, State.LsnFifo.FirstLsnToKeep());

@@ -33,6 +33,9 @@ namespace NLongTxService {
             EvSubscribeLock,
             EvLockStatus,
             EvUnsubscribeLock,
+            EvWaitingLockAdd,
+            EvWaitingLockRemove,
+            EvWaitingLockDeadlock,
             EvEnd,
         };
 
@@ -212,9 +215,11 @@ namespace NLongTxService {
             : TEventLocal<TEvRegisterLock, EvRegisterLock>
         {
             const ui64 LockId;
+            const TInstant LockTimestamp;
 
-            explicit TEvRegisterLock(ui64 lockId)
+            explicit TEvRegisterLock(ui64 lockId, TInstant lockTimestamp)
                 : LockId(lockId)
+                , LockTimestamp(lockTimestamp)
             { }
         };
 
@@ -246,10 +251,17 @@ namespace NLongTxService {
 
             TEvLockStatus() = default;
 
-            TEvLockStatus(ui64 lockId, ui32 lockNode, EStatus status) {
+            TEvLockStatus(ui64 lockId, ui32 lockNode, EStatus status, TInstant lockTimestamp = TInstant::Zero()) {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
                 Record.SetStatus(status);
+                if (lockTimestamp) {
+                    Record.SetLockTimestampUs(lockTimestamp.MicroSeconds());
+                }
+            }
+
+            TInstant GetLockTimestamp() const {
+                return TInstant::MicroSeconds(Record.GetLockTimestampUs());
             }
         };
 
@@ -262,6 +274,50 @@ namespace NLongTxService {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
             }
+        };
+
+        struct TEvWaitingLockAdd
+            : TEventLocal<TEvWaitingLockAdd, EvWaitingLockAdd>
+        {
+            struct TLockInfo {
+                ui64 LockId;
+                ui32 LockNodeId;
+
+                TLockInfo(ui64 lockId, ui32 lockNodeId)
+                    : LockId(lockId)
+                    , LockNodeId(lockNodeId)
+                {}
+            };
+
+            TEvWaitingLockAdd(ui64 requestId, TLockInfo lock, TLockInfo otherLock)
+                : RequestId(requestId)
+                , Lock(lock)
+                , OtherLock(otherLock)
+            {}
+
+            ui64 RequestId;
+            TLockInfo Lock;
+            TLockInfo OtherLock;
+        };
+
+        struct TEvWaitingLockRemove
+            : TEventLocal<TEvWaitingLockRemove, EvWaitingLockRemove>
+        {
+            TEvWaitingLockRemove(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            ui64 RequestId;
+        };
+
+        struct TEvWaitingLockDeadlock
+            : TEventLocal<TEvWaitingLockDeadlock, EvWaitingLockDeadlock>
+        {
+            TEvWaitingLockDeadlock(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            ui64 RequestId;
         };
     };
 

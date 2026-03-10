@@ -28,13 +28,14 @@
     #include <pthread.h>
 #endif
 
-#include <errno.h>
+#include <cerrno>
+#include <utility>
 
 namespace NYql {
 
 namespace {
 
-constexpr const char CleanupLockFilename[] = ".cleanup_lock";
+constexpr const char* CleanupLockFilename = ".cleanup_lock";
 
 struct TFileObject {
     TString Name;
@@ -45,25 +46,25 @@ struct TFileObject {
 TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
-        char tempDir[MAX_PATH];
-        if (MakeTempDir(tempDir, nullptr) != 0) {
-            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir;
+        std::array<char, MAX_PATH> tempDir;
+        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
         }
-        return tempDir;
+        return tempDir.data();
     }
     return path;
 }
 
-constexpr char FileLocksDir[] = "locks";
+constexpr const char* FileLocksDir = "locks";
 
 constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
-    : Path_(path)
-    , StorageFileName_(storageFileName)
+TFileLink::TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy)
+    : Path_(std::move(path))
+    , StorageFileName_(std::move(storageFileName))
     , Size_(size)
-    , Md5_(md5)
+    , Md5_(std::move(md5))
     , DeleteOnDestroy_(deleteOnDestroy)
 {
 }

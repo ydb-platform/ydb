@@ -30,7 +30,7 @@ class TJsonDescribe : public TViewerPipeClient {
     EAskSchemeCache AskSchemeCache = EAskSchemeCache::Second;
 
 public:
-    TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonDescribe(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
@@ -140,7 +140,7 @@ public:
         if (Params.Has("path_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {
                 // it's dangerous because we don't check access to specific path here
-                ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+                ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
                 return;
             }
         }
@@ -178,8 +178,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -340,7 +340,7 @@ public:
             describe = GetCacheDescribeSchemeInfo();
         } else {
             if (SchemeShardStatus == NKikimrScheme::EStatus::StatusAccessDenied) {
-                return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Forbidden"));
+                return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"));
             }
             TStringBuilder error;
             if (SchemeShardResult.IsError()) {
@@ -386,7 +386,7 @@ public:
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
             if (describe->GetStatus() == accessDeniedStatus) {
-                ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Forbidden"));
+                ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"));
                 return;
             }
             for (auto& child : *describe->MutablePathDescription()->MutableChildren()) {

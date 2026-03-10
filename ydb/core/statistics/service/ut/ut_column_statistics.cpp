@@ -271,6 +271,35 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         auto estimator = TEqWidthHistogramEstimator(histogram);
         UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
     }
+
+    Y_UNIT_TEST(ManyColumns) {
+        std::vector<TColumnDesc> columns;
+        for (size_t i = 0; i < 100; ++i) {
+            columns.push_back({
+                .Name = std::format("V_{}", i),
+                .TypeId = NScheme::NTypeIds::Int64,
+                .AddValue = [](ui64 key, Ydb::Value& row) {
+                    row.add_items()->set_int64_value(key / 10);
+                },
+            });
+        }
+
+        TTestEnv env(1, 3);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database", 3);
+        const auto tableInfo = PrepareTable(env, "Database", "Table1", columns);
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        auto responses = GetStatistics(
+            runtime, tableInfo.PathId, EStatType::COUNT_MIN_SKETCH, {GetTag("V_99", columns)});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        UNIT_ASSERT(resp.CountMinSketch.CountMin);
+        UNIT_ASSERT_VALUES_EQUAL(
+            resp.CountMinSketch.CountMin->GetElementCount(), ColumnTableRowsNumber);
+    }
 }
 
 } // NKikimr::NStat

@@ -84,6 +84,7 @@ namespace NLongTxService {
             ui64 Cookie = 0;
             THashMap<TActorId, ui64> NewSubscribers;
             THashMap<TActorId, ui64> RepliedSubscribers;
+            TInstant Timestamp = TInstant::Zero();
             // Intrusive heap support
             size_t HeapIndex = -1;
             TMonotonic ExpiresAt;
@@ -147,6 +148,7 @@ namespace NLongTxService {
 
         struct TLockState {
             ui64 RefCount = 0;
+            TInstant Timestamp = TInstant::Zero();
 
             THashMap<TActorId, ui64> LocalSubscribers;
             THashMap<TActorId, THashMap<TActorId, ui64>> RemoteSubscribers;
@@ -297,6 +299,8 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvSubscribeLock, Handle);
                 hFunc(TEvLongTxService::TEvLockStatus, Handle);
                 hFunc(TEvLongTxService::TEvUnsubscribeLock, Handle);
+                hFunc(TEvLongTxService::TEvWaitingLockAdd, Handle);
+                hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -321,6 +325,8 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
+        void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
+        void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,

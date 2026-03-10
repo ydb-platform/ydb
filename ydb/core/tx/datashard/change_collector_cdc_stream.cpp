@@ -149,7 +149,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates, const TString& userSID)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
@@ -222,10 +222,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
             switch (stream.Mode) {
             case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, {});
+                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, {}, userSID);
                 break;
             case NKikimrSchemeOp::ECdcStreamModeUpdate:
-                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, MakeUpdates(**initialState, valueTags, valueTypes));
+                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, MakeUpdates(**initialState, valueTags, valueTypes), userSID);
                 break;
             case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup: {
                 Y_ENSURE(false, "Invariant violation: source table must be locked before restore.");
@@ -233,10 +233,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
             case NKikimrSchemeOp::ECdcStreamModeNewImage:
             case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
-                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, nullptr, &*initialState, valueTags);
+                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, nullptr, &*initialState, valueTags, userSID);
                 break;
             case NKikimrSchemeOp::ECdcStreamModeOldImage:
-                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, &*initialState, nullptr, valueTags);
+                Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, &*initialState, nullptr, valueTags, userSID);
                 break;
             default:
                 Y_ENSURE(false, "Invalid stream mode: " << static_cast<ui32>(stream.Mode));
@@ -245,10 +245,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
         switch (stream.Mode) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-            Persist(tableId, pathId, rop, key, keyTags, {});
+            Persist(tableId, pathId, rop, key, keyTags, {}, userSID);
             break;
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
-            Persist(tableId, pathId, rop, key, keyTags, updates);
+            Persist(tableId, pathId, rop, key, keyTags, updates, userSID);
             break;
         case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
             Y_ENSURE(false, "Invariant violation: source table must be locked before restore.");
@@ -257,13 +257,13 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
             if (const auto oldState = GetState(tableId, key, valueTags)) {
                 if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeOldImage) {
-                    Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), nullptr, valueTags);
+                    Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), nullptr, valueTags, userSID);
                 } else {
                     const auto newState = PatchState(*oldState, rop, MakeTagToPos(valueTags), MappedUpdates(updates));
                     if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeNewImage) {
-                        Persist(tableId, pathId, rop, key, keyTags, nullptr, NullIfErased(&newState), valueTags);
+                        Persist(tableId, pathId, rop, key, keyTags, nullptr, NullIfErased(&newState), valueTags, userSID);
                     } else {
-                        Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), NullIfErased(&newState), valueTags);
+                        Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), NullIfErased(&newState), valueTags, userSID);
                     }
                 }
             } else {
@@ -333,20 +333,22 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
 }
 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates,
+        const TString& userSID)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userSID);
 }
 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
-        const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
+        const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags,
+        const TString& userSID)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userSID);
 }
 
 } // NDataShard

@@ -14,6 +14,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/olap/bg_tasks/events/global.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -58,6 +59,8 @@ class TListOperationsRPC
             return "[ListIncrementalBackups]";
         case TOperationId::RESTORE:
             return "[ListBackupCollectionRestores]";
+        case TOperationId::COMPACTION:
+            return "[ListForcedCompactions]";
         default:
             return "[Untagged]";
         }
@@ -79,6 +82,8 @@ class TListOperationsRPC
             return new TEvBackup::TEvListIncrementalBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::RESTORE:
             return new TEvBackup::TEvListBackupCollectionRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::COMPACTION:
+            return new TEvForcedCompaction::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -124,6 +129,26 @@ class TListOperationsRPC
         const auto& record = ev->Get()->Record;
 
         LOG_D("Handle TEvIndexBuilder::TEvListResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TResponse response;
+
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            auto operation = response.add_operations();
+            ::NKikimr::NGRpcService::ToOperation(entry, operation);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
+    void Handle(TEvForcedCompaction::TEvListResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvForcedCompaction::TEvListResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -224,6 +249,7 @@ public:
         case TOperationId::SS_BG_TASKS:
         case TOperationId::INCREMENTAL_BACKUP:
         case TOperationId::RESTORE:
+        case TOperationId::COMPACTION:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -242,6 +268,7 @@ public:
             hFunc(TEvImport::TEvListImportsResponse, Handle);
             hFunc(NSchemeShard::NBackground::TEvListResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
+            hFunc(TEvForcedCompaction::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
             hFunc(TEvBackup::TEvListBackupCollectionRestoresResponse, Handle);

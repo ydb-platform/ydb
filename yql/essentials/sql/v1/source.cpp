@@ -16,15 +16,17 @@
 #include <util/string/escape.h>
 #include <util/string/subst.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-TTableRef::TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys)
-    : RefName(refName)
+TTableRef::TTableRef(TString refName, const TString& service, TDeferredAtom cluster, TNodePtr keys)
+    : RefName(std::move(refName))
     , Service(to_lower(service))
-    , Cluster(cluster)
-    , Keys(keys)
+    , Cluster(std::move(cluster))
+    , Keys(std::move(keys))
 {
 }
 
@@ -487,9 +489,14 @@ TNodePtr ISource::BuildFlattenColumns(const TString& label) {
 
 namespace {
 
-TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override, bool persistable) {
+TNodePtr BuildLambdaBodyForExprAliases(
+    TPosition pos,
+    const TVector<TNodePtr>& exprs,
+    bool override,
+    EFlattenAndAggrExprsPersistence persistence)
+{
     auto structObj = BuildAtom(pos, "row", TNodeFlags::Default);
-    for (const auto& exprNode : exprs) {
+    for (auto exprNode : exprs) {
         const auto name = exprNode->GetLabel();
         YQL_ENSURE(name);
         if (override) {
@@ -502,7 +509,25 @@ TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& e
         if (dynamic_cast<const THoppingWindow*>(exprNode.Get())) {
             continue;
         }
-        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), persistable ? structObj->Y("PersistableRepr", exprNode) : exprNode);
+
+        TString tranformer;
+        switch (persistence) {
+            case EFlattenAndAggrExprsPersistence::Disable:
+                tranformer = "";
+                break;
+            case EFlattenAndAggrExprsPersistence::Auto:
+                tranformer = "PersistableRepr";
+                break;
+            case EFlattenAndAggrExprsPersistence::Force:
+                tranformer = "EnsurePersistable";
+                break;
+        }
+
+        if (!tranformer.empty()) {
+            exprNode = structObj->Y(tranformer, exprNode);
+        }
+
+        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), std::move(exprNode));
     }
     return structObj->Y("AsList", structObj);
 }
@@ -521,7 +546,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
             Pos_,
             groupByExprs,
             ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
-            ctx.PersistableFlattenAndAggrExprs);
+            ctx.FlattenAndAggrExprsPersistence);
         res = Y("FlatMap", "core", BuildLambda(Pos_, Y("row"), body));
     }
 
@@ -530,7 +555,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
             Pos_,
             distinctAggrExprs,
             ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
-            ctx.PersistableFlattenAndAggrExprs);
+            ctx.FlattenAndAggrExprsPersistence);
         auto lambda = BuildLambda(Pos_, Y("row"), body);
         res = res ? Y("FlatMap", res, lambda) : Y("FlatMap", "core", lambda);
     }
@@ -540,7 +565,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.PersistableFlattenAndAggrExprs);
+    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.FlattenAndAggrExprsPersistence);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {

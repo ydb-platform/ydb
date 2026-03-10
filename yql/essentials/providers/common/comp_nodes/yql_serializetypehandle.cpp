@@ -5,11 +5,10 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TSerializeTypeHandleWrapper: public TMutableComputationNode<TSerializeTypeHandleWrapper> {
-    typedef TMutableComputationNode<TSerializeTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSerializeTypeHandleWrapper>;
 
 public:
     TSerializeTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* handle)
@@ -39,5 +38,4 @@ IComputationNode* WrapSerializeTypeHandle(TCallable& callable, const TComputatio
     return new TSerializeTypeHandleWrapper(ctx.Mutables, handle);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -982,7 +982,7 @@ std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
     return {0};
 }
 
-bool TViewerPipeClient::IsDatabaseRequest() {
+bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
@@ -1120,8 +1120,8 @@ TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString res
     return Viewer->GetHTTPINTERNALERROR(GetRequest(), std::move(contentType), std::move(response));
 }
 
-TString TViewerPipeClient::GetHTTPFORBIDDEN(TString contentType, TString response) {
-    return Viewer->GetHTTPFORBIDDEN(GetRequest(), std::move(contentType), std::move(response));
+TString TViewerPipeClient::GETHTTPACCESSDENIED(TString contentType, TString response) {
+    return Viewer->GETHTTPACCESSDENIED(GetRequest(), std::move(contentType), std::move(response));
 }
 
 TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
@@ -1164,6 +1164,18 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     RequestDone(requests);
 }
 
+void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+        Cancelled();
+    }
+}
+
+void TViewerPipeClient::Cancelled() {
+    BLOG_D("Request cancelled");
+    AddEvent("Cancelled");
+    PassAway();
+}
+
 void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     if (ResourceNavigateResponse) {
         ResourceNavigateResponse->Set(std::move(ev));
@@ -1174,9 +1186,17 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             ResourceBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
             --DataRequests; // don't count this request
         } else {
-            AddEvent("Failed to resolve database - shared database not found");
-            Direct = true;
-            Bootstrap(); // retry bootstrap without redirect this time
+            if (CheckDatabase) {
+                if (ResourceNavigateResponse->GetError() == "AccessDenied") {
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                } else {
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"), "Shared database not found");
+                }
+            } else {
+                AddEvent("Failed to resolve database - shared database not found");
+                Direct = true;
+                Bootstrap(); // retry bootstrap without redirect this time
+            }
         }
     }
 }
@@ -1196,9 +1216,17 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
                 --DataRequests; // don't count this request
             }
         } else {
-            AddEvent("Failed to resolve database - not found");
-            Direct = true;
-            Bootstrap(); // retry bootstrap without redirect this time
+            if (CheckDatabase) {
+                if (DatabaseNavigateResponse->GetError() == "AccessDenied") {
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                } else {
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"), "Database not found");
+                }
+            } else {
+                AddEvent("Failed to resolve database - not found");
+                Direct = true;
+                Bootstrap(); // retry bootstrap without redirect this time
+            }
         }
     }
 }
@@ -1212,6 +1240,8 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
             } else {
                 return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
             }
+        } else {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database nodes"), "Failed to resolve database nodes");
         }
     }
     if (ResourceBoardInfoResponse) {
@@ -1222,11 +1252,11 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
             } else {
                 return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef())));
             }
+        } else {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database nodes"), "Failed to resolve database nodes");
         }
     }
-    AddEvent("Failed to resolve database nodes");
-    Direct = true;
-    Bootstrap(); // retry bootstrap without redirect this time
+    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database nodes"), "Failed to resolve database nodes");
 }
 
 void TViewerPipeClient::HandleTimeout() {
@@ -1238,6 +1268,8 @@ STATEFN(TViewerPipeClient::StateResolveDatabase) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1246,6 +1278,18 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveResource);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
+    }
+}
+
+STATEFN(TViewerPipeClient::StateWork) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1256,7 +1300,11 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
+    if (HttpEvent) {
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+    }
     auto request = GetRequest();
+    CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
@@ -1265,8 +1313,8 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }
-        if (checkDatabaseAuth && !Viewer->CheckAccessViewer(request)) {
-            ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+        if (CheckDatabase && !Viewer->CheckAccessViewer(request)) {
+            ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }
     }

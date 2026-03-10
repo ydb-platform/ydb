@@ -143,7 +143,9 @@ protected:
                 }
 
                 if constexpr (SkipOrTake) {
-                    while (Iter.Next(Item->RefValue(CompCtx))) {
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    while (Iter.Next(fetchResult)) {
+                        Item->SetValue(CompCtx, std::move(fetchResult));
                         if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
                             FilterWorkFinished = true;
                             if constexpr (Inclusive) {
@@ -155,7 +157,9 @@ protected:
                         }
                     }
                 } else {
-                    if (Iter.Next(Item->RefValue(CompCtx))) {
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    if (Iter.Next(fetchResult)) {
+                        Item->SetValue(CompCtx, std::move(fetchResult));
                         if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                             value = Item->GetValue(CompCtx);
                             return true;
@@ -229,10 +233,12 @@ protected:
 
             if constexpr (SkipOrTake) {
                 for (;;) {
-                    if (const auto status = Stream.Fetch(Item->RefValue(CompCtx)); status != NUdf::EFetchStatus::Ok) {
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    if (const auto status = Stream.Fetch(fetchResult); status != NUdf::EFetchStatus::Ok) {
                         return status;
                     }
 
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                     if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
                         FilterWorkFinished = true;
                         if constexpr (Inclusive) {
@@ -244,11 +250,13 @@ protected:
                     }
                 }
             } else {
-                switch (const auto status = Stream.Fetch(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                switch (const auto status = Stream.Fetch(fetchResult)) {
                     case NUdf::EFetchStatus::Yield:
                         return status;
 
                     case NUdf::EFetchStatus::Ok:
+                        Item->SetValue(CompCtx, std::move(fetchResult));
                         if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                             result = Item->GetValue(CompCtx);
                             return NUdf::EFetchStatus::Ok;
@@ -358,9 +366,9 @@ protected:
             block = loop;
         }
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
-
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
@@ -378,7 +386,7 @@ protected:
 
         if constexpr (SkipOrTake) {
             if constexpr (Inclusive) {
-                const auto last = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, valuePtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, valuePtr);
+                const auto last = IsStream ? CallBoxedValueFetch(container, ctx, block, valuePtr) : CallBoxedValueNext(container, ctx, block, valuePtr);
                 ReturnInst::Create(context, last, block);
             } else {
                 BranchInst::Create(pass, block);
@@ -618,12 +626,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListWhileWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListWhileWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             out->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

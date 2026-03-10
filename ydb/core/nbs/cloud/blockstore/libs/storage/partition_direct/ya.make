@@ -1,17 +1,32 @@
 LIBRARY()
 
 SRCS(
-    partition_direct.cpp
+    direct_block_group_in_mem.cpp
+    direct_block_group.cpp
+    dirty_map.cpp
+    fast_path_service.cpp
+    load_actor_adapter.cpp
     partition_direct_actor.cpp
+    partition_direct.cpp
+    region.cpp
+    request.cpp
+    vchunk.cpp
 )
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config
     ydb/core/nbs/cloud/blockstore/libs/storage/api
-    ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group
-    ydb/core/nbs/cloud/storage/core/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
+    ydb/core/nbs/cloud/storage/core/libs/coroutine
+
     ydb/core/protos
+    ydb/library/aclib
+    ydb/library/services
+
+    ydb/core/mind/bscontroller
+    contrib/libs/opentelemetry-proto
 )
 
 END()

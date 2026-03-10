@@ -9,6 +9,8 @@
 #include <util/stream/null.h>
 #include <util/generic/scope.h>
 
+#include <utility>
+
 #ifdef GetMessage
     #undef GetMessage
 #endif
@@ -39,9 +41,9 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     return result.Build();
 }
 
-typedef bool TContext::*TPragmaField;
+using TPragmaField = bool TContext::*;
 
-// TODO(vitya-smirnov): register thsese names automatically using TABLE_ELEM macro.
+// TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
@@ -80,7 +82,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
-typedef TMaybe<bool> TContext::*TPragmaMaybeField;
+using TPragmaMaybeField = TMaybe<bool> TContext::*;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
@@ -92,19 +94,19 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
-                   const NSQLTranslation::TSQLHints& hints,
+                   NSQLTranslation::TSQLHints hints,
                    TIssues& issues,
-                   const TString& query)
-    : Lexers(lexers)
-    , Parsers(parsers)
+                   TString query)
+    : Lexers(std::move(lexers))
+    , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
-    , SqlHints_(hints)
+    , SqlHints_(std::move(hints))
     , Settings(settings)
-    , Query(query)
+    , Query(std::move(query))
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
@@ -120,7 +122,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     }
 
     if (settings.LangVer >= MakeLangVersion(2025, 3)) {
-        PersistableFlattenAndAggrExprs = true;
+        FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
     if (settings.LangVer >= MakeLangVersion(2025, 4)) {
@@ -241,14 +243,61 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
 }
 
 TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
-    TVector<NSQLTranslation::TSQLHint> result;
-    auto it = SqlHints_.find(tokenPos);
-    if (it == SqlHints_.end()) {
-        return result;
+    return PullHintForToken(tokenPos, [](const auto&) { return true; });
+}
+
+std::expected<NSQLTranslation::TSQLHint, bool> TContext::PullHintForToken(NYql::TPosition tokenPos, TStringBuf name) {
+    const auto isSameName = [&](const NSQLTranslation::TSQLHint& hint) {
+        return to_lower(hint.Name) == name;
+    };
+
+    TVector<NSQLTranslation::TSQLHint> hints = PullHintForToken(tokenPos, isSameName);
+    if (hints.empty()) {
+        return std::unexpected(false);
     }
-    result = std::move(it->second);
-    SqlHints_.erase(it);
-    return result;
+
+    NSQLTranslation::TSQLHint back = std::move(hints.back());
+    hints.pop_back();
+
+    bool hasError = false;
+    for (const NSQLTranslation::TSQLHint& hint : hints) {
+        hasError |= !Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+            out << "Hint " << hint.Name << " will not be used";
+        });
+    }
+    if (hasError) {
+        return std::unexpected(true);
+    }
+
+    return back;
+}
+
+TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(
+    NYql::TPosition tokenPos,
+    std::function<bool(NSQLTranslation::TSQLHint)> pred)
+{
+    auto it = SqlHints_.find(tokenPos);
+    if (it == end(SqlHints_)) {
+        return {};
+    }
+
+    auto& hints = it->second;
+
+    // If two or more hints with the same name are
+    // specified in the set, the last one is used.
+    auto tail = std::ranges::stable_partition(hints, std::not_fn(pred));
+
+    TVector<NSQLTranslation::TSQLHint> pulled;
+    pulled.reserve(std::ranges::size(tail));
+
+    std::ranges::move(tail, std::back_inserter(pulled));
+    hints.erase(std::ranges::begin(tail), std::ranges::end(tail));
+
+    if (hints.empty()) {
+        SqlHints_.erase(it);
+    }
+
+    return pulled;
 }
 
 bool TContext::WarnUnusedHints() {
@@ -539,6 +588,26 @@ TScopedStatePtr TContext::CreateScopedState() const {
     return state;
 }
 
+bool TContext::EnsureBackwardCompatibleFeatureAvailable(
+    TPosition position,
+    TStringBuf feature,
+    NYql::TLangVersion version)
+{
+    if (!IsBackwardCompatibleFeatureAvailable(version)) {
+        Error(position)
+            << feature << " is not available before language version "
+            << NYql::FormatLangVersion(version);
+        return false;
+    }
+
+    return true;
+}
+
+bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
+    return NYql::IsBackwardCompatibleFeatureAvailable(
+        Settings.LangVer, featureVer, Settings.BackportMode);
+}
+
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
     static const TSet<TStringBuf> DenyForAllArgs = {
         "datatype",
@@ -734,10 +803,6 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
-}
-
-bool TTranslation::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const {
-    return NYql::IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, langVer, Ctx_.Settings.BackportMode);
 }
 
 void EnumerateSqlFlags(std::function<void(std::string_view)> callback) {

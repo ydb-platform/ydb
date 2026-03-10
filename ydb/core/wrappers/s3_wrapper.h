@@ -4,6 +4,6 @@
 
 namespace NKikimr::NWrappers {
 
-IActor* CreateS3Wrapper(NExternalStorage::IExternalStorageOperator::TPtr storage);
+IActor* CreateStorageWrapper(NExternalStorage::IExternalStorageOperator::TPtr storage);
 
 } // NKikimr::NWrappers

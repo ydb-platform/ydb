@@ -7,12 +7,12 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 #include <yql/essentials/parser/pg_wrapper/interface/pack.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
 
 namespace NKikimr {
@@ -529,15 +529,15 @@ TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTab
 {}
 
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-    NYql::NDqProto::EDqStatsMode statsMode)
+    NYql::NDqProto::EDqStatsMode statsMode, const TTypeEnvironment* typeEnv)
     : TBase(meta)
 {
     switch(ReadTypeFromProto(meta.GetReadType())) {
         case TKqpScanComputeContext::TScanData::EReadType::Rows:
-            BatchReader.reset(new TRowBatchReader(meta));
+            BatchReader.reset(new TRowBatchReader(meta, typeEnv));
             break;
         case TKqpScanComputeContext::TScanData::EReadType::Blocks:
-            BatchReader.reset(new TBlockBatchReader(meta));
+            BatchReader.reset(new TBlockBatchReader(meta, typeEnv));
             break;
     }
 
@@ -657,7 +657,9 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     return stats;
 }
 
-std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original) {
+std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original,
+    const TKqpComputeContextBase::TColumn& column, std::optional<NYql::TColumnConverter>& cachedPgConverter)
+{
     if (original->type_id() == arrow::Type::TIMESTAMP) {
         auto timestamps = std::static_pointer_cast<arrow::TimestampArray>(original);
         auto ui64Data = std::make_shared<arrow::ArrayData>(arrow::TypeTraits<arrow::UInt64Type>::type_singleton(), original->length(), timestamps->data()->buffers);
@@ -677,9 +679,18 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
         case arrow::TimeUnit::NANO:
             return NArrow::TStatusValidator::GetValid(arrow::compute::Divide(ui64Array, const1K)).make_array();
         }
-    } else {
-        return original;
     }
+
+    if (column.PgType) {
+        if (!cachedPgConverter.has_value()) {
+            cachedPgConverter = NYql::BuildPgColumnConverter(original->type(), column.PgType);
+        }
+        if (*cachedPgConverter) {
+            return (*cachedPgConverter)(original);
+        }
+    }
+
+    return original;
 }
 
 TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& dataAccessor, TMaybe<ui64> /*shardId*/,
@@ -687,13 +698,16 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
 {
     TBytesStatistics stats;
     auto totalColsCount = TotalColumnsCount + 1;
+    if (CachedPgConverters.empty()) {
+        CachedPgConverters.resize(ResultColumns.size());
+    }
     auto batches = NArrow::SliceToRecordBatches(dataAccessor.GetFiltered());
     for (auto&& filtered : batches) {
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
         Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
+            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i), ResultColumns[i], CachedPgConverters[i])));
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});
@@ -730,9 +744,9 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch,
 }
 
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-    NYql::NDqProto::EDqStatsMode statsMode)
+    NYql::NDqProto::EDqStatsMode statsMode, const TTypeEnvironment* typeEnv)
 {
-    auto scanData = TKqpScanComputeContext::TScanData(meta, statsMode);
+    auto scanData = TKqpScanComputeContext::TScanData(meta, statsMode, typeEnv);
 
     auto result = Scans.emplace(0, std::move(scanData));
     Y_ENSURE(result.second);

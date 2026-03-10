@@ -10,7 +10,7 @@ public:
     using TThis = TViewerCapabilities;
     using TBase = TViewerPipeClient;
 
-    TViewerCapabilities(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TViewerCapabilities(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {}
 

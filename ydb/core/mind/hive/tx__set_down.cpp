@@ -22,8 +22,8 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         if (Forward) {
             auto tenantHive = Self->GetPipeToTenantHive(node);
             if (tenantHive) {
-                SideEffects.Callback([self = Self->SelfId(), tablet = *tenantHive, node = NodeId] {
-                    NTabletPipe::SendData(self, tablet, new TEvHive::TEvSetDown(node));
+                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId] {
+                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node));
                 });
             } else {
                 SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);

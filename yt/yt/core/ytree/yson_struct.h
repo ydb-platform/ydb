@@ -50,10 +50,6 @@ namespace NYT::NYTree {
  * In order to speed up compilation it is possible to use DECLARE_YSON_STRUCT(TYourClass) in the class body
  * and supplement it with DEFINE_YSON_STRUCT(TYourClass) in the .cpp file. Similar DECLARE_YSON_STRUCT_LITE
  * macro is available for non-ref-counted structs.
- *
- * The key difference from TYsonSerializable is that the latter builds the whole meta every time
- * an instance of the class is being constructed
- * while TYsonStruct builds meta only once just before construction of the first instance.
  */
 class TYsonStructBase
 {

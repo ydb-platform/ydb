@@ -58,20 +58,22 @@ extern "C" void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols) {
 }
 #endif
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-typedef void (*TBackTraceCallback)();
-static TBackTraceCallback BackTraceCallback;
+namespace {
 
-static void UdfBackTraceFn(IOutputStream*, void* const*, size_t) {
+using TBackTraceCallback = void (*)();
+TBackTraceCallback BackTraceCallback;
+
+void UdfBackTraceFn(IOutputStream*, void* const*, size_t) {
     BackTraceCallback();
 }
+
+} // namespace
 
 void SetBackTraceCallbackImpl(TBackTraceCallback callback) {
     BackTraceCallback = callback;
     SetFormatBackTraceFn(UdfBackTraceFn);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

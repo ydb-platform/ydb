@@ -19,11 +19,9 @@ namespace NYson {
 class TYsonWriter;
 } // namespace NYson
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -55,8 +53,8 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> TableType;
     NNodes::TMaybeNode<NNodes::TCallable> PgFilter;
 
-    explicit TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteTableSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -69,8 +67,8 @@ struct TWriteSequenceSettings {
 
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteSequenceSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -84,8 +82,8 @@ struct TWriteTopicSettings {
     NNodes::TMaybeNode<NNodes::TCoAtomList> DropConsumers;
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TWriteTopicSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteTopicSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -96,8 +94,8 @@ struct TWriteReplicationSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> ReplicationSettings;
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TWriteReplicationSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteReplicationSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -110,8 +108,8 @@ struct TWriteTransferSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteTransferSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -120,8 +118,8 @@ struct TDatabaseSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TDatabaseSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -132,8 +130,8 @@ struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> NewName;
     NNodes::TCoNameValueTupleList Other;
 
-    explicit TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other)
+    explicit TWriteRoleSettings(NNodes::TCoNameValueTupleList other)
+        : Other(std::move(other))
     {
     }
 };
@@ -170,7 +168,7 @@ struct TCommitSettings {
     NNodes::TCoNameValueTupleList Other;
 
     explicit TCommitSettings(NNodes::TCoNameValueTupleList other)
-        : Other(other)
+        : Other(std::move(other))
     {
     }
 

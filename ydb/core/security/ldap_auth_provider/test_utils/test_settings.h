@@ -32,13 +32,18 @@ public:
     TString GetCaCertFileName() const;
     TString GetServerCertFileName() const;
     TString GetServerKeyFileName() const;
+    TString GetClientCertFileName() const;
+    TString GetClientKeyFileName() const;
 
 private:
     TCertAndKey CaCertAndKey;
     TCertAndKey ServerCertAndKey;
+    TCertAndKey ClientCertAndKey;
     TTempFileHandle CaCertFile;
     TTempFileHandle ServerCertFile;
     TTempFileHandle ServerKeyFile;
+    TTempFileHandle ClientCertFile;
+    TTempFileHandle ClientKeyFile;
 };
 
 void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
@@ -53,5 +58,6 @@ void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ld
 void InitLdapSettingsWithCustomGroupAttribute(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
 void InitLdapSettingsWithListOfHosts(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
 void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
+void InitLdapSettingsWithSaslExternalBind(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
 
 } // NKikimr

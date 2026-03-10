@@ -52,6 +52,8 @@ void AdjustSecretPaths(
     const TVector<TSecretSettingsNames>& secretSettings,
     TStringBuf tablePathPrefix);
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TExternalDataSourceAuthFields final {
 public:
     TExternalDataSourceAuthFields() = default;

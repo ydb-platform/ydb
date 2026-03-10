@@ -3,7 +3,11 @@
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
+#include <arrow/array/concatenate.h>
+#include <arrow/array/util.h>
+#include <arrow/scalar.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -53,6 +57,78 @@ TRenames MakeScalarMapJoinRenames(int leftSize, int rightDictValueSize) {
     return ret;
 }
 
+// regular arrow column:
+//
+// [... ... ... ... ...]
+//  ^
+//  |-- array->GetValues<T>(...)
+//  |-- buffer.data()
+//
+// sliced arrow column:
+//
+// [PAD ... ... ... ... ...]
+//  ^    ^
+//  |    +-- array->GetValues<T>(...)
+//  |-- buffer.data()
+//
+// So, this method creates sliced columns to check if they are parsed correctly
+NUdf::TUnboxedValuePod SliceBlockList(
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValuePod blockList,
+    size_t width)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    NUdf::TUnboxedValue iterator = blockList.GetListIterator();
+    NUdf::TUnboxedValue current;
+
+    TDefaultListRepresentation newList;
+
+    while (iterator.Next(current)) {
+        auto blockCountUV = current.GetElement(width);
+        ui64 blockCount =
+            TArrowBlock::From(blockCountUV).GetDatum()
+                .scalar_as<arrow::UInt64Scalar>().value;
+
+        if (blockCount == 0) {
+            newList = newList.Append(std::move(current));
+            continue;
+        }
+
+        NUdf::TUnboxedValue* items = nullptr;
+        auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
+
+        for (size_t i = 0; i < width; i++) {
+            auto colValue = current.GetElement(i);
+            const auto& datum = TArrowBlock::From(colValue).GetDatum();
+            Y_ABORT_UNLESS(datum.is_array());
+
+            auto arrData = datum.array();
+            Y_ABORT_UNLESS(arrData->offset == 0);
+
+            auto arr = arrow::MakeArray(arrData);
+
+            auto nullScalar = arrow::MakeNullScalar(arr->type());
+            auto prefixArr = ARROW_RESULT(arrow::MakeArrayFromScalar(*nullScalar, 1, pool));
+
+            std::shared_ptr<arrow::Array> concatArr;
+            {
+                arrow::ArrayVector parts{prefixArr, arr};
+                concatArr = ARROW_RESULT(arrow::Concatenate(parts, pool));
+            }
+
+            auto sliced = concatArr->Slice(1, arr->length())->data();
+
+            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(std::move(sliced)));
+        }
+
+        items[width] = MakeBlockCount(holderFactory, blockCount);
+        newList = newList.Append(std::move(tuple));
+    }
+
+    return holderFactory.CreateDirectListHolder(std::move(newList));
+}
+
 void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, NYql::NUdf::TUnboxedValue right) {
     TComputationContext& ctx = g.GetContext();
     g.GetEntryPoint(0, false)->SetValue(ctx, std::move(left));
@@ -65,7 +141,8 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr) {
+THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+                                                    bool withSpiller) {
 
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
@@ -144,10 +221,14 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     auto blockGraphFrom = [&](TRuntimeNode blockWideStreamJoin) {
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(blockWideStreamJoin, args.Entrypoints);
         TComputationContext& ctx = graph->GetContext();
-        const int kBlockSize = 128;
-        SetEntryPointValues(*graph,
-                            ToBlocks(ctx, kBlockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList),
-                            ToBlocks(ctx, kBlockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList));
+        const int blockSize = descr.BlockSize;
+        auto leftBlocks = ToBlocks(ctx, blockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList);
+        auto rightBlocks = ToBlocks(ctx, blockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList);
+        if (descr.SliceBlocks) {
+            leftBlocks = SliceBlockList(ctx.HolderFactory, leftBlocks, descr.LeftSource.ColumnTypes.size());
+            rightBlocks = SliceBlockList(ctx.HolderFactory, rightBlocks, descr.RightSource.ColumnTypes.size());
+        }
+        SetEntryPointValues(*graph, leftBlocks, rightBlocks);
         return graph;
     };
 
@@ -242,7 +323,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         }
     }();
     auto graph = graphFrom(wideStream);
-    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    if (withSpiller) {
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    }
 
     graph->GetContext().LogProvider = testLogProvider.Get();
     return graph;

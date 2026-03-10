@@ -1,6 +1,5 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/services/ydb/ydb_keys_ut.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -25,11 +24,8 @@ using namespace NYdb::NTable;
 using namespace NKikimr::NDataStreams::V1;
 namespace YDS_V1 = Ydb::DataStreams::V1;
 namespace NYDS_V1 = NYdb::NDataStreams::V1;
-struct WithSslAndAuth : TKikimrTestSettings {
-    static constexpr bool SSL = true;
-    static constexpr bool AUTH = true;
-};
-using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
+
+using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 
 static constexpr const char NON_CHARGEABLE_USER[] = "superuser@builtin";
 static constexpr const char NON_CHARGEABLE_USER_X[] = "superuser_x@builtin";
@@ -98,11 +94,11 @@ public:
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driverConfig = TDriverConfig()
             .SetEndpoint(location)
-            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()))
+            .SetDatabase("/Root");
+
         if (secure) {
-            driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
-        } else {
-            driverConfig.SetDatabase("/Root/");
+            driverConfig.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt());
         }
 
         Driver = std::make_unique<TDriver>(std::move(driverConfig));
@@ -623,7 +619,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
     }
 
-
     Y_UNIT_TEST(TestReservedConsumersMetering) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
@@ -774,7 +769,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             });
         UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 9);
     }
-
 
     Y_UNIT_TEST(TestNonChargeableUser) {
         TSecureDatastreamsTestServer testServer;
@@ -2252,10 +2246,15 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         {
+waitForNavCache:
             auto result = client.GetShardIterator(
                     streamName, "shard-000000",
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
                 ).ExtractValueSync();
+            if (result.GetStatus() == EStatus::SCHEME_ERROR) { // permissions were cached
+                Sleep(TDuration::MilliSeconds(10));
+                goto waitForNavCache;
+            }
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();

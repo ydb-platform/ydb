@@ -1,7 +1,6 @@
 {
   "qp": "area/queryprocessor",
-  "Topics": "area/topics",
-  "topics": "area/topics", 
+  "topics": "area/topics",
   "cs": "area/cs",
   "datashard": "area/datashard",
   "system-infra": "area/system-infra",
@@ -19,6 +18,6 @@
   "duty": "area/duty",
   "engineering": "area/engineering",
   "postgres-compatibility": "area/pg",
-  "Security": "area/security",
+  "security": "area/security",
   "changelog-reviewers": "area/changelog"
 }

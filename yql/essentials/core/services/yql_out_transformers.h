@@ -11,6 +11,8 @@
 #include <util/stream/output.h>
 #include <util/generic/ptr.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TExprOutputTransformer {
@@ -71,8 +73,8 @@ private:
 
 class TExprLogTransformer {
 public:
-    TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
-        : Description_(description)
+    TExprLogTransformer(TString description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
+        : Description_(std::move(description))
         , Component_(component)
         , Level_(level)
     {

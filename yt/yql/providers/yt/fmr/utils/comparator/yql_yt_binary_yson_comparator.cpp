@@ -2,6 +2,11 @@
 
 namespace NYql::NFmr {
 
+int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs) {
+    Y_ENSURE(lhs.SortOrders.size() == rhs.SortOrders.size(), "SortOrders mismatch in TFmrTableKeysBoundary comparison");
+    return CompareKeyRowsAcrossYsonBlocks(lhs.Row, lhs.Markup, rhs.Row, rhs.Markup, lhs.SortOrders);
+}
+
 int TBinaryYsonComparator::CompareYsonValues(TColumnOffsetRange lhs, TColumnOffsetRange rhs) const {
     Y_ENSURE(lhs.IsValid(), "Invalid column offset range");
     Y_ENSURE(rhs.IsValid(), "Invalid column offset range");
@@ -51,6 +56,14 @@ int TBinaryYsonComparator::CompareRows(
     }
 
     return 0;
+}
+
+TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns) {
+    return TFmrTableKeysBoundary(
+        NYT::NodeToYsonString(keyRow, NYT::NYson::EYsonFormat::Binary),
+        keyColumns.Columns,
+        keyColumns.SortOrders
+    );
 }
 
 } // namespace NYql::NFmr

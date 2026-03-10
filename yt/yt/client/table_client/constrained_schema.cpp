@@ -25,7 +25,7 @@ TConstrainedTableSchema::TConstrainedTableSchema(TTableSchema schema, TColumnNam
 TConstrainedTableSchema::TConstrainedTableSchema(
     TTableSchema schema,
     TColumnStableNameToConstraintMap columnStableNameToConstraint,
-    size_t columnToConstraintLogLimit)
+    int columnToConstraintLogLimit)
     : TableSchema_(std::move(schema))
     , ColumnToConstraint_(MakeColumnNameToConstraintMap(TableSchema_, std::move(columnStableNameToConstraint), columnToConstraintLogLimit))
 { }
@@ -35,7 +35,7 @@ TConstrainedTableSchema::TConstrainedTableSchema(
 TColumnNameToConstraintMap MakeColumnNameToConstraintMap(
     const TTableSchema& schema,
     TColumnStableNameToConstraintMap columnStableNameToConstraint,
-    size_t columnToConstraintLogLimit)
+    int columnToConstraintLogLimit)
 {
     TColumnNameToConstraintMap result;
     for (auto& [stableName, constraint] : columnStableNameToConstraint) {
@@ -56,7 +56,7 @@ TColumnNameToConstraintMap MakeColumnNameToConstraintMap(
 TColumnStableNameToConstraintMap MakeColumnStableNameToConstraintMap(
     const TTableSchema& schema,
     TColumnNameToConstraintMap columnNameToConstraint,
-    size_t columnToConstraintLogLimit)
+    int columnToConstraintLogLimit)
 {
     TColumnStableNameToConstraintMap result;
     for (auto& [name, constraint] : columnNameToConstraint) {

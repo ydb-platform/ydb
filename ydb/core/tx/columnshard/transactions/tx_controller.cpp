@@ -69,6 +69,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
             ++countOverrideDeadline;
         } else {
+            // For transactions without deadline (e.g., schema transactions),
+            // use GetAllowedStep() to ensure MinStep is not zero after restart
+            txInfo.MinStep = GetAllowedStep();
             ++countNoDeadline;
         }
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);

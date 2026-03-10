@@ -1,6 +1,7 @@
 #include "mlp_reader.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -40,7 +41,12 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
         case NDescriber::EStatus::SUCCESS: {
-            ReadBalancerTabletId = topic.Info->Description.GetBalancerTabletID();
+            Info = topic.Info;
+            ConsumerConfig = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
+            if (!ConsumerConfig) {
+                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
+            }
             return DoSelectPartition();
         }
         default: {
@@ -60,7 +66,7 @@ STFUNC(TReaderActor::DescribeState) {
 void TReaderActor::DoSelectPartition() {
     LOG_D("Start select partition");
     Become(&TReaderActor::SelectPartitionState);
-    SendToTablet(ReadBalancerTabletId, new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
+    SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
@@ -101,8 +107,16 @@ STFUNC(TReaderActor::SelectPartitionState) {
 void TReaderActor::DoRead() {
     LOG_D("Start read");
     Become(&TReaderActor::ReadState);
-    SendToTablet(PQTabletId, new TEvPQ::TEvMLPReadRequest(Settings.TopicName, Settings.Consumer, PartitionId,
-        Settings.WaitTime.ToDeadLine(), Settings.VisibilityTimeout.ToDeadLine(), Settings.MaxNumberOfMessage));
+
+    auto* request = new TEvPQ::TEvMLPReadRequest(
+        Settings.TopicName,
+        Settings.Consumer,
+        PartitionId,
+        Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
+        Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
+        Settings.MaxNumberOfMessage
+    );
+    SendToTablet(PQTabletId, request);
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {

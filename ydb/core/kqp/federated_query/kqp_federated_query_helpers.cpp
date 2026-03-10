@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 
@@ -160,6 +161,7 @@ namespace {
         NYdb::TDriverConfig cfg;
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
 
         auto driver = std::make_unique<NYdb::TDriver>(cfg);
 
@@ -187,12 +189,12 @@ namespace {
 
         if (handlersExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(handlersExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
-            settings.DefaultHandlersExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultHandlersExecutor(NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         if (compressionExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(compressionExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compression").SetBlocking(true).SetCatching(false));
-            settings.DefaultCompressionExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultCompressionExecutor(NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         return settings;
@@ -324,6 +326,7 @@ namespace {
         }
 
         auto result = TKqpFederatedQuerySetup{
+            Driver,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -339,8 +342,8 @@ namespace {
             DqTaskTransformFactory,
             PqGatewayConfig,
             MakePqGateway(Driver, LocalTopicClientSettings),
-            ActorSystemPtr,
-            Driver};
+            ActorSystemPtr
+        };
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

@@ -23,10 +23,39 @@ using namespace NActors;
 
 using TFixture = THttpProxyTestMockForSQSTopic;
 
+
 namespace {
+    class TNoAuthFixture: public THttpProxyTestMockForSQSTopic {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            THttpProxyTestMockForSQSTopic::SetUp(ctx);
+            DisableAuthorization();
+        }
+    };
+
+    class TWithEnforceUserTokenRequirementFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnforceUserTokenRequirement = true,
+            });
+        }
+    };
+
+
+    class TNoAuthWithEnforceUserTokenRequirementFixture: public TWithEnforceUserTokenRequirementFixture {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            TWithEnforceUserTokenRequirementFixture::SetUp(ctx);
+            DisableAuthorization();
+        }
+    };
 
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
+
+    constexpr TStringBuf NON_EXISTING_QUEUE_URL = "/v1/5//Root/16/NonExistentQueue/16/ydb-sqs-consumer";
 
     TString GetPathFromFullQueueUrl(const TString& url) {
         auto [host, path] = NUrl::SplitUrlToHostAndPath(url);
@@ -42,10 +71,8 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
-    NYdb::TDriverConfig MakeDriverConfig(TFixture& fixture) {
+    NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
-
-        config.SetEndpoint("localhost:" + ToString(fixture.GRpcServerPort));
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
         config.SetDatabase("/Root");
         config.SetAuthToken("root@builtin");
@@ -53,7 +80,7 @@ namespace {
         return config;
     }
 
-    NYdb::TDriver MakeDriver(TFixture& fixture) {
+    NYdb::TDriver MakeDriver(std::derived_from<THttpProxyTestMock> auto& fixture) {
         return TDriver(MakeDriverConfig(fixture));
     }
 
@@ -68,6 +95,7 @@ namespace {
         }
         {
             auto desc = client.DescribeTopic(topicName, NYdb::NTopic::TDescribeTopicSettings{}.IncludeLocation(true)).GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), topicName);
             auto description = desc.GetTopicDescription();
             desc.Out(Cerr);
             for (const auto& c : description.GetConsumers()) {
@@ -155,8 +183,14 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrl, TFixture) {
-            const TString queueUrl = "/v1/5//Root/16/ExampleQueueName/16/ydb-sqs-consumer";
-            auto queueName = "ExampleQueueName";
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            auto queueName = topicName;
             auto json = GetQueueUrl({{"QueueName", queueName}});
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
 
@@ -169,25 +203,31 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, TFixture) {
-            if ("X-Fail") {
-                return;
-            }
             auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
             TString resultType = GetByPath<TString>(json, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
             TString resultMessage = GetByPath<TString>(json, "message");
-            UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+            UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist");
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithConsumer, TFixture) {
+            auto driver = MakeDriver(*this);
             const TString consumer = "user_consumer";
             const TString queueName = "ExampleQueueName";
-            const TString queueUrl = "/v1/5//Root/16/ExampleQueueName/13/user_consumer";
+            Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
             const TString requestQueueName = queueName + "@" + consumer;
             auto json = GetQueueUrl({
                 {"QueueName", requestQueueName},
             });
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+            const TString requestQueueNameWithWrongConsumer = queueName + "@" + "wrong_consumer";
+            json = GetQueueUrl({
+                {"QueueName", requestQueueNameWithWrongConsumer},
+            }, 400);
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {
@@ -300,7 +340,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json0, "__type"), "MissingParameter");
 
             auto json1 = SendMessage({
-                {"QueueUrl", "/v1/5//Root/16/ExampleQueueName/13/user_consumer"},
+                {"QueueUrl", NON_EXISTING_QUEUE_URL},
                 {"MessageBody", "MessageBody-0"}
             }, 400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json1, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
@@ -416,7 +456,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             {"MessageId", "MessageId"},
         };
 
-        static void CompareCommonSendAndRecievedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
+        static void CompareCommonSendAndReceivedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
             for (const auto& [keyS, keyR] : CommonReceiveMessageAttributes) {
                 UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, keyS), GetByPath<TString>(jsonReceived, keyR), LabeledOutput(keyS, caseName));
             }
@@ -438,7 +478,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {
-            auto jsonReceived = ReceiveMessage({{"QueueUrl", "/v1/5//Root/16/ExampleQueueName/16/ydb-sqs-consumer"}, {"WaitTimeSeconds", 1}}, 400);
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", NON_EXISTING_QUEUE_URL}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         }
@@ -470,7 +510,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
@@ -490,7 +530,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}, {"VisibilityTimeout", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
 
             do {
                 Sleep(TDuration::MilliSeconds(350));
@@ -501,7 +541,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
@@ -619,9 +659,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        if (!"X-Fail") { // TODO MLP commit idempotence
-            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        }
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {
@@ -1310,6 +1348,76 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], ToString(queueRetention.Seconds()));
     }
 
+    Y_UNIT_TEST_F(TestDeleteQueueInvalid, TFixture) {
+        auto json = DeleteQueue({{"QueueUrl", "InvalidExistentQueue"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueueNonExisting, TFixture) {
+        auto json = DeleteQueue({{"QueueUrl", NON_EXISTING_QUEUE_URL}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueue, TFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteQueue({{"QueueUrl", queueUrl}});
+
+        auto getQueueUrlRequest = CreateSqsGetQueueUrlRequest();
+        for (const TInstant deadline = TDuration::Seconds(60).ToDeadLine(); TInstant::Now() <= deadline; ) {
+            auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", getQueueUrlRequest, FormAuthorizationStr("ru-central1"));
+            if (res.HttpCode == 200) {
+                // The queue should be deleted within 60 seconds.
+                Sleep(TDuration::MilliSeconds(250));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+                return;
+            }
+        }
+        UNIT_FAIL("Queue was not deleted");
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueueMultiConsumer, TFixture) {
+        const int nConsumers = 10;
+        auto driver = MakeDriver(*this);
+
+        const TString queueName = "ExampleQueueName";
+        auto consumerName = [](int i) { return "user_consumer" + ToString(i); };
+        auto queueUrl = [&](int i) {
+            return std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumerName(i).size(), consumerName(i).c_str());
+        };
+        {
+            NYdb::NTopic::TCreateTopicSettings settings;
+            for (int i = 0; i < nConsumers; ++i) {
+                settings.BeginAddSharedConsumer(consumerName(i)).KeepMessagesOrder(false).DefaultProcessingTimeout(TDuration::Seconds(20)).EndAddConsumer();
+            }
+            Y_ENSURE(CreateTopic(driver, queueName, settings));
+        }
+        auto client = TTopicClient(driver);
+        for (int consumerRemains = nConsumers; consumerRemains >= 0; --consumerRemains) {
+            auto desc = client.DescribeTopic(queueName, NYdb::NTopic::TDescribeTopicSettings{}.IncludeLocation(true)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(desc.IsSuccess(), consumerRemains > 0, consumerRemains);
+            auto description = desc.GetTopicDescription();
+            desc.Out(Cerr);
+            for (const auto& c : description.GetConsumers()) {
+                Cerr << c.GetConsumerName() << Endl;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(consumerRemains, description.GetConsumers().size(), consumerRemains);
+
+            for (int i = 0; i < nConsumers; ++i) {
+                const TString requestQueueName = queueName + "@" + consumerName(i);
+                const int code = (i < consumerRemains) ? 200 : 400;
+                auto json = GetQueueUrl({{"QueueName", requestQueueName},}, code);
+            }
+
+            if (consumerRemains > 0) {
+                DeleteQueue({{"QueueUrl", queueUrl(consumerRemains - 1)}});
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(TestSetQueueAttributesBasic, TFixture) {
         auto json = CreateQueue({
             {"QueueName", "TestSetAttrsQueue"},
@@ -1374,7 +1482,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestSetQueueAttributesNonExistentQueue, TFixture) {
         auto errorJson = SetQueueAttributes({
-            {"QueueUrl", "/v1/5//Root/16/NonExistentQueue/16/ydb-sqs-consumer"},
+            {"QueueUrl", NON_EXISTING_QUEUE_URL},
             {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "60"}}}
         }, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
@@ -1481,5 +1589,301 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
     }
 
+    Y_UNIT_TEST_F(TestPurgeQueueInvalid, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", "invlid-queue-url"}}, 400);
+    }
 
+    Y_UNIT_TEST_F(TestPurgeQueueNonExisting, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", NON_EXISTING_QUEUE_URL}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestPurgeQueue, TFixture) {
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        const int nMessages = 5;
+        const TString queueName = "queueName";
+        const TString consumer = "consumer-3";
+        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+
+        auto describeAndCountUncommited = [&]() {
+            auto desc = client.DescribeConsumer(queueName, consumer, NYdb::NTopic::TDescribeConsumerSettings{}.IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), queueName);
+            auto description = desc.GetConsumerDescription();
+            desc.Out(Cerr);
+            ui64 offsetDiff = 0;
+            for (const NYdb::NTopic::TPartitionInfo& part : description.GetPartitions()) {
+                UNIT_ASSERT_C(part.GetPartitionStats().has_value(), part.GetPartitionId());
+                UNIT_ASSERT_C(part.GetPartitionConsumerStats().has_value(), part.GetPartitionId());
+                offsetDiff += part.GetPartitionStats().value().GetEndOffset() -
+                              part.GetPartitionConsumerStats().value().GetCommittedOffset();
+            }
+            return offsetDiff;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
+
+        auto json = CreateQueue({{"QueueName", queueName + "@" + consumer}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
+
+        for (int i = 0; i < nMessages; ++i) {
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-" + ToString(i)}});
+        }
+
+        // All available messages in a queue (including in-flight messages) should be deleted.
+        // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"MaxNumberOfMessages", 3}, {"VisibilityTimeout", 43000}}); // ~12 hours
+        UNIT_ASSERT_VALUES_UNEQUAL(json["Messages"].GetArray().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), nMessages);
+        PurgeQueue({{"QueueUrl", queueUrl}});
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 30}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, TFixture) {
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_STRING_CONTAINS(resultMessage, "The specified queue doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlEmpty, TNoAuthFixture) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrl, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExampleQueueName";
+        const TString consumer = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+        auto queueName = topicName;
+        auto json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        // ignore QueueOwnerAWSAccountId parameter.
+        json = GetQueueUrl({{"QueueName", queueName}, {"QueueOwnerAWSAccountId", "some-account-id"}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlOfNotExistingQueue, TNoAuthFixture) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlWithConsumer, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TString consumer = "user_consumer";
+        const TString queueName = "ExampleQueueName";
+        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
+        const TString requestQueueName = queueName + "@" + consumer;
+        auto json = GetQueueUrl({
+            {"QueueName", requestQueueName},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        const TString requestQueueNameWithWrongConsumer = queueName + "@" + "wrong_consumer";
+        json = GetQueueUrl({
+                               {"QueueName", requestQueueNameWithWrongConsumer},
+                           }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthSendMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto json0 = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json0, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json0, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json0, "MessageId").empty());
+
+        auto json1 = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", ""},
+            {"DelaySeconds", 900},
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json1, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json1, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json1, "MessageId").empty());
+        constexpr TStringBuf emptyStringHash = "d41d8cd98f00b204e9800998ecf8427e";
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json1, "MD5OfMessageBody"), emptyStringHash);
+        UNIT_ASSERT_VALUES_UNEQUAL(GetByPath<TString>(json0, "MessageId"), GetByPath<TString>(json1, "MessageId"));
+
+        const auto messages = ReadMessagesSync(driver, path.TopicPath, false, 2, TDuration::Minutes(5));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "MessageBody-0");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthReceiveMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto jsonSend = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+
+        auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
+        CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+        // Second call during visibility timeout
+        jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthDeleteMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthCreateQueue, TNoAuthFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains("ExampleQueueName"));
+        UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthDeleteQueue, TNoAuthFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        DeleteQueue({{"QueueUrl", queueUrl}});
+        json = GetQueueUrl({{"QueueName", "ExampleQueueName"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlEmpty, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrl, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExampleQueueName";
+        const TString consumer = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+        auto queueName = topicName;
+        auto json = GetQueueUrl({{"QueueName", queueName}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlOfNotExistingQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenSendMessage, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto json = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        }, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenReceiveMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto jsonSend = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+
+        DisableAuthorization();
+
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DisableAuthorization();
+
+        json = DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenCreateQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteQueue, TWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DisableAuthorization();
+
+        json = DeleteQueue({{"QueueUrl", queueUrl}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

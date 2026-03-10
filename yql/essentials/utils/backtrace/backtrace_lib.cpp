@@ -12,7 +12,7 @@
 
 namespace {
 const size_t Limit = 400;
-void* Stack[Limit];
+void* Stack[Limit]; // NOLINT(modernize-avoid-c-arrays)
 
 struct TDllInfo {
     const char* Path;
@@ -20,7 +20,7 @@ struct TDllInfo {
 };
 
 const size_t MaxDLLCnt = 100;
-TDllInfo DLLs[MaxDLLCnt];
+TDllInfo DLLs[MaxDLLCnt]; // NOLINT(modernize-avoid-c-arrays)
 size_t DLLCount = 0;
 
 #if defined(_linux_) && defined(_x86_64_)
@@ -39,8 +39,7 @@ bool Comp(const TDllInfo& a, const TDllInfo& b) {
 
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 TCollectedFrame::TCollectedFrame(uintptr_t addr) {
     File = GetPersistentExecPath().c_str();
     Address = addr;
@@ -74,5 +73,4 @@ size_t CollectFrames(TCollectedFrame* frames, void** stack, size_t cnt) {
     }
     return cnt;
 }
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace

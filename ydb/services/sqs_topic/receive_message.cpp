@@ -100,10 +100,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 return Nothing();
             }
 
-            const TDuration waitTime = TDuration::Seconds(request.wait_time_seconds());
+            const std::optional<TDuration> waitTime = request.has_wait_time_seconds()
+                ? std::make_optional(TDuration::Seconds(request.wait_time_seconds())) : std::nullopt;
 
-            const TDuration visibilityTimeout = request.has_visibility_timeout() ? TDuration::Seconds(request.visibility_timeout()) : TDuration::Seconds(NSQS::TLimits::VisibilityTimeout);
-            if (visibilityTimeout > NSQS::TLimits::MaxVisibilityTimeout) {
+            const std::optional<TDuration> visibilityTimeout = request.has_visibility_timeout()
+                ? std::make_optional(TDuration::Seconds(request.visibility_timeout())) : std::nullopt;
+            if (visibilityTimeout && *visibilityTimeout > NSQS::TLimits::MaxVisibilityTimeout) {
                 ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Visibility timeout is greater than {} hours", NSQS::TLimits::MaxVisibilityTimeout.Hours())));
                 return Nothing();
             }
@@ -116,16 +118,15 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = this->QueueUrl_->Consumer,
                 .WaitTime = waitTime,
-                .VisibilityTimeout = visibilityTimeout,
+                .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UncompressMessages = true,
-                .UserToken = std::move(userToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
         }

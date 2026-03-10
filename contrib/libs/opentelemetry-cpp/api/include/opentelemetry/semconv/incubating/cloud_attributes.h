@@ -87,6 +87,11 @@ static constexpr const char *kCloudResourceId = "cloud.resource_id";
 namespace CloudPlatformValues
 {
 /**
+  Akamai Cloud Compute
+ */
+static constexpr const char *kAkamaiCloudCompute = "akamai_cloud.compute";
+
+/**
   Alibaba Cloud Elastic Compute Service
  */
 static constexpr const char *kAlibabaCloudEcs = "alibaba_cloud_ecs";
@@ -172,6 +177,11 @@ static constexpr const char *kAzureAppService = "azure.app_service";
 static constexpr const char *kAzureOpenshift = "azure.openshift";
 
 /**
+  Google Vertex AI Agent Engine
+ */
+static constexpr const char *kGcpAgentEngine = "gcp.agent_engine";
+
+/**
   Google Bare Metal Solution (BMS)
  */
 static constexpr const char *kGcpBareMetalSolution = "gcp_bare_metal_solution";
@@ -207,6 +217,11 @@ static constexpr const char *kGcpAppEngine = "gcp_app_engine";
 static constexpr const char *kGcpOpenshift = "gcp_openshift";
 
 /**
+  Server on Hetzner Cloud
+ */
+static constexpr const char *kHetznerCloudServer = "hetzner.cloud_server";
+
+/**
   Red Hat OpenShift on IBM Cloud
  */
 static constexpr const char *kIbmCloudOpenshift = "ibm_cloud_openshift";
@@ -236,10 +251,20 @@ static constexpr const char *kTencentCloudEks = "tencent_cloud_eks";
  */
 static constexpr const char *kTencentCloudScf = "tencent_cloud_scf";
 
+/**
+  Vultr Cloud Compute
+ */
+static constexpr const char *kVultrCloudCompute = "vultr.cloud_compute";
+
 }  // namespace CloudPlatformValues
 
 namespace CloudProviderValues
 {
+/**
+  Akamai Cloud
+ */
+static constexpr const char *kAkamaiCloud = "akamai_cloud";
+
 /**
   Alibaba Cloud
  */
@@ -266,6 +291,11 @@ static constexpr const char *kGcp = "gcp";
 static constexpr const char *kHeroku = "heroku";
 
 /**
+  Hetzner
+ */
+static constexpr const char *kHetzner = "hetzner";
+
+/**
   IBM Cloud
  */
 static constexpr const char *kIbmCloud = "ibm_cloud";
@@ -279,6 +309,11 @@ static constexpr const char *kOracleCloud = "oracle_cloud";
   Tencent Cloud
  */
 static constexpr const char *kTencentCloud = "tencent_cloud";
+
+/**
+  Vultr
+ */
+static constexpr const char *kVultr = "vultr";
 
 }  // namespace CloudProviderValues
 

@@ -557,6 +557,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 const std::optional<TString> expectedIssue = std::nullopt) {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto db = NYdb::NTable::TTableClient(driver);
@@ -1991,7 +1992,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         {
             auto driverConfig = TDriverConfig()
-            .SetEndpoint(kikimr.GetEndpoint())
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
@@ -3104,7 +3106,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         {
             auto driverConfig = TDriverConfig()
-            .SetEndpoint(kikimr.GetEndpoint())
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto schemeClient = NYdb::NScheme::TSchemeClient(driver);

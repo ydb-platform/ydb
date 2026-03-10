@@ -1,6 +1,7 @@
 #include "yql_co.h"
 #include "yql_co_sqlin.h"
 #include "yql_co_pgselect.h"
+#include "yql_co_sqlselect.h"
 #include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
@@ -6697,7 +6698,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             });
 
             EDataSlot payloadSlot;
-            const auto* payloadType = payload->GetTypeAnn();
+            const auto payloadType = payload->GetTypeAnn();
             if (payloadType->GetKind() == ETypeAnnotationKind::Null) {
                 // we treat NULL as Nothing(Utf8?)
                 payloadSlot = EDataSlot::Utf8;
@@ -7157,13 +7158,13 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["PgSelect"] = &ExpandPgSelect;
-    map["PgIterate"] = &ExpandPgIterate;
-    map["PgIterateAll"] = &ExpandPgIterate;
+    map["PgSelect"] = &ExpandSqlSelect;
+    map["PgIterate"] = &ExpandSqlIterate;
+    map["PgIterateAll"] = &ExpandSqlIterate;
 
-    map["YqlSelect"] = &ExpandPgSelect;
-    map["YqlIterate"] = &ExpandPgIterate;
-    map["YqlIterateAll"] = &ExpandPgIterate;
+    map["YqlSelect"] = &ExpandSqlSelect;
+    map["YqlIterate"] = &ExpandSqlIterate;
+    map["YqlIterateAll"] = &ExpandSqlIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;

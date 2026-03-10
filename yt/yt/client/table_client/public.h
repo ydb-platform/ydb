@@ -124,7 +124,6 @@ constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
 extern const std::string PrimaryLockName;
-
 extern const std::string SystemColumnNamePrefix;
 extern const std::string NonexistentColumnName;
 extern const std::string TableIndexColumnName;
@@ -337,9 +336,9 @@ using TTableSchemaPtr = TIntrusivePtr<TTableSchema>;
 
 class TConstrainedTableSchema;
 
-// NB: Is used to store constraints on master side.
+// NB: Used to store constraints on master side.
 using TColumnStableNameToConstraintMap = THashMap<TColumnStableName, std::string>;
-// NB: Is used to handle constraints on user side.
+// NB: Used to handle constraints on user side.
 using TColumnNameToConstraintMap = THashMap<std::string, std::string>;
 
 class TLegacyLockMask;
@@ -373,6 +372,8 @@ DECLARE_REFCOUNTED_STRUCT(THashTableChunkIndexWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkIndexesWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlimVersionedWriterConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TCompactionHintWriterConfig);
+
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterTestingOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderConfig)
@@ -398,13 +399,14 @@ DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
-DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
-
 DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
+DECLARE_REFCOUNTED_STRUCT(ISchemafulPipe)
+
+DECLARE_REFCOUNTED_CLASS(TMemoryProviderMapByTag)
+DECLARE_REFCOUNTED_CLASS(TTrackedMemoryChunkProvider)
 
 class TSaveContext;
 class TLoadContext;

@@ -385,7 +385,7 @@ message StreamingReadClientMessage {
         int64 partition_session_id = 1;
     }
 
-    // Signal for server that client is not ready to recieve more data from this partition.
+    // Signal for server that client is not ready to receive more data from this partition.
     message PauseReadRequest {
         repeated int64 partition_session_ids = 1;
     }
@@ -490,7 +490,7 @@ message StreamingReadServerMessage {
     }
 
     // Command to create and start a partition session.
-    // Client must react on this signal by sending StartRead when ready recieve data from this partition.
+    // Client must react on this signal by sending StartRead when ready receive data from this partition.
     message StartPartitionSessionRequest {
         // Partition partition stream description.
         PartitionSession partition_session = 1;

@@ -45,6 +45,7 @@ struct TKqpPhyTxSettings {
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
+constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
@@ -87,8 +88,8 @@ struct TKqpStreamLookupSettings {
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
-    static bool HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node);
-    static bool HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopColumn(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {
@@ -130,23 +131,26 @@ struct TKqpReadTableFullTextIndexSettings: public TSortingOperator<ERequestSorti
 public:
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf SkipLimitSettingName = "SkipLimit";
-    static constexpr TStringBuf BFactorSettingName = "BFactor";
-    static constexpr TStringBuf K1FactorSettingName = "K1Factor";
-    static constexpr TStringBuf QueryModeSettingName = "QueryMode";
+    static constexpr TStringBuf BFactorSettingName = "B";
+    static constexpr TStringBuf K1FactorSettingName = "K1";
+    static constexpr TStringBuf DefaultOperatorSettingName = "DefaultOperator";
     static constexpr TStringBuf MinimumShouldMatchSettingName = "MinimumShouldMatch";
+    static constexpr TStringBuf ModeSettingName = "Mode";
     TExprNode::TPtr ItemsLimit;
     TExprNode::TPtr SkipLimit;
     TExprNode::TPtr BFactor;
     TExprNode::TPtr K1Factor;
-    TExprNode::TPtr QueryMode;
+    TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
+    TExprNode::TPtr Mode;
 
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
     void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
     void SetBFactor(const TExprNode::TPtr& expr) { BFactor = expr; }
     void SetK1Factor(const TExprNode::TPtr& expr) { K1Factor = expr; }
-    void SetQueryMode(const TExprNode::TPtr& expr) { QueryMode = expr; }
+    void SetDefaultOperator(const TExprNode::TPtr& expr) { DefaultOperator = expr; }
     void SetMinimumShouldMatch(const TExprNode::TPtr& expr) { MinimumShouldMatch = expr; }
+    void SetMode(const TExprNode::TPtr& expr) { Mode = expr; }
 
     static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;

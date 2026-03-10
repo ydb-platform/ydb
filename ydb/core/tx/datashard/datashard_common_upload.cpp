@@ -223,16 +223,17 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (ChangeCollector) {
                 Y_ENSURE(CollectChanges);
 
+                TString userSID = Ev->Get()->GetUserSID();
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {
                         throw TNeedGlobalTxId();
                     }
 
-                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId)) {
+                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId, userSID)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion)) {
+                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion, userSID)) {
                         pageFault = true;
                     }
                 }

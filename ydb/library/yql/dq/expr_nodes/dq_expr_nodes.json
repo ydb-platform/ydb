@@ -64,6 +64,20 @@
         "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"}
     },
     {
+        "Name": "TDqBlockHashJoinCore",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "BlockHashJoinCore"},
+        "Children": [
+            {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+            {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+            {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+            {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}
+        ]
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}

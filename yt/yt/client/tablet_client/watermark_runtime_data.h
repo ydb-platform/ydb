@@ -35,7 +35,7 @@ struct TWatermarkRuntimeData
 {
     ui64 Watermark;
     int ColumnIndex;
-    EWatermarkComparisonOperator ComparisonOpeator;
+    EWatermarkComparisonOperator ComparisonOperator;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -9,12 +9,12 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <memory>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerGraph {
     TWorkerGraph(
         const TExprNode::TPtr& exprRoot,
@@ -49,6 +49,7 @@ struct TWorkerGraph {
     const NKikimr::NMiniKQL::TType* OutputType;
     const NKikimr::NMiniKQL::TType* RawOutputType;
     TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes;
+    NKikimr::NMiniKQL::TComputationExternalNodeInvalidator ExternalNodeInvalidator;
     TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes;
     TVector<const NKikimr::NMiniKQL::TStructType*> OriginalInputTypes;
     TVector<const NKikimr::NMiniKQL::TStructType*> RawInputTypes;
@@ -183,5 +184,4 @@ public:
 protected:
     void Release() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

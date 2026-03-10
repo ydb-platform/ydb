@@ -41,12 +41,14 @@ void TFmrUserJobLauncher::InitializeJobEnvironment(
 
     for (auto& [localPath, alias]: filePaths) {
         YQL_ENSURE(!localPath.empty());
+        auto jobFilePath = TFsPath(jobEnvironmentDir) / alias;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Setting hardlink from local path " << localPath << " to new path " << jobFilePath.GetPath();
         NFs::SetExecutable(localPath, true);
-        NFs::SymLink(localPath, TFsPath(jobEnvironmentDir) / alias);
+        NFs::HardLink(localPath, jobFilePath);
     }
 }
 
-std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(
+std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     TFmrUserJob& job,
     const TMaybe<TString>& jobEnvironmentDir,
     const std::vector<TFileInfo>& jobFiles,
@@ -93,13 +95,10 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     auto code = command.GetExitCode();
     if (code != 0) {
         TString errorStr = fmrJobErrorStream.Str();
-        TStringBuf errorMessage = errorStr;
-        TryParseTerminationMessage(errorMessage);
+        EFmrErrorReason errorReason = ParseFmrReasonFromErrorMessage(errorStr);
 
-        if (errorMessage.size() < errorStr.size()) {
-            ythrow yexception() << "Process terminated with error: " << errorMessage;
-        }
-        return TError{
+        return TFmrError{
+            .Reason = errorReason,
             .ErrorMessage = TStringBuilder() << "Process terminated with exit code " << code << " and error message " << fmrJobErrorStream.Str()
         };
     }

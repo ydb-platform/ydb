@@ -103,9 +103,12 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--owner-idx", "{global_run_id}"
+                "--owner-idx", "{global_run_id}",
+                "--tsserver-port", "31313",
+                "--tsserver-host", "{node_host}"
             ],
-            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
+            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
+            'nodes_percentage': 1
         },
         'IncrementalBackup': {
             'args': [
@@ -159,7 +162,7 @@ def _init_stress_utils():
 
     for config_preset in ['common_channel_read', 'inline_channel_read', 'write_read_delete']:
         _all_stress_utils[f'KVVolume_{config_preset}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--config-name', config_preset],
+            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--version', 'v1', '--config-name', config_preset],
             'local_path': 'ydb/tests/stress/kv_volume/workload_keyvalue_volume'
         }
 

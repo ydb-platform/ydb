@@ -190,7 +190,7 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
     }
 }
 
-void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
+void TFacadeRunOptions::Parse(int argc, const char** argv) {
     User = GetUsername();
 
     if (EnableCredentials) {
@@ -541,7 +541,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
     return FuncRegistry_;
 }
 
-int TFacadeRunner::Main(int argc, const char* argv[]) {
+int TFacadeRunner::Main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
@@ -554,7 +554,7 @@ int TFacadeRunner::Main(int argc, const char* argv[]) {
     }
 }
 
-int TFacadeRunner::DoMain(int argc, const char* argv[]) {
+int TFacadeRunner::DoMain(int argc, const char** argv) {
     Y_UNUSED(NUdf::GetStaticSymbols());
 
     RunOptions_.Parse(argc, argv);
@@ -663,7 +663,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                 }
 
                 constexpr bool isIdempotencyChecked = true;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, isIdempotencyChecked)) {
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, isIdempotencyChecked)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -842,13 +842,13 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
             constexpr bool isIdempotencyChecked = true;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, isIdempotencyChecked)) {
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, isIdempotencyChecked)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
         }
-        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion && !settings.PgParser) {
             TIssues issues;
             if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;

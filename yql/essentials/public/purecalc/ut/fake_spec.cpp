@@ -1,7 +1,6 @@
 #include "fake_spec.h"
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 NYT::TNode MakeFakeSchema(bool pg) {
     auto itemType = NYT::TNode::CreateList();
     itemType.Add(pg ? "PgType" : "DataType");
@@ -76,5 +75,4 @@ TFakeOutputSpec FakeStructOS() {
     spec.Schema = MakeFakeStructSchema();
     return spec;
 }
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

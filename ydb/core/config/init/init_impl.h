@@ -299,6 +299,7 @@ struct TCommonAppOptions {
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString MonitoringPrivateKeyFile;
+    TString MonitoringCaFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -314,6 +315,7 @@ struct TCommonAppOptions {
     TString NodeHost;
     TString NodeResolveHost;
     TString NodeDomain;
+    ui32 HttpProxyPort = 0;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
     TMaybe<TString> NodeType;
@@ -391,6 +393,8 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         opts.AddLongOption("sqs-port", "sqs port")
             .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
+        opts.AddLongOption("http-proxy-port", "http proxy port")
+            .RequiredArgument("NUM").StoreResult(&HttpProxyPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
@@ -398,6 +402,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
         opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
+        opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&MonitoringCaFile);
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
@@ -608,6 +613,10 @@ struct TCommonAppOptions {
             appConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(MonitoringPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
+        if (MonitoringCaFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringCaFile(MonitoringCaFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::SqsConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
@@ -659,6 +668,12 @@ struct TCommonAppOptions {
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (HttpProxyPort) {
+            auto* httpProxyConfig = appConfig.MutableHttpProxyConfig();
+            httpProxyConfig->SetEnabled(true);
+            httpProxyConfig->SetPort(HttpProxyPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::HttpProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (PGWireAddress) {
             appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
@@ -1162,7 +1177,7 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString) {
+        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
             if (CommonAppOptions.SeedNodesFile) {
                 InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
                 Y_ABORT_UNLESS(mainYamlConfigString);

@@ -1,0 +1,5 @@
+/* postgres can not */
+/* custom error:Expected at most 2 positional argument(s) for fulltext builtin, but got 4 arguments. Use named arguments for additional arguments instead.*/
+SELECT
+    FulltextMatch('some text', 'text', 'or', '1')
+;

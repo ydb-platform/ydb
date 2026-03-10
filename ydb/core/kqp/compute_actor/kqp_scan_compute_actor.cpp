@@ -181,6 +181,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
+    ScanDataInFlight = false;
+    ++SendDataReceived;
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
 
@@ -210,6 +212,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
+    ++AcksSent;
+    ScanDataInFlight = true;
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
@@ -225,6 +229,9 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     if (!ScanData || ScanData->IsFinished()) {
         return;
     }
+    if (ScanDataInFlight) {
+        return;
+    }
     const auto hasNewMemoryPred = [&]() {
         const ui64 freeSpace = CalculateFreeSpace();
         return freeSpace > prevFreeSpace;
@@ -237,6 +244,8 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
+    ++AcksSent;
+    ScanDataInFlight = true;
     CA_LOG_D("POLL_SOURCES:FINISH");
 }
 
@@ -292,7 +301,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     };
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
-    ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
+    ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
     ScanData = &ComputeCtx.GetTableScan(0);
 
     ScanData->TaskId = GetTask().GetId();

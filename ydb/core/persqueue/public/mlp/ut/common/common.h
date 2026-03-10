@@ -24,7 +24,8 @@ void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query);
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TCreateTopicSettings& settings);
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
-    const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false);
+    const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false,
+    bool autopartitioning = false);
 TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TAlterTopicSettings& settings);
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings);
@@ -32,14 +33,18 @@ TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings);
 TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings);
 TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings);
+TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings);
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime);
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
+THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5));
+void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5));
+void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount);
 

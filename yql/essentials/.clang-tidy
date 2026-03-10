@@ -8,6 +8,7 @@ Checks: >
   bugprone-bad-signal-to-kill-thread,
   bugprone-copy-constructor-init,
   bugprone-dangling-handle,
+  bugprone-exception-escape,
   bugprone-fold-init-type,
   bugprone-forward-declaration-namespace,
   bugprone-forwarding-reference-overload,
@@ -57,8 +58,23 @@ Checks: >
   misc-static-assert,
   misc-throw-by-value-catch-by-reference,
   misc-unconventional-assign-operator,
-  modernize-use-override
+  misc-use-anonymous-namespace,
+  modernize-avoid-c-arrays,
+  modernize-concat-nested-namespaces,
+  modernize-deprecated-headers,
+  modernize-deprecated-ios-base-aliases,
+  modernize-loop-convert,
+  modernize-pass-by-value,
+  modernize-redundant-void-arg,
+  modernize-use-bool-literals,
+  modernize-use-equals-delete,
+  modernize-use-noexcept,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using
 CheckOptions:
+  - key: modernize-avoid-c-arrays.AllowStringArrays
+    value: true
   - key: readability-identifier-naming.StructPrefix
     value: T
   - key: readability-identifier-naming.EnumPrefix

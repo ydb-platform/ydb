@@ -9,6 +9,7 @@ namespace NYT::NTableClient {
 
 class TConstrainedTableSchema final
 {
+public:
     DEFINE_BYREF_RO_PROPERTY(TTableSchema, TableSchema);
     DEFINE_BYREF_RO_PROPERTY(TColumnNameToConstraintMap, ColumnToConstraint);
 
@@ -16,7 +17,7 @@ public:
     TConstrainedTableSchema() = default;
     explicit TConstrainedTableSchema(const TTableSchema& schema);
     TConstrainedTableSchema(TTableSchema schema, TColumnNameToConstraintMap columnNameToConstraint);
-    TConstrainedTableSchema(TTableSchema schema, TColumnStableNameToConstraintMap columnStableNameToConstraint, size_t columnToConstraintLogLimit);
+    TConstrainedTableSchema(TTableSchema schema, TColumnStableNameToConstraintMap columnStableNameToConstraint, int columnToConstraintLogLimit);
 };
 
 DEFINE_REFCOUNTED_TYPE(TConstrainedTableSchema)
@@ -26,12 +27,12 @@ DEFINE_REFCOUNTED_TYPE(TConstrainedTableSchema)
 TColumnNameToConstraintMap MakeColumnNameToConstraintMap(
     const TTableSchema& schema,
     TColumnStableNameToConstraintMap columnStableNameToConstraint,
-    size_t columnToConstraintLogLimit);
+    int columnToConstraintLogLimit);
 
 TColumnStableNameToConstraintMap MakeColumnStableNameToConstraintMap(
     const TTableSchema& schema,
     TColumnNameToConstraintMap columnNameToConstraint,
-    size_t columnToConstraintLogLimit);
+    int columnToConstraintLogLimit);
 
 ////////////////////////////////////////////////////////////////////////////////
 

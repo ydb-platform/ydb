@@ -100,6 +100,7 @@ public:
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
     TDuration OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev,
                                      const TActorContext &ctx, TActorId launcher);               // notification on any garbage collection results
+    void OnConfirmSnapshot(ui32 step, const TActorContext &ctx);                                 // notification about snapshot confirmation - will GC blobs in storage
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified

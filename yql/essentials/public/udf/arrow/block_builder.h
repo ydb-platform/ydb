@@ -17,8 +17,7 @@
 
 #include <deque>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IArrayBuilder {
 public:
@@ -1125,8 +1124,8 @@ public:
     }
 
     void AddToChildrenDefault() {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->AddDefault();
+        for (const auto& child : Children_) {
+            child->AddDefault();
         }
     }
 
@@ -1152,8 +1151,8 @@ public:
     }
 
     void AddToChildren(TInputBuffer& input) {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->Add(input);
+        for (const auto& child : Children_) {
+            child->Add(input);
         }
     }
 
@@ -1180,8 +1179,8 @@ public:
 
     void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
         resultChildren.reserve(Children_.size());
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            resultChildren.emplace_back(Children_[i]->BuildTree(finish));
+        for (const auto& child : Children_) {
+            resultChildren.emplace_back(child->BuildTree(finish));
         }
     }
 
@@ -1510,5 +1509,4 @@ inline std::unique_ptr<IScalarBuilder> MakeScalarBuilder(const ITypeInfoHelper& 
     return nullptr;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

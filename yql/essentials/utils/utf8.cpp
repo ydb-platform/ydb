@@ -2,8 +2,10 @@
 
 #include <util/charset/wide.h>
 
-#include <ctype.h>
+#include <cctype>
+#include <ranges>
 #include <vector>
+#include <array>
 
 namespace NYql {
 
@@ -13,7 +15,7 @@ unsigned char GetRange(unsigned char c) {
     // Referring to DFA of http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     // With new mapping 1 -> 0x10, 7 -> 0x20, 9 -> 0x40, such that AND operation can test multiple types.
     // clang-format off
-    static const unsigned char Type[] = {
+    static const auto Type = std::to_array<unsigned char>({
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -24,7 +26,7 @@ unsigned char GetRange(unsigned char c) {
         0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
         8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
         10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
-    };
+    });
     // clang-format on
     return Type[c];
 }
@@ -36,7 +38,7 @@ struct TByteRange {
 
 struct TUtf8Ranges {
     size_t BytesCount = 0;
-    TByteRange Bytes[4] = {};
+    TByteRange Bytes[4] = {}; // NOLINT(modernize-avoid-c-arrays)
 };
 
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8
@@ -261,8 +263,7 @@ std::optional<std::string> NextValidUtf8(const std::string_view& str) {
     TUtf32String wide = UTF8ToUTF32<false>(str);
     bool incremented = false;
     size_t toDrop = 0;
-    for (auto it = wide.rbegin(); it != wide.rend(); ++it) {
-        auto& c = *it;
+    for (char32_t& c : std::ranges::reverse_view(wide)) {
         if (c < 0x10ffff) {
             c = (c == 0xd7ff) ? 0xe000 : (c + 1);
             incremented = true;
@@ -287,8 +288,7 @@ std::optional<std::string> NextLexicographicString(const std::string_view& str) 
     bool incremented = false;
     size_t toDrop = 0;
     std::string result{str};
-    for (auto it = result.rbegin(); it != result.rend(); ++it) {
-        auto& c = *it;
+    for (char& c : std::ranges::reverse_view(result)) {
         if (ui8(c) < 0xff) {
             ++c;
             incremented = true;

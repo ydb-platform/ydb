@@ -10,8 +10,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
@@ -67,8 +68,8 @@ struct TSetup {
 };
 
 struct TStreamWithYield: public NUdf::TBoxedValue {
-    TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
-        : Items_(items)
+    TStreamWithYield(TUnboxedValueVector items, ui32 yieldPos, ui32 index)
+        : Items_(std::move(items))
         , YieldPos_(yieldPos)
         , Index_(index)
     {
@@ -323,11 +324,11 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
 
         TUnboxedValueVector streamItems;
-        for (size_t i = 0; i < items.size(); ++i) {
+        for (const auto& item : items) {
             NUdf::TUnboxedValue* itemsPtr;
             auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(2, itemsPtr);
-            itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(items[i].first);
-            itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(items[i].second);
+            itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(item.first);
+            itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(item.second);
             streamItems.push_back(std::move(structValues));
         }
 
@@ -377,5 +378,4 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

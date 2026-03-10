@@ -46,12 +46,12 @@ TTableChunkStats TFmrTableDataServiceBaseWriter::GetStats() {
 void TFmrTableDataServiceBaseWriter::DoFlush() {
     PutRows();
     with_lock(State_->Mutex) {
+        State_->CondVar.Wait(State_->Mutex, [this] {
+            return State_->CurInflightChunks == 0 || State_->Exception;
+        });
         if (State_->Exception) {
             std::rethrow_exception(State_->Exception);
         }
-        State_->CondVar.Wait(State_->Mutex, [this] {
-            return State_->CurInflightChunks == 0;
-        });
     }
 }
 
@@ -64,12 +64,15 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
 
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {
-            return State_->CurInflightChunks < MaxInflightChunks_;
+            return State_->CurInflightChunks < MaxInflightChunks_ || State_->Exception;
         });
+        if (State_->Exception) {
+            std::rethrow_exception(State_->Exception);
+        }
         State_->CurInflightChunks += splittedYsonByColumnGroups.size(); // Adding number of keys which we want to put to TableDataService to inflight
     }
 
-    TVector<NThreading::TFuture<void>> result;
+    TVector<NThreading::TFuture<bool>> result;
     result.reserve(splittedYsonByColumnGroups.size());
     for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
         auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
@@ -80,7 +83,13 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
                 if (state) {
                     with_lock(state->Mutex) {
                         --state->CurInflightChunks;
-                        putFuture.GetValue();
+                        try {
+                            putFuture.GetValue();
+                        } catch (...) {
+                            if (!state->Exception) {
+                                state->Exception = std::current_exception();
+                            }
+                        }
                         state->CondVar.Signal();
                     }
                 }

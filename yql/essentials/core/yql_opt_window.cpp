@@ -11,6 +11,7 @@
 #include <yql/essentials/core/yql_window_frames_collector_params_serializer.h>
 
 #include <expected>
+#include <utility>
 
 namespace NYql {
 
@@ -49,7 +50,7 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
     YQL_ENSURE(partitionsByKeys->ChildrenSize() == 5);
 
     auto pos = partitionsByKeys->Pos();
-    auto list = partitionsByKeys->ChildPtr(0);
+    auto stream = partitionsByKeys->ChildPtr(0);
     auto keySelector = partitionsByKeys->ChildPtr(1);
     auto sortDirection = partitionsByKeys->ChildPtr(2);
     auto sortKeySelector = partitionsByKeys->ChildPtr(3);
@@ -74,9 +75,9 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
 
     auto addMemberLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), std::move(addMemberBody));
 
-    auto listWithSortedColumn = ctx.Builder(pos)
-        .Callable("Map")
-            .Add(0, list)
+    auto streamWithSortedColumn = ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, stream)
             .Add(1, addMemberLambda)
         .Seal()
         .Build();
@@ -99,7 +100,7 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
     // Build new PartitionsByKeys with modified arguments.
     return ctx.Builder(pos)
         .Callable("PartitionsByKeys")
-            .Add(0, listWithSortedColumn)
+            .Add(0, streamWithSortedColumn)
             .Add(1, keySelector)
             .Add(2, sortDirection)
             .Add(3, newSortKeySelector)
@@ -1026,7 +1027,7 @@ public:
 
     TChain1MapTraitsLagLead(TStringBuf name, const TRawTrait& raw, TMaybe<TQueueParam> queueOffset)
         : TChain1MapTraits(name, raw.Pos)
-        , QueueOffset_(queueOffset)
+        , QueueOffset_(std::move(queueOffset))
         , LeadLagLambda_(raw.CalculateLambda)
     {
     }
@@ -1140,10 +1141,10 @@ public:
 
 class TChain1MapTraitsCumeDist : public TChain1MapTraits {
 public:
-    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle, const TString& partitionRowsColumn)
+    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle, TString partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn_(partitionRowsColumn)
-        , Handle_(handle)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
+        , Handle_(std::move(handle))
     {
     }
 
@@ -1211,9 +1212,9 @@ private:
 
 class TChain1MapTraitsNTile : public TChain1MapTraits {
 public:
-    TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+    TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, TString  partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn_(partitionRowsColumn)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
     {
         YQL_ENSURE(raw.Params.size() == 1);
         Param_ = raw.Params[0];
@@ -1483,9 +1484,9 @@ public:
 
 class TChain1MapTraitsPercentRank : public TChain1MapTraitsRank {
 public:
-    TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+    TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, TString partitionRowsColumn)
         : TChain1MapTraitsRank(name, raw)
-        , PartitionRowsColumn_(partitionRowsColumn)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
     {
     }
 
@@ -1836,7 +1837,7 @@ class TChain1MapTraitsIncremental : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsIncremental(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle)
         : TChain1MapTraitsStateBase(name, raw)
-        , Handle_(handle)
+        , Handle_(std::move(handle))
         , OutputIsOptional_(raw.OutputType->IsOptionalOrNull())
     {
     }

@@ -99,6 +99,7 @@ message TEvAnalyzeResponse {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;
         STATUS_ERROR = 2;
+        STATUS_CANCELLED = 3;
     }
     optional EStatus Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
@@ -120,6 +121,11 @@ message TEvAnalyzeStatusResponse {
         STATUS_IN_PROGRESS = 3;
     }
     optional EStatus Status = 2;
+}
+
+// KQP -> SA
+message TEvAnalyzeCancel {
+    optional bytes OperationId = 1;
 }
 
 // SA -> Shard
@@ -212,4 +218,8 @@ message TSimpleColumnStatistics {
 
     optional Ydb.Value Min = 5;
     optional Ydb.Value Max = 6;
+};
+
+message TTableSummaryStatistics {
+    optional uint64 RowCount = 1;
 };

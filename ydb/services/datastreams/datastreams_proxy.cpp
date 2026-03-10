@@ -1170,7 +1170,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto& pqConfig = appData->PQConfig;
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
-        auto messageAndCode = AddReadRuleToConfig(tabletConfig, readRule, serviceTypes, pqConfig);
+        auto messageAndCode = AddReadRuleToConfig(tabletConfig, readRule, serviceTypes, pqConfig, nullptr);
         size_t issueCode = static_cast<size_t>(messageAndCode.PQCode);
         Ydb::StatusIds::StatusCode status;
         if (messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK) {

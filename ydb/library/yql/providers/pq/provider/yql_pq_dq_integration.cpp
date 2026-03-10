@@ -3,10 +3,8 @@
 #include "yql_pq_mkql_compiler.h"
 #include "yql_pq_topic_key_parser.h"
 
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -16,7 +14,13 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/string/builder.h>
 
@@ -233,6 +237,20 @@ public:
                     }
                 }
 
+                if (const auto& bufferSize = State_->Configuration->ReadSessionBufferBytes.Get()) {
+                    srcDesc.SetReadSessionBufferBytes(*bufferSize);
+                }
+
+                std::optional<NDqProto::TDqIntegrationCommonSettings> commonSettings;
+                if (const auto maxPartitionReadSkew = State_->Configuration->MaxPartitionReadSkew.Get()) {
+                    *srcDesc.MutableMaxPartitionReadSkew() = NProtoInterop::CastToProto(*maxPartitionReadSkew);
+
+                    NDqProto::TDqControlPlaneActorSettings aggregatorSettings;
+                    aggregatorSettings.SetType("PqInfoAggregator");
+                    commonSettings = NDqProto::TDqIntegrationCommonSettings();
+                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
+                }
+
                 bool sharedReading = false;
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
@@ -271,6 +289,8 @@ public:
                         skipErrors = FromString<bool>(Value(setting));
                     } else if (name == StreamingTopicRead) {
                         streamingTopicRead = FromString<bool>(Value(setting));
+                    } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
+                        *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
                     }
                 }
 
@@ -341,7 +361,13 @@ public:
                 TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
-                protoSettings.PackFrom(srcDesc);
+                if (commonSettings) {
+                    commonSettings->MutableSettings()->PackFrom(srcDesc);
+                    protoSettings.PackFrom(*commonSettings);
+                } else {
+                    protoSettings.PackFrom(srcDesc);
+                }
+
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
@@ -394,6 +420,10 @@ public:
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
+                }
+
+                if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
                 }
 
                 protoSettings.PackFrom(sinkDesc);
@@ -626,6 +656,10 @@ public:
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;
+        }
+
+        if (State_->Configuration->MaxPartitionReadSkew.Get()) {
+            Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
         if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {

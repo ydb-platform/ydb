@@ -6,10 +6,15 @@
 
 #include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_yt_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
@@ -21,28 +26,37 @@ namespace NYql::NFmr {
 
 class TFmrJob: public IFmrJob {
 public:
-
     TFmrJob(
         const TString& tableDataServiceDiscoveryFilePath,
         IYtJobService::TPtr ytJobService,
         TFmrUserJobLauncher::TPtr jobLauncher,
-        const TFmrJobSettings& settings
+        const TFmrJobSettings& settings,
+        const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
     )
         : TableDataServiceDiscoveryFilePath_(tableDataServiceDiscoveryFilePath)
         , YtJobService_(ytJobService)
         , JobLauncher_(jobLauncher)
         , Settings_(settings)
+        , TvmSettings_(tvmSettings)
     {
         auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
-        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
+        if (tvmSettings.Defined()) {
+            TvmClient_ = MakeFmrTvmClient({
+                .SourceTvmAlias = tvmSettings->WorkerTvmAlias,
+                .TvmPort = tvmSettings->TvmPort,
+                .TvmSecret = tvmSettings->TvmSecret
+            });
+            TableDataServiceTvmId_ = tvmSettings->TableDataServiceTvmId;
+        }
+        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, TvmClient_, TableDataServiceTvmId_);
     }
 
-    virtual std::variant<TError, TStatistics> Download(
+    virtual std::variant<TFmrError, TStatistics> Download(
         const TDownloadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto downloadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto ytTableTaskRef = params.Input;
             const auto output = params.Output;
             const auto tableId = output.TableId;
@@ -59,20 +73,17 @@ public:
             tableDataServiceWriter->Flush();
 
             TTableChunkStats stats = tableDataServiceWriter->GetStats();
-            auto statistics = TStatistics({{output, stats}});
-            return statistics;
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside download: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+            return TStatistics({{output, stats}});
+        };
+        return HandleFmrJob(downloadJobFunc, ETaskType::Download);
     }
 
-    virtual std::variant<TError, TStatistics> Upload(
+    virtual std::variant<TFmrError, TStatistics> Upload(
         const TUploadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto uploadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto ytTable = params.Output;
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
@@ -87,18 +98,16 @@ public:
             ytTableWriter->Flush();
 
             return TStatistics(); // TODO - get actual stats from yt table.
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside upload: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(uploadJobFunc, ETaskType::Upload);
     }
 
-    virtual std::variant<TError, TStatistics> SortedUpload(
+    virtual std::variant<TFmrError, TStatistics> SortedUpload(
         const TSortedUploadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto sortedUploadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
             const auto neededColumns = params.Input.Columns;
@@ -122,7 +131,7 @@ public:
                 cancelFlag);
             writer->Finish();
 
-             auto fragmentResult = writer->GetResponse();
+            auto fragmentResult = writer->GetResponse();
             TString fragmentResultYson = NYT::NodeToYsonString(fragmentResult);
             TStatistics stats;
             stats.TaskResult = TTaskSortedUploadResult{
@@ -130,18 +139,16 @@ public:
                 .FragmentOrder = order
             };
             return stats;
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside distributed upload: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(sortedUploadJobFunc, ETaskType::SortedUpload);
     }
 
-    virtual std::variant<TError, TStatistics> Merge(
+    virtual std::variant<TFmrError, TStatistics> Merge(
         const TMergeTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto mergeJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto taskTableInputRef = params.Input;
             const auto output = params.Output;
 
@@ -150,6 +157,7 @@ public:
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
             auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads, parseRecordSettings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
             TMaybe<TMutex> mutex = TMutex();
+            std::exception_ptr mergeException;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
                     try {
@@ -158,22 +166,73 @@ public:
                             ParseRecords(tableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
                         }
                     } catch (...) {
-                        YQL_CLOG(ERROR, FastMapReduce) << CurrentExceptionMessage();
-                        throw yexception() << CurrentExceptionMessage();
+                        mergeException = std::current_exception();
                     }
                 });
             }
             threadPool->Stop();
 
+            if (mergeException) {
+                std::rethrow_exception(mergeException);
+            }
+
             tableDataServiceWriter->Flush();
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside merge: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(mergeJobFunc, ETaskType::Merge);
     }
 
-    virtual std::variant<TError, TStatistics> Map(
+    virtual std::variant<TFmrError, TStatistics> SortedMerge(
+        const TSortedMergeTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& /*clusterConnections*/,
+        std::shared_ptr<std::atomic<bool>> cancelFlag
+    ) override {
+        auto sortedMergeJobFunc = [&, cancelFlag] () -> TStatistics {
+            const auto taskTableInputRef = params.Input;
+            const auto output = params.Output;
+
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            YQL_ENSURE(!output.SortingColumns.Columns.empty(), "SortedMerge output key columns must be set");
+
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                output.TableId,
+                output.PartId,
+                TableDataService_,
+                output.SerializedColumnGroups,
+                Settings_.FmrWriterSettings,
+                output.SortingColumns
+            );
+            TMaybe<TMutex> mutex = TMutex();
+            std::vector<IBlockIterator::TPtr> blockIterators;
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                        fmrInput->TableId,
+                        fmrInput->TableRanges,
+                        TableDataService_,
+                        output.SortingColumns.Columns,
+                        output.SortingColumns.SortOrders,
+                        fmrInput->Columns,
+                        fmrInput->SerializedColumnGroups,
+                        fmrInput->IsFirstRowInclusive,
+                        fmrInput->FirstRowKeys,
+                        fmrInput->LastRowKeys
+                    ));
+                } else {
+                    throw TFmrNonRetryableJobException() << "YtTables unsupported inside SortedMerge task";
+                }
+            }
+
+            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
+            ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+
+            tableDataServiceWriter->Flush();
+            return TStatistics({{output, tableDataServiceWriter->GetStats()}});
+        };
+        return HandleFmrJob(sortedMergeJobFunc, ETaskType::SortedMerge);
+    }
+
+    virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
@@ -182,15 +241,91 @@ public:
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
-        TFmrUserJob mapJob;
-        // deserialize map job and fill params
-        TStringStream serializedJobStateStream(params.SerializedMapJobState);
-        mapJob.Load(serializedJobStateStream);
-        FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
-        return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        auto mapJobFunc = [&, this] () {
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob mapJob;
+            // deserialize map job and fill params
+            TStringStream serializedJobStateStream(params.SerializedMapJobState);
+            mapJob.Load(serializedJobStateStream);
+            FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
+            mapJob.SetTvmSettings(TvmSettings_);
+            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        };
+        return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
     // TODO - figure out how to how to use cancel flag to kill map job.
+
+
+    std::variant<TFmrError, TStatistics> LocalSort(
+        const TLocalSortTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {},
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr
+    ) override {
+        auto localSortJobFunc = [&, this, cancelFlag] () -> TStatistics {
+            const auto taskTableInputRef = params.Input;
+            const auto output = params.Output;
+
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
+
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                output.TableId,
+                output.PartId,
+                TableDataService_,
+                output.SerializedColumnGroups,
+                Settings_.FmrWriterSettings,
+                output.SortingColumns
+            );
+            TMaybe<TMutex> mutex = TMutex();
+            std::vector<IBlockIterator::TPtr> blockIterators;
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    blockIterators.emplace_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                        fmrInput->TableId,
+                        fmrInput->TableRanges,
+                        TableDataService_,
+                        output.SortingColumns.Columns,
+                        output.SortingColumns.SortOrders,
+                        fmrInput->Columns,
+                        fmrInput->SerializedColumnGroups,
+                        fmrInput->IsFirstRowInclusive,
+                        fmrInput->FirstRowKeys,
+                        fmrInput->LastRowKeys
+                    ));
+                } else {
+                    auto ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
+                    auto ytReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                    blockIterators.emplace_back(MakeIntrusive<TYtBlockIterator>(
+                        ytReaders,
+                        output.SortingColumns.Columns,
+                        TYtBlockIteratorSettings(), // TODO - support parsing TYtBlockIteratorSettings from yson file.
+                        output.SortingColumns.SortOrders
+                    ));
+                }
+            }
+
+            NYT::TRawTableReaderPtr sortingReader = MakeIntrusive<TFmrSortingBlockReader>(blockIterators);
+            ParseRecords(sortingReader, tableDataServiceWriter, parseRecordSettings.LocalSortBlockCount, parseRecordSettings.LocalSortBlockSize, cancelFlag, mutex);
+
+            tableDataServiceWriter->Flush();
+            return TStatistics({{output, tableDataServiceWriter->GetStats()}});
+        };
+        return HandleFmrJob(localSortJobFunc, ETaskType::LocalSort);
+    }
+
+private:
+    std::variant<TFmrError, TStatistics> HandleFmrJob(auto fmrJobFunc, ETaskType fmrJobType) {
+        TString errorLogMessage;
+        EFmrErrorReason errorReason;
+        try {
+            return fmrJobFunc();
+        } catch (...) {
+            errorLogMessage = CurrentExceptionMessage();
+            errorReason = ParseFmrReasonFromErrorMessage(errorLogMessage);
+        }
+        YQL_CLOG(ERROR, FastMapReduce) << "Gotten exception inside fmr " << fmrJobType << " job with message " << errorLogMessage << " and reason " << errorReason;
+        return TFmrError{.Reason = errorReason, .ErrorMessage = errorLogMessage};
+    }
 
 private:
     ITableDataService::TPtr TableDataService_; // Table data service http client
@@ -198,15 +333,19 @@ private:
     IYtJobService::TPtr YtJobService_;
     TFmrUserJobLauncher::TPtr JobLauncher_;
     TFmrJobSettings Settings_;
+    IFmrTvmClient::TPtr TvmClient_ = nullptr;
+    ui32 TableDataServiceTvmId_ = 0;
+    TMaybe<TFmrTvmJobSettings> TvmSettings_;
 };
 
 IFmrJob::TPtr MakeFmrJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    const TFmrJobSettings& settings
+    const TFmrJobSettings& settings,
+    const TMaybe<TFmrTvmJobSettings>& workerTvmSettings
 ) {
-    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings);
+    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings, workerTvmSettings);
 }
 
 TJobResult RunJob(
@@ -214,10 +353,11 @@ TJobResult RunJob(
     const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings, tvmSettings);
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -232,17 +372,20 @@ TJobResult RunJob(
             return job->Map(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else if constexpr (std::is_same_v<T, TSortedUploadTaskParams>) {
             return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TSortedMergeTaskParams>) {
+            return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TLocalSortTaskParams>) {
+            return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else {
             ythrow yexception() << "Unsupported task type";
         }
     };
 
-    std::variant<TError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
-    auto err = std::get_if<TError>(&taskOutput);
+    std::variant<TFmrError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
+    auto err = std::get_if<TFmrError>(&taskOutput);
     if (err) {
-        ythrow yexception() << "Job failed with error: " << err->ErrorMessage;
+        return TJobResult{.TaskStatus = ETaskStatus::Failed, .Error = *err};
     }
-
     auto statistics = std::get_if<TStatistics>(&taskOutput);
     return {ETaskStatus::Completed, *statistics};
 };

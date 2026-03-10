@@ -174,4 +174,9 @@ namespace orc {
         streamOffset, stripeFooter_->streams(static_cast<int>(streamId)));
   }
 
+  std::shared_ptr<StringDictionary> StripeStreamsImpl::getSharedDictionary(
+      uint64_t columnId) const {
+    return reader_.getSharedDictionary(columnId);
+  }
+
 }  // namespace orc

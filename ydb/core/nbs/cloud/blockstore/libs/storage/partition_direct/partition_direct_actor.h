@@ -1,138 +1,113 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/core/mon/mon.h>
-
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-using namespace NActors;
-using namespace NYdb::NBS::NProto;
-using namespace NKikimrBlockStore;
-
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitionActor
-    : public TActorBootstrapped<TPartitionActor>
+struct TDiskIds
 {
+    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
+    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
+};
+
+using TPartitionIds = TVector<TDiskIds>;
+
+class TPartitionActor
+    : public NActors::TActor<TPartitionActor>
+    , public NKikimr::NTabletFlatExecutor::TTabletExecutedFlat
+{
+    enum EState
+    {
+        STATE_BOOT,
+        STATE_INIT,
+        STATE_WORK,
+        STATE_ZOMBIE,
+        STATE_MAX,
+    };
+
 private:
-    TStorageConfig StorageConfig;
-    TVolumeConfig VolumeConfig;
+    NYdb::NBS::NProto::TStorageServiceConfig StorageConfig;
+    NKikimrBlockStore::TVolumeConfig VolumeConfig;
 
-    TActorId BSControllerPipeClient;
+    NActors::TActorId BSControllerPipeClient;
 
-    std::unique_ptr<TDirectBlockGroup> DirectBlockGroup;
-
-    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
-    // Throttle trace ID creation to avoid overwhelming the tracing system
-    TDuration TraceSamplePeriod;
-
-    TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
-    std::vector<std::pair<TString, TString>> CountersChain;
-
-    struct {
-        struct {
-            NMonitoring::TDynamicCounters::TCounterPtr Requests;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
-            NMonitoring::TDynamicCounters::TCounterPtr Bytes;
-
-            void Request(ui32 bytes = 0) {
-                if (Requests) {
-                    ++*Requests;
-                }
-                if (bytes && Bytes) {
-                    *Bytes += bytes;
-                }
-            }
-
-            void Reply(bool ok, ui32 bytes = 0) {
-                if (ok && ReplyOk) {
-                    ++*ReplyOk;
-                } else if (!ok && ReplyErr) {
-                    ++*ReplyErr;
-                }
-                if (bytes && Bytes) {
-                    *Bytes += bytes;
-                }
-            }
-        } WriteBlocks, ReadBlocks;
-    } Counters;
+    NActors::TActorId LoadActorAdapter;
+    bool DdiskBlockGroupAllocated = false;
 
 public:
+    static constexpr size_t NumDirectBlockGroups = 32;
     TPartitionActor(
-        TStorageConfig storageConfig,
-        TVolumeConfig volumeConfig,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters = nullptr);
-
-    void Bootstrap(const TActorContext& ctx);
+        const NActors::TActorId& tablet,
+        NKikimr::TTabletStorageInfo* info);
 
 private:
+    void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
-    void CreateBSControllerPipeClient(const TActorContext& ctx);
+    void OnDetach(const NActors::TActorContext& ctx) override;
+    void OnTabletDead(
+        NKikimr::TEvTablet::TEvTabletDead::TPtr& ev,
+        const NActors::TActorContext& ctx) override;
+    void OnActivateExecutor(const NActors::TActorContext& ctx) override;
+    void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
-    void AllocateDDiskBlockGroup(const TActorContext& ctx);
+    void HandleServerConnected(
+        const NKikimr::TEvTabletPipe::TEvServerConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleServerDisconnected(
+        const NKikimr::TEvTabletPipe::TEvServerDisconnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleServerDestroyed(
+        const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void ReportTabletState(const NActors::TActorContext& ctx);
+
+    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
+
+    void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
-        const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
-        const TActorContext& ctx);
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
-    void HandleWriteBlocksRequest(
-        const TEvService::TEvWriteBlocksRequest::TPtr& ev,
-        const TActorContext& ctx);
+    void HandleGetLoadActorAdapterActorId(
+        const NYdb::NBS::NBlockStore::TEvService::
+            TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
-    void HandleReadBlocksRequest(
-        const TEvService::TEvReadBlocksRequest::TPtr& ev,
-        const TActorContext& ctx);
+    void HandleUpdateVolumeConfig(
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void Start(const NActors::TActorContext& ctx, TPartitionIds ids);
 
-    // Forward events to DirectBlockGroup
-    void HandleDDiskConnectResult(
-        const NDDisk::TEvConnectResult::TPtr& ev,
-        const TActorContext& ctx);
+    bool HaveStoredTabletInfo();
 
-    void HandlePersistentBufferWriteResult(
-        const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
-        const TActorContext& ctx);
+    void LoadTabletInfo(const NActors::TActorContext& ctx, TPartitionIds& ids);
 
-    void HandlePersistentBufferFlushResult(
-        const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
-        const TActorContext& ctx);
+    void StoreTabletInfo(
+        const NActors::TActorContext& ctx,
+        const TPartitionIds& ids);
 
-    void HandlePersistentBufferEraseResult(
-        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
-        const TActorContext& ctx);
-
-    template <typename TEvent>
-    void HandleReadResult(
-        const typename TEvent::TPtr& ev,
-        const TActorContext& ctx);
-
-    template<typename TEvPtr>
-    void AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx);
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename TEvPtr>
-void TPartitionActor::AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx)
-{
-    if (!ev->TraceId) {
-        // Generate new trace id with throttling to avoid overwhelming the tracing system
-        ev->TraceId = NWilson::TTraceId::NewTraceIdThrottled(
-            15,                 // verbosity
-            4095,               // timeToLive
-            LastTraceTs,        // atomic counter for throttling
-            ctx.Monotonic(),    // current monotonic time
-            TraceSamplePeriod   // 100ms between samples
-        );
-    }
-}
-
-} // namespace NYdb::NBS:NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

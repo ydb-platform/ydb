@@ -939,12 +939,20 @@ message TYtflowGatewayConfig {
 
 ///////////////////////////// Fmr /////////////////////////////
 
+message TFmrTvmConfig {
+    optional uint64 CoordinatorTvmId = 1;
+    optional uint64 GatewayTvmId = 2;
+    optional string GatewayTvmSecretFile = 3; // Path to file with tvm secret.
+    optional string TvmDiskCacheDir = 4;
+}
+
 message TFmrInstance {
     optional string Name = 1;
     optional string CoordinatorUrl = 2;
     repeated string AllowedGroups = 3;
     optional bool EnableAuth = 4 [default = false];
     optional string FileRemoteCacheName = 5;
+    optional TFmrTvmConfig TvmConfig = 6;
 }
 
 message TFmrGatewayConfig {

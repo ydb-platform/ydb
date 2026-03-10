@@ -29,28 +29,27 @@ class TJsonHealthCheck : public TViewerPipeClient {
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
 
 public:
-    TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonHealthCheck(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
     THolder<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
-        const auto& params(Event->Get()->Request.GetParams());
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = Database;
-        if (params.Has("verbose")) {
-            request->Request.set_return_verbose_status(FromStringWithDefault<bool>(params.Get("verbose"), false));
+        if (Params.Has("verbose")) {
+            request->Request.set_return_verbose_status(FromStringWithDefault<bool>(Params.Get("verbose"), false));
         }
-        if (params.Has("max_level")) {
-            request->Request.set_maximum_level(FromStringWithDefault<ui32>(params.Get("max_level"), 0));
+        if (Params.Has("max_level")) {
+            request->Request.set_maximum_level(FromStringWithDefault<ui32>(Params.Get("max_level"), 0));
         }
         if (MinStatus != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
             request->Request.set_minimum_status(MinStatus);
         }
-        if (params.Has("merge_records")) {
+        if (Params.Has("merge_records")) {
             request->Request.set_merge_records(MergeRecords);
         }
-        if (params.Has("return_hints")) {
-            request->Request.set_return_hints(FromStringWithDefault<bool>(params.Get("return_hints"), false));
+        if (Params.Has("return_hints")) {
+            request->Request.set_return_hints(FromStringWithDefault<bool>(Params.Get("return_hints"), false));
         }
         SetDuration(Timeout, *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
@@ -58,6 +57,14 @@ public:
 
     void SendHealthCheckRequest() {
         SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().Release());
+    }
+
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHealthCheck::TEvSelfCheckResult::EventType) {
+            SendHealthCheckRequest();
+        } else {
+            TBase::Undelivered(ev);
+        }
     }
 
     void Bootstrap() override {
@@ -89,8 +96,8 @@ public:
         if (Database.empty()) {
             Database = Params.Get("tenant");
         }
-        if (!IsDatabaseRequest() && Format != HealthCheckResponseFormat::PROMETHEUS && !Viewer->CheckAccessMonitoring(GetRequest())) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+        if (!CheckAccess()) {
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
         MergeRecords = FromStringWithDefault<bool>(Params.Get("merge_records"), MergeRecords);
@@ -107,13 +114,36 @@ public:
         Become(&TThis::StateRequestedInfo, Timeout, new TEvents::TEvWakeup());
     }
 
+    bool CheckAccess() const {
+        const auto& config = Viewer->GetKikimrRunConfig();
+        const auto requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
+        if (Format == HealthCheckResponseFormat::PROMETHEUS) {
+            // This format was left without any authentication checks for a long time,
+            // so we check access for it only when it's required with a separate flag.
+            // We want metrics collection systems to have minimal permissions, so we check for viewer access
+            return !requireHealthcheckAuth || Viewer->CheckAccessViewer(GetRequest());
+        }
+
+        // But the general healthcheck info should not be accessible for those
+        // who have only viewer access level so we check for the monitoring access level.
+        const bool checkAccessMonitoring = Viewer->CheckAccessMonitoring(GetRequest());
+        if (requireHealthcheckAuth) {
+            return checkAccessMonitoring;
+        }
+
+        // The database requests were left without any authentication checks for a long time,
+        // so we ignore access check for it by default.
+        return IsDatabaseRequest() || checkAccessMonitoring;
+    }
+
     STFUNC(StateRequestedInfo) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
-            cFunc(TEvents::TSystem::Wakeup, TBase::HandleTimeout);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
-            cFunc(TEvents::TSystem::Undelivered, SendHealthCheckRequest);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 

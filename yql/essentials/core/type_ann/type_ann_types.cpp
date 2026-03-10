@@ -4,8 +4,8 @@
 #include "type_ann_types.h"
 #include "yql/essentials/core/yql_opt_utils.h"
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
     bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx) {
         if (!IsAvailableLangVersion(MakeLangVersion(2025, 4), langver)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Linear types are not available before version 2025.04"));
@@ -1216,18 +1216,34 @@ namespace NTypeAnnImpl {
         }
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
+        if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (input->Child(0)->GetTypeAnn() != resType) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(0), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
         }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (input->Child(1)->GetTypeAnn() != resType) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
         }
-        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!TryFromString<bool>(input->Child(2)->Content())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->ChildPtr(2)->Pos()), TStringBuilder() << "Expected boolean value, but got: " << input->ChildPtr(2)->Content()));
@@ -1468,6 +1484,11 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (underlyingType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(underlyingType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         auto varType = ctx.Expr.MakeType<TVariantExprType>(underlyingType);
         if (!varType->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1508,6 +1529,11 @@ namespace NTypeAnnImpl {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureTypeHandleResourceType(*input->Child(0), ctx.Expr)) {
@@ -2019,6 +2045,11 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!EnsureCodeResourceType(*input->Child(0), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2095,8 +2126,11 @@ namespace NTypeAnnImpl {
         Y_UNUSED(output);
         IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
         for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
-            if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(input->Child(i)->GetTypeAnn());
+            if (input->Child(i)->GetTypeAnn() && (
+                input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+                input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List &&
+                GetSeqItemType(input->Child(i)->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Universal)) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
 
@@ -2126,8 +2160,11 @@ namespace NTypeAnnImpl {
         }
 
         for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(input->Child(i)->GetTypeAnn());
+            if (input->Child(i)->GetTypeAnn() && (
+                input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+                input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List &&
+                GetSeqItemType(input->Child(i)->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Universal)) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
 
@@ -2196,5 +2233,5 @@ namespace NTypeAnnImpl {
         input->SetTypeAnn(resType);
         return IGraphTransformer::TStatus::Ok;
     }
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

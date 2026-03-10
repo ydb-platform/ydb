@@ -1,10 +1,13 @@
-#include <ydb/library/actors/http/http.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb/library/security/util.h>
-#include <ydb/mvp/core/mvp_tokens.h>
+#include "oidc_session_create_yandex.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "oidc_session_create_yandex.h"
+#include <ydb/mvp/core/mvp_tokens.h>
+
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
+
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NMVP {
 namespace NOIDC {
@@ -88,19 +91,5 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
 }
 
 } // NMVP
-
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionRequest& request) {
-    yandex::cloud::priv::oauth::v1::CreateSessionRequest copy = request;
-    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
-    return copy.ShortDebugString();
-}
-
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionResponse& request) {
-    yandex::cloud::priv::oauth::v1::CreateSessionResponse copy = request;
-    copy.clear_set_cookie_header();
-    return copy.ShortDebugString();
-}
 
 } // NMVP

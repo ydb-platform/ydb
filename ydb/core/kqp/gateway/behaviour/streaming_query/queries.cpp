@@ -614,7 +614,10 @@ public:
                 }
 
                 Become(&TExecuteTransactionSchemeActor::StateFuncWaitCompletion);
-                SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId()));
+                SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId(), NTabletPipe::TClientRetryPolicy{
+                    .RetryLimitCount = 10,
+                    .MaxRetryTime = TDuration::Seconds(5),
+                }));
                 NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
 
                 LOG_D("Subscribe on scheme tx: " << txId);

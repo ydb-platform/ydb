@@ -446,7 +446,7 @@ message TRequestedBloomFilter {
 }
 
 message TRequestedBloomNGrammFilter {
-    optional uint32 NGrammSize = 1;
+    optional uint32 NGrammSize = 1 [default = 3];
     optional uint32 HashesCount = 3 [default = 2];
     optional string ColumnName = 4;
     optional TIndexDataExtractor DataExtractor = 6;
@@ -488,7 +488,7 @@ message TBloomFilter {
 }
 
 message TBloomNGrammFilter {
-    optional uint32 NGrammSize = 1;
+    optional uint32 NGrammSize = 1 [default = 3];
     optional uint32 HashesCount = 3 [default = 2];
     optional uint32 ColumnId = 4;
     optional TIndexDataExtractor DataExtractor = 6;

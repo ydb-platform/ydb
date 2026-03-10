@@ -719,10 +719,13 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
         Stream << " WITH ("
                << "ngram_size=" << settings.ngram_size()
-               << ", hashes_count=" << settings.hashes_count()
-               << ", filter_size_bytes=" << settings.filter_size_bytes()
-               << ", records_count=" << settings.records_count()
-               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
+               << ", hashes_count=" << (settings.hashes_count() ? settings.hashes_count() : 2);
+
+        if (settings.has_false_positive_probability()) {
+            Stream << ", false_positive_probability=" << settings.false_positive_probability();
+        }
+
+        Stream << ", case_sensitive=" << (caseSensitive ? "true" : "false")
                << ")";
     }
 }
@@ -1833,18 +1836,19 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     json["bits_storage_type"] = bitsStorage.GetClassName();
                 }
             }
-            if (bloomNGrammFilter.HasRecordsCount()) {
-                json["records_count"] = bloomNGrammFilter.GetRecordsCount();
-            }
+
             if (bloomNGrammFilter.HasNGrammSize()) {
                 json["ngramm_size"] = bloomNGrammFilter.GetNGrammSize();
             }
-            if (bloomNGrammFilter.HasFilterSizeBytes()) {
-                json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
-            }
+
             if (bloomNGrammFilter.HasHashesCount()) {
                 json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
             }
+
+            if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+                json["false_positive_probability"] = bloomNGrammFilter.GetFalsePositiveProbability();
+            }
+
             if (bloomNGrammFilter.HasCaseSensitive()) {
                 json["case_sensitive"] = bloomNGrammFilter.GetCaseSensitive();
             }

@@ -294,23 +294,11 @@ public:
         X509* current = X509_STORE_CTX_get_current_cert(ctx);
         if (!preverify) {
             int err = X509_STORE_CTX_get_error(ctx);
-            int depth = X509_STORE_CTX_get_error_depth(ctx);
             char buffer[1024];
             X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
             if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
                 // Разрешаем self-signed сертификаты
                 preverify = 1;
-            } else {
-                TStringBuilder s;
-                s << "Error during certificate validation"
-                    << " error# " << X509_verify_cert_error_string(err)
-                    << " depth# " << depth
-                    << " cert# " << buffer;
-                if (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) {
-                    X509_NAME_oneline(X509_get_issuer_name(current), buffer, sizeof(buffer));
-                    s << " issuer# " << buffer;
-                }
-                Cerr << s << Endl;
             }
         }
         return preverify;

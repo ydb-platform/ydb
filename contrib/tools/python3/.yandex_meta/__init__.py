@@ -13,7 +13,6 @@ from devtools.yamaker.modules import (
 )
 from devtools.yamaker.project import NixSourceProject
 
-
 MODULES_WINDOWS = (
     "Modules/_winapi.c",
     "Modules/overlapped.c",

@@ -2,8 +2,9 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request)
+TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount)
     : OriginalRequest(request)
+    , RecordsCount(recordsCount)
 {
     AFL_VERIFY(!!OriginalRequest);
 }

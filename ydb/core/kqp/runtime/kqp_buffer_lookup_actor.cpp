@@ -85,6 +85,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
+
         AFL_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
@@ -97,8 +98,9 @@ public:
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
+        ReadIdToState.clear();
 
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
 
@@ -107,6 +109,15 @@ public:
 
     void Terminate() override {
         PassAway();
+    }
+
+    void Unlink() override {
+        AFL_ENSURE(ReadIdToState.empty());
+
+        for (auto& [_, state] : ShardToState) {
+            state.HasPipe = false;
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
     }
 
     STFUNC(StateFunc) {

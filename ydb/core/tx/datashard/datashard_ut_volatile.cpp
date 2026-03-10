@@ -141,15 +141,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartBeforePlan, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    Y_UNIT_TEST(DistributedWriteShardRestartBeforePlan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(appConfig);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -238,15 +235,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartAfterExpectation, UseSink) {
+    Y_UNIT_TEST(DistributedWriteShardRestartAfterExpectation) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -420,15 +414,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenCommit, UseSink) {
+    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -510,15 +501,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenAbort, UseSink) {
+    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2248,17 +2236,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
-    Y_UNIT_TEST_TWIN(TwoAppendsMustBeVolatile, UseSink) {
+    Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2327,16 +2312,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-21156
-    Y_UNIT_TEST_TWIN(VolatileCommitOnBlobStorageFailure, UseSink) {
+    Y_UNIT_TEST(VolatileCommitOnBlobStorageFailure) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2863,15 +2845,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TTestActorRuntime::TEventObserverHolder Observer;
     };
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2921,15 +2900,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 31 } items { int32_value: 311 } }");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2990,15 +2966,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3065,15 +3038,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3141,15 +3111,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: ABORTED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertDependenciesShardsRestart, UseSink) {
+    Y_UNIT_TEST(UpsertDependenciesShardsRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3234,15 +3201,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "... split finished" << Endl;
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartBeforePrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartBeforePrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3296,15 +3260,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNAVAILABLE");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3392,15 +3353,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPlan, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPlan) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3491,15 +3449,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-22506
-    Y_UNIT_TEST_TWIN(NotCachingAbortingDeletes, UseSink) {
+    Y_UNIT_TEST(NotCachingAbortingDeletes) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

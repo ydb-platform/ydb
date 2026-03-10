@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -468,7 +469,7 @@ public:
 
     TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
         TString resultPoolId;
-        i64 resultRank;
+        i64 resultRank = std::numeric_limits<i64>::max();
 
         const bool isSystemUser = userToken && userToken->IsSystemUser();
         TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);

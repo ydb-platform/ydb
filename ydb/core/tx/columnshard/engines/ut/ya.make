@@ -32,6 +32,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_program.cpp
+    ut_snapshot_holders.cpp
     ut_script.cpp
     helper.cpp
 )

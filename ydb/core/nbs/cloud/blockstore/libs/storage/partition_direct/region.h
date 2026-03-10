@@ -14,8 +14,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TRegion
 {
 public:
-    TRegion(TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr>
-                directBlockGroups);
+    TRegion(
+        TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr>
+            directBlockGroups,
+        ui32 syncRequestsBatchSize);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -28,7 +30,7 @@ public:
         NWilson::TTraceId traceId);
 
 private:
-    TVector<TVChunk> VChunks;
+    TVector<std::shared_ptr<TVChunk>> VChunks;
 
     size_t GetVChunkIndex(ui64 blockIndex) const;
     size_t GetVChunkOffset(ui64 blockIndex) const;

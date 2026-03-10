@@ -495,9 +495,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(FewEffects, UseSink) {
+    Y_UNIT_TEST(FewEffects) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -515,17 +514,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
-
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
-
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? 1 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
@@ -547,8 +540,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         countOperationsByType("reads");
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseSink ? deletesCount : deletesConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], deletesCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);
     }
@@ -1059,9 +1052,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpdateConditional, UseSink) {
+    Y_UNIT_TEST(UpdateConditional) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1076,9 +1068,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         Cerr << plan << Endl;
-
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 1);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 1);
@@ -1100,13 +1089,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         countOperationsByType("reads");
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
     }
 
-    Y_UNIT_TEST_TWIN(UpdateConditionalKey, UseSink) {
+    Y_UNIT_TEST(UpdateConditionalKey) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1121,9 +1109,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         Cerr << plan << Endl;
-
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 1);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 1);
@@ -1145,13 +1130,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         countOperationsByType("reads");
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);
     }
 
-    Y_UNIT_TEST_TWIN(UpdateOn, UseSink) {
+    Y_UNIT_TEST(UpdateOn) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1167,14 +1151,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 1);
-
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
-        UNIT_ASSERT_VALUES_EQUAL(updatesCount, UseSink ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 1);
 
         auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
-        UNIT_ASSERT_VALUES_EQUAL(lookupCount, UseSink ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, 0);
 
         /* check tables section */
         const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
@@ -1187,22 +1168,15 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             }
         };
 
-        if (!UseSink) {
-            countOperationsByType("reads");
-        }
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], UseSink ? updatesCount : 0);
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? 0 : upsertsConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], updatesCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 0);
         UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
     }
 
-    Y_UNIT_TEST_QUAD(UpdateSecondaryConditional, UseSink, UseStreamIndex) {
-        if (!UseSink && UseStreamIndex) {
-            return;
-        }
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseStreamIndex) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1221,17 +1195,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
-
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
-
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
@@ -1274,12 +1242,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(UpdateSecondaryConditionalPrimaryKey, UseSink, UseStreamIndex) {
-        if (!UseSink && UseStreamIndex) {
-            return;
-        }
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalPrimaryKey, UseStreamIndex) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1297,14 +1261,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
-
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
-
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
@@ -1353,12 +1311,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(UpdateSecondaryConditionalSecondaryKey, UseSink, UseStreamIndex) {
-        if (!UseSink && UseStreamIndex) {
-            return;
-        }
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalSecondaryKey, UseStreamIndex) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1376,20 +1330,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
-
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
         UNIT_ASSERT_VALUES_EQUAL(updatesCount, 0);
 
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
-
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
@@ -1425,23 +1373,17 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             };
 
             countOperationsByType("reads");
-
             if (!UseStreamIndex) {
                 countOperationsByType("writes");
             }
-
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseStreamIndex ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseStreamIndex ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
         }
     }
 
-    Y_UNIT_TEST_QUAD(UpdateOnSecondary, UseSink, UseStreamIndex) {
-        if (!UseSink && UseStreamIndex) {
-            return;
-        }
+    Y_UNIT_TEST_TWIN(UpdateOnSecondary, UseStreamIndex) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1459,23 +1401,17 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
-
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
-        UNIT_ASSERT_VALUES_EQUAL(updatesCount, UseSink ? (UseStreamIndex ? 1 : 0) : 0); // Rows have beed read already, so it's better to use upsert.
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, (UseStreamIndex ? 1 : 0)); // Rows have beed read already, so it's better to use upsert.
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, UseSink ? (UseStreamIndex ? 0 : 2) : 2);
-
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 0 : 2));
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
 
         auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
-        UNIT_ASSERT_VALUES_EQUAL(lookupCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, (UseStreamIndex ? 0 : 1));
 
         /* check tables section */
         {
@@ -1494,8 +1430,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             }
             countOperationsByType("writes");
 
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? (UseStreamIndex ? 0 : 1) : 1);
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], UseSink ? (UseStreamIndex ? 1 : 0) : 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], (UseStreamIndex ? 0 : 1));
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], (UseStreamIndex ? 1 : 0));
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
         }
@@ -1520,9 +1456,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpdateOnSecondaryWithoutSecondaryKey, UseSink) {
+    Y_UNIT_TEST(UpdateOnSecondaryWithoutSecondaryKey) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1539,23 +1474,17 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 1);
-
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
-        UNIT_ASSERT_VALUES_EQUAL(updatesCount, UseSink ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 1);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, UseSink ? 0 : 1);
-
-        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 0);
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? 0 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, 0);
 
         auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
-        UNIT_ASSERT_VALUES_EQUAL(lookupCount, UseSink ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, 0);
 
         /* check tables section */
         {
@@ -1569,13 +1498,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
                 }
             };
 
-            if (!UseSink) {
-                countOperationsByType("reads");
-            }
             countOperationsByType("writes");
 
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? 0 : 1);
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], UseSink ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
         }

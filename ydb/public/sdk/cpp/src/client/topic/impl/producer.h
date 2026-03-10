@@ -376,6 +376,8 @@ private:
 
     TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
 
+    bool IsFederation(const std::string& endpoint);
+
 public:
     TProducer(const TProducerSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,

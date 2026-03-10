@@ -1,6 +1,7 @@
 #include <util/system/byteorder.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
+#include <library/cpp/string_utils/url/url.h>
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
 
@@ -1351,15 +1352,19 @@ TProducer::TProducer(
     Settings(settings)
 {
     if (settings.ProducerIdPrefix_.empty()) {
-        ythrow TContractViolation("ProducerIdPrefix is required for KeyedWriteSession");
+        ythrow TContractViolation("ProducerIdPrefix is required for Producer");
     }
 
     if (!settings.ProducerId_.empty()) {
-        ythrow TContractViolation("ProducerId should be empty for KeyedWriteSession, use ProducerIdPrefix instead");
+        ythrow TContractViolation("ProducerId should be empty for Producer, use ProducerIdPrefix instead");
     }
 
     if (!settings.MessageGroupId_.empty()) {
-        ythrow TContractViolation("MessageGroupId should be empty for KeyedWriteSession");
+        ythrow TContractViolation("MessageGroupId should be empty for Producer");
+    }
+
+    if (IsFederation(DbDriverState->DiscoveryEndpoint)) {
+        ythrow TContractViolation("Producer is not supported for federation");
     }
 
     TDescribeTopicSettings describeTopicSettings;
@@ -1460,7 +1465,7 @@ TProducer::TProducer(
 
     RunMainWorker(-1);
 
-    LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Keyed write session created");
+    LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Producer created");
 }
 
 std::vector<TProducer::TPartitionInfo> TProducer::GetPartitions() const {
@@ -1685,6 +1690,11 @@ void TProducer::RunUserEventLoop() {
             break;
         }
     }
+}
+
+bool TProducer::IsFederation(const std::string& endpoint) {
+    std::string_view host = GetHost(endpoint);
+    return host == "logbroker.yandex.net" || host == "logbroker-prestable.yandex.net";
 }
 
 void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent) {

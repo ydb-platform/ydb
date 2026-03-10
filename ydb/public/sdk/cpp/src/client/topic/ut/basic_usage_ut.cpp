@@ -1047,6 +1047,26 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateProducer(writeSettings), TContractViolation);
     }
 
+    Y_UNIT_TEST(Producer_IsNotSupportedForFederation) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        auto config = setup.MakeDriverConfig();
+        config.SetEndpoint("logbroker.yandex.net:2135");
+
+        TDriver driver(config);
+        TTopicClient federatedLikeClient(driver);
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        UNIT_ASSERT_EXCEPTION(federatedLikeClient.CreateProducer(writeSettings), TContractViolation);
+    }
+
     Y_UNIT_TEST(Producer_SessionClosedDueToUserError) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);

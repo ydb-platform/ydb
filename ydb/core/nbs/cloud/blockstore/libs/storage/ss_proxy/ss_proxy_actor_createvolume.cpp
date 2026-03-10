@@ -228,12 +228,11 @@ void TCreateVolumeActor::DescribeVolumeAfterCreate(const TActorContext& ctx)
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_SS_PROXY,
-        "Volume %s: sending describe request after create for volume %s",
-        VolumeConfig.GetDiskId().Quote().data(),
-        VolumeName.data());
+        "Volume %s: sending describe request after create",
+        VolumeConfig.GetDiskId().Quote().data());
 
     auto request =
-        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(VolumeName);
+        std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(
         ctx,

@@ -309,7 +309,7 @@ class NbsTestBase:
         """
         # Verify basic success (Result field may not be present, which means success)
         if 'Result' in results:
-            assert results['Result'] in [0, 'TEST_STATUS_OK'], f"Test failed with result: {results.get('Result')}"
+            assert results['Result'] == 0, "Load actor run finished with error"
 
         # Verify IOPS and throughput are non-zero
         assert 'Iops' in results, f"Missing Iops in results: {results}"
@@ -324,6 +324,11 @@ class NbsTestBase:
         assert 'RequestsCompleted' in results, f"Missing RequestsCompleted in results: {results}"
         requests_completed = results['RequestsCompleted']
         assert requests_completed > 0, f"RequestsCompleted should be greater than 0, got {requests_completed}"
+
+        # Verify requests failed (if present)
+        if 'RequestsFailed' in results:
+            requests_failed = results['RequestsFailed']
+            assert requests_failed == 0, f"RequestsFailed should be 0, got {requests_failed}"
 
         # Verify blocks read/written as expected
         if expected_blocks_read:

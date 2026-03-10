@@ -23,5 +23,5 @@ def do(args):
     result = nbs.GetLoadActorAdapterActorIdResult()
     response.operation.result.Unpack(result)
 
-    output = {'status': common.get_status(response), 'actorId': result.ActorId or ''}
+    output = {'status': common.get_status_str(response), 'actorId': result.ActorId or ''}
     print(json.dumps(output))

@@ -20,6 +20,7 @@ struct TTestResults
     NProto::ETestStatus Status = NProto::TEST_STATUS_OK;
 
     size_t RequestsCompleted = 0;
+    size_t RequestsFailed = 0;
 
     size_t BlocksRead = 0;
     size_t BlocksWritten = 0;

@@ -24,6 +24,23 @@ class TestNbs(NbsTestBase):
         # Verify the data matches (trimmed to the original length)
         assert read_data[: len(test_data)] == test_data
 
+    def test_nbs_disk_creation_name_with_symbols(self):
+        """
+        Create nbs disk and check basic IO operations
+        """
+
+        disk_id = "disk%1"
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = "vnfjkdnsfvjdfknsjknsdkjnvnjk"
+        self.write(actor_id, 0, test_data)
+        read_data = self.read(actor_id, 0)
+
+        # Verify the data matches (trimmed to the original length)
+        assert read_data[: len(test_data)] == test_data
+
     def test_nbs_4gb_disk_read_write(self):
         """
         Create a 4GB disk, write random data to some locations in it, and verify read operations.
@@ -47,7 +64,7 @@ class TestNbs(NbsTestBase):
         test_locations = []
 
         # Test first, middle, and last block of few 128MB chunks
-        for chunk_idx in range(0, int(num_chunks / 2), num_chunks - 1):
+        for chunk_idx in [0, num_chunks // 2, num_chunks - 1]:
             chunk_start = chunk_idx * chunk_size_blocks
             chunk_middle = chunk_start + (chunk_size_blocks // 2)
             chunk_end = chunk_start + chunk_size_blocks - 1

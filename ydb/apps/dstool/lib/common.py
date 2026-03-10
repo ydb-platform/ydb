@@ -743,7 +743,11 @@ def invoke_nbs_request(request_type, request):
 
 
 def get_status(response):
-    success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+    return response.operation.ready and response.operation.status == StatusIds.SUCCESS
+
+
+def get_status_str(response):
+    success = get_status(response)
 
     return 'success' if success else 'failure'
 

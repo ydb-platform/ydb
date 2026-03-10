@@ -47,5 +47,5 @@ def do_read(args):
     # Extract data from IOVector buffers and convert to string
     data_buffers = [buf.decode('utf-8', errors='replace') for buf in result.Blocks.Buffers]
 
-    output = {'status': common.get_status(response), 'data': ''.join(data_buffers) if data_buffers else ''}
+    output = {'status': common.get_status_str(response), 'data': ''.join(data_buffers) if data_buffers else ''}
     print(json.dumps(output))

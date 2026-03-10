@@ -71,8 +71,8 @@ bool TDuplicateManager::IsExclusiveInterval(const NArrow::TSimpleRow& begin, con
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
-    auto constructor = std::make_shared<TFilterAccumulator>(ev);
-    TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
+    TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(ev->Get()->GetPortionId());
+    auto constructor = std::make_shared<TFilterAccumulator>(ev, mainPortion->GetRecordsCount());
     if (IsExclusiveInterval(mainPortion->IndexKeyStart(), mainPortion->IndexKeyEnd())) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());

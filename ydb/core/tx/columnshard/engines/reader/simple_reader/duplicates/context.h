@@ -51,6 +51,7 @@ private:
 
     std::vector<std::optional<TPortionColumnFilter>> Filters;
     ui64 FiltersAccumulated = 0;
+    ui64 RecordsCount = 0;
 
 private:
     bool IsReady() const {
@@ -60,13 +61,30 @@ private:
         return Filters.size() == FiltersAccumulated;
     }
 
+    NArrow::TColumnFilter BuildDeniedFilter(ui32 recrodsCount) {
+        NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+        filter.Add(false, recrodsCount);
+        return filter;
+    }
+
     void Complete() {
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(IsReady());
         NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
+        ui64 offset = 0;
         for (const auto& filter : Filters) {
             AFL_VERIFY(!!filter);
+            if (offset < filter->Offset) {
+                ui64 delta = filter->Offset - offset;
+                result.Append(BuildDeniedFilter(delta));
+                offset += delta; 
+            }
             result.Append(filter->Filter);
+            offset += filter->Filter.GetRecordsCount().value_or(0);
+        }
+        if (offset < RecordsCount) {
+            ui64 delta = RecordsCount - offset;
+            result.Append(BuildDeniedFilter(delta));
         }
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(result));
         Done = true;
@@ -104,7 +122,7 @@ public:
         return OriginalRequest;
     }
 
-    TFilterAccumulator(const TEvRequestFilter::TPtr& request);
+    TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount);
 
     ~TFilterAccumulator() {
         AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());

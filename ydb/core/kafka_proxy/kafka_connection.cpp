@@ -721,7 +721,7 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            std::optional<TInet64SecureStreamSocket::ServerMtlsCreds> serverCreds = std::nullopt;
+            std::optional<TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::nullopt;
             if (NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
                 auto readFile = [](std::optional<TString> path) {
                     if (path) {
@@ -750,7 +750,7 @@ protected:
                     PassAway();
                     return false;
                 }
-                serverCreds = TInet64SecureStreamSocket::ServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
+                serverCreds = TInet64SecureStreamSocket::TServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
             }
             int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, serverCreds);
             if (res < 0) {

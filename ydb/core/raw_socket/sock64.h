@@ -144,7 +144,7 @@ protected:
 
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
 public:
-    struct ServerMtlsCreds {
+    struct TServerMtlsCreds {
         TString ServerCert;
         TString ServerPrivateKey;
         TString CAFilePath;
@@ -155,7 +155,7 @@ public:
     {}
 
     TInet64SecureStreamSocket(TInet64StreamSocket&& socket, NKikimrServices::EServiceKikimr service,
-                const std::optional<ServerMtlsCreds>& serverCreds = std::nullopt)
+                const std::optional<TServerMtlsCreds>& serverCreds = std::nullopt)
         : TInet64StreamSocket(std::move(socket))
     {
         Service = service;
@@ -171,7 +171,7 @@ private:
 
     TSslHolder<BIO> Bio;
     TSslHolder<SSL> Ssl;
-    ServerMtlsCreds ServerCreds;
+    TServerMtlsCreds ServerCreds;
     bool UseMtlsAuth = false;
     NKikimrServices::EServiceKikimr Service;
 

@@ -56,7 +56,7 @@ public:
     }
 
     int UpgradeToSecure(NKikimrServices::EServiceKikimr service,
-                        const std::optional<TInet64SecureStreamSocket::ServerMtlsCreds>& serverCreds = std::nullopt) {
+                        const std::optional<TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds = std::nullopt) {
         std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket), service, serverCreds);
         int res = socket->SecureAccept(Endpoint->SecureContext.get());
         TGuard lock(Lock);
@@ -65,7 +65,7 @@ public:
     }
 
     int TryUpgradeToSecure(NKikimrServices::EServiceKikimr service,
-                          const std::optional<TInet64SecureStreamSocket::ServerMtlsCreds>& serverCreds = std::nullopt) {
+                          const std::optional<TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds = std::nullopt) {
         for (;;) {
             int res = UpgradeToSecure(service, serverCreds);
             if (res >= 0) {

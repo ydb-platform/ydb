@@ -231,3 +231,148 @@ class Test(TestBase):
             retry_assertions(check_vdisk_state_error, timeout_seconds=20),
             self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
         ]
+<<<<<<< HEAD
+=======
+
+    def test_capacity_metrics(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+
+        vdisk_columns = [
+            'VDiskId',
+            'NodeId:PDiskId',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+            'GroupSizeInUnits',
+        ]
+        group_columns = [
+            'GroupId',
+            'SizeInUnits',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+        ]
+
+        ydb_cli = [yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")), "--endpoint", self.endpoint, "--database=/Root"]
+        group_id = 2181038080
+
+        initial_total_size = None
+
+        def check_vdisks_allocated_size_updated():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
+            assert len(vslots) == 8
+            for vslot in vslots[0:6]:
+                used_size = vslot.VDiskMetrics.AllocatedSize
+                assert used_size > 0
+                assert used_size == vslots[0].VDiskMetrics.AllocatedSize
+
+            nonlocal initial_total_size
+            initial_total_size = vslots[0].VDiskMetrics.AllocatedSize + vslots[0].VDiskMetrics.AvailableSize
+
+        def check_vdisks_total_size_doubled():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
+            assert len(vslots) == 8
+            for vslot in vslots[0:6]:
+                total_size = vslot.VDiskMetrics.AllocatedSize + vslot.VDiskMetrics.AvailableSize
+                assert total_size == 2 * initial_total_size
+
+        def wait_vdisks_total_size_doubled():
+            try:
+                retry_assertions(check_vdisks_total_size_doubled)
+            except AssertionError:
+                pass
+
+        return [
+            self._trace('pdisk', 'stop', '--node-id', '7', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
+            self._trace('pdisk', 'stop', '--node-id', '8', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '-H', '--columns', *group_columns),
+            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'init', '-w', '1'], wait=True).returncode,
+            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'import', '-w', '1'], wait=True).returncode,
+            retry_assertions(check_vdisks_allocated_size_updated),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '--columns', *group_columns),
+            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
+            wait_vdisks_total_size_doubled(),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '--columns', *group_columns),
+
+            # Errors:
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id), '--format', 'json'),
+        ]
+
+    def test_infer_pdisk_slot_count(self):
+        dynconfig_client = DynConfigClient(self.host, self.grpc_port)
+
+        def generate_config():
+            generate_config_response = dynconfig_client.fetch_startup_config()
+            logger.info(f"{generate_config_response=}")
+            assert generate_config_response.operation.status == StatusIds.SUCCESS
+
+            result = dynconfig.FetchStartupConfigResult()
+            generate_config_response.operation.result.Unpack(result)
+
+            return {
+                "metadata": {
+                    "kind": "MainConfig",
+                    "version": 0,
+                    "cluster": "",
+                },
+                "config": yaml.safe_load(result.config)
+            }
+
+        def replace_config(full_config):
+            replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
+            logger.info(f"{replace_config_response=}")
+            assert replace_config_response.operation.status == StatusIds.SUCCESS
+
+        full_config = generate_config()
+        full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"] = {
+            "rot": {
+                "prefer_inferred_settings_over_explicit": True,
+                "unit_size": C_4GB,
+                "max_slots": 12,
+            }
+        }
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits > 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'Path',
+            'TotalSize',
+            'ExpectedSlotCount',
+            'SlotSizeInUnits',
+        ]
+
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
+        full_config["metadata"]["version"] = 1
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        return [trace1, trace2]
+>>>>>>> 8b9e2730796 (New command dstool group resize (#35643))

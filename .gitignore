@@ -94,8 +94,6 @@ junk/
 # YDB CLI configuration file location is `~/ydb/config/config.yaml`
 config/config.yaml
 path.bash.inc
-<<<<<<< HEAD
-=======
 
 # Clang format
 /.clang-format
@@ -112,4 +110,3 @@ path.bash.inc
 
 # Harness local cluster working directory
 .ydbd_working_dir/
->>>>>>> ffea58c6bef (YQ-4502 add streaming_queries docs (#25701))

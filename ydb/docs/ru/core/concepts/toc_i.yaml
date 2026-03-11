@@ -16,14 +16,6 @@ items:
     mode: link
 - name: Топология кластера
   href: topology.md
-<<<<<<< HEAD
-=======
-- name: Выполнение запросов
-  href: query_execution/index.md
-  include:
-    path: query_execution/toc_p.yaml
-    mode: link
->>>>>>> ffea58c6bef (YQ-4502 add streaming_queries docs (#25701))
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
@@ -50,7 +42,6 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
-<<<<<<< HEAD
   when: feature_transfer
 - name: Оптимизатор запросов
   href: optimizer.md
@@ -58,7 +49,5 @@ items:
   include:
     path: federated_query/toc_p.yaml
     mode: link
-=======
 - name: Потоковые запросы
   href: streaming-query.md
->>>>>>> ffea58c6bef (YQ-4502 add streaming_queries docs (#25701))

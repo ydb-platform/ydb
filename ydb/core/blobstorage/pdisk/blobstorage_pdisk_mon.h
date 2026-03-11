@@ -85,7 +85,7 @@ struct TPDiskMon {
             BootingCommonLogRead,
             BootingFormatMagicChecking,
             BootingDeviceFormattingAndTrimming,
-            ErrorInitialFormatRead,
+            ErrorInitialFormatRead, // deprecated; kept for backward compatibility, replaced with two following states
             ErrorInitialFormatReadDueToGuid,
             ErrorInitialFormatReadIncompleteFormat,
             ErrorDiskCannotBeFormated,
@@ -124,7 +124,7 @@ struct TPDiskMon {
         static const char *DetailedStateToStr(i64 val) {
             switch (val) {
                 case EverythingIsOk: return "EverythingIsOk";
-                case BootingFormatRead: return "BootingSysLogRead";
+                case BootingFormatRead: return "BootingFormatRead";
                 case BootingSysLogRead: return "BootingSysLogRead";
                 case BootingCommonLogRead: return "BootingCommonLogRead";
                 case BootingFormatMagicChecking: return "BootingFormatMagicChecking";

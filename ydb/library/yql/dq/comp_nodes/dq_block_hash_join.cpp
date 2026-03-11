@@ -318,7 +318,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7 || callable.GetInputsCount() == 8, "Expected 7 or 8 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -403,7 +403,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         meta.Renames.push_back({.Index = rename.Index, .Side = thisSide});
     }
 
-    if (callable.GetInputsCount() == 8) {
+    {
         const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
         if (settingsTuple->GetValuesCount() >= 1) {
             meta.Settings.LeftIsBuild = AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>() != 0;

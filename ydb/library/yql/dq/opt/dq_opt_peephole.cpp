@@ -1013,12 +1013,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    TExprNode::TListType joinFlags;
-    if (blockHashJoin.Flags()) {
-        joinFlags = blockHashJoin.Flags().Cast().Ref().ChildrenList();
-    }
-
-    auto blockJoinCoreBuilder = ctx.Builder(pos)
+    auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftInput))
             .Add(1, std::move(rightInput))
@@ -1027,10 +1022,9 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
             .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
-            .Add(7, ctx.NewList(pos, std::move(joinFlags)))
-        .Seal();
-
-    auto blockJoinCore = blockJoinCoreBuilder.Build();
+            .Add(7, blockHashJoin.Settings().Ptr())
+        .Seal()
+        .Build();
 
     // Convert blocks back to scalars if needed
     auto wideResult = std::move(blockJoinCore);

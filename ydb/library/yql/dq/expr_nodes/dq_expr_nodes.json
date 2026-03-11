@@ -63,7 +63,7 @@
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"},
         "Children": [
-            {"Index": 8, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+            {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList"}
         ]
     },
     {
@@ -78,7 +78,7 @@
             {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
             {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
             {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
-            {"Index": 7, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
         ]
     },
     {

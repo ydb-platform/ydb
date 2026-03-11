@@ -427,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 7 || node.ChildrenSize() == 8, "BlockHashJoinCore should have 7 or 8 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -489,11 +489,9 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
 
             NMiniKQL::TBlockHashJoinSettings settings;
-            if (node.ChildrenSize() == 8) {
-                for (const auto& flag : node.Child(7)->Children()) {
-                    if (flag->Content() == "LeftIsBuild") {
-                        settings.LeftIsBuild = true;
-                    }
+            for (const auto& setting : node.Child(7)->Children()) {
+                if (setting->Child(0)->Content() == "LeftIsBuild") {
+                    settings.LeftIsBuild = FromString<bool>(setting->Child(1)->Content());
                 }
             }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,

@@ -1693,9 +1693,13 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                TExprNode::TListType blockFlags;
+                TVector<TCoNameValueTuple> joinSettings;
                 if (blockHashJoinLeftIsBuild) {
-                    blockFlags.push_back(ctx.NewAtom(join.Pos(), "LeftIsBuild"));
+                    joinSettings.push_back(
+                        Build<TCoNameValueTuple>(ctx, join.Pos())
+                            .Name().Build("LeftIsBuild")
+                            .Value<TCoAtom>().Build("true")
+                            .Done());
                 }
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
@@ -1707,8 +1711,8 @@ TExprBase DqBuildHashJoin(
                     .JoinKeys(join.JoinKeys())
                     .LeftJoinKeyNames(join.LeftJoinKeyNames())
                     .RightJoinKeyNames(join.RightJoinKeyNames())
-                    .Flags()
-                        .Add(blockFlags)
+                    .Settings()
+                        .Add(joinSettings)
                         .Build()
                     .Done().Ptr();
                 break;

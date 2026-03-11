@@ -290,6 +290,8 @@ namespace NKikimr {
                 static constexpr double RssUsageSoft = 0.85;
                 static constexpr double RssUsageSoftLimit = 0.75;
                 static constexpr double RssUsageNotifySlowLimit = 0.5;
+                // Temporary fallback for environments without cgroup limits.
+                static constexpr ui64 CGroupLimitFallbackBytes = 2ull << 30; // 2 GiB
                 static constexpr TDuration RepeatInterval = TDuration::Seconds(10);
                 static constexpr TDuration DumpInterval = TDuration::Minutes(10);
                 static constexpr TDuration NotifySlowInterval = TDuration::Seconds(10);
@@ -402,11 +404,19 @@ namespace NKikimr {
                 if (memoryUsage) {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
 
+                    // const ui64 cgroupLimit = memoryUsage->CGroupLimit
+                    //     ? memoryUsage->CGroupLimit
+                    //     : TDumpLogConfig::CGroupLimitFallbackBytes;
+
+                    Y_UNUSED(TDumpLogConfig::CGroupLimitFallbackBytes);
+
+                    const ui64 cgroupLimit = memoryUsage->CGroupLimit;
+
                     TMemObserver::TMemStat stat{
                         // Note: we use allocated memory because AnonRss has lag
                         TAllocState::GetAllocatedMemoryEstimate(), 
-                        memoryUsage->CGroupLimit, 
-                        static_cast<ui64>(memoryUsage->CGroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
+                        cgroupLimit,
+                        static_cast<ui64>(cgroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
 
                     if (memoryUsage->AnonRss > TDumpLogConfig::RssUsageNotifySlowLimit ||
                             TInstant::Now() - NotifyMemoryStatsTime > TDumpLogConfig::NotifySlowInterval) {

@@ -58,6 +58,8 @@ namespace NOps {
 
         ~TDriver()
         {
+            DropScanCounters();
+
             /* Correct actors shutdown hasn't been implemented in
                 kikimr, thus actors may be destructed in incompleted state
                 and dtor cannot be used for completeness checkups.
@@ -307,6 +309,7 @@ namespace NOps {
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
                 Y_VERIFY_S(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
                 ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore)));
+                SyncScanGaugeCounters();
             }
 
             // Return empty TPartView to signal loader is still in progress
@@ -372,6 +375,7 @@ namespace NOps {
             Y_ABORT_UNLESS(!Spent, "Talble scan actor bootstrapped twice");
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
+            InitScanCounters();
 
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl
@@ -535,6 +539,7 @@ namespace NOps {
             req.Sender = ev->Sender;
             req.Cookie = ev->Cookie;
             ui64 reqId = BlobQueueRequestsOffset + BlobQueueRequests.size() - 1;
+            SyncScanGaugeCounters();
 
             BlobQueue.Enqueue(msg->BlobId, msg->Group, this, reqId);
             BlobQueue.SendRequests(SelfId());
@@ -562,6 +567,7 @@ namespace NOps {
                 BlobQueueRequests.pop_front();
                 ++BlobQueueRequestsOffset;
             }
+            SyncScanGaugeCounters();
         }
 
         void Handle(TEvPrivate::TEvLoadPages::TPtr& ev) noexcept
@@ -590,6 +596,7 @@ namespace NOps {
 
             auto& partView = ColdPartLoaded[label];
             partView = std::move(msg->Part);
+            SyncScanGaugeCounters();
 
             auto* partStore = partView.As<TPartStore>();
             Y_ABORT_UNLESS(partStore);
@@ -615,6 +622,7 @@ namespace NOps {
 
             const auto label = msg->Label;
             ColdPartLoaders.erase(label);
+            SyncScanGaugeCounters();
 
             Terminate(EAbort::Host);
         }
@@ -701,6 +709,7 @@ namespace NOps {
                 Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
             }
 
+            DropScanCounters();
             PassAway();
         }
 
@@ -716,10 +725,84 @@ namespace NOps {
             Send(Owner, event.Release(), flags);
         }
 
+        void InitScanCounters() noexcept
+        {
+            auto tabletsCounters = GetServiceCounters(AppData()->Counters, "tablets");
+            auto group = tabletsCounters->GetSubgroup("component", "flat_scan_actor");
+
+            ScanCounters.ActiveScans = group->GetCounter("ActiveScans", false);
+            ScanCounters.BlobQueueRequests = group->GetCounter("BlobQueueRequests", false);
+            ScanCounters.ColdPartLoaders = group->GetCounter("ColdPartLoaders", false);
+            ScanCounters.ColdPartLoaded = group->GetCounter("ColdPartLoaded", false);
+
+            if (!ActiveScanCounterApplied) {
+                ScanCounters.ActiveScans->Inc();
+                ActiveScanCounterApplied = true;
+            }
+
+            SyncScanGaugeCounters();
+        }
+
+        static void SyncGaugeCounter(
+            const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+            ui64& accounted,
+            size_t current) noexcept
+        {
+            if (!counter) {
+                accounted = 0;
+                return;
+            }
+
+            const ui64 value = static_cast<ui64>(current);
+            if (value > accounted) {
+                counter->Add(value - accounted);
+            } else if (accounted > value) {
+                counter->Sub(accounted - value);
+            }
+            accounted = value;
+        }
+
+        void SyncScanGaugeCounters() noexcept
+        {
+            SyncGaugeCounter(ScanCounters.BlobQueueRequests, AccountedBlobQueueRequests, BlobQueueRequests.size());
+            SyncGaugeCounter(ScanCounters.ColdPartLoaders, AccountedColdPartLoaders, ColdPartLoaders.size());
+            SyncGaugeCounter(ScanCounters.ColdPartLoaded, AccountedColdPartLoaded, ColdPartLoaded.size());
+        }
+
+        void DropScanCounters() noexcept
+        {
+            if (ScanCounters.BlobQueueRequests && AccountedBlobQueueRequests) {
+                ScanCounters.BlobQueueRequests->Sub(AccountedBlobQueueRequests);
+                AccountedBlobQueueRequests = 0;
+            }
+
+            if (ScanCounters.ColdPartLoaders && AccountedColdPartLoaders) {
+                ScanCounters.ColdPartLoaders->Sub(AccountedColdPartLoaders);
+                AccountedColdPartLoaders = 0;
+            }
+
+            if (ScanCounters.ColdPartLoaded && AccountedColdPartLoaded) {
+                ScanCounters.ColdPartLoaded->Sub(AccountedColdPartLoaded);
+                AccountedColdPartLoaded = 0;
+            }
+
+            if (ScanCounters.ActiveScans && ActiveScanCounterApplied) {
+                ScanCounters.ActiveScans->Dec();
+                ActiveScanCounterApplied = false;
+            }
+        }
+
     private:
         struct TBlobQueueRequest {
             TActorId Sender;
             ui64 Cookie;
+        };
+
+        struct TScanCounters {
+            NMonitoring::TDynamicCounters::TCounterPtr ActiveScans;
+            NMonitoring::TDynamicCounters::TCounterPtr BlobQueueRequests;
+            NMonitoring::TDynamicCounters::TCounterPtr ColdPartLoaders;
+            NMonitoring::TDynamicCounters::TCounterPtr ColdPartLoaded;
         };
 
     private:
@@ -744,6 +827,12 @@ namespace NOps {
 
         bool ForwardedSharedRequests = false;
         bool ContinueInFly = false;
+        bool ActiveScanCounterApplied = false;
+
+        TScanCounters ScanCounters;
+        ui64 AccountedBlobQueueRequests = 0;
+        ui64 AccountedColdPartLoaders = 0;
+        ui64 AccountedColdPartLoaded = 0;
 
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;

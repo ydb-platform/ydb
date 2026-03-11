@@ -1,20 +1,11 @@
 #pragma once
 
+#include "dq_block_hash_join_settings.h"
+
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
-
-enum class EBuildSide : ui32 {
-    Right = 0,
-    Left = 1,
-};
-
-struct TBlockHashJoinSettings {
-    EBuildSide BuildSide = EBuildSide::Right;
-
-    bool LeftIsBuild() const { return BuildSide == EBuildSide::Left; }
-};
 
 class TDqProgramBuilder : public TProgramBuilder {
   public:

@@ -1,6 +1,6 @@
 #pragma once
 #include "dq_hash_join_table.h"
-#include "dq_program_builder.h"
+#include "dq_block_hash_join_settings.h"
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>

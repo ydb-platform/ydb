@@ -1948,6 +1948,8 @@ message TEvBuildFulltextIndexRequest {
     optional string DocsTableName = 13;
 
     optional EFulltextIndexType IndexType = 14;
+
+    optional NKikimrTx.TKeyRange KeyRange = 15;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -1966,6 +1968,8 @@ message TEvBuildFulltextIndexResponse {
 
     optional uint64 DocCount = 9;
     optional uint64 TotalDocLength = 10;
+
+    optional bytes LastKeyAck = 11;
 }
 
 message TEvBuildFulltextDictRequest {

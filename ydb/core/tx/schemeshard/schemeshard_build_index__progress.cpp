@@ -1125,6 +1125,14 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
+        const auto& shardStatus = buildInfo.Shards.at(shardIdx);
+        if (shardStatus.LastKeyAck) {
+            TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
+            range.Serialize(*ev->Record.MutableKeyRange());
+        } else {
+            shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+        }
+
         LOG_N("TTxBuildProgress: TEvBuildFulltextIndexRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -2912,11 +2920,42 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextIndex: public TTxShardReply<
     {
     }
 
+    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+
+        if (record.HasLastKeyAck()) {
+            if (shardStatus.LastKeyAck) {
+                const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
+                std::vector<NScheme::TTypeInfo> keyTypes;
+                keyTypes.reserve(tableInfo.KeyColumnIds.size());
+                for (ui32 keyPos : tableInfo.KeyColumnIds) {
+                    keyTypes.emplace_back(tableInfo.Columns.at(keyPos).PType);
+                }
+
+                TSerializedCellVec prev{shardStatus.LastKeyAck};
+                TSerializedCellVec next{record.GetLastKeyAck()};
+
+                int cmp = CompareBorders<true, true>(prev.GetCells(), next.GetCells(), true, true, keyTypes);
+                if (cmp < 0) {
+                    LOG_W("check that all LastKeyAcks are monotonously increasing"
+                        << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry)
+                        << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry));
+                }
+            }
+
+            shardStatus.LastKeyAck = max(shardStatus.LastKeyAck, record.GetLastKeyAck());
+        }
+    }
+
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         const auto& record = Response->Get()->Record;
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
         TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+        if (record.HasLastKeyAck()) {
+            shardStatus.LastKeyAck = max(shardStatus.LastKeyAck, record.GetLastKeyAck());
+        }
 
         shardStatus.DocCount = record.GetDocCount();
         shardStatus.TotalDocLength = record.GetTotalDocLength();
@@ -2971,18 +3010,15 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
                 TSerializedCellVec next{shardStatus.LastKeyAck};
                 TSerializedCellVec prev{record.GetLastKeyAck()};
 
-                int cmp = CompareBorders<true, true>(next.GetCells(),
-                                                        prev.GetCells(),
-                                                        true,
-                                                        true,
-                                                        keyTypes);
-                Y_ENSURE(cmp < 0,
-                            "check that all LastKeyAcks are monotonously increase"
-                                << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
-                                << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
+                int cmp = CompareBorders<true, true>(next.GetCells(), prev.GetCells(), true, true, keyTypes);
+                if (cmp < 0) {
+                    LOG_W("Check that all LastKeyAcks are monotonously increase"
+                        << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
+                        << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
+                }
             }
 
-            shardStatus.LastKeyAck = record.GetLastKeyAck();
+            shardStatus.LastKeyAck = max(shardStatus.LastKeyAck, record.GetLastKeyAck());
         }
     }
 

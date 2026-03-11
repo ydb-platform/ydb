@@ -47,8 +47,8 @@ namespace NKikimr::NDDisk {
             auto cookie = ev->Cookie;
             Y_ABORT_UNLESS(cookie < Inflights.size());
             auto& inflight = Inflights[cookie];
-            inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::UNDELIVERED;
             if (!inflight.Received) {
+                inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::UNDELIVERED;
                 inflight.Received = true;
                 Received++;
             }

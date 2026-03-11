@@ -519,6 +519,71 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT(wr.GetResult().GetStatus() == TReplyStatus::OK);
         }
     }
+
+    void DoTest(const std::vector<TReplyStatus::E> expected) {
+        TTestContext ctx;
+        const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
+        const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
+        const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
+        const ui64 lsn = 10;
+        const TString payload = MakeData('P', BlockSize);
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+
+        auto pbs = std::vector<std::tuple<ui32, ui32, ui32>>{{NodeId, disk1.PDiskId, disk1.SlotId}, {NodeId, disk2.PDiskId, disk2.SlotId}, {NodeId, disk3.PDiskId, disk3.SlotId}};
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffers>(creds, selector, lsn, NDDisk::TWriteInstruction(0)
+            , pbs, 1000);
+        write->AddPayload(TRope(payload));
+
+        ctx.Runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffer::EventType) {
+                switch (expected[ev->Cookie]) {
+                    case TReplyStatus::UNDELIVERED:
+                        ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvents::TEvUndelivered(NDDisk::TEvWritePersistentBuffer::EventType, TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie), node);
+                        return false;
+                    case TReplyStatus::DISCONNECTED:
+                        ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvInterconnect::TEvNodeDisconnected(1), 0, ev->Cookie), node);
+                        return false;
+                    default:
+                        return true;
+                }
+            }
+            return true;
+        };
+
+        SendToDDisk(ctx, disk1.ServiceId, write.release());
+        for (auto s : expected) {
+            if (s == TReplyStatus::OK) {
+                auto pbWriteRaw = ctx.WaitPDiskRequests<NPDisk::TEvChunkWriteRaw>({disk1.PDiskEdge, disk2.PDiskEdge, disk3.PDiskEdge});
+                ctx.SendPDiskResponse(disk1, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            }
+        }
+        auto writeResult = ctx.Runtime.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBuffersResult>(
+            ctx.Edge, false);
+        UNIT_ASSERT(writeResult->Get()->Record.ResultSize() == 3);
+        for (ui32 i = 0; i < writeResult->Get()->Record.ResultSize(); i++) {
+            auto& wr = writeResult->Get()->Record.GetResult(i);
+            UNIT_ASSERT(wr.GetResult().GetStatus() == expected[i]);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferWriteTunnel_Undelivered) {
+        DoTest({TReplyStatus::UNDELIVERED, TReplyStatus::UNDELIVERED, TReplyStatus::UNDELIVERED});
+    }
+
+    Y_UNIT_TEST(PersistentBufferWriteTunnel_Disconnected) {
+        DoTest({TReplyStatus::DISCONNECTED, TReplyStatus::DISCONNECTED, TReplyStatus::DISCONNECTED});
+    }
+
+    Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed1) {
+        DoTest({TReplyStatus::UNDELIVERED, TReplyStatus::OK, TReplyStatus::UNDELIVERED});
+    }
+    
+    Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed2) {
+        DoTest({TReplyStatus::UNDELIVERED, TReplyStatus::DISCONNECTED, TReplyStatus::DISCONNECTED});
+    }
 }
 
 } // NKikimr

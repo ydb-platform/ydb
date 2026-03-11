@@ -27,4 +27,5 @@ PEERDIR(
     ydb/library/actors/testlib
 )
 
+ENDIF()
 END()

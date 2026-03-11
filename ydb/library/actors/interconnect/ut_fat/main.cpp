@@ -182,9 +182,15 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
         TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
-        testCluster.RegisterActor(senderActor, 1);
+        const TActorId senderActorId = testCluster.RegisterActor(senderActor, 1);
 
-        NanoSleep(30ULL * 1000 * 1000 * 1000);
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline && receiverActor->GetReceivedCount() == 0) {
+            // Re-arm connection request in case the initial TLS/XDC handshake attempt
+            // fails before sender receives TEvNodeConnected.
+            testCluster.GetNode(1)->Send(senderActorId, new TEvents::TEvWakeup);
+            Sleep(TDuration::MilliSeconds(100));
+        }
 
         UNIT_ASSERT_C(receiverActor->GetReceivedCount() > 0, "no traffic detected!");
     }

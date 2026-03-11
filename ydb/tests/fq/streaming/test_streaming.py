@@ -174,19 +174,28 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
-        restart_node_id = None
-        for node_id in kikimr.cluster.nodes:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
+        def restart_node():
+            restart_node_id = None
+            for node_id in kikimr.cluster.nodes:
+                count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                if count:
+                    restart_node_id = node_id
+            assert restart_node_id is not None
+            logger.debug(f"Restart node {restart_node_id}")
+            node = kikimr.cluster.nodes[restart_node_id]
+            node.stop()
+            node.start()
 
-        logger.debug(f"Restart node {restart_node_id}")
-        node = kikimr.cluster.nodes[restart_node_id]
-        node.stop()
-        node.start()
-
+        restart_node()
         self.write_stream(['{"value": "value2"}'])
         expected_data = ['value2']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        restart_node()
+        self.write_stream(['{"value": "value3"}'])
+        expected_data = ['value3']
+        self.wait_completed_checkpoints(kikimr, path)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -194,6 +203,7 @@ class TestStreamingInYdb(StreamingTestBase):
         source_name = entity_name("source4_")
         self.init_topics(source_name, partitions_count=1)
         self.create_source(kikimr, source_name, True)
+
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN

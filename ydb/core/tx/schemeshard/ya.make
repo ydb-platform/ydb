@@ -91,9 +91,9 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
-    schemeshard__shred_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
+    schemeshard__domain_shred_manager.cpp
     schemeshard__find_subdomain_path_id.cpp
     schemeshard__fix_bad_paths.cpp
     schemeshard__init.cpp
@@ -228,7 +228,6 @@ SRCS(
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
-    schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp

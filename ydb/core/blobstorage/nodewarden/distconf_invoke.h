@@ -128,6 +128,7 @@ namespace NKikimr::NStorage {
         std::optional<TString> NewStorageYaml;
         std::optional<ui64> MainYamlVersion;
         std::optional<ui64> StorageYamlVersion;
+        bool IsDryRun = false;
 
         TActorId ControllerPipeId;
 

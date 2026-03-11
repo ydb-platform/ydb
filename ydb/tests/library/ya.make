@@ -74,6 +74,7 @@ PEERDIR(
     contrib/python/PyYAML
     contrib/python/cryptography
     contrib/python/importlib-resources
+    contrib/python/port_manager
     contrib/python/protobuf
     contrib/python/pytest
     contrib/python/requests

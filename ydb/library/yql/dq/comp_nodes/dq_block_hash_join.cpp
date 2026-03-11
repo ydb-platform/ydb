@@ -405,13 +405,8 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     if (callable.GetInputsCount() == 8) {
         const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-        MKQL_ENSURE(settingsTuple->GetValuesCount() >= 1, "settings tuple must have at least flags element");
-
-        const ui32 flags = AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>();
-        meta.Settings.LeftIsBuild = (flags & 1) != 0;
-
-        if (settingsTuple->GetValuesCount() >= 2) {
-            meta.Settings.MemoryLimit = AS_VALUE(TDataLiteral, settingsTuple->GetValue(1))->AsValue().Get<ui64>();
+        if (settingsTuple->GetValuesCount() >= 1) {
+            meta.Settings.LeftIsBuild = AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>() != 0;
         }
     }
     if (joinKind == EJoinKind::Left && meta.Settings.LeftIsBuild) {

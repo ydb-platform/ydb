@@ -7,7 +7,6 @@ namespace NMiniKQL {
 
 struct TBlockHashJoinSettings {
     bool LeftIsBuild = false;
-    ui64 MemoryLimit = 0;
 };
 
 class TDqProgramBuilder : public TProgramBuilder {

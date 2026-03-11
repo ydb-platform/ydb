@@ -13,36 +13,36 @@ namespace NKikimr::NArrow::NAccessor {
 class TDictionaryArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    std::shared_ptr<arrow::Array> ArrayVariants;
-    std::shared_ptr<arrow::Array> ArrayRecords;
+    std::shared_ptr<arrow::Array> ArrayDictionary;
+    std::shared_ptr<arrow::Array> ArrayPositions;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
-        visitor(ArrayVariants);
+        visitor(ArrayDictionary);
     }
 
     ui32 GetIndexImpl(const ui32 index) const;
 
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override {
-        return NArrow::GetArrayDataSize(ArrayVariants) + NArrow::GetArrayDataSize(ArrayRecords);
+        return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
-        return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(GetIndexImpl(index)));
+        return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(GetIndexImpl(index)));
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
-        return ArrayRecords->null_count();
+        return ArrayPositions->null_count();
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        return NArrow::GetArrayDataSize(ArrayVariants) + NArrow::GetArrayDataSize(ArrayRecords);
+        return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
-        if (ArrayVariants->length() == 1) {
-            value = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(0));
+        if (ArrayDictionary->length() == 1) {
+            value = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(0));
             return true;
         }
         return false;
@@ -56,22 +56,22 @@ public:
     }
 
     virtual void Reallocate() override {
-        ArrayVariants = NArrow::ReallocateArray(ArrayVariants);
-        ArrayRecords = NArrow::ReallocateArray(ArrayRecords);
+        ArrayDictionary = NArrow::ReallocateArray(ArrayDictionary);
+        ArrayPositions = NArrow::ReallocateArray(ArrayPositions);
     }
 
-    const std::shared_ptr<arrow::Array>& GetVariants() const {
-        return ArrayVariants;
+    const std::shared_ptr<arrow::Array>& GetDictionary() const {
+        return ArrayDictionary;
     }
 
-    const std::shared_ptr<arrow::Array>& GetRecords() const {
-        return ArrayRecords;
+    const std::shared_ptr<arrow::Array>& GetPositions() const {
+        return ArrayPositions;
     }
 
-    TDictionaryArray(const std::shared_ptr<arrow::Array>& variants, const std::shared_ptr<arrow::Array>& records)
-        : TBase(TValidator::CheckNotNull(records)->length(), EType::Dictionary, variants->type())
-        , ArrayVariants(variants)
-        , ArrayRecords(records) {
+    TDictionaryArray(const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions)
+        : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, dictionary->type())
+        , ArrayDictionary(dictionary)
+        , ArrayPositions(positions) {
     }
 };
 

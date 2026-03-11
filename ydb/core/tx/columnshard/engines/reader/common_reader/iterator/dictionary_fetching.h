@@ -13,9 +13,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-// Restores one column chunk when we only read the dictionary part of the blob (first DictionaryBlobSize
-// bytes). The full blob on disk is unchanged (dictionary + positions); we just request and deserialize
-// only the dictionary prefix.
+// Restores one column chunk when we only read the dictionary part of the blob (first DictionaryBlobSize bytes).
 class TDictionaryChunkRestoreInfo {
 private:
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
@@ -61,9 +59,7 @@ public:
     }
 };
 
-// Fetches only the dictionary part of each blob (first DictionaryBlobSize bytes per chunk). Result is
-// a composite of trivial arrays (one per chunk), each holding that chunk's unique values. No new
-// blob layout; we just read a prefix of the existing blob.
+// Fetches only the dictionary part of each blob (first DictionaryBlobSize bytes per chunk)
 class TDictionaryFetchLogic : public IKernelFetchLogic {
 private:
     using TBase = IKernelFetchLogic;
@@ -73,20 +69,16 @@ private:
     std::optional<TString> StorageId;
 
     void DoOnDataCollected(TFetchingResultContext& context) override {
-        ui32 totalRecords = 0;
         NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
         for (auto&& i : ColumnChunks) {
             AFL_VERIFY(i.GetDictionaryArray());
-            totalRecords += i.GetDictionaryArray()->length();
             compositeBuilder.AddChunk(std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetDictionaryArray()));
         }
-        Cerr << "!!! VLAD TDictionaryFetchLogic::DoOnDataCollected entity_id=" << GetEntityId() << " chunks=" << ColumnChunks.size() << " total_records=" << totalRecords << Endl;
         context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
     }
 
     void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
         AFL_VERIFY(!!StorageId);
-        Cerr << "!!! VLAD TDictionaryFetchLogic::DoOnDataReceived entity_id=" << GetEntityId() << " chunks=" << ColumnChunks.size() << " blobs_total_size=" << blobs.GetTotalBlobsSize() << Endl;
         for (auto&& i : ColumnChunks) {
             if (!!i.GetDictionaryBlobRangeOptional()) {
                 i.SetDictionaryBlob(blobs.ExtractVerified(*StorageId, *i.GetDictionaryBlobRangeOptional()));
@@ -99,7 +91,6 @@ private:
         auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         AFL_VERIFY(columnChunks.size());
         StorageId = source->GetColumnStorageId(GetEntityId());
-        Cerr << "!!! VLAD TDictionaryFetchLogic::DoStart entity_id=" << GetEntityId() << " context_records_count=" << context.GetRecordsCount() << " column_chunks=" << columnChunks.size() << Endl;
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);

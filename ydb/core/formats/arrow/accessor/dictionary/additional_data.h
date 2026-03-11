@@ -7,8 +7,6 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-// Dictionary accessor metadata (dictionary blob + positions blob layout).
-// Only the dictionary accessor and storage layer (e.g. columnshard) need to know this type.
 struct TDictionaryAccessorData : IAdditionalAccessorData {
     ui32 DictionaryBlobSize = 0;
     ui32 PositionsBlobSize = 0;

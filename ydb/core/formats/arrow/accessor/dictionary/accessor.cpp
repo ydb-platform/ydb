@@ -15,19 +15,19 @@ namespace NKikimr::NArrow::NAccessor {
 
 IChunkedArray::TLocalDataAddress TDictionaryArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
-    std::unique_ptr<arrow::ArrayBuilder> builderVariants = NArrow::MakeBuilder(ArrayVariants->type());
-    AFL_VERIFY(SwitchType(ArrayVariants->type()->id(), [&](const auto typeVariant) {
-        const auto* arrVariantsImpl = typeVariant.CastArray(ArrayVariants.get());
-        auto* builder = typeVariant.CastBuilder(builderVariants.get());
+    std::unique_ptr<arrow::ArrayBuilder> builderDictionary = NArrow::MakeBuilder(ArrayDictionary->type());
+    AFL_VERIFY(SwitchType(ArrayDictionary->type()->id(), [&](const auto typeVariant) {
+        const auto* arrDictionaryImpl = typeVariant.CastArray(ArrayDictionary.get());
+        auto* builder = typeVariant.CastBuilder(builderDictionary.get());
         if constexpr (typeVariant.IsAppropriate) {
-            AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto type) {
-                const auto* arrRecordsImpl = type.CastArray(ArrayRecords.get());
+            AFL_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
+                const auto* arrPositionsImpl = type.CastArray(ArrayPositions.get());
                 if constexpr (type.IsIndexType()) {
-                    for (ui32 i = 0; i < arrRecordsImpl->length(); ++i) {
-                        if (arrRecordsImpl->IsNull(i)) {
+                    for (ui32 i = 0; i < arrPositionsImpl->length(); ++i) {
+                        if (arrPositionsImpl->IsNull(i)) {
                             TStatusValidator::Validate(builder->AppendNull());
                         } else {
-                            TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrVariantsImpl, arrRecordsImpl->Value(i))));
+                            TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrDictionaryImpl, arrPositionsImpl->Value(i))));
                         }
                     }
                     return true;
@@ -38,23 +38,22 @@ IChunkedArray::TLocalDataAddress TDictionaryArray::DoGetLocalData(
         }
         return false;
     }));
-    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builderVariants)), 0, 0);
+    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builderDictionary)), 0, 0);
 }
 
 std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, const ui32 count) const {
-    auto arrRecordsResult = ArrayRecords->Slice(offset, count);
-    std::vector<bool> mask(ArrayVariants->length(), false);
+    std::vector<bool> mask(ArrayDictionary->length(), false);
     ui32 markCount = 0;
-    const auto recordsNew = ArrayRecords->Slice(offset, count);
-    AFL_VERIFY(SwitchType(recordsNew->type()->id(), [&](const auto& type) {
+    const auto positionsNew = ArrayPositions->Slice(offset, count);
+    AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
         using TRecordsWrap = std::decay_t<decltype(type)>;
         using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
         if constexpr (arrow::has_c_type<typename TRecordsWrap::T>()) {
-            const auto* arrRecordsImpl = static_cast<const TRecordsArray*>(recordsNew.get());
-            for (ui32 i = 0; i < arrRecordsImpl->length() && markCount < mask.size(); ++i) {
-                if (!arrRecordsImpl->IsNull(i) && !mask[arrRecordsImpl->Value(i)]) {
+            const auto* arrPositionsImpl = static_cast<const TRecordsArray*>(positionsNew.get());
+            for (ui32 i = 0; i < arrPositionsImpl->length() && markCount < mask.size(); ++i) {
+                if (!arrPositionsImpl->IsNull(i) && !mask[arrPositionsImpl->Value(i)]) {
                     ++markCount;
-                    mask[arrRecordsImpl->Value(i)] = true;
+                    mask[arrPositionsImpl->Value(i)] = true;
                 }
             }
             return true;
@@ -62,38 +61,38 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         return false;
     }));
     if (markCount == mask.size()) {
-        return std::make_shared<TDictionaryArray>(ArrayVariants, recordsNew);
+        return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew);
     } else {
-        auto arr = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayVariants))->GetChunkedArray();
+        auto arr = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
         AFL_VERIFY(arr && arr->num_chunks() == 1);
-        return std::make_shared<TDictionaryArray>(arr->chunk(0), recordsNew);
+        return std::make_shared<TDictionaryArray>(arr->chunk(0), positionsNew);
     }
 }
 
 NJson::TJsonValue TDictionaryArray::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("variants_count", ArrayVariants->length());
-    result.InsertValue("records_count", GetRecordsCount());
-    NJson::TJsonValue variantsArr = NJson::JSON_ARRAY;
-    for (int64_t i = 0; i < ArrayVariants->length(); ++i) {
-        auto scalar = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(i));
+    result.InsertValue("dictionary_count", ArrayDictionary->length());
+    result.InsertValue("positions_count", GetRecordsCount());
+    NJson::TJsonValue dictionaryArr = NJson::JSON_ARRAY;
+    for (int64_t i = 0; i < ArrayDictionary->length(); ++i) {
+        auto scalar = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(i));
         if (scalar->is_valid) {
-            variantsArr.AppendValue(NJson::TJsonValue(scalar->ToString()));
+            dictionaryArr.AppendValue(NJson::TJsonValue(scalar->ToString()));
         } else {
-            variantsArr.AppendValue(NJson::TJsonValue(NJson::JSON_NULL));
+            dictionaryArr.AppendValue(NJson::TJsonValue(NJson::JSON_NULL));
         }
     }
-    result.InsertValue("variants", std::move(variantsArr));
+    result.InsertValue("dictionary", std::move(dictionaryArr));
     return result;
 }
 
 ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     std::optional<ui32> result;
-    AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto type) {
+    AFL_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
         if constexpr (type.IsIndexType()) {
-            const auto* arr = static_cast<const TArray*>(ArrayRecords.get());
+            const auto* arr = static_cast<const TArray*>(ArrayPositions.get());
             result = arr->Value(index);
             return true;
         }
@@ -106,11 +105,11 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
 
 std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
     std::shared_ptr<arrow::Scalar> result;
-    if (!ArrayVariants->length()) {
+    if (!ArrayDictionary->length()) {
         return result;
     }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
-    return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.second));
+    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
+    return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

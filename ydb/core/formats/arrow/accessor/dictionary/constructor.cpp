@@ -90,14 +90,14 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 TBlobWithAccessorMeta TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
-    auto arrVariants = arr->GetVariants();
-    auto arrRecords = arr->GetRecords();
-    auto schemaVariants = NArrow::BuildFakeSchema({ arrVariants });
-    auto schemaRecords = NArrow::BuildFakeSchema({ arrRecords });
+    auto arrDictionary = arr->GetDictionary();
+    auto arrPositions = arr->GetPositions();
+    auto schemaDictionary = NArrow::BuildFakeSchema({ arrDictionary });
+    auto schemaPositions = NArrow::BuildFakeSchema({ arrPositions });
     const TString blobDictionary =
-        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaVariants, arrVariants->length(), { arrVariants }));
+        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaDictionary, arrDictionary->length(), { arrDictionary }));
     const TString blobPositions =
-        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
+        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaPositions, arrPositions->length(), { arrPositions }));
 
     auto meta = std::make_shared<TDictionaryAccessorData>(blobDictionary.size(), blobPositions.size());
     TString blob;

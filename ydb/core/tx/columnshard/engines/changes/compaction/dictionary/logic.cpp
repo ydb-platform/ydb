@@ -30,9 +30,9 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
                     while (true) {
                         AFL_VERIFY(Iterators[idx].GetCurrentDataChunk().GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary);
                         const auto* dict = static_cast<const NArrow::NAccessor::TDictionaryArray*>(&Iterators[idx].GetCurrentDataChunk());
-                        const auto* arrVariants = type.CastArray(dict->GetVariants().get());
-                        for (ui32 r = 0; r < (ui32)arrVariants->length(); ++r) {
-                            auto it = globalDecoder.emplace(type.GetValue(*arrVariants, r), globalDecoder.size()).first;
+                        const auto* arrDictionary = type.CastArray(dict->GetDictionary().get());
+                        for (ui32 r = 0; r < (ui32)arrDictionary->length(); ++r) {
+                            auto it = globalDecoder.emplace(type.GetValue(*arrDictionary, r), globalDecoder.size()).first;
                             RemapIndexes[idx].emplace_back(it->second);
                         }
                         if (!Iterators[idx].MoveFurther(Iterators[idx].GetCurrentDataChunk().GetRecordsCount())) {
@@ -82,7 +82,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         if (!Iterators[inputIdx].IsEmpty()) {
             AFL_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
             AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
-                const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetRecords().get());
+                const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
                 if constexpr (type.IsIndexType()) {
                     if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
                         records.emplace_back(-1);

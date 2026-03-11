@@ -9,7 +9,9 @@
 #include "reserve.h"
 #include "stream_logic.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
@@ -339,7 +341,6 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
             auto it = addrs.find(columnId);
             if (it != addrs.end() && !it->second.GetUseDictionaryOnly()) {
                 proc->SetDictionaryOnlyForColumn(columnId);
-                Cerr << "!!! VLAD OptimizeForFetchDictionaryOnly applied column_id=" << columnId << Endl;
                 changed = true;
             }
         }
@@ -695,8 +696,15 @@ TConclusionStatus TGraph::Collapse() {
             }
         }
     }
+
+    bool optimizeForFetchDictionaryOnly = false;
+    THashSet<ui32> requiredDataColumnIds;
+    if (HasAppData() && AppData()->ColumnShardConfig.GetOptimizeForFetchDictionaryOnly()) {
+        optimizeForFetchDictionaryOnly = true;
+        requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
+    }
+
     hasChanges = true;
-    const THashSet<ui32> requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
     while (hasChanges) {
         hasChanges = false;
         for (auto&& [_, n] : Nodes) {
@@ -708,13 +716,16 @@ TConclusionStatus TGraph::Collapse() {
                 hasChanges = true;
                 break;
             }
-            conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
-            if (conclusion.IsFail()) {
-                return conclusion;
-            }
-            if (*conclusion) {
-                hasChanges = true;
-                break;
+
+            if (optimizeForFetchDictionaryOnly) {
+                conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                if (*conclusion) {
+                    hasChanges = true;
+                    break;
+                }
             }
         }
     }

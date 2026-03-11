@@ -320,10 +320,8 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
 }
 
 TString ReformatYson(const TString& yson);
-/** Sorts top-level list items by their string representation. Use for unordered list comparison. */
 TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
-/** Compare two YSON values treating top-level lists as unordered (sorts both before comparing). */
 void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 

@@ -240,10 +240,8 @@ public:
             AFL_VERIFY(!Finished);
             Finished = true;
             TGraph graph(std::move(Processors), Resolver);
-            Cerr << "!!! VLAD graph before collapse: " << graph.DebugJson().GetStringRobust() << Endl;
             graph.Collapse();
             auto res = graph.Compile();
-            Cerr << "!!! VLAD graph after collapse (compiled): " << res->DebugJson().GetStringRobust() << Endl;
             return res;
         }
     };

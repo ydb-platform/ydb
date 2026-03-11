@@ -164,11 +164,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
-    // SELECT SOME(message) FROM table GROUP BY message uses dictionary-only fetch for the key column:
-    // the optimizer marks the GroupBy key (message) for dictionary-only; the source then reads only the
-    // dictionary blob per chunk (no positions). Each chunk yields one array of distinct values; GroupBy
-    // runs on that (possibly multi-chunk) array. For SOME(message) the aggregate argument is the same
-    // column, so per group there is a single value and SOME(value)=value. Result: one row per distinct message.
     TString scriptGroupBySomeDictionary = R"(
         STOP_COMPACTION
         ------
@@ -220,8 +215,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
     }
 
-    // Loop 10 times: insert, wait compaction, insert, change schema, insert, set actualization, insert, wait actualization
-    // lc-buckets with 2 layers: Zero (portions_live_duration 1s) + OneLayer.
     TString scriptDictCompactionAndActualization = R"(
         STOP_COMPACTION
         ------

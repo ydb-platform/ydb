@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    additional_data.cpp
     chunk_data.cpp
     const.cpp
     binary_json_value_view.cpp

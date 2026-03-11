@@ -36,13 +36,9 @@ private:
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
 
-    // Returns blob and optional accessor meta for LocalDB. Used by write path.
     static TBlobWithAccessorMeta SerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo);
 
-    // Deserializes only the dictionary (unique values) part of the blob. The blob on disk is still
-    // full (dictionary + positions); this reads just the first DictionaryBlobSize bytes and returns
-    // the variants array. Used e.g. for SELECT DISTINCT. externalInfo must have TDictionaryAccessorData.
     static TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyReader(
         const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);
 

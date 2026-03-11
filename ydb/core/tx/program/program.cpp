@@ -1,8 +1,6 @@
 #include "builder.h"
 #include "program.h"
 
-#include <util/stream/output.h>
-
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/execution.h>
@@ -29,7 +27,6 @@ const THashSet<ui32>& TProgramContainer::GetEarlyFilterColumns() const {
 
 TConclusionStatus TProgramContainer::Init(
     const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept {
-    Cerr << "!!! VLAD program received (Init), commands_count=" << programProto.CommandSize() << Endl;
     ProgramProto = programProto;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
@@ -144,7 +141,6 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     if (!hasProjection) {
         return TConclusionStatus::Fail("program has no projections");
     }
-    Cerr << "!!! VLAD program parsed, calling Finish() to build and collapse graph" << Endl;
     auto programStatus = programBuilder.Finish();
     if (programStatus.IsFail()) {
         return programStatus;

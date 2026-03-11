@@ -58,22 +58,22 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(5, 3));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetVariants()->ToString()) == R"(["ab"])");
-            AFL_VERIFY(PrepareToCompare(slice->GetRecords()->ToString()) == R"([null,0,null])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab"])");
+            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(7, 2));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetVariants()->ToString()) == R"([])");
-            AFL_VERIFY(PrepareToCompare(slice->GetRecords()->ToString()) == R"([null,null])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(2, 0));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([])");
-            AFL_VERIFY(PrepareToCompare(slice->GetVariants()->ToString()) == R"([])");
-            AFL_VERIFY(PrepareToCompare(slice->GetRecords()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([])");
         }
     }
 
@@ -96,15 +96,13 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
             NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
         Cerr << PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) << Endl;
-        Cerr << PrepareToCompare(dictParsed->GetRecords()->ToString()) << Endl;
-        Cerr << PrepareToCompare(dictParsed->GetVariants()->ToString()) << Endl;
+        Cerr << PrepareToCompare(dictParsed->GetPositions()->ToString()) << Endl;
+        Cerr << PrepareToCompare(dictParsed->GetDictionary()->ToString()) << Endl;
         AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,"",null]])");
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetRecords()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetVariants()->ToString()) == R"(["","ab","abc","abcd"])");
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetPositions()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetDictionary()->ToString()) == R"(["","ab","abc","abcd"])");
     }
 
-    // Reading only the dictionary part of the blob (first DictionaryBlobSize bytes). Blob on disk
-    // is still full (dictionary + positions); we only deserialize the dictionary prefix.
     Y_UNIT_TEST(BuildDictionaryOnlyReader) {
         TTrivialArray::TPlainBuilder builder;
         builder.AddRecord(0, "abc");
@@ -127,7 +125,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto conclusion = NDictionary::TConstructor::BuildDictionaryOnlyReader(dictionaryBlobOnly, infoWithMeta);
         AFL_VERIFY(conclusion.IsSuccess())("error", conclusion.GetErrorMessage());
         auto dictionaryArray = conclusion.DetachResult();
-        AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetVariants()->ToString()));
-        AFL_VERIFY(dictionaryArray->length() == dict->GetVariants()->length());
+        AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetDictionary()->ToString()));
+        AFL_VERIFY(dictionaryArray->length() == dict->GetDictionary()->length());
     }
 };

@@ -3,9 +3,6 @@ UNITTEST_FOR(ydb/core/grpc_services)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
-ENDIF()
 
 PEERDIR(
     ydb/core/testlib/default

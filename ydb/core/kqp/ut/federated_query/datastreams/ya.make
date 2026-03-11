@@ -5,9 +5,6 @@ SPLIT_FACTOR(50)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:4)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:4)
-ENDIF()
 
 SRCS(
     datastreams_ut.cpp

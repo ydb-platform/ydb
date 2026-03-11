@@ -1,10 +1,10 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(cpu:4)
     SIZE(MEDIUM)
 ENDIF()
 

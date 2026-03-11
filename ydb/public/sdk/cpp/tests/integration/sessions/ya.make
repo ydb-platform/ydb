@@ -5,12 +5,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SPLIT_FACTOR(60)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

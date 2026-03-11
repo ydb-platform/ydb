@@ -4,15 +4,14 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 
+REQUIREMENTS(cpu:4)
+
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        ram:32
-    )
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:4)
 ENDIF()
 
 SRCS(

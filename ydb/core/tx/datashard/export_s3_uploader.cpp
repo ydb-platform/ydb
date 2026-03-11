@@ -648,7 +648,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = error.GetMessage().c_str();
+            Error = TStringBuilder() << error;
             this->PassAway();
         }
     }

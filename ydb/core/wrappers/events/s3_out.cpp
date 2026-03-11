@@ -221,7 +221,11 @@ void Out(IOutputStream& out, const TStringOutcome& outcome) {
 }
 
 void Out(IOutputStream& out, const Aws::S3::S3Error& error) {
-    out << static_cast<int>(error.GetResponseCode()) << " " << error.GetMessage().c_str();
+    const auto responseCode = error.GetResponseCode();
+    if (responseCode != Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+        out << static_cast<int>(responseCode) << " ";
+    }
+    out << error.GetMessage().c_str();
 }
 
 } // NKikimr::NWrappers

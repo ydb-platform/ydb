@@ -1,5 +1,53 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 25.3 {#25-3}
+
+### Версия 25.3.1 {#25-3-1}
+
+Дата выхода: 25 сентября 2025.
+
+#### Функциональность
+
+* В [федеративных запросах](./concepts/query_execution/federated_query/) добавлена поддержка новых внешних источников данных: [Prometheus](https://github.com/ydb-platform/ydb/pull/17148), [Apache Iceberg](https://github.com/ydb-platform/ydb/pull/17007), [OpenSearch](https://github.com/ydb-platform/ydb/pull/18444) и [Redis](https://github.com/ydb-platform/ydb/pull/16957). Кроме того, [YDB Topics теперь можно использовать как внешний источник данных](https://github.com/ydb-platform/ydb/pull/18955) в SQL-сценариях.
+* Расширена поддержка аналитических сценариев с внешними источниками: теперь можно [создавать внешние источники данных для таблиц Iceberg](https://github.com/ydb-platform/ydb/pull/16652), а также выполнять pushdown предикатов [`REGEXP`](https://github.com/ydb-platform/ydb/pull/19227) и [`LIKE`](https://github.com/ydb-platform/ydb/pull/17695) по колонкам `Utf8`, уменьшая объём читаемых внешних данных.
+* Реализованы [экспорт конфигурации топика в S3](https://github.com/ydb-platform/ydb/pull/18138) и [импорт конфигурации топика из S3](https://github.com/ydb-platform/ydb/pull/18214).
+* В Kafka API [появилась возможность создавать компактифицированные топики](https://github.com/ydb-platform/ydb/pull/18683), а YDB [автоматически создаёт и удаляет служебного consumer'а для компактификации топиков](https://github.com/ydb-platform/ydb/pull/20176).
+* Улучшено автопартиционирование топиков: при разделении партиций YDB теперь может учитывать скорость записи отдельных producer'ов и стремится распределять их по новым партициям более равномерно, а не просто делить трафик пополам ([#25458](https://github.com/ydb-platform/ydb/pull/25458)).
+* Стек планирования улучшен на базе HDRF. В YDB [переработан KQP CPU scheduler на модели HDRF](https://github.com/ydb-platform/ydb/pull/19618), [включён новый compute scheduler на базе HDRF](https://github.com/ydb-platform/ydb/pull/21997), а также [улучшен алгоритм планировщика, чтобы он не запускал больше задач, чем допускает спрос](https://github.com/ydb-platform/ydb/pull/19893).
+* Улучшена работа со скриптами: добавлена [поддержка выдачи промежуточных результатов во время выполнения скрипта](https://github.com/ydb-platform/ydb/pull/17421) и отдельный [статус `running`](https://github.com/ydb-platform/ydb/pull/19134) в API выполнения скриптов.
+* Расширены административные возможности: лимиты схемных объектов, такие как `MAX_SHARDS` и `MAX_PATHS`, теперь можно [изменять через YQL с помощью `ALTER DATABASE`](https://github.com/ydb-platform/ydb/pull/19580), а операции BuildIndex теперь сохраняют [время создания, время завершения и SID пользователя, инициировавшего операцию](https://github.com/ydb-platform/ydb/pull/17751).
+* Расширен аудит: YDB теперь пишет в audit log [`ALTER/MODIFY USER` операции](https://github.com/ydb-platform/ydb/pull/16989), [события YMQ в общем формате аудита YDB](https://github.com/ydb-platform/ydb/pull/18333), а также [отдельные audit log события для YMQ](https://github.com/ydb-platform/ydb/pull/21183).
+* Расширены возможности управления кластером и хранилищем. Добавлены [настройки BS Controller в конфигурации кластера](https://github.com/ydb-platform/ydb/pull/17957), [базовая поддержка cluster bridging](https://github.com/ydb-platform/ydb/pull/18297), [реконфигурация Board через DistConf](https://github.com/ydb-platform/ydb/pull/18859) и [автоматическая реконфигурация StateStorage без простоя всей группы](https://github.com/ydb-platform/ydb/pull/17525).
+* Для Distributed Storage добавлены новые параметры управления и размерности: [`GroupSizeInUnits` для storage groups и `SlotSizeInUnits` для PDisks](https://github.com/ydb-platform/ydb/pull/19337), [команда `ydb-dstool` для переноса PDisk между узлами без полной пересинхронизации данных](https://github.com/ydb-platform/ydb/pull/19684) и [поддержка параметра `--iam-token-file` в `ydb-dstool`](https://github.com/ydb-platform/ydb/pull/20303).
+* Улучшена наблюдаемость: добавлены [счётчики ожидания операций в spilling IO queue](https://github.com/ydb-platform/ydb/pull/17394), [мониторинговые счётчики с постоянным значением 1 для nodes, VDisks и PDisks](https://github.com/ydb-platform/ydb/pull/18731), а также [дополнительные атрибуты в span'ах DSProxy и VDisk](https://github.com/ydb-platform/ydb/pull/21010), упрощающие диагностику.
+* Скорректировано поведение кластера и Healthcheck: [понижен уровень серьёзности состояния `FAULTY` для PDisks](https://github.com/ydb-platform/ydb/pull/17095), добавлено [определение состояния bootstrap кластера в Healthcheck API для окружений с configuration V2](https://github.com/ydb-platform/ydb/pull/19600), а также [базовая валидация имён групп](https://github.com/ydb-platform/ydb/pull/19216).
+* Улучшено размещение нагрузок в крупных инсталляциях: добавлена [эвристика, предотвращающая бесконечное перемещение по узлам таблеток, которые способны перегрузить узел в одиночку](https://github.com/ydb-platform/ydb/pull/18376), а также поддержка [pile identifiers для узлов баз данных в 2-DC топологии](https://github.com/ydb-platform/ydb/pull/18988).
+* Улучшена интеграция с OIDC: в white list [добавлен заголовок `Accept`](https://github.com/ydb-platform/ydb/pull/19735).
+
+#### Производительность
+
+* В YDB [по умолчанию включён multi-broadcast в table service](https://github.com/ydb-platform/ydb/pull/17794), что уменьшает накладные расходы для распределённых запросов, где широковещательная рассылка является оптимальной стратегией.
+* Производительность на пути записи улучшена в нескольких местах: добавлена [новая схема приоритетов PDisk, разделяющая realtime- и compaction-записи](https://github.com/ydb-platform/ydb/pull/21705), [оптимизирована рассылка обновлений `TStorageConfig` подписчикам](https://github.com/ydb-platform/ydb/pull/18765), а также [улучшен алгоритм нового планировщика](https://github.com/ydb-platform/ydb/pull/20195).
+* [Ускорены UPSERT-операции для таблиц со значениями по умолчанию](https://github.com/ydb-platform/ydb/pull/20048): в ряде случаев YDB избегает дополнительных чтений строк и выполняет больше работы непосредственно на шардах.
+* Накладные расходы на аутентификацию снижены за счёт [выноса проверки пароля в отдельный actor вместо выполнения этой логики внутри локальных транзакций `TSchemeShard`](https://github.com/ydb-platform/ydb/pull/19687).
+
+#### Исправления ошибок
+
+* Исправлен ряд проблем корректности и стабильности в колоночных таблицах, включая [обработку предикатов в scan-запросах](https://github.com/ydb-platform/ydb/pull/16061), [гонки в CPU limiter, которые могли приводить к неконсистентным результатам](https://github.com/ydb-platform/ydb/pull/20238), а также [сбои и ошибки при изменении таблиц с векторными индексами](https://github.com/ydb-platform/ydb/pull/18121), включая [`RENAME INDEX`](https://github.com/ydb-platform/ydb/pull/17982).
+* Исправлены проблемы консистентности транзакций: добавлены защитные механизмы от [некорректных результатов в отдельных read-write транзакциях](https://github.com/ydb-platform/ydb/pull/18088), а также устранена ошибка, из-за которой [конфликтующие read-write транзакции могли нарушать сериализуемость после рестартов шардов](https://github.com/ydb-platform/ydb/pull/18234).
+* Исправлен ряд проблем в Topics и управлении сессиями, включая [редкие падения узлов при балансировке read sessions](https://github.com/ydb-platform/ydb/pull/16016), [ошибки commit offset в автопартиционируемых топиках](https://github.com/ydb-platform/ydb/pull/20560), [неожиданные ошибки `PathErrorUnknown` при подтверждении offset'ов](https://github.com/ydb-platform/ydb/pull/20084), а также проблему, из-за которой [attach streams оставались активными после завершения сессии](https://github.com/ydb-platform/ydb/pull/22298).
+* Исправлены крайние случаи в backup, restore и replication: YDB больше [не сохраняет в локальные бэкапы таблицы-получатели и changefeed'ы асинхронной репликации](https://github.com/ydb-platform/ydb/pull/18401), а YDB CLI backup/restore теперь [корректно обрабатывает колонки типа `UUID`](https://github.com/ydb-platform/ydb/pull/17198).
+* Исправлен ряд проблем стабильности в Distributed Storage, включая отсутствие [проверок включённого шифрования в zero-copy передаче](https://github.com/ydb-platform/ydb/pull/18698), [зависание VDisk в local recovery после ошибки `ChunkRead`](https://github.com/ydb-platform/ydb/pull/20519) и появление [phantom VDisks из-за гонок между созданием и удалением группы](https://github.com/ydb-platform/ydb/pull/18924).
+* Повышена безопасность управления кластером: исправлены [повторные попытки захвата PDisk без VDisk в CMS](https://github.com/ydb-platform/ydb/pull/19781), устранена [гонка в resource manager](https://github.com/ydb-platform/ydb/pull/25412), а также изменён ответ `RateLimiter` на [`SCHEME_ERROR` вместо `INTERNAL_ERROR` для несуществующих coordination nodes или ресурсов](https://github.com/ydb-platform/ydb/pull/16901).
+* Исправлены пограничные случаи в Healthcheck и maintenance: добавлена обработка [неизвестных значений `StatusV2` в VDisk healthcheck](https://github.com/ydb-platform/ydb/pull/17606), выбор состояния PDisk переключён на [менее двусмысленный источник данных](https://github.com/ydb-platform/ydb/pull/17687), а также добавлен [новый статус BSC PDisk для сценариев длительного обслуживания](https://github.com/ydb-platform/ydb/pull/17920).
+* Исправлены проблемы в Workload Manager и связанном с планировщиком коде, включая [use-after-free и VERIFY failures в CPU scheduler и CPU limiter](https://github.com/ydb-platform/ydb/pull/20157).
+* Исправлены проблемы удобства работы с DDL для внешних источников и улучшена диагностика для [`ALTER TABLE ... RENAME TO`](https://github.com/ydb-platform/ydb/pull/20670).
+
+#### YDB UI
+
+* Обновлена обработка аутентификации для [`whoami` и `capabilities` handlers](https://github.com/ydb-platform/ydb/pull/17942) во viewer.
+* Исправлена проблема во viewer, из-за которой [запросы информации о PDisk могли завершаться таймаутом, если целевой узел был отключён или недоступен](https://github.com/ydb-platform/ydb/pull/20432).
+
 ## Версия 25.2 {#25-2}
 
 ### Версия 25.2.1.24 {#25-2-1-24}

@@ -211,7 +211,10 @@ def build_html_dashboard(
       <span id="generateCpuScriptHint" style="font-size:12px;color:#586069;"></span>
     </div>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
-    <div id="cpuHeavyTestsTable" class="clickbox"></div>
+    <details id="heavyTestsDetails" style="margin: 8px 0 12px 0;">
+      <summary><b>Long/heavy tests near timeout</b></summary>
+      <div id="cpuHeavyTestsTable" class="clickbox"></div>
+    </details>
   </div>
   <div class="toolbar">
     <label for="suiteSearch"><b>Search suite:</b></label>
@@ -744,6 +747,9 @@ def build_html_dashboard(
       // Default: show suites with the highest non-chunk failures first.
       let suggestionsSortCol = 23;  // test_fails_total
       let suggestionsSortAsc = false;
+      // Heavy tests table default: suite -> test.
+      let heavySortCol = 1;  // 1=suite_path, 2=ya_size, 3=threshold, 4=test, 5=duration, 6=chunk
+      let heavySortAsc = true;
 
       function getSuggestionsForScript() {{
         const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
@@ -1316,34 +1322,95 @@ def build_html_dashboard(
         document.getElementById('cpuSuggestionsTable').innerHTML =
           '<table id=\"cpuSuggestionsInner\" style=\"width:100%;border-collapse:collapse;\"><thead>' + topHeader + subHeader + '</thead><tbody>' + bodyHtml + '</tbody></table>';
 
-        const heavyRows = filtered
-          .filter(s => Number(s.heavy_tests_count || 0) > 0)
-          .sort((a, b) => Number(b.heavy_tests_count || 0) - Number(a.heavy_tests_count || 0))
-          .slice(0, 100);
-        const heavyBody = heavyRows.map((s, i) => {{
-          const examples = Array.isArray(s.heavy_tests_examples) ? s.heavy_tests_examples : [];
-          const examplesHtml = examples.length ? examples.map(x => String(x)).join('<br>') : '—';
+        const heavyTestsFlat = [];
+        for (const s of filtered) {{
+          const tests = Array.isArray(s.heavy_tests_all) ? s.heavy_tests_all : [];
+          for (const t of tests) {{
+            if (!t) continue;
+            const chunkIdx = t.chunk_idx;
+            const chunkGroup = t.chunk_group;
+            const chunkLabel = (chunkIdx == null)
+              ? '—'
+              : (chunkGroup ? (String(chunkGroup) + '/chunk' + String(chunkIdx)) : ('chunk' + String(chunkIdx)));
+            heavyTestsFlat.push({{
+              suite_path: String(s.suite_path || ''),
+              ya_size: String(s.ya_size || ''),
+              threshold_sec: Number(s.heavy_test_threshold_sec || 0),
+              test_name: String(t.name || ''),
+              duration_sec: Number(t.duration_sec || 0),
+              chunk_label: chunkLabel,
+            }});
+          }}
+        }}
+        const heavySortValue = (row, col) => {{
+          if (col === 1) return String(row.suite_path || '').toLowerCase();
+          if (col === 2) return String(row.ya_size || '').toLowerCase();
+          if (col === 3) return Number(row.threshold_sec || 0);
+          if (col === 4) return String(row.test_name || '').toLowerCase();
+          if (col === 5) return Number(row.duration_sec || 0);
+          if (col === 6) return String(row.chunk_label || '').toLowerCase();
+          return '';
+        }};
+        heavyTestsFlat.sort((a, b) => {{
+          const av = heavySortValue(a, heavySortCol);
+          const bv = heavySortValue(b, heavySortCol);
+          if (av < bv) return heavySortAsc ? -1 : 1;
+          if (av > bv) return heavySortAsc ? 1 : -1;
+          // stable tie-breaker by suite->test so default stays readable.
+          const as = String(a.suite_path || '').toLowerCase();
+          const bs = String(b.suite_path || '').toLowerCase();
+          if (as < bs) return -1;
+          if (as > bs) return 1;
+          const at = String(a.test_name || '').toLowerCase();
+          const bt = String(b.test_name || '').toLowerCase();
+          if (at < bt) return -1;
+          if (at > bt) return 1;
+          return 0;
+        }});
+        const heavyBody = heavyTestsFlat.map((x, i) => {{
           return (
             '<tr>' +
               '<td>' + (i + 1) + '</td>' +
-              '<td>' + String(s.suite_path || '') + '</td>' +
-              '<td>' + String(s.ya_size || '') + '</td>' +
-              '<td>' + (s.heavy_test_threshold_sec != null ? Number(s.heavy_test_threshold_sec).toFixed(1) + ' s' : '') + '</td>' +
-              '<td>' + String(s.heavy_tests_count || 0) + '</td>' +
-              '<td>' + examplesHtml + '</td>' +
+              '<td>' + x.suite_path + '</td>' +
+              '<td>' + x.ya_size + '</td>' +
+              '<td>' + (Number.isFinite(x.threshold_sec) ? x.threshold_sec.toFixed(1) + ' s' : '') + '</td>' +
+              '<td>' + x.test_name + '</td>' +
+              '<td>' + (Number.isFinite(x.duration_sec) ? x.duration_sec.toFixed(1) + ' s' : '') + '</td>' +
+              '<td>' + x.chunk_label + '</td>' +
             '</tr>'
           );
         }}).join('');
         const heavyWrap = document.getElementById('cpuHeavyTestsTable');
+        const heavyDetails = document.getElementById('heavyTestsDetails');
+        const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary b');
+        const heavyMarker = (col) => (col === heavySortCol ? (heavySortAsc ? ' ▲' : ' ▼') : '');
+        if (heavySummaryLabel) {{
+          heavySummaryLabel.textContent = 'Long/heavy tests near timeout (' + heavyTestsFlat.length + ')';
+        }}
+        if (heavyDetails && !heavyDetails.dataset.initCollapsed) {{
+          heavyDetails.open = false;
+          heavyDetails.dataset.initCollapsed = '1';
+        }}
         if (heavyWrap) {{
-          if (!heavyRows.length) {{
+          if (!heavyTestsFlat.length) {{
             heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of size timeout threshold in current filter.</div>';
+            if (heavyDetails) heavyDetails.open = false;
           }} else {{
             heavyWrap.innerHTML =
               '<b>Long/heavy tests near timeout (>=97% of size timeout)</b>' +
               '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
-              '<thead><tr><th>#</th><th>suite_path</th><th>ya_size</th><th>threshold</th><th>tests</th><th>examples</th></tr></thead>' +
+              '<thead><tr><th>#</th><th data-hcol=\"1\" style=\"cursor:pointer;user-select:none;\">suite_path' + heavyMarker(1) + '</th><th data-hcol=\"2\" style=\"cursor:pointer;user-select:none;\">ya_size' + heavyMarker(2) + '</th><th data-hcol=\"3\" style=\"cursor:pointer;user-select:none;\">threshold' + heavyMarker(3) + '</th><th data-hcol=\"4\" style=\"cursor:pointer;user-select:none;\">test' + heavyMarker(4) + '</th><th data-hcol=\"5\" style=\"cursor:pointer;user-select:none;\">duration' + heavyMarker(5) + '</th><th data-hcol=\"6\" style=\"cursor:pointer;user-select:none;\">chunk' + heavyMarker(6) + '</th></tr></thead>' +
               '<tbody>' + heavyBody + '</tbody></table>';
+            const hths = heavyWrap.querySelectorAll('thead th[data-hcol]');
+            hths.forEach(th => th.addEventListener('click', () => {{
+              const col = Number(th.getAttribute('data-hcol'));
+              if (heavySortCol === col) heavySortAsc = !heavySortAsc;
+              else {{
+                heavySortCol = col;
+                heavySortAsc = true;
+              }}
+              renderSuggestionsTable();
+            }}));
           }}
         }}
 

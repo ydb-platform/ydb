@@ -45,6 +45,7 @@ CHUNK_SOLE_RE = re.compile(r"^\s*sole\s+chunk\s*$", re.IGNORECASE)
 CHUNK_BRACKET_ONLY_RE = re.compile(r"^\s*\[[^\]]+\]\s+chunk\s*$", re.IGNORECASE)
 CHUNK_GROUP_FROM_SUBTEST_RE = re.compile(r"\[([^\]\s]+)\s+\d+/\d+\]\s+chunk", re.IGNORECASE)
 CHUNK_GROUP_BRACKET_ONLY_RE = re.compile(r"\[([^\]]+)\]\s+chunk", re.IGNORECASE)
+MIN_HEAVY_TEST_CANDIDATE_SEC = 57.0
 RUN_UID_RE = re.compile(r"Run\((rnd-[^\$\)]+)")
 RESULT_UID_RE = re.compile(r"Result\((rnd-[^\$\)]+)")
 RUN_SUITE_GROUP_CHUNK_RE = re.compile(
@@ -341,11 +342,12 @@ def parse_report_chunks(
     test_durations_sec_by_suite: dict[str, list[float]] = defaultdict(list)
     test_total_duration_sec_by_suite: dict[str, float] = defaultdict(float)
     chunk_loads_by_suite: dict[str, dict[tuple[Optional[str], int], dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
-    top_tests_by_suite: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    heavy_test_candidates_by_suite: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in results:
         if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
             continue
         suite_raw = str(item.get("path", ""))
+        test_info_ref: Optional[dict[str, Any]] = None
         if suite_raw:
             suite_norm = normalize_suite_path(suite_raw)
             tests_per_suite[suite_norm] += 1
@@ -356,14 +358,14 @@ def parse_report_chunks(
                 if test_duration_sec > 0:
                     test_durations_sec_by_suite[suite_norm].append(test_duration_sec)
                     test_total_duration_sec_by_suite[suite_norm] += test_duration_sec
-                    top_tests_by_suite[suite_norm].append(
-                        {
+                    if test_duration_sec >= MIN_HEAVY_TEST_CANDIDATE_SEC:
+                        test_info_ref = {
                             "name": str(item.get("subtest_name") or item.get("name") or ""),
                             "duration_sec": test_duration_sec,
                             "chunk_idx": None,
                             "chunk_group": None,
                         }
-                    )
+                        heavy_test_candidates_by_suite[suite_norm].append(test_info_ref)
         chunk_key: Optional[tuple[str, Optional[str], int]] = None
         chunk_hid = item.get("chunk_hid")
         if chunk_hid is not None and chunk_hid in hid_to_chunk_key:
@@ -407,9 +409,9 @@ def parse_report_chunks(
                     if test_duration_sec > rec["max_test_duration_sec"]:
                         rec["max_test_duration_sec"] = test_duration_sec
                     rec["tests_count"] += 1.0
-                    if top_tests_by_suite[suite_norm]:
-                        top_tests_by_suite[suite_norm][-1]["chunk_idx"] = int(chunk_idx)
-                        top_tests_by_suite[suite_norm][-1]["chunk_group"] = chunk_group
+                    if test_info_ref is not None:
+                        test_info_ref["chunk_idx"] = int(chunk_idx)
+                        test_info_ref["chunk_group"] = chunk_group
 
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
@@ -421,7 +423,11 @@ def parse_report_chunks(
         sorted_vals = sorted(vals)
         n = len(sorted_vals)
         idx96 = min(int(0.96 * n + 0.5), n - 1) if n else 0
-        top_tests = sorted(top_tests_by_suite.get(suite, []), key=lambda x: float(x.get("duration_sec", 0) or 0), reverse=True)[:5]
+        heavy_candidates = sorted(
+            heavy_test_candidates_by_suite.get(suite, []),
+            key=lambda x: float(x.get("duration_sec", 0) or 0),
+            reverse=True,
+        )
         chunk_loads_raw = chunk_loads_by_suite.get(suite, {})
         chunk_loads = sorted(
             [
@@ -442,7 +448,7 @@ def parse_report_chunks(
             "total_duration_sec": float(test_total_duration_sec_by_suite.get(suite, 0.0) or 0.0),
             "count": float(n),
             "durations_sec": vals,
-            "top_tests": top_tests,
+            "heavy_test_candidates": heavy_candidates,
             "chunk_loads": chunk_loads,
         }
     return (

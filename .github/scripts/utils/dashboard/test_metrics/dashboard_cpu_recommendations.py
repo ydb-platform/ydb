@@ -412,21 +412,28 @@ def build_cpu_recommendations(
                 recommended_split_action = "lower"
             else:
                 recommended_split_action = "ok"
-        durations = list(dur_stats.get("durations_sec", []) or [])
         heavy_test_threshold_sec = timeout_budget_sec * 0.97
-        heavy_tests_count = sum(1 for d in durations if float(d or 0.0) >= heavy_test_threshold_sec) if timeout_budget_sec > 0 else 0
-        top_tests = list(dur_stats.get("top_tests", []) or [])
+        heavy_candidates = list(dur_stats.get("heavy_test_candidates", []) or [])
+        heavy_tests_all = []
+        if timeout_budget_sec > 0:
+            for t in heavy_candidates:
+                dur = float(t.get("duration_sec", 0.0) or 0.0)
+                if dur < heavy_test_threshold_sec:
+                    continue
+                heavy_tests_all.append(
+                    {
+                        "name": str(t.get("name", "") or ""),
+                        "duration_sec": round(dur, 3),
+                        "chunk_idx": t.get("chunk_idx"),
+                        "chunk_group": t.get("chunk_group"),
+                    }
+                )
+        heavy_tests_count = len(heavy_tests_all)
         heavy_examples = []
-        for t in top_tests:
-            dur = float(t.get("duration_sec", 0.0) or 0.0)
-            if timeout_budget_sec > 0 and dur < heavy_test_threshold_sec:
-                continue
-            name = str(t.get("name", "") or "")
+        for t in heavy_tests_all[:3]:
             chunk_idx = t.get("chunk_idx")
             suffix = f" [chunk{chunk_idx}]" if chunk_idx is not None else ""
-            heavy_examples.append(f"{name}{suffix}: {dur:.1f}s")
-        if not heavy_examples:
-            heavy_examples = [f"{str(t.get('name', '') or '')}: {float(t.get('duration_sec', 0.0) or 0.0):.1f}s" for t in top_tests[:3]]
+            heavy_examples.append(f"{str(t.get('name', '') or '')}{suffix}: {float(t.get('duration_sec', 0.0) or 0.0):.1f}s")
         recommended_split_explain = (
             f"timeouts={timeout_tests_count}; "
             f"chunk_timeout_budget_sec={timeout_budget_sec:.1f}; "
@@ -451,6 +458,7 @@ def build_cpu_recommendations(
             "heavy_tests_count": heavy_tests_count,
             "heavy_test_threshold_sec": round(heavy_test_threshold_sec, 3),
             "heavy_tests_examples": heavy_examples[:3],
+            "heavy_tests_all": heavy_tests_all,
             "ya_split_factor": ya_split_factor,
             "median_cores": round(median_c, 3),
             "p95_cores": round(p95_c, 3),

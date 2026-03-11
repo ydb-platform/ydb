@@ -7,52 +7,22 @@ from .hang_monitor import TransactionHangMonitor, TransactionHungError
 
 
 class CommandExecutor:
-    """Выполняет команды и логирует их с мониторингом зависших транзакций."""
+    # Выполняет команды и мониторит остановились операции с топиком или нет.
 
     def __init__(self, hang_monitor: Optional[TransactionHangMonitor] = None):
-        """
-        Args:
-            hang_monitor: монитор для детекции зависаний. Если None, создастся дефолтный.
-        """
         self.logger = logging.getLogger(__name__)
         self.hang_monitor = hang_monitor or TransactionHangMonitor()
 
     def set_monitor(self, hang_timeout: int, window_interval: int) -> None:
-        """Создает новый монитор с заданными параметрами.
-
-        Args:
-            hang_timeout: таймаут зависания в секундах
-            window_interval: интервал между строками статистики в секундах
-        """
         self.hang_monitor = TransactionHangMonitor(hang_timeout, window_interval)
 
     def run(self, cmd: List[str]) -> None:
-        """Выполняет команду без мониторинга зависших транзакций.
-        
-        Используется для коротких операций (init, clean).
-        
-        Args:
-            cmd: список аргументов команды
-        """
-        self.logger.debug(f"Running cmd {cmd}")
-        print(f"Running cmd {cmd} at {time.time()}")
+        self.logger.debug(f"Begin cmd {cmd}")
         subprocess.run(cmd, check=True, text=True)
-        print(f"End at {time.time()}")
+        self.logger.debug(f"End cmd {cmd}")
     
     def run_with_monitoring(self, cmd: List[str]) -> None:
-        """Выполняет команду с мониторингом зависших транзакций.
-        
-        Читает stdout построчно и передает каждую строку в hang_monitor.
-        Если hang_detected=True, убивает процесс и выбрасывает TransactionHungError.
-        
-        Args:
-            cmd: список аргументов команды
-        
-        Raises:
-            subprocess.CalledProcessError: если команда вернула non-zero exit code
-            TransactionHungError: если транзакция зависла
-        """
-        self.logger.debug(f"Begin cmd with monitoring {cmd}")
+        self.logger.debug(f"Begin cmd {cmd}")
         
         process = subprocess.Popen(
             cmd,
@@ -65,8 +35,6 @@ class CommandExecutor:
         
         try:
             for line in process.stdout:
-                self.logger.debug(f"{line}")
-                
                 if self.hang_monitor.check_line(line):
                     self.logger.error(
                         f"Transaction hung for {self.hang_monitor.hang_timeout} seconds"
@@ -77,7 +45,6 @@ class CommandExecutor:
                         f"Transaction hung for {self.hang_monitor.hang_timeout} seconds",
                         timeout_seconds=self.hang_monitor.hang_timeout
                     )
-            self.logger.debug("end of stdout")
             
             process.wait()
             
@@ -90,10 +57,10 @@ class CommandExecutor:
                 )
             
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"exception CalledProcessError: {e}")
+            self.logger.error(f"Exception 'CalledProcessError': {e}")
             raise
         except Exception as e:
-            self.logger.error(f"exception Exception: {e}")
+            self.logger.error(f"Exception 'Exception': {e}")
             process.kill()
             process.wait()
             raise

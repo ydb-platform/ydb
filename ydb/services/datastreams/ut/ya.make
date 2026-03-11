@@ -8,9 +8,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
 
 SRCS(
     datastreams_ut.cpp

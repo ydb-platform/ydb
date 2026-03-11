@@ -74,13 +74,13 @@ PEERDIR(
     contrib/python/PyYAML
     contrib/python/cryptography
     contrib/python/importlib-resources
-    contrib/python/port_manager
     contrib/python/protobuf
     contrib/python/pytest
     contrib/python/requests
     contrib/python/setuptools
     contrib/python/six
     ydb/public/sdk/python
+    library/python/port_manager
     library/python/svn_version
     library/python/testing/yatest_common
     ydb/core/protos

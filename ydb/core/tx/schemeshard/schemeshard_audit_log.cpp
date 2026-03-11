@@ -79,6 +79,8 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
     return databasePath;
 }
 
+} // anonymous namespace
+
 TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchemeOp::TModifyScheme& operation) {
     if (operation.GetWorkingDir().empty()) {
         // Moving operations does not have working directory. It is valid to take src or dst as directory for database
@@ -98,8 +100,6 @@ TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchem
 
     return DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
 }
-
-}  // anonymous namespace
 
 void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,

@@ -1038,9 +1038,21 @@ public:
         const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
                 pqChannelsBinding, context, tabletConfig, newTabletConfig);
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+
+        // Emit topic CloudEvent after successful alter
+        SendTopicCloudEvent(
+            Transaction,
+            NKikimrScheme::StatusSuccess,
+            TString(),
+            context.SS,
+            context.PeerName,
+            context.UserToken ? context.UserToken->GetUserSID() : TString(),
+            TString() /* maskedToken */,
+            ui64(OperationId.GetTxId()));
 
         path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);

@@ -527,7 +527,19 @@ public:
             }
         }
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
+
+        // Emit topic CloudEvent after successful create
+        SendTopicCloudEvent(
+            Transaction,
+            NKikimrScheme::StatusSuccess,
+            TString(),
+            context.SS,
+            context.PeerName,
+            context.UserToken ? context.UserToken->GetUserSID() : TString(),
+            TString() /* maskedToken */,
+            ui64(OperationId.GetTxId()));
 
         context.DbChanges.PersistTxState(OperationId);
 

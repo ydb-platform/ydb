@@ -1,9 +1,19 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
+
+class TSchemeShard;
+class TPath;
+
+TPath DatabasePathFromModifySchemeOperation(
+    TSchemeShard* ss,
+    const NKikimrSchemeOp::TModifyScheme& operation);
+
+std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath& databasePath);
 
 class PQGroupReserve {
 public:
@@ -17,5 +27,14 @@ public:
     ui64 Throughput;
 };
 
-} // NSchemeShard
-} // NKikimr
+void SendTopicCloudEvent(
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    NKikimrScheme::EStatus status,
+    const TString& reason,
+    TSchemeShard* ss,
+    const TString& peerName,
+    const TString& userSID,
+    const TString& maskedToken,
+    ui64 txId);
+
+} // NKikimr::NSchemeShard

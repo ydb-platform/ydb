@@ -1752,6 +1752,13 @@ protected:
         if (tokenType == "Certificate") {
             return TDerived::ETokenType::Certificate;
         }
+        if (tokenType == "Builtin") {
+            if (Config.GetUseBuiltinDomain()) {
+                return TDerived::ETokenType::Builtin;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        }
         return TDerived::ETokenType::Unknown;
     }
 

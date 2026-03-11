@@ -191,8 +191,9 @@ def build_html_dashboard(
         <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
         <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
         <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>.</li>
-        <li>If there is at least one <b>test timeout</b>, <b>recommended_cpu</b> is increased by one tier (then MEDIUM cap is applied).</li>
-        <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites with test timeouts use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
+        <li><b>recommended_cpu</b> is increased by one tier when a suite has a test with duration at/above size threshold: <b>SMALL=60s, MEDIUM=600s, LARGE=1800s</b> (then size cap is applied).</li>
+        <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold (SMALL=60s, MEDIUM=600s, LARGE=1800s) use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
+        <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. For overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) we sum their durations and estimate required chunk count as <code>ceil(overloaded_total / (size_timeout*0.5))</code>, then add missing chunks.</li>
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>
       </ol>
       <ul>
@@ -210,6 +211,7 @@ def build_html_dashboard(
       <span id="generateCpuScriptHint" style="font-size:12px;color:#586069;"></span>
     </div>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
+    <div id="cpuHeavyTestsTable" class="clickbox"></div>
   </div>
   <div class="toolbar">
     <label for="suiteSearch"><b>Search suite:</b></label>
@@ -317,6 +319,9 @@ def build_html_dashboard(
     <div id="activeLayerSuite" class="wide"></div>
     <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
     <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+    <div id="testsLayerSuite" class="wide"></div>
+    <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
+    <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
     <div id="cpuLayerSuite" class="wide"></div>
     <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
     <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
@@ -336,8 +341,9 @@ def build_html_dashboard(
       <div id="cpuPieSuite" class="chart"></div>
       <div id="ramPieSuite" class="chart"></div>
     </div>
-    <div class="row1">
+    <div class="row">
       <div id="activePieSuite" class="chart"></div>
+      <div id="testsPieSuite" class="chart"></div>
     </div>
   </div>
   <script>
@@ -351,7 +357,7 @@ def build_html_dashboard(
       // Hidden-tab Plotly charts need explicit resize after becoming visible.
       setTimeout(() => {{
         const ids = id === 'suiteTab'
-          ? ['activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'activeChunks']
+          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite', 'activeChunks']
           : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie', 'activeChunks'];
         ids.forEach(cid => {{
           const el = document.getElementById(cid);
@@ -461,6 +467,50 @@ def build_html_dashboard(
       const v = Number(ys[idx]);
       return Number.isFinite(v) ? Math.round(v) : null;
     }}
+    function sourceSecAtClick(plotId, point) {{
+      if (!point) return null;
+      const idx = Number(point.pointNumber);
+      if (!Number.isFinite(idx) || idx < 0) return null;
+      const i = Math.floor(idx);
+      let xs = null;
+      if (plotId === 'cpuLayerSuite') xs = data.xs_cpu_suite;
+      else if (plotId === 'ramLayerSuite') xs = data.xs_ram_suite;
+      else if (plotId === 'activeLayerSuite') xs = data.xs_active_suite;
+      else if (plotId === 'testsLayerSuite') xs = data.xs_tests_suite;
+      else if (plotId === 'cpuLayer') xs = data.xs_cpu;
+      else if (plotId === 'ramLayer') xs = data.xs_ram;
+      else if (plotId === 'activeLayerChunk') xs = data.xs_active_chunk;
+      else if (plotId === 'activeChunks') xs = data.xs_active;
+      if (!Array.isArray(xs) || i >= xs.length) return null;
+      const tSec = Number(xs[i]);
+      return Number.isFinite(tSec) ? tSec : null;
+    }}
+    function testsInActiveChunksAtTime(trackName, tDisplay, tSecOverride=null) {{
+      if (typeof trackName !== 'string' || !trackName) return '';
+      const tSec = Number.isFinite(Number(tSecOverride)) ? Number(tSecOverride) : xFromDisplay(tDisplay);
+      if (!Number.isFinite(tSec)) return '';
+      const chunkRuns = Array.isArray(data.chunk_runs_for_tests) ? data.chunk_runs_for_tests : [];
+      if (chunkRuns.length === 0) return '';
+      let total = 0;
+      if (trackName.includes('::')) {{
+        for (const run of chunkRuns) {{
+          if (!run || run.chunk_label !== trackName) continue;
+          const b = Number(run.start_sec);
+          const e = Number(run.end_sec);
+          if (!Number.isFinite(b) || !Number.isFinite(e) || !(b <= tSec && tSec < e)) continue;
+          total += Number(run.tests || 0);
+        }}
+      }} else {{
+        for (const run of chunkRuns) {{
+          if (!run || run.suite !== trackName) continue;
+          const b = Number(run.start_sec);
+          const e = Number(run.end_sec);
+          if (!Number.isFinite(b) || !Number.isFinite(e) || !(b <= tSec && tSec < e)) continue;
+          total += Number(run.tests || 0);
+        }}
+      }}
+      return total > 0 ? String(Math.round(total)) : '';
+    }}
     function axisLayout(xsDisp) {{
       const msVals = Array.isArray(xsDisp) ? xsDisp.map(_toMs).filter(v => v != null) : [];
       let tickVals = null;
@@ -488,7 +538,7 @@ def build_html_dashboard(
       }};
     }}
     function applyTimezoneToAllCharts() {{
-      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
       for (const id of ids) {{
         const el = document.getElementById(id);
         if (!el || !el.data || !el.layout || !window.Plotly) continue;
@@ -669,7 +719,7 @@ def build_html_dashboard(
     setupMonitoringLink();
 
     // Marker state lives at top scope so all functions can access it.
-    const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     // Each entry: {{ shapes: [...], annotations: [...] }} by suite_path.
     const _suiteMarkerData = {{}};
 
@@ -723,7 +773,7 @@ def build_html_dashboard(
           '#!/usr/bin/env python3',
           '# Apply cpu REQUIREMENTS updates in ya.make files (default: SANITIZER_TYPE branch when report is ASAN/TSAN/MSAN).',
           '# Generated by tests_resource_dashboard HTML.',
-          '# Usage: python3 apply_cpu_requirements.py --repo-root /path/to/ydb [--sanitizer address|thread|memory] [--dry-run] [--mode all|only-raise|only-lower|only-set]',
+          '# Usage: python3 apply_cpu_requirements.py --repo-root /path/to/ydb [--sanitizer address|thread|memory] [--dry-run] [--mode all|raise|lower|set]',
           '',
           'from __future__ import annotations',
           '',
@@ -747,9 +797,9 @@ def build_html_dashboard(
           "RE_SAN_NE = re.compile(r\\'SANITIZER_TYPE\\\\s*!=\\\\s*\\\\\\\"(.*?)\\\\\\\"\\')",
           "ACTION_BY_MODE = dict()",
           "ACTION_BY_MODE['all'] = set(['raise', 'lower', 'set'])",
-          "ACTION_BY_MODE['only-raise'] = set(['raise'])",
-          "ACTION_BY_MODE['only-lower'] = set(['lower'])",
-          "ACTION_BY_MODE['only-set'] = set(['set'])",
+          "ACTION_BY_MODE['raise'] = set(['raise'])",
+          "ACTION_BY_MODE['lower'] = set(['lower'])",
+          "ACTION_BY_MODE['set'] = set(['set'])",
           '',
           'def normalize_suite_path(path: str) -> str:',
           "    return PART_SUFFIX_RE.sub('', path or '')",
@@ -1009,7 +1059,7 @@ def build_html_dashboard(
           "    p.add_argument('--repo-root', type=Path, required=True, help='Repository root path')",
           "    p.add_argument('--sanitizer', type=str, default=SANITIZER_FOR_SCRIPT, help='Target SANITIZER_TYPE branch (e.g. address, thread, memory); default from dashboard when report is ASAN/TSAN/MSAN')",
           "    p.add_argument('--dry-run', action='store_true', help='Print planned changes without writing files')",
-          "    p.add_argument('--mode', choices=['all', 'only-raise', 'only-lower', 'only-set'], default='all', help='Filter by cpu_action: all / only-raise / only-lower / only-set')",
+          "    p.add_argument('--mode', choices=['all', 'raise', 'lower', 'set'], default='all', help='Filter by cpu_action: all / raise / lower / set')",
           '    args = p.parse_args()',
           '    sanitizer = (args.sanitizer or "").strip() or None',
           '',
@@ -1075,7 +1125,7 @@ def build_html_dashboard(
         const hintEl = document.getElementById('generateCpuScriptHint');
         if (!hintEl) return;
         hintEl.textContent = items.length
-          ? ('Will include ' + items.length + ' actionable suite(s) from current filter. Script supports --mode all|only-raise|only-lower|only-set.')
+          ? ('Will include ' + items.length + ' actionable suite(s) from current filter. Script supports --mode all|raise|lower|set.')
           : 'No actionable rows in current filter.';
       }}
 
@@ -1087,7 +1137,7 @@ def build_html_dashboard(
 
       const suggestionsColumns = [
         'idx', 'suite_path', 'ya_ram_gb', 'ya_cpu_cores', 'ya_size', 'ya_split_factor',
-        'chunks_count', 'median_cores', 'p95_cores', 'total_cpu_sec',
+        'chunks_count', 'recommended_split', 'split_action', 'median_cores', 'p95_cores', 'total_cpu_sec',
         'total_ram_gb', 'total_dur_sec', 'total_dur_report_sec', 'total_dur_evlog_sec', 'recommended_cpu', 'cpu_action',
         'test_total', 'test_passed', 'test_errors', 'test_timeouts', 'test_muted', 'test_muted_timeouts', 'test_skipped', 'test_fails_total',
         'chunk_total', 'chunk_passed', 'errors', 'timeouts', 'muted', 'muted_timeouts', 'fails_total',
@@ -1114,11 +1164,17 @@ def build_html_dashboard(
             ? '<span title="' + cpuExplain + '" style="display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;">cpu:all</span>'
             : '<span title="' + cpuExplain + '"><b>cpu:' + cpuReqText + '</b></span>';
           const cpuCell = cpuBadge + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
-          const sizeCapped = s.recommended_cpu_small_cap_applied || s.recommended_cpu_medium_cap_applied;
+          const durationBoost = Boolean(s.recommended_cpu_duration_boost);
+          const sizeCapped = durationBoost && (s.recommended_cpu_small_cap_applied || s.recommended_cpu_medium_cap_applied);
+          const maxTestDur = Number(s.max_test_duration_sec || 0);
+          const durThreshold = Number(s.long_test_threshold_sec || 0);
+          const durPart = (Number.isFinite(maxTestDur) && Number.isFinite(durThreshold) && durThreshold > 0)
+            ? ('max test duration ' + maxTestDur.toFixed(1) + 's >= threshold ' + durThreshold + 's')
+            : 'duration threshold reached';
           const sizeCapHint = sizeCapped
             ? (s.recommended_cpu_small_cap_applied
-                ? 'p95 exceeds SMALL limit (max cpu:1) — consider increasing SIZE to MEDIUM'
-                : 'p95 exceeds MEDIUM limit (max cpu:4) — consider increasing SIZE to LARGE')
+                ? (durPart + '; SMALL cap keeps max cpu:1 — consider increasing SIZE to MEDIUM')
+                : (durPart + '; MEDIUM cap keeps max cpu:4 — consider increasing SIZE to LARGE'))
             : '';
           const sizeCell = sizeCapped
             ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:2px;color:#991b1b;font-weight:600;">'
@@ -1130,6 +1186,12 @@ def build_html_dashboard(
           const chunksCell = chunksMismatch
             ? '<span title="Runtime chunks (evlog): ' + realChunks + ', ya.make SPLIT_FACTOR: ' + (s.ya_split_factor ?? '') + '" style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;">' + realChunks + '</span>'
             : String(realChunks);
+          const recSplit = Number(s.recommended_split ?? realChunks);
+          const recSplitAction = String(s.recommended_split_action || 'ok');
+          const recSplitExplain = String(s.recommended_split_explain || '').replace(/"/g, '&quot;');
+          const recSplitCell = recSplit > Number(realChunks)
+            ? '<span title="' + recSplitExplain + '" style="color:#991b1b;font-weight:700;">' + recSplit + ' ↑</span>'
+            : '<span title="' + recSplitExplain + '">' + recSplit + '</span>';
           return [
             String(i + 1),
             '<label style="display:inline-flex;align-items:center;gap:5px;max-width:420px;">' +
@@ -1141,6 +1203,8 @@ def build_html_dashboard(
             sizeCell,
             yaChunksCell,
             chunksCell,
+            recSplitCell,
+            actionCell(s.recommended_split_action || 'ok'),
             (s.median_cores != null ? Number(s.median_cores).toFixed(3) : ''),
             (s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : ''),
             (s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : ''),
@@ -1190,7 +1254,7 @@ def build_html_dashboard(
           '<th data-col="0" rowspan="2" style="cursor:pointer;user-select:none;">#' + marker(0) + '</th>' +
           '<th data-col="1" rowspan="2" style="cursor:pointer;user-select:none;">suite_path' + marker(1) + '</th>' +
           '<th colspan="4">ya.make</th>' +
-          '<th colspan="1">runtime</th>' +
+          '<th colspan="3">runtime</th>' +
           '<th colspan="3">cpu usage</th>' +
           '<th colspan="1">ram usage</th>' +
           '<th colspan="3">runtime (used / report / evlog)</th>' +
@@ -1208,47 +1272,80 @@ def build_html_dashboard(
           '<th data-col="3" style="cursor:pointer;user-select:none;">ya_cpu' + marker(3) + '</th>' +
           '<th data-col="4" style="cursor:pointer;user-select:none;">ya_size' + marker(4) + '</th>' +
           '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;" title="SPLIT_FACTOR(N) from ya.make">ya_split_factor' + marker(5) + '</th>' +
-          '<th data-col="6" class="group-end" style="cursor:pointer;user-select:none;" title="Chunk runs (evlog). Highlighted if ≠ ya.make SPLIT_FACTOR">chunks' + marker(6) + '</th>' +
-          '<th data-col="7" style="cursor:pointer;user-select:none;">median_cores' + marker(7) + '</th>' +
-          '<th data-col="8" style="cursor:pointer;user-select:none;">p95_cores' + marker(8) + '</th>' +
-          '<th data-col="9" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(9) + '</th>' +
-          '<th data-col="10" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(10) + '</th>' +
-          '<th data-col="11" style="cursor:pointer;user-select:none;" title="Sum of max(report, evlog) duration per run">total_dur_sec' + marker(11) + '</th>' +
-          '<th data-col="12" style="cursor:pointer;user-select:none;" title="Sum of report duration per run">total_dur_report_sec' + marker(12) + '</th>' +
-          '<th data-col="13" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog duration per run">total_dur_evlog_sec' + marker(13) + '</th>' +
-          '<th data-col="14" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(14) + '</th>' +
-          '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(15) + '</th>' +
-          '<th data-col="16" style="cursor:pointer;user-select:none;">total' + marker(16) + '</th>' +
-          '<th data-col="17" style="cursor:pointer;user-select:none;">passed' + marker(17) + '</th>' +
-          '<th data-col="18" style="cursor:pointer;user-select:none;">errors' + marker(18) + '</th>' +
-          '<th data-col="19" style="cursor:pointer;user-select:none;">timeouts' + marker(19) + '</th>' +
-          '<th data-col="20" style="cursor:pointer;user-select:none;">muted' + marker(20) + '</th>' +
-          '<th data-col="21" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(21) + '</th>' +
-          '<th data-col="22" style="cursor:pointer;user-select:none;">skipped' + marker(22) + '</th>' +
-          '<th data-col="23" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(23) + '</th>' +
-          '<th data-col="24" style="cursor:pointer;user-select:none;">total' + marker(24) + '</th>' +
-          '<th data-col="25" style="cursor:pointer;user-select:none;">passed' + marker(25) + '</th>' +
-          '<th data-col="26" style="cursor:pointer;user-select:none;">errors' + marker(26) + '</th>' +
-          '<th data-col="27" style="cursor:pointer;user-select:none;">timeouts' + marker(27) + '</th>' +
-          '<th data-col="28" style="cursor:pointer;user-select:none;">muted' + marker(28) + '</th>' +
-          '<th data-col="29" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(29) + '</th>' +
-          '<th data-col="30" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(30) + '</th>' +
-          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(31) + '</th>' +
-          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(32) + '</th>' +
-          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(33) + '</th>' +
-          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(34) + '</th>' +
-          '<th data-col="35" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(35) + '</th>' +
-          '<th data-col="36" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(36) + '</th>' +
-          '<th data-col="37" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(37) + '</th>' +
-          '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(38) + '</th>' +
+          '<th data-col="6" style="cursor:pointer;user-select:none;" title="Chunk runs (evlog). Highlighted if ≠ ya.make SPLIT_FACTOR">chunks' + marker(6) + '</th>' +
+          '<th data-col="7" style="cursor:pointer;user-select:none;" title="Heuristic split recommendation for timeout cases">recommended_split' + marker(7) + '</th>' +
+          '<th data-col="8" class="group-end" style="cursor:pointer;user-select:none;" title="Compare recommended_split to ya_split_factor">split_action' + marker(8) + '</th>' +
+          '<th data-col="9" style="cursor:pointer;user-select:none;">median_cores' + marker(9) + '</th>' +
+          '<th data-col="10" style="cursor:pointer;user-select:none;">p95_cores' + marker(10) + '</th>' +
+          '<th data-col="11" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(11) + '</th>' +
+          '<th data-col="12" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(12) + '</th>' +
+          '<th data-col="13" style="cursor:pointer;user-select:none;" title="Sum of max(report, evlog) duration per run">total_dur_sec' + marker(13) + '</th>' +
+          '<th data-col="14" style="cursor:pointer;user-select:none;" title="Sum of report duration per run">total_dur_report_sec' + marker(14) + '</th>' +
+          '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog duration per run">total_dur_evlog_sec' + marker(15) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(16) + '</th>' +
+          '<th data-col="17" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(17) + '</th>' +
+          '<th data-col="18" style="cursor:pointer;user-select:none;">total' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;">passed' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;">errors' + marker(20) + '</th>' +
+          '<th data-col="21" style="cursor:pointer;user-select:none;">timeouts' + marker(21) + '</th>' +
+          '<th data-col="22" style="cursor:pointer;user-select:none;">muted' + marker(22) + '</th>' +
+          '<th data-col="23" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(23) + '</th>' +
+          '<th data-col="24" style="cursor:pointer;user-select:none;">skipped' + marker(24) + '</th>' +
+          '<th data-col="25" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(25) + '</th>' +
+          '<th data-col="26" style="cursor:pointer;user-select:none;">total' + marker(26) + '</th>' +
+          '<th data-col="27" style="cursor:pointer;user-select:none;">passed' + marker(27) + '</th>' +
+          '<th data-col="28" style="cursor:pointer;user-select:none;">errors' + marker(28) + '</th>' +
+          '<th data-col="29" style="cursor:pointer;user-select:none;">timeouts' + marker(29) + '</th>' +
+          '<th data-col="30" style="cursor:pointer;user-select:none;">muted' + marker(30) + '</th>' +
+          '<th data-col="31" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(31) + '</th>' +
+          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(32) + '</th>' +
+          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(33) + '</th>' +
+          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(34) + '</th>' +
+          '<th data-col="35" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(35) + '</th>' +
+          '<th data-col="36" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(36) + '</th>' +
+          '<th data-col="37" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(37) + '</th>' +
+          '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(38) + '</th>' +
+          '<th data-col="39" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(39) + '</th>' +
+          '<th data-col="40" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(40) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([5, 6, 9, 10, 11, 13, 15, 23, 30, 32, 34, 36, 38]);
+        const groupEnds = new Set([5, 8, 11, 12, 15, 17, 25, 32, 34, 36, 38, 40]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');
         document.getElementById('cpuSuggestionsTable').innerHTML =
           '<table id=\"cpuSuggestionsInner\" style=\"width:100%;border-collapse:collapse;\"><thead>' + topHeader + subHeader + '</thead><tbody>' + bodyHtml + '</tbody></table>';
+
+        const heavyRows = filtered
+          .filter(s => Number(s.heavy_tests_count || 0) > 0)
+          .sort((a, b) => Number(b.heavy_tests_count || 0) - Number(a.heavy_tests_count || 0))
+          .slice(0, 100);
+        const heavyBody = heavyRows.map((s, i) => {{
+          const examples = Array.isArray(s.heavy_tests_examples) ? s.heavy_tests_examples : [];
+          const examplesHtml = examples.length ? examples.map(x => String(x)).join('<br>') : '—';
+          return (
+            '<tr>' +
+              '<td>' + (i + 1) + '</td>' +
+              '<td>' + String(s.suite_path || '') + '</td>' +
+              '<td>' + String(s.ya_size || '') + '</td>' +
+              '<td>' + (s.heavy_test_threshold_sec != null ? Number(s.heavy_test_threshold_sec).toFixed(1) + ' s' : '') + '</td>' +
+              '<td>' + String(s.heavy_tests_count || 0) + '</td>' +
+              '<td>' + examplesHtml + '</td>' +
+            '</tr>'
+          );
+        }}).join('');
+        const heavyWrap = document.getElementById('cpuHeavyTestsTable');
+        if (heavyWrap) {{
+          if (!heavyRows.length) {{
+            heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of size timeout threshold in current filter.</div>';
+          }} else {{
+            heavyWrap.innerHTML =
+              '<b>Long/heavy tests near timeout (>=97% of size timeout)</b>' +
+              '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
+              '<thead><tr><th>#</th><th>suite_path</th><th>ya_size</th><th>threshold</th><th>tests</th><th>examples</th></tr></thead>' +
+              '<tbody>' + heavyBody + '</tbody></table>';
+          }}
+        }}
 
         // Fix sticky top for two-row thead: row 2 must sit below row 1.
         const theadRows = document.querySelectorAll('#cpuSuggestionsInner thead tr');
@@ -1395,10 +1492,11 @@ def build_html_dashboard(
     function applySuiteSearch() {{
       const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
       const inc = document.getElementById('includeSyntheticCb')?.checked ?? true;
-      const cpuSuiteBase = inc ? data.cpu_tracks_suite : data.cpu_tracks_suite_no_synthetic;
-      const ramSuiteBase = inc ? data.ram_tracks_suite : data.ram_tracks_suite_no_synthetic;
-      const cpuChunkBase = inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic;
-      const ramChunkBase = inc ? data.ram_tracks : data.ram_tracks_no_synthetic;
+      const useNoSynthetic = Boolean(data.has_synthetic_metrics) && !inc;
+      const cpuSuiteBase = useNoSynthetic ? data.cpu_tracks_suite_no_synthetic : data.cpu_tracks_suite;
+      const ramSuiteBase = useNoSynthetic ? data.ram_tracks_suite_no_synthetic : data.ram_tracks_suite;
+      const cpuChunkBase = useNoSynthetic ? data.cpu_tracks_no_synthetic : data.cpu_tracks;
+      const ramChunkBase = useNoSynthetic ? data.ram_tracks_no_synthetic : data.ram_tracks;
 
       if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
         updateStackedPlotTracks('activeLayerChunk', data.active_tracks_chunk);
@@ -1406,14 +1504,15 @@ def build_html_dashboard(
         updateStackedPlotTracks('ramLayer', ramChunkBase);
       }}
       updateStackedPlotTracks('activeLayerSuite', data.active_tracks_suite);
+      updateStackedPlotTracks('testsLayerSuite', data.tests_tracks_suite);
       updateStackedPlotTracks('cpuLayerSuite', cpuSuiteBase);
       updateStackedPlotTracks('ramLayerSuite', ramSuiteBase);
 
-      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
         .forEach(id => updateStackedPlotColors(id, q));
-      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+      ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
         .forEach(id => reorderStackedPlotByQuery(id, q));
-      ['cpuPie', 'ramPie', 'activePie', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite']
+      ['cpuPie', 'ramPie', 'activePie', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
         .forEach(id => updatePieColors(id, q));
       if (window.renderSuggestionsTable) {{
         window.renderSuggestionsTable();
@@ -1615,11 +1714,12 @@ def build_html_dashboard(
 
     function applySyntheticToCharts() {{
       const inc = document.getElementById('includeSyntheticCb')?.checked ?? true;
-      updateStackedPlotTracks('cpuLayerSuite', inc ? data.cpu_tracks_suite : data.cpu_tracks_suite_no_synthetic);
-      updateStackedPlotTracks('ramLayerSuite', inc ? data.ram_tracks_suite : data.ram_tracks_suite_no_synthetic);
+      const useNoSynthetic = Boolean(data.has_synthetic_metrics) && !inc;
+      updateStackedPlotTracks('cpuLayerSuite', useNoSynthetic ? data.cpu_tracks_suite_no_synthetic : data.cpu_tracks_suite);
+      updateStackedPlotTracks('ramLayerSuite', useNoSynthetic ? data.ram_tracks_suite_no_synthetic : data.ram_tracks_suite);
       if (data.by_chunk && data.xs_cpu && data.xs_cpu.length > 0) {{
-        updateStackedPlotTracks('cpuLayer', inc ? data.cpu_tracks : data.cpu_tracks_no_synthetic);
-        updateStackedPlotTracks('ramLayer', inc ? data.ram_tracks : data.ram_tracks_no_synthetic);
+        updateStackedPlotTracks('cpuLayer', useNoSynthetic ? data.cpu_tracks_no_synthetic : data.cpu_tracks);
+        updateStackedPlotTracks('ramLayer', useNoSynthetic ? data.ram_tracks_no_synthetic : data.ram_tracks);
       }}
       applySuiteSearch();
     }}
@@ -1679,12 +1779,14 @@ def build_html_dashboard(
 
     function formatValue(y, unit) {{
       if (unit === 'active') return String(Math.round(y));
+      if (unit === 'tests') return String(Math.round(y));
       if (unit === 'GB') return y.toFixed(3);
       return y.toFixed(3);
     }}
 
     function minVisibleValue(unit) {{
       if (unit === 'active') return 0.5;
+      if (unit === 'tests') return 0.5;
       if (unit === 'GB') return 0.001;   // ~1 MB
       if (unit === 'cores') return 0.01; // suppress tiny CPU noise shown as 0.000
       return 0.0;
@@ -1736,25 +1838,25 @@ def build_html_dashboard(
       return Number.isFinite(v) ? v : null;
     }}
 
-    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null, totalAtClick=null) {{
+    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null, totalAtClick=null, tSecAtClick=null) {{
       const panel = document.getElementById(panelId);
       if (!panel) return;
       const top = rows.slice(0, 100);
+      const showTestsColumn = unit !== 'tests';
       const includeSynthetic = document.getElementById('includeSyntheticCb')?.checked ?? true;
-      const testsMap = data.by_chunk ? (data.tests_per_chunk_by_label || {{}}) : (data.tests_per_suite || {{}});
-      const testsFor = (name) => {{
-        const n = testsMap[name];
-        return (n !== undefined && n !== null) ? String(n) : '';
-      }};
+      const testsFor = (name) => testsInActiveChunksAtTime(name, t, tSecAtClick);
       const htmlRows = top.map((r, i) => {{
         const isSynthetic = includeSynthetic && data.has_synthetic_metrics && data.track_has_synthetic && data.track_has_synthetic[r.name];
         const syntheticBadge = isSynthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '';
         const testsCell = testsFor(r.name);
+        const testsColHtml = showTestsColumn
+          ? ('<td>' + (testsCell !== '' ? testsCell : '—') + '</td>')
+          : '';
         return (
         '<tr>' +
           '<td>' + (i + 1) + '</td>' +
           '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;background:' + colorForTrack(r.name) + ';"></span>' + r.name + syntheticBadge + '</td>' +
-          '<td>' + (testsCell !== '' ? testsCell : '—') + '</td>' +
+          testsColHtml +
           '<td>' + formatValue(r.y, unit) + ' ' + unit + '</td>' +
         '</tr>'
         );
@@ -1788,16 +1890,23 @@ def build_html_dashboard(
           '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
           '<b>Tests (chunks) running at this time:</b> ' + Math.round(totalActive) +
           '</div>';
+      }} else if (unit === 'tests') {{
+        const totalTests = rows.reduce((acc, r) => acc + Number(r.y || 0), 0);
+        totalsHtml =
+          '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;">' +
+          '<b>Tests running at this time:</b> ' + Math.round(totalTests) +
+          '</div>';
       }}
       const runningCount = activeCountAtTime(t);
       const runningLine = (runningCount != null)
         ? '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;"><b>Tests (chunks) running at this time:</b> ' + runningCount + '</div>'
         : '';
-      const summaryBlock = (unit === 'active') ? totalsHtml : (runningLine + totalsHtml);
+      const summaryBlock = (unit === 'active' || unit === 'tests') ? totalsHtml : (runningLine + totalsHtml);
+      const testsHeaderHtml = showTestsColumn ? '<th>tests in active chunks</th>' : '';
       panel.innerHTML =
         '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
         summaryBlock +
-        '<table><thead><tr><th>#</th><th>suite+chunk</th><th>tests</th><th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
+        '<table><thead><tr><th>#</th><th>suite+chunk</th>' + testsHeaderHtml + '<th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
     }}
 
     function attachSortedClick(plotId, panelId, unit) {{
@@ -1815,10 +1924,11 @@ def build_html_dashboard(
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
           .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
           .sort((a, b) => b.y - a.y);
+        const tSecAtClick = sourceSecAtClick(plotId, ev.points[0]);
         const totalAtClick = unit === 'active'
           ? rows.reduce((acc, r) => acc + Number(r.y || 0), 0)
           : Number(ev.points[0]?.y);
-        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick);
+        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick, tSecAtClick);
       }});
     }}
 
@@ -1898,6 +2008,9 @@ def build_html_dashboard(
     stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
     attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
     attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
+    stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
+    attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
+    attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
 
     stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
     stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');
@@ -2017,6 +2130,18 @@ def build_html_dashboard(
       sort: false,
       hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
     }}], {{title: 'Active time share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+
+    Plotly.newPlot('testsPieSuite', [{{
+      type: 'pie',
+      labels: data.pie_tests_suite_labels,
+      values: data.pie_tests_suite_vals,
+      marker: {{colors: data.pie_tests_suite_labels.map(lb => lb === 'other' ? '#bdbdbd' : (data.suite_color[suiteFromLabel(lb)] || '#999'))}},
+      textinfo: 'percent',
+      textposition: 'inside',
+      automargin: true,
+      sort: false,
+      hovertemplate: '%{{label}}<br>tests=%{{value:.0f}}<extra></extra>',
+    }}], {{title: 'Tests count share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
 
     if (data.resources_overlay) {{
       document.getElementById('layerTogglesWrap').style.display = '';

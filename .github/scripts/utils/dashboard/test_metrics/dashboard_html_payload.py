@@ -43,6 +43,7 @@ def build_dashboard_payload(
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
     active_time_by_suite: dict[str, float] = defaultdict(float)
+    tests_count_by_suite: dict[str, float] = defaultdict(float)
     suite_set = sorted({str(r["suite_path"]) for r in runs})
 
     for r in runs:
@@ -53,6 +54,9 @@ def build_dashboard_payload(
     top_cpu_suite = topn_other_map(cpu_by_suite, top_n)
     top_ram_suite = topn_other_map(ram_by_suite, top_n)
     top_active_suite = topn_other_map(active_time_by_suite, top_n)
+    for s, c in (tests_per_suite or {}).items():
+        tests_count_by_suite[str(s)] = float(c or 0.0)
+    top_tests_suite_pie = topn_other_map(tests_count_by_suite, top_n)
 
     enriched = []
     for r in runs:
@@ -63,16 +67,27 @@ def build_dashboard_payload(
         rr["cpu_cores_est"] = (float(rr.get("cpu_sec_report", 0.0) or 0.0) / dur_used) if dur_used > 0 else 0.0
         rr["ram_gb"] = float(rr.get("ram_kb_report", 0.0) or 0.0) / (1024.0 * 1024.0)
         rr["active_one"] = 1.0
+        group = normalize_chunk_group(rr.get("chunk_group"))
+        chunk_label = f"{rr['suite_path']}::{group}/chunk{rr['chunk']}" if group else f"{rr['suite_path']}::chunk{rr['chunk']}"
+        rr["tests_in_chunk"] = int((tests_per_chunk_by_label or {}).get(chunk_label, 0) or 0)
         enriched.append(rr)
 
     xs_cpu_suite, cpu_tracks_suite = build_step_series(enriched, "cpu_cores_est", set(top_cpu_suite), label_mode="suite")
     xs_ram_suite, ram_tracks_suite = build_step_series(enriched, "ram_gb", set(top_ram_suite), label_mode="suite")
     xs_active_suite, active_tracks_suite = build_step_series(enriched, "active_one", set(top_active_suite), label_mode="suite")
+    tests_time_by_suite: dict[str, float] = defaultdict(float)
+    for rr in enriched:
+        tests_time_by_suite[str(rr["suite_path"])] += float(rr.get("tests_in_chunk", 0) or 0) * (
+            float(rr.get("dur_us", 0) or 0) / 1_000_000.0
+        )
+    top_tests_suite = topn_other_map(tests_time_by_suite, top_n)
+    xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
     xs_active, ys_active = build_active_series(enriched)
 
     xs_cpu_suite, cpu_tracks_suite = downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)
     xs_ram_suite, ram_tracks_suite = downsample_step_series(xs_ram_suite, ram_tracks_suite, max_points)
     xs_active_suite, active_tracks_suite = downsample_step_series(xs_active_suite, active_tracks_suite, max_points)
+    xs_tests_suite, tests_tracks_suite = downsample_step_series(xs_tests_suite, tests_tracks_suite, max_points)
     xs_active, ys_active = downsample_active_series(xs_active, ys_active, max_points)
 
     has_synthetic = (stats.get("runs_with_synthetic_metrics") or 0) > 0
@@ -115,10 +130,10 @@ def build_dashboard_payload(
         top_ram = []
         top_active = []
 
-    cpu_tracks_suite_no_synthetic = cpu_tracks_suite
-    ram_tracks_suite_no_synthetic = ram_tracks_suite
-    cpu_tracks_no_synthetic = cpu_tracks if by_chunk else {}
-    ram_tracks_no_synthetic = ram_tracks if by_chunk else {}
+    cpu_tracks_suite_no_synthetic: dict[str, list[float]] = {}
+    ram_tracks_suite_no_synthetic: dict[str, list[float]] = {}
+    cpu_tracks_no_synthetic: dict[str, list[float]] = {}
+    ram_tracks_no_synthetic: dict[str, list[float]] = {}
     if has_synthetic:
         enriched_no_synth = []
         for r in enriched:
@@ -166,6 +181,7 @@ def build_dashboard_payload(
         + list(cpu_tracks_suite.keys())
         + list(ram_tracks_suite.keys())
         + list(active_tracks_suite.keys())
+        + list(tests_tracks_suite.keys())
     ):
         if lb == "other":
             track_suite[lb] = "other"
@@ -178,6 +194,20 @@ def build_dashboard_payload(
     track_has_synthetic = {
         lb: (track_suite.get(lb) in synthetic_suites) for lb in track_suite.keys()
     }
+    chunk_runs_for_tests: list[dict[str, Any]] = []
+    tests_per_chunk_map = tests_per_chunk_by_label or {}
+    for r in runs:
+        group = normalize_chunk_group(r.get("chunk_group"))
+        chunk_label = f"{r['suite_path']}::{group}/chunk{r['chunk']}" if group else f"{r['suite_path']}::chunk{r['chunk']}"
+        chunk_runs_for_tests.append(
+            {
+                "suite": str(r["suite_path"]),
+                "chunk_label": chunk_label,
+                "start_sec": float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0,
+                "end_sec": float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0,
+                "tests": int(tests_per_chunk_map.get(chunk_label, 0) or 0),
+            }
+        )
     # Always build chunk-level events as fallback, then merge with provided test-level events.
     timeout_times_by_suite: dict[str, list[float]] = defaultdict(list)
     error_times_by_suite: dict[str, list[float]] = defaultdict(list)
@@ -261,6 +291,8 @@ def build_dashboard_payload(
         "ram_tracks_suite": ram_tracks_suite,
         "xs_active_suite": xs_active_suite,
         "active_tracks_suite": active_tracks_suite,
+        "xs_tests_suite": xs_tests_suite,
+        "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
@@ -305,6 +337,13 @@ def build_dashboard_payload(
             if len(active_time_by_suite) > len(top_active_suite)
             else []
         ),
+        "pie_tests_suite_labels": top_tests_suite_pie + (["other"] if len(tests_count_by_suite) > len(top_tests_suite_pie) else []),
+        "pie_tests_suite_vals": [tests_count_by_suite.get(lb, 0.0) for lb in top_tests_suite_pie]
+        + (
+            [sum(v for k, v in tests_count_by_suite.items() if k not in set(top_tests_suite_pie))]
+            if len(tests_count_by_suite) > len(top_tests_suite_pie)
+            else []
+        ),
         "suite_color": suite_color,
         "track_suite": track_suite,
         "track_has_synthetic": track_has_synthetic,
@@ -316,6 +355,5 @@ def build_dashboard_payload(
         "ram_suite_trace_count": len(ram_tracks_suite),
         "cpu_chunk_trace_count": len(cpu_tracks) if by_chunk else 0,
         "ram_chunk_trace_count": len(ram_tracks) if by_chunk else 0,
-        "tests_per_suite": tests_per_suite or {},
-        "tests_per_chunk_by_label": tests_per_chunk_by_label or {},
+        "chunk_runs_for_tests": chunk_runs_for_tests,
     }

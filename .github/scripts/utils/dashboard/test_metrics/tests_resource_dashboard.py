@@ -216,6 +216,8 @@ def parse_report_chunks(
     dict[str, dict[Any, int]],
     dict[tuple[str, Optional[str], int], int],
     dict[str, int],
+    dict[str, float],
+    dict[str, dict[str, Any]],
 ]:
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -326,27 +328,133 @@ def parse_report_chunks(
         if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite_norm]:
             hid_to_chunk_idx_by_suite[suite_norm][hid] = idx
 
-    # Count tests per chunk: test rows (chunk=false) reference chunk via chunk_hid.
+    # Count tests per chunk.
+    # Primary mapping: test row chunk_hid -> chunk row.
+    # Secondary mapping: parse [i/N] chunk info from test subtest_name when chunk_hid is absent.
     hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
     for suite_raw, group, idx, meta in parsed_chunk_rows:
         if meta.get("hid") is not None:
             hid_to_chunk_key[meta["hid"]] = (suite_raw, group, idx)
     tests_per_chunk: dict[tuple[str, Optional[str], int], int] = defaultdict(int)
     tests_per_suite: dict[str, int] = defaultdict(int)
+    max_test_duration_sec_by_suite: dict[str, float] = defaultdict(float)
+    test_durations_sec_by_suite: dict[str, list[float]] = defaultdict(list)
+    test_total_duration_sec_by_suite: dict[str, float] = defaultdict(float)
+    chunk_loads_by_suite: dict[str, dict[tuple[Optional[str], int], dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
+    top_tests_by_suite: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in results:
         if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
             continue
         suite_raw = str(item.get("path", ""))
         if suite_raw:
-            tests_per_suite[normalize_suite_path(suite_raw)] += 1
+            suite_norm = normalize_suite_path(suite_raw)
+            tests_per_suite[suite_norm] += 1
+            if not bool(item.get("suite")):
+                test_duration_sec = float(item.get("duration") or 0.0)
+                if test_duration_sec > max_test_duration_sec_by_suite[suite_norm]:
+                    max_test_duration_sec_by_suite[suite_norm] = test_duration_sec
+                if test_duration_sec > 0:
+                    test_durations_sec_by_suite[suite_norm].append(test_duration_sec)
+                    test_total_duration_sec_by_suite[suite_norm] += test_duration_sec
+                    top_tests_by_suite[suite_norm].append(
+                        {
+                            "name": str(item.get("subtest_name") or item.get("name") or ""),
+                            "duration_sec": test_duration_sec,
+                            "chunk_idx": None,
+                            "chunk_group": None,
+                        }
+                    )
+        chunk_key: Optional[tuple[str, Optional[str], int]] = None
         chunk_hid = item.get("chunk_hid")
         if chunk_hid is not None and chunk_hid in hid_to_chunk_key:
-            tests_per_chunk[hid_to_chunk_key[chunk_hid]] += 1
+            chunk_key = hid_to_chunk_key[chunk_hid]
+        else:
+            sub = str(item.get("subtest_name", ""))
+            group = chunk_group_from_subtest(sub)
+            idx: Optional[int] = None
+            m = CHUNK_FROM_SUBTEST_RE.search(sub)
+            if m:
+                idx = int(m.group(1))
+            elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
+                idx = 0
+            if suite_raw and idx is not None:
+                by_group = (suite_raw, group, idx)
+                by_idx_alias = (suite_raw, None, idx)
+                if by_group in chunks:
+                    chunk_key = by_group
+                elif by_idx_alias in chunks:
+                    chunk_key = by_idx_alias
+        if chunk_key is not None:
+            tests_per_chunk[chunk_key] += 1
+            if suite_raw:
+                suite_norm = normalize_suite_path(suite_raw)
+                test_duration_sec = float(item.get("duration") or 0.0)
+                if test_duration_sec > 0:
+                    _suite_raw, chunk_group, chunk_idx = chunk_key
+                    ck = (chunk_group, int(chunk_idx))
+                    rec = chunk_loads_by_suite[suite_norm].get(ck)
+                    if not rec:
+                        rec = {
+                            "sum_duration_sec": 0.0,
+                            "max_test_duration_sec": 0.0,
+                            "tests_count": 0.0,
+                            "chunk_idx": float(int(chunk_idx)),
+                        }
+                        if chunk_group is not None:
+                            rec["chunk_group"] = chunk_group
+                        chunk_loads_by_suite[suite_norm][ck] = rec
+                    rec["sum_duration_sec"] += test_duration_sec
+                    if test_duration_sec > rec["max_test_duration_sec"]:
+                        rec["max_test_duration_sec"] = test_duration_sec
+                    rec["tests_count"] += 1.0
+                    if top_tests_by_suite[suite_norm]:
+                        top_tests_by_suite[suite_norm][-1]["chunk_idx"] = int(chunk_idx)
+                        top_tests_by_suite[suite_norm][-1]["chunk_group"] = chunk_group
 
     for by_kind in report_status_by_suite.values():
         by_kind["chunks"]["fails_total"] = by_kind["chunks"]["errors"] + by_kind["chunks"]["timeouts"]
         by_kind["tests"]["fails_total"] = by_kind["tests"]["errors"] + by_kind["tests"]["timeouts"]
-    return chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite, dict(tests_per_chunk), dict(tests_per_suite)
+    test_duration_stats_by_suite: dict[str, dict[str, Any]] = {}
+    for suite, vals in test_durations_sec_by_suite.items():
+        if not vals:
+            continue
+        sorted_vals = sorted(vals)
+        n = len(sorted_vals)
+        idx96 = min(int(0.96 * n + 0.5), n - 1) if n else 0
+        top_tests = sorted(top_tests_by_suite.get(suite, []), key=lambda x: float(x.get("duration_sec", 0) or 0), reverse=True)[:5]
+        chunk_loads_raw = chunk_loads_by_suite.get(suite, {})
+        chunk_loads = sorted(
+            [
+                {
+                    "sum_duration_sec": float(v.get("sum_duration_sec", 0.0) or 0.0),
+                    "max_test_duration_sec": float(v.get("max_test_duration_sec", 0.0) or 0.0),
+                    "tests_count": int(v.get("tests_count", 0.0) or 0),
+                    "chunk_idx": int(v.get("chunk_idx", 0.0) or 0),
+                    "chunk_group": v.get("chunk_group"),
+                }
+                for v in chunk_loads_raw.values()
+            ],
+            key=lambda x: x["sum_duration_sec"],
+            reverse=True,
+        )
+        test_duration_stats_by_suite[suite] = {
+            "p96_duration_sec": float(sorted_vals[idx96]) if n else 0.0,
+            "total_duration_sec": float(test_total_duration_sec_by_suite.get(suite, 0.0) or 0.0),
+            "count": float(n),
+            "durations_sec": vals,
+            "top_tests": top_tests,
+            "chunk_loads": chunk_loads,
+        }
+    return (
+        chunks,
+        report_status_by_suite,
+        report_test_fail_chunk_hids_by_suite,
+        hid_to_chunk_idx_by_suite,
+        dict(tests_per_chunk),
+        dict(tests_per_suite),
+        dict(max_test_duration_sec_by_suite),
+        test_duration_stats_by_suite,
+    )
 
 
 def build_test_event_times_by_suite(
@@ -1113,7 +1221,11 @@ def main() -> None:
     p.add_argument("--max-points", type=int, default=1000, help="Max points per series in HTML dashboard (downsampling)")
     p.add_argument("--html-by-chunk", action="store_true", help="Include suite+chunk charts in HTML (default: only by suite)")
     p.add_argument("--full-table", action="store_true", help="Generate additional detailed *_table.html (disabled by default)")
-    p.add_argument("--maximize-reqs-for-timeout-tests", action="store_true", help="For suites with test timeouts use size max: SMALL=1, MEDIUM=4, LARGE=4")
+    p.add_argument(
+        "--maximize-reqs-for-timeout-tests",
+        action="store_true",
+        help="For suites crossing test-duration threshold (SMALL=60s, MEDIUM=600s, LARGE=1800s) use size max: SMALL=1, MEDIUM=4, LARGE=4",
+    )
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
     p.add_argument(
         "--sanitizer",
@@ -1176,7 +1288,16 @@ def main() -> None:
     report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
     effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
 
-    chunks, report_status_by_suite, report_test_fail_chunk_hids_by_suite, hid_to_chunk_idx_by_suite, tests_per_chunk, tests_per_suite = parse_report_chunks(
+    (
+        chunks,
+        report_status_by_suite,
+        report_test_fail_chunk_hids_by_suite,
+        hid_to_chunk_idx_by_suite,
+        tests_per_chunk,
+        tests_per_suite,
+        max_test_duration_sec_by_suite,
+        test_duration_stats_by_suite,
+    ) = parse_report_chunks(
         args.report, args.suite_path
     )
     tests_per_chunk_by_label: dict[str, int] = {}
@@ -1227,11 +1348,22 @@ def main() -> None:
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
 
     # Per-suite chunk count from report (declared chunks; may differ from evlog run count).
-    report_chunks_by_suite: dict[str, int] = defaultdict(int)
+    # If suite has indexed chunk rows, ignore "sole chunk" rows for counting.
+    report_chunk_kind_by_suite: dict[str, dict[str, int]] = defaultdict(lambda: {"indexed": 0, "sole": 0})
     for (suite_raw, _group, _idx), meta in chunks.items():
         if meta.get("_fallback_alias"):
             continue
-        report_chunks_by_suite[normalize_suite_path(suite_raw)] += 1
+        suite_norm = normalize_suite_path(suite_raw)
+        sub = str(meta.get("subtest_name", "") or "")
+        if CHUNK_SOLE_RE.search(sub):
+            report_chunk_kind_by_suite[suite_norm]["sole"] += 1
+        else:
+            report_chunk_kind_by_suite[suite_norm]["indexed"] += 1
+    report_chunks_by_suite: dict[str, int] = {}
+    for suite_norm, kinds in report_chunk_kind_by_suite.items():
+        indexed = int(kinds.get("indexed", 0) or 0)
+        sole = int(kinds.get("sole", 0) or 0)
+        report_chunks_by_suite[suite_norm] = indexed if indexed > 0 else sole
 
     resources_overlay = None
     if args.resources_jsonl and args.resources_jsonl.exists():
@@ -1242,6 +1374,8 @@ def main() -> None:
         requirements_cache=requirements_cache,
         report_status_by_suite=report_status_by_suite,
         report_chunks_by_suite=dict(report_chunks_by_suite),
+        max_test_duration_sec_by_suite=max_test_duration_sec_by_suite,
+        test_duration_stats_by_suite=test_duration_stats_by_suite,
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
     )
     suite_test_event_times = build_test_event_times_direct(

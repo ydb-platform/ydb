@@ -187,7 +187,7 @@ def main() -> None:
     ap.add_argument(
         "--top-n",
         type=int,
-        default=700,
+        default=500,
         help="Top N suites for dashboard. Passed to tests_resource_dashboard.",
     )
     ap.add_argument(

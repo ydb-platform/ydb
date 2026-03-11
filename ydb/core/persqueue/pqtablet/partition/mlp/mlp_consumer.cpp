@@ -915,7 +915,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
 
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
-        LOG_D("Move to DLQ: " << JoinRange(", ", messages.begin(), messages.end()));
+        LOG_D("Move to DLQ: " << JoinSeq(", ", messages));
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
             .ParentActorId = SelfId(),
             .Database = Database,

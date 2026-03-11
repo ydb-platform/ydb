@@ -29,7 +29,7 @@ def kikimr(request):
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,
-                "dq_channel_version": 1,
+                "dq_channel_version": 2,
                 "enable_oltp_sink": False
             },
             default_clusteradmin="root@builtin",

@@ -85,7 +85,7 @@ public:
         EnsureNotInitialized("AppConfig");
 
         auto& result = AppConfig.emplace();
-        result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+        result.MutableTableServiceConfig()->SetDqChannelVersion(2u);
         return result;
     }
 
@@ -125,7 +125,7 @@ public:
             queryServiceConfig.SetEnableMatchRecognize(true);
 
             auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-            tableServiceConfig.SetDqChannelVersion(1u);
+            tableServiceConfig.SetDqChannelVersion(2u);
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -3367,7 +3367,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.HashJoinMode = "map";
-                PRAGMA ydb.DqChannelVersion = "1";
+                PRAGMA ydb.DqChannelVersion = "2";
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT

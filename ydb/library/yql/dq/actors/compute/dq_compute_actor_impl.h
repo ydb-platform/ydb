@@ -1248,7 +1248,9 @@ protected:
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
-            Channels->SetCheckpointsSupport();
+            if (Channels) {
+                Channels->SetCheckpointsSupport();
+            }
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
         Checkpoints->Receive(handle);

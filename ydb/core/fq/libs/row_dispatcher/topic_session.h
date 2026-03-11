@@ -24,7 +24,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters);
 

@@ -222,7 +222,7 @@ public:
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
@@ -921,7 +921,7 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
@@ -970,7 +970,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqGateway::TPtr pqGateway,
+    IPqStaticGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize
@@ -1002,7 +1002,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,

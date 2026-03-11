@@ -38,6 +38,7 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 using namespace NThreading;
+namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
 
 namespace {
     NThreading::TFuture<IKikimrGateway::TGenericResult> CreateDummySuccess() {
@@ -2315,7 +2316,7 @@ public:
                                 }
 
                                 auto* bloomIndex = add_index->mutable_local_bloom_filter_index();
-                                bloomIndex->set_case_sensitive(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
+                                bloomIndex->set_case_sensitive(NDefaults::CaseSensitive);
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2324,7 +2325,7 @@ public:
                                 }
 
                                 auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
-                                ngramIndex->set_case_sensitive(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
+                                ngramIndex->set_case_sensitive(NDefaults::CaseSensitive);
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));

@@ -5,7 +5,7 @@
 
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 #include <yql/essentials/providers/common/metrics/metrics_registry.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_helper.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/sql/settings/translation_settings.h>

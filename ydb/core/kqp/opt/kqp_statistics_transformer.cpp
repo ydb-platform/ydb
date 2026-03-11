@@ -3,7 +3,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/core/yql_join.h>
-#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+#include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
 

@@ -4,7 +4,7 @@
 #include "dq_opt_conflict_rules_collector.h"
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <memory.h>

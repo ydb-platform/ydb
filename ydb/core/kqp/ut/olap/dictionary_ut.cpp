@@ -26,6 +26,13 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 
+    TKikimrSettings GetSettingsForDictionary() {
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetOptimizeForFetchDictionaryOnly(true);
+        return settings;
+    }
+
     TString scriptDifferentPages = R"(
         STOP_COMPACTION
         ------
@@ -80,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
                 PARTS_COUNT:16
         )",
             arrowString.data());
-        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute(GetSettingsForDictionary());
     }
 
     TString scriptEmptyStringVariants = R"(
@@ -110,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 
     )";
     Y_UNIT_TEST_STRING_VARIATOR(EmptyStringVariants, scriptEmptyStringVariants) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetSettingsForDictionary());
     }
 
     TString scriptSimpleStringVariants = R"(
@@ -161,7 +168,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[1u;["abc"]];[2u;#];[3u;["abc"]];[4u;["ab"]]]
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimpleStringVariants, scriptSimpleStringVariants) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetSettingsForDictionary());
     }
 
     TString scriptGroupBySomeDictionary = R"(
@@ -212,7 +219,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[["a"];["a"];1u];[["b"];["b"];2u];[["c"];["c"];4u]]
     )";
     Y_UNIT_TEST(GroupBySomeDictionary) {
-        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute(GetSettingsForDictionary());
     }
 
     TString scriptDictCompactionAndActualization = R"(
@@ -268,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             cycleBlocks += "ONE_ACTUALIZATION\n------\n";
             cycleBlocks += readCheck;
         }
-        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute();
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute(GetSettingsForDictionary());
     }
 
     // ChunkDetails in .sys/primary_index_stats for dictionary column: check deterministic output for 1 row.
@@ -299,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[["{\"positions_blob_size\":152,\"dictionary_blob_size\":176}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute(GetSettingsForDictionary());
     }
 }
 

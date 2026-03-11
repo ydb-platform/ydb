@@ -1308,7 +1308,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     }
 
-    Y_UNIT_TEST(Producer_EventLoop_Acks) {
+    Y_UNIT_TEST(Producer_WriteManyMessages) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
 
@@ -1337,6 +1337,52 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), count);
+    }
+
+    Y_UNIT_TEST(Producer_AutoSeqNo) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        auto client = setup.MakeClient();
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.MaxBlock(TDuration::Seconds(30));
+
+        auto producer = client.CreateProducer(writeSettings);
+
+        const ui64 count = 3000;
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            std::string payload = "data";
+            TWriteMessage msg(payload);
+            msg.SeqNo(i);
+            msg.Key(key);
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        }
+
+        UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        auto producer2 = client.CreateProducer(writeSettings);
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            std::string payload = "data";
+            TWriteMessage msg(payload);
+            msg.Key(key);
+            UNIT_ASSERT_C(producer2->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        }
+        UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), count * 2);
     }
 
     Y_UNIT_TEST(Producer_WriteToClosedProducer) {

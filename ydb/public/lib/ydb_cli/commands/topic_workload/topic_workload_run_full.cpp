@@ -122,22 +122,7 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
 
-    config.Opts->AddLongOption("configure-consumers", "The number of consumers to change the topic configuration. "
-                                                      "If the value is greater than 0, the program will continuously "
-                                                      "change the topic configuration.")
-        .Optional()
-        .Hidden()
-        .DefaultValue(0)
-        .StoreResult(&Scenario.ConfigConsumerCount);
-    config.Opts->AddLongOption("describe-topic", "The program constantly calls the DescribeTopic method")
-        .Optional()
-        .Hidden()
-        .DefaultValue(false)
-        .StoreTrue(&Scenario.NeedDescribeTopic);
-    config.Opts->AddLongOption("describe-consumer", "The program constantly calls the DescribeConsumer method")
-        .Optional()
-        .Hidden()
-        .StoreResult(&Scenario.DescribeConsumerName);
+    Scenario.ConfigMetadataMonitoringOptions(config);
 
     config.IsNetworkIntensive = true;
 }

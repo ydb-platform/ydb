@@ -416,4 +416,22 @@ bool TTopicOperationsScenario::AnyOutgoingMessages() const
     return false;
 }
 
+void TTopicOperationsScenario::ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config)
+{
+    config.Opts->AddLongOption("configure-consumers", "Number of consumers to continuously add and remove from the topic")
+        .Optional()
+        .Hidden()
+        .DefaultValue(0)
+        .StoreResult(&ConfigConsumerCount);
+    config.Opts->AddLongOption("describe-topic", "Continuously call DescribeTopic method to monitor topic metadata")
+        .Optional()
+        .Hidden()
+        .DefaultValue(false)
+        .StoreTrue(&NeedDescribeTopic);
+    config.Opts->AddLongOption("describe-consumer", "Consumer name for which DescribeConsumer method will be called continuously")
+        .Optional()
+        .Hidden()
+        .StoreResult(&DescribeConsumerName);
+}
+
 }

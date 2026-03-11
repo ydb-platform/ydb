@@ -48,6 +48,8 @@ public:
 
     ui32 GetTopicMaxPartitionCount() const;
 
+    void ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config);
+
     TDuration TotalSec;
     TDuration WindowSec;
     TDuration WarmupSec;

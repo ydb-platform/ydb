@@ -97,7 +97,8 @@ class YdbTopicWorkload(WorkloadBase):
         ])
 
     def _run_workload(self, topic_name, duration, byte_rate, producers, consumers,
-                     tx_commit_interval=None, use_tx=True, with_config=True) -> None:
+                      consumer_threads=None,
+                      tx_commit_interval=None, use_tx=True, with_config=True) -> None:
         """Запускает тестовую нагрузку с мониторингом.
 
         Args:
@@ -122,6 +123,8 @@ class YdbTopicWorkload(WorkloadBase):
             '-p', str(producers), '-c', str(consumers),
             '--topic', topic_name,
         ]
+        if consumer_threads:
+            args.extend(['-t', str(consumer_threads)])
         if use_tx:
             args.extend(['--use-tx', '--tx-commit-interval', tx_commit_interval])
         if self.limit_memory_usage:
@@ -261,7 +264,8 @@ class YdbTopicWorkload(WorkloadBase):
             self.duration,
             test_config.byte_rate,
             test_config.producers,
-            test_config.consumer_threads,
+            test_config.consumers,
+            consumer_threads=test_config.consumer_threads,
             use_tx=True,
             with_config=True
         )
@@ -290,6 +294,7 @@ class YdbTopicWorkload(WorkloadBase):
             test_config.byte_rate,
             test_config.producers,
             test_config.consumers,
+            consumer_threads=test_config.consumer_threads,
             use_tx=False,
             with_config=True
         )

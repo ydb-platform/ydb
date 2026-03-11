@@ -17,7 +17,7 @@ using namespace NActors;
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
 
 static void GTestSkip() {
-    GTEST_SKIP() << "Skipping all rdma tests for suit, set \""
+    GTEST_SKIP() << "Skipping all rdma tests for suite, set \""
                  << NRdmaTest::RdmaTestEnvSwitchName << "\" env if it is RDMA compatible";
 }
 
@@ -45,7 +45,7 @@ class TSendActor: public TActorBootstrapped<TSendActor> {
 public:
     struct TExtCtx {
         std::atomic<bool> Undelivered = false;
-        bool WhaitForUndelivered(ui32 maxAttempt) {
+        bool WaitForUndelivered(ui32 maxAttempt) {
             while (Undelivered.load(std::memory_order_relaxed) == false && maxAttempt) {
                 Sleep(TDuration::MilliSeconds(1000));
                 maxAttempt--;
@@ -102,7 +102,7 @@ public:
     )
 public:
     std::atomic<ui32> ReceivedEvents = 0;
-    bool WhaitForReceive(ui32 expected, ui32 maxAttempt) {
+    bool WaitForReceive(ui32 expected, ui32 maxAttempt) {
         while (ReceivedEvents.load(std::memory_order_relaxed) != expected && maxAttempt) {
             Sleep(TDuration::MilliSeconds(1000));
             maxAttempt--;
@@ -192,7 +192,7 @@ struct TEventsForTest {
     }
 };
 
-TEvTestSerialization* MakeMultuGlueTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool) {
+TEvTestSerialization* MakeMultiGlueTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool) {
     auto ev = new TEvTestSerialization();
     ev->Record.SetBlobID(blobId);
     ev->Record.SetBuffer("hello world");
@@ -225,7 +225,7 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
         ev->AddPayload(std::move(tmp));
     } else {
         auto buf = memPool->AllocRcBuf(5000, 0).value();
-        // TRope can "glue" rcbufs in they have same backend and placed in the contiguous memory regions
+        // TRope can "glue" rcbufs if they have the same backend and are placed in contiguous memory regions.
         if (withGlue) {
             auto b = buf.data();
             TRcBuf rcbuf1(TRcBuf::Piece, b, b + 2500, buf);
@@ -719,7 +719,7 @@ TEST_F(XdcRdmaTest, SendRdma) {
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
@@ -739,7 +739,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
         }
     }
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 10u);
@@ -753,13 +753,13 @@ TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
             }
         }
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
@@ -781,7 +781,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
@@ -807,7 +807,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
@@ -831,13 +831,13 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeMultuGlueTestEvent(123, memPool.get());
+    auto* ev = MakeMultiGlueTestEvent(123, memPool.get());
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -857,7 +857,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
 
     auto senderPtr = new TSendActor(receiver, ev);
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, RestoreRdmaSession) {
@@ -891,7 +891,7 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         auto senderPtr = new TSendActor(receiver, ev);
         cluster.RegisterActor(senderPtr, 2);
 
-        UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+        UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
     }
 
     // Exhaust the same allocation class (5KB) that receiver uses for RDMA sections.
@@ -913,14 +913,14 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         auto senderPtr = new TSendActor(receiver, ev, extCtx);
         cluster.RegisterActor(senderPtr, 2);
         // Undelivered because we can't allocate memory on the receiver side
-        UNIT_ASSERT(extCtx->WhaitForUndelivered(10));
+        UNIT_ASSERT(extCtx->WaitForUndelivered(10));
     }
 
     // The event was not delivered
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 
-    // Session is going to be recreated without rdma
-    // but pending handshake timer are triggered (we can't check it directly in this ut(()
+    // Session is going to be recreated without RDMA,
+    // but pending handshake timers are triggered (we can't check it directly in this UT).
     TString lastRdmaStatus;
     for (size_t i = 0; i < 10; i++) {
         lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
@@ -940,17 +940,17 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         auto senderPtr = new TSendActor(receiver, ev);
         cluster.RegisterActor(senderPtr, 2);
     }
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(2, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(2, 20));
     // Free memory
     occupiedBuffers.clear();
-    // Whait for the pending hendshake timer
+    // Wait for the pending handshake timer
     Sleep(TDuration::MilliSeconds(5000));
 
     for (size_t i = 0; i < 5; i++) {
         try {
             lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
         } catch (const TPatternNotFound&) {
-            // retry case if the session was not created yiet
+            // retry case if the session was not created yet
             Sleep(TDuration::Seconds(1));
             continue;
         }
@@ -966,7 +966,7 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         auto senderPtr = new TSendActor(receiver, ev);
         cluster.RegisterActor(senderPtr, 2);
     }
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(3, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(3, 20));
     lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
     UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "On | SoftwareChecksum");
 }
@@ -1000,7 +1000,7 @@ TEST_P(XdcRdmaTestCqMode, SendMix) {
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(numEvents, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(numEvents, 20));
 }
 
 TEST_P(XdcRdmaTestCqMode, SendMixBig) {
@@ -1049,14 +1049,14 @@ TEST_F(XdcRdmaTest, SendMixBigShuffle) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
     TEventsForTest events(1000, true);
 
-    auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
         ui64 blobId = ev->Get()->Record.GetBlobID();
         auto checkIt = events.Checks.find(blobId);
         UNIT_ASSERT(checkIt != events.Checks.end());
         checkIt->second(ev->Get());
         events.Checks.erase(checkIt);
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
 
     for (auto* ev : events.Events) {
@@ -1107,7 +1107,7 @@ static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    UNIT_ASSERT(receiverPtr->WhaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
 TEST_F(XdcRdmaTest, Send1Payload) {

@@ -348,18 +348,21 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
         }
     }
 
-    Y_UNIT_TEST(DecimalCsvToYdbConverter) {
+    Y_UNIT_TEST(DecimalAndUuidCsvToYdbConverter) {
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns = {
-            {"dec", NScheme::TTypeInfo(NScheme::TDecimalType(22, 9))}
+            {"dec", NScheme::TTypeInfo(NScheme::TDecimalType(22, 9))},
+            {"uuid", NScheme::TTypeInfo(NScheme::NTypeIds::Uuid)}
         };
 
         TString csv;
-        csv += "1.000000000\n";
-        csv += "-2.500000000\n";
+        csv += "1.000000000,aaaaaaaaaaaaaaaa\n";
+        csv += "-2.500000000,bbbbbbbbbbbbbbbb\n";
 
         auto batch = TestReadSingleBatch(columns, csv, ',', false, 2);
         auto decColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(batch->column(0));
         UNIT_ASSERT_VALUES_EQUAL(decColumn->byte_width(), NScheme::FSB_SIZE);
+        auto uuidColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(batch->column(1));
+        UNIT_ASSERT_VALUES_EQUAL(uuidColumn->byte_width(), NScheme::FSB_SIZE);
 
         struct TRowWriter : public NArrow::IRowWriter {
             TVector<TOwnedCellVec> Rows;
@@ -376,9 +379,11 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
 
         UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows.size(), 2);
         for (const auto& row : rowWriter.Rows) {
-            UNIT_ASSERT_VALUES_EQUAL(row.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(row[0].Size(), NScheme::FSB_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(row[1].Size(), NScheme::FSB_SIZE);
             UNIT_ASSERT(!row[0].IsNull());
+            UNIT_ASSERT(!row[1].IsNull());
         }
     }
 #if 0

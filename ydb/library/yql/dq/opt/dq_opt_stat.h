@@ -70,6 +70,7 @@ struct TTreeNode {
 
     // For Leaf
     TString Column;
+    TString ColumnType;
     TMaybe<TString> TableAlias;
     double Selectivity = 0.0;
     TPredicateRange Range;
@@ -197,6 +198,8 @@ protected:
         bool collectConstantMembers,
         bool containString
     );
+
+    TMaybe<TString> GetAttributeType(const TString& attributeName);
 
     double ComputeSelectivity(
         const std::shared_ptr<TTreeNode>& node,

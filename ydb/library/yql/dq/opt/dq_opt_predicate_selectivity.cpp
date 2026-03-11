@@ -208,6 +208,66 @@ namespace {
         return Nothing();
     }
 
+    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
+        if (columnType == "Bool") {
+            ui8 l = FromString<bool>(left);
+            ui8 r = FromString<bool>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Uint8") {
+            ui8 l = FromString<ui8>(left);
+            ui8 r = FromString<ui8>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Int8") {
+            i8 l = FromString<i8>(left);
+            i8 r = FromString<i8>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Uint32") {
+            ui32 l = FromString<ui32>(left);
+            ui32 r = FromString<ui32>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Int32") {
+            i32 l = FromString<i32>(left);
+            i32 r = FromString<i32>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Uint64") {
+            ui64 l = FromString<ui64>(left);
+            ui64 r = FromString<ui64>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Int64") {
+            i64 l = FromString<i64>(left);
+            i64 r = FromString<i64>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Float") {
+            float l = FromString<float>(left);
+            float r = FromString<float>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Double") {
+            double l = FromString<double>(left);
+            double r = FromString<double>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Date") {
+            ui16 l = FromString<ui16>(left);
+            ui16 r = FromString<ui16>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Datetime") {
+            ui32 l = FromString<ui32>(left);
+            ui32 r = FromString<ui32>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
+            i64 l = FromString<i64>(left);
+            i64 r = FromString<i64>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Timestamp") {
+            ui64 l = FromString<ui64>(left);
+            ui64 r = FromString<ui64>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        }
+
+        // other types are considered as string and compared lexicographically
+        // "Utf8", "String", Uuid, "Yson", "Json"
+        return (left < right) ? -1 : (left > right) ? 1 : 0;
+    }
+
     // Returns a number of rows based on predicate.
     TMaybe<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
                                             const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
@@ -317,7 +377,7 @@ namespace {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Date") {
-                ui16 val = FromString<ui32>(value);
+                ui16 val = FromString<ui16>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Datetime") {
                 ui32 val = FromString<ui32>(value);
@@ -358,6 +418,13 @@ TExprNode::TPtr FindNode(const TExprBase& input) {
     }
 
     return nullptr;
+}
+
+TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
+    if (Stats && Stats->ColumnStatistics) {
+        return Stats->ColumnStatistics->Data[attributeName].Type;
+    }
+    return Nothing();
 }
 
 double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(
@@ -523,6 +590,10 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     } else {
         node->Column = ref;
     }
+    TMaybe<TString> colType = GetAttributeType(ref);
+    if (colType.Defined()) {
+        node->ColumnType = colType.GetRef();
+    }
 
     return node;
 }
@@ -620,6 +691,10 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
     } else {
         node->Column = ref;
     }
+    TMaybe<TString> colType = GetAttributeType(ref);
+    if (colType.Defined()) {
+        node->ColumnType = colType.GetRef();
+    }
 
     return node;
 }
@@ -670,15 +745,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
 
     auto node = std::make_shared<TTreeNode>();
 
-    TString ref = leftAttr.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
-    }
-
     if (underNot) {
         // converting not equality into two ranges (col < x) OR (col > x)
         node->Operator = ELogicalOperator::Or;
@@ -698,6 +764,19 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
 
     node->Operator = ELogicalOperator::Leaf;
     node->Selectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
+
+    TString ref = leftAttr.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
+    TMaybe<TString> colType = GetAttributeType(ref);
+    if (colType.Defined()) {
+        node->ColumnType = colType.GetRef();
+    }
 
     TMaybe<TString> literal = ExtractLiteral(*rightPtr);
     TPredicateRange rangeNode(*rightPtr, literal.GetRef(), true, *rightPtr, literal.GetRef(), true);
@@ -744,7 +823,8 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
     }
 
     // point predicate logic
-    if (mergedRange.LeftBound.GetRef() == mergedRange.RightBound.GetRef()) {
+    if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()
+            && mergedRange.LeftBound.GetRef() == mergedRange.RightBound.GetRef()) {
 
         if (!mergedRange.LeftInclusive || !mergedRange.RightInclusive) {
             return 0.0;
@@ -813,13 +893,15 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
         return DefaultInequalitySelectivity(Stats, attributeName);
     }
 
-    TMaybe<TExprBase> nodePtr = mergedRange.Left.GetRef();
-    EInequalityPredicateType inequalitySign = EInequalityPredicateType::Greater;
-    if (mergedRange.LeftInclusive) {
-        inequalitySign = EInequalityPredicateType::GreaterOrEqual;
-    }
-
-    if (mergedRange.RightBound.Defined()) {
+    TMaybe<TExprBase> nodePtr;
+    EInequalityPredicateType inequalitySign;
+    if (mergedRange.Left.Defined()) {
+        mergedRange.Left.GetRef();
+        inequalitySign = EInequalityPredicateType::Greater;
+        if (mergedRange.LeftInclusive) {
+            inequalitySign = EInequalityPredicateType::GreaterOrEqual;
+        }
+    } else if (mergedRange.Right.Defined()) {
         nodePtr = mergedRange.Right.GetRef();
         inequalitySign = EInequalityPredicateType::Less;
         if (mergedRange.RightInclusive) {
@@ -845,16 +927,35 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
     return DefaultInequalitySelectivity(Stats, attributeName);
 }
 
-i8 CompareBounds(const TString& left, const TString& right) {
-    if (left < right) {
-        return -1;
-    } else if (left > right) {
-        return 1;
-    }
-    return 0;
+void SortRanges(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
+    // sorting by left bound only
+    std::sort(allRanges.begin(), allRanges.end(), [columnType](const std::shared_ptr<TTreeNode>& left, const std::shared_ptr<TTreeNode>& right) {
+
+        // -inf bounds first
+        if (!left->Range.LeftBound.Defined() && !right->Range.LeftBound.Defined()) {
+            return false;
+        }
+        if (!left->Range.LeftBound.Defined()) {
+            return true;
+        }
+        if (!right->Range.LeftBound.Defined()) {
+            return false;
+        }
+
+        i8 cmp = CompareValues(left->Range.LeftBound.GetRef(), right->Range.LeftBound.GetRef(), columnType);
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+
+        // inclusive starts earlier
+        if (left->Range.LeftInclusive != right->Range.LeftInclusive) {
+            return left->Range.LeftInclusive;
+        }
+        return false;
+    });
 }
 
-TMaybe<TPredicateRange> MergeConjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges) {
+TMaybe<TPredicateRange> IntersectOverlappingConjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
     if (allRanges.empty()) {
         return Nothing();
     }
@@ -864,14 +965,14 @@ TMaybe<TPredicateRange> MergeConjunctions(TVector<std::shared_ptr<TTreeNode>>& a
     for (size_t i = 1; i < allRanges.size(); ++i) {
         auto& range = allRanges[i]->Range;
 
-        // Merge Left
+        // intersect left bound
         if (range.LeftBound.Defined()) {
             if (!mergedRange.LeftBound.Defined()) {
                 mergedRange.Left = range.Left;
                 mergedRange.LeftBound = range.LeftBound;
                 mergedRange.LeftInclusive = range.LeftInclusive;
             } else {
-                i8 cmp = CompareBounds(*range.LeftBound, *mergedRange.LeftBound);
+                i8 cmp = CompareValues(range.LeftBound.GetRef(), mergedRange.LeftBound.GetRef(), columnType);
                 if (cmp > 0 || (cmp == 0 && !range.LeftInclusive)) {
                     mergedRange.Left = range.Left;
                     mergedRange.LeftBound = range.LeftBound;
@@ -880,14 +981,14 @@ TMaybe<TPredicateRange> MergeConjunctions(TVector<std::shared_ptr<TTreeNode>>& a
             }
         }
 
-        // Merge Right
+        // intersect right bound
         if (range.RightBound.Defined()) {
             if (!mergedRange.RightBound.Defined()) {
                 mergedRange.Right = range.Right;
                 mergedRange.RightBound = range.RightBound;
                 mergedRange.RightInclusive = range.RightInclusive;
             } else {
-                i8 cmp = CompareBounds(*range.RightBound, *mergedRange.RightBound);
+                i8 cmp = CompareValues(range.RightBound.GetRef(), mergedRange.RightBound.GetRef(), columnType);
                 if (cmp < 0 || (cmp == 0 && !range.RightInclusive)) {
                     mergedRange.Right = range.Right;
                     mergedRange.RightBound = range.RightBound;
@@ -896,21 +997,74 @@ TMaybe<TPredicateRange> MergeConjunctions(TVector<std::shared_ptr<TTreeNode>>& a
             }
         }
 
-        // Check for empty intersection
+        // check for empty intersection
         if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()) {
-            int cmp = CompareBounds(*mergedRange.LeftBound, *mergedRange.RightBound);
-
+            i8 cmp = CompareValues(mergedRange.LeftBound.GetRef(), mergedRange.RightBound.GetRef(), columnType);
             if (cmp > 0) {
                 return Nothing();
-            }
-
-            if (cmp == 0 && (!mergedRange.LeftInclusive || !mergedRange.RightInclusive)) {
+            } else if (cmp == 0 && (!mergedRange.LeftInclusive || !mergedRange.RightInclusive)) {
                 return Nothing();
             }
         }
     }
 
     return mergedRange;
+}
+
+TMaybe<TVector<TPredicateRange>> UnionOverlappingDisjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
+    if (allRanges.empty()) {
+        return Nothing();
+    }
+
+    // sorting ranges by left bound only
+    SortRanges(allRanges, columnType);
+
+    TVector<TPredicateRange> mergedRanges;
+    TPredicateRange current = allRanges.front()->Range;
+
+    for (size_t i = 1; i < allRanges.size(); ++i) {
+        auto& range = allRanges[i]->Range;
+
+        // check whether the intervals do not overlap
+        bool disjoint = false;
+        if (current.RightBound.Defined() && range.LeftBound.Defined()) {
+            i8 cmp = CompareValues(current.RightBound.GetRef(), range.LeftBound.GetRef(), columnType);
+            if (cmp < 0) {
+                disjoint = true;
+            } else if (cmp == 0 && (!current.RightInclusive || !range.LeftInclusive)) {
+                disjoint = true;
+            }
+        }
+        if (disjoint) {
+            mergedRanges.push_back(current);
+            current = range;
+            continue;
+        }
+
+        // expand upper bound if either side is +inf
+        if (!current.RightBound.Defined() || !range.RightBound.Defined()) {
+            current.Right = Nothing();
+            current.RightBound = Nothing();
+            current.RightInclusive = false;
+        } else {
+            i8 cmp = CompareValues(range.RightBound.GetRef(), current.RightBound.GetRef(), columnType);
+            if (cmp > 0 || (cmp == 0 && range.RightInclusive)) {
+                current.Right = range.Right;
+                current.RightBound = range.RightBound;
+                current.RightInclusive = range.RightInclusive;
+            }
+        }
+
+        // if domain is fully covered, then exit
+        if (!current.LeftBound.Defined() && !current.RightBound.Defined()) {
+            mergedRanges.clear();
+            mergedRanges.push_back(current);
+            return mergedRanges;
+        }
+    }
+
+    mergedRanges.push_back(current);
+    return mergedRanges;
 }
 
 double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node, TSet<TString>& tableAliases) {
@@ -947,14 +1101,15 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
             }
         }
 
-        // find overlaps and re-compute selectivity
+        // intersect overlaps and re-compute selectivity
         for (auto& entry : columnSelectivities) {
             if (entry.second.size() == 0) {
 
             } else if (entry.second.size() == 1) {
                 resSelectivity *= ComputeSelectivity(entry.second.front(), tableAliases);
             } else {
-                TMaybe<TPredicateRange> mergedRange = MergeConjunctions(entry.second);
+                TString columnType = entry.second.front()->ColumnType;
+                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(entry.second, columnType);
                 if (mergedRange.Defined()) {
                     resSelectivity *= ReComputeEstimation(entry.first, mergedRange.GetRef());
                 } else {
@@ -969,8 +1124,46 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
 
     else if (node->Operator == ELogicalOperator::Or) {
         double resSelectivity = 0.0;
+        TMap<TString, TVector<std::shared_ptr<TTreeNode>>> columnSelectivities;
+
         for (auto& child : node->Children) {
-            resSelectivity += ComputeSelectivity(child, tableAliases);
+            TString column = child->Column;
+            if (!columnSelectivities.contains(column)) {
+                TVector<std::shared_ptr<TTreeNode>> ranges;
+                columnSelectivities[column] = ranges;
+            }
+
+            // group by column and convert point predicates into ranges
+            if (child->Operator == ELogicalOperator::Leaf) {
+                columnSelectivities[column].push_back(child);
+            } else {
+                // next conjunction/disjunction
+                resSelectivity += ComputeSelectivity(child, tableAliases);
+            }
+        }
+
+        // union overlaps and re-compute selectivity
+        for (auto& entry : columnSelectivities) {
+            if (entry.second.size() == 0) {
+
+            } else if (entry.second.size() == 1) {
+                resSelectivity += ComputeSelectivity(entry.second.front(), tableAliases);
+            } else {
+                TString columnType = entry.second.front()->ColumnType;
+                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(entry.second, columnType);
+                if (allMergedRanges.Defined()) {
+                    for (auto& mergedRange : allMergedRanges.GetRef()) {
+                        // domain full coverage
+                        if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
+                            return 1.0;
+                        }
+                        resSelectivity += ReComputeEstimation(entry.first, mergedRange);
+                    }
+                } else {
+                    // in case of no overlaps, zero selectivity
+                    return 0.0;
+                }
+            }
         }
         // cap at 1.0 to stop error propagation
         return resSelectivity = std::min(1.0, resSelectivity);

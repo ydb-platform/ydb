@@ -180,9 +180,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             otherPk Uint64 NOT NULL,
             message Utf8,
             other Uint64,
-            PRIMARY KEY (pk)
+            PRIMARY KEY (pk, otherPk)
         )
-        PARTITION BY HASH(pk)
+        PARTITION BY HASH(pk, otherPk)
         WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
         ------
         SCHEMA:
@@ -194,11 +194,23 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES (1u, 1u, 'a', 4u), (2u, 2u, 'b', 3u), (3u, 3u, 'a', 2u), (4u, 4u, 'c', 1u);
         ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
         EXPECTED: [[["a"];["a"]];[["b"];["b"]];[["c"];["c"]]]
         ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
         EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
         ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
         EXPECTED: [[["a"]];[["b"]];[["c"]]]
@@ -217,6 +229,10 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(pk) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
         EXPECTED: [[["a"];["a"];1u];[["b"];["b"];2u];[["c"];["c"];4u]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
     )";
     Y_UNIT_TEST(GroupBySomeDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute(GetSettingsForDictionary());

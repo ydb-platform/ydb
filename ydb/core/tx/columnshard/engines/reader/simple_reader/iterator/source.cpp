@@ -351,6 +351,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     if (addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::Dictionary && UsageClass == TPKRangeFilter::EUsageClass::FullUsage) {
+        GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
     } else if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==

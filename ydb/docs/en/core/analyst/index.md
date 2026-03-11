@@ -1,4 +1,4 @@
-# For Analysts
+# For Analysts and Data Engineers
 
 This section provides examples and recommendations for handling [analytical (OLAP) scenarios](../faq/analytics.md) in {{ ydb-short-name }}.
 

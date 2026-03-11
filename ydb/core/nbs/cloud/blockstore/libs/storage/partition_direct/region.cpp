@@ -5,7 +5,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
-    TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr> directBlockGroups,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize)
 {
     for (size_t i = 0; i < directBlockGroups.size(); i++) {

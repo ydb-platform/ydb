@@ -1,16 +1,11 @@
 #pragma once
 
-#include "direct_block_group.h"
+#include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
-
-#include <ydb/core/mind/bscontroller/types.h>
-#include <ydb/core/mon/mon.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -21,9 +16,8 @@ class TFastPathService
     , public std::enable_shared_from_this<TFastPathService>
 {
 private:
-    TMutex Lock;
     NActors::TActorSystem* const ActorSystem = nullptr;
-    std::shared_ptr<NStorage::NPartitionDirect::TRegion> Region;
+    const std::shared_ptr<TRegion> Region;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
@@ -36,8 +30,8 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
-        std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
-        const NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
+        std::shared_ptr<TRegion> region,
+        const NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;

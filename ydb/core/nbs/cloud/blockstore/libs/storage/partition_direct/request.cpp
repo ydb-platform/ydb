@@ -83,11 +83,9 @@ TWriteRequestHandler::TWriteRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId,
-    NThreading::TPromise<TWriteBlocksLocalResponse> promise)
+    ui64 tabletId)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
-    , Promise(std::move(promise))
 {
     Span = NWilson::TSpan(
         TWilsonNbs::NbsTopLevel,
@@ -148,6 +146,39 @@ void TWriteRequestHandler::OnWriteRequested(
         TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
 }
 
+void TWriteRequestHandler::OnWriteFinished(
+    ui64 requestId,
+    const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult& result)
+{
+    auto execSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.WriteBlocks.HandlePBWriteResult.Exec",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+
+    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        ChildSpanEndOk(requestId);
+
+        if (IsCompleted(requestId)) {
+            execSpan.Event("Start SetResponse");
+            SetResponse(MakeError(S_OK));
+            execSpan.Event("Finish SetResponse");
+            Span.EndOk();
+        }
+    } else {
+        // TODO: add error handling
+        ChildSpanEndError(
+            requestId,
+            "HandleWritePersistentBufferResult failed");
+        Span.EndError("HandleWritePersistentBufferResult failed");
+
+        SetResponse(MakeError(E_FAIL, result.GetErrorReason()));
+    }
+
+    execSpan.EndOk();
+}
+
 TVector<TPersistentBufferWriteMeta> TWriteRequestHandler::GetWritesMeta() const
 {
     TVector<TPersistentBufferWriteMeta> result;
@@ -163,11 +194,16 @@ TGuardedSgList TWriteRequestHandler::GetData()
     return Request->Sglist;
 }
 
+NThreading::TFuture<TDBGWriteBlocksResponse> TWriteRequestHandler::GetFuture()
+{
+    return Promise.GetFuture();
+}
+
 void TWriteRequestHandler::SetResponse(NProto::TError error)
 {
-    TWriteBlocksLocalResponse response;
-    response.Error = std::move(error);
-    Promise.SetValue(std::move(response));
+    Promise.SetValue(TDBGWriteBlocksResponse{
+        .Meta = GetWritesMeta(),
+        .Error = std::move(error)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -334,15 +370,10 @@ TReadRequestHandler::TReadRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId,
-    NThreading::TPromise<TReadBlocksLocalResponse> promise)
+    ui64 tabletId)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
-    , Promise(std::move(promise))
 {
-    Y_UNUSED(traceId);
-    Y_UNUSED(tabletId);
-
     Span = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsTopLevel,
         std::move(traceId),
@@ -390,11 +421,14 @@ TGuardedSgList TReadRequestHandler::GetData()
     return Request->Sglist;
 }
 
+NThreading::TFuture<TDBGReadBlocksResponse> TReadRequestHandler::GetFuture()
+{
+    return Promise;
+}
+
 void TReadRequestHandler::SetResponse(NProto::TError error)
 {
-    TReadBlocksLocalResponse response;
-    response.Error = std::move(error);
-    Promise.SetValue(std::move(response));
+    Promise.SetValue(TDBGReadBlocksResponse{.Error = std::move(error)});
 }
 
 TOverallAckRequestHandler::TOverallAckRequestHandler(

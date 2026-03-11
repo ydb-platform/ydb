@@ -31,6 +31,17 @@ struct TRestoreMeta
     ui64 Lsn = 0;
 };
 
+struct TDBGReadBlocksResponse
+{
+    NProto::TError Error;
+};
+
+struct TDBGWriteBlocksResponse
+{
+    TVector<TPersistentBufferWriteMeta> Meta;
+    NProto::TError Error;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBaseRequestHandler
@@ -69,8 +80,6 @@ public:
         ui32 vChunkIndex,
         TBlockRange64 range);
 
-    virtual ~TIORequestsHandler() = default;
-
     [[nodiscard]] ui64 GetStartIndex() const;
     [[nodiscard]] ui64 GetStartOffset() const;
     [[nodiscard]] ui64 GetSize() const;
@@ -86,8 +95,7 @@ public:
         ui32 vChunkIndex,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        ui64 tabletId,
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise);
+        ui64 tabletId);
 
     ~TWriteRequestHandler() override = default;
 
@@ -96,16 +104,22 @@ public:
     bool IsCompleted(ui64 requestId) override;
 
     void OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
-
-    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
+    void OnWriteFinished(
+        ui64 requestId,
+        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult&
+            result);
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    NThreading::TFuture<TDBGWriteBlocksResponse> GetFuture();
     void SetResponse(NProto::TError error);
 
 private:
+    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
+
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
+    NThreading::TPromise<TDBGWriteBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGWriteBlocksResponse>();
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
     ui8 AcksMask = 0;
@@ -186,8 +200,7 @@ public:
         ui32 vChunkIndex,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        ui64 tabletId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise);
+        ui64 tabletId);
 
     ~TReadRequestHandler() override = default;
 
@@ -197,11 +210,13 @@ public:
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    NThreading::TFuture<TDBGReadBlocksResponse> GetFuture();
     void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;
-    NThreading::TPromise<TReadBlocksLocalResponse> Promise;
+    NThreading::TPromise<TDBGReadBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGReadBlocksResponse>();
 };
 
 class TOverallAckRequestHandler: public TBaseRequestHandler

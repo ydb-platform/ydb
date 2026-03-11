@@ -1,11 +1,10 @@
 #pragma once
 
+#include "direct_block_group.h"
+#include "vchunk.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk.h>
-
-#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -15,8 +14,7 @@ class TRegion
 {
 public:
     TRegion(
-        TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr>
-            directBlockGroups,
+        TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -35,5 +33,7 @@ private:
     size_t GetVChunkIndex(ui64 blockIndex) const;
     size_t GetVChunkOffset(ui64 blockIndex) const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

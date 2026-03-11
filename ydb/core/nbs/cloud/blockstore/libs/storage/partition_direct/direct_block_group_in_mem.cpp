@@ -9,6 +9,69 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NYdb::NBS;
 
+namespace {
+
+void DoReadFromSectorMap(
+    const TIntrusivePtr<NPDisk::TSectorMap>& sectorMap,
+    ui32 blockSize,
+    const std::shared_ptr<TReadBlocksLocalRequest>& request,
+    NThreading::TPromise<TDBGReadBlocksResponse> promise)
+{
+    // Acquire the sglist guard to access the data
+    auto guard = request->Sglist.Acquire();
+    if (!guard) {
+        // Failed to acquire guard, return error
+        auto error = MakeError(E_CANCELLED, "Failed to acquire sglist guard");
+        promise.SetValue({.Error = std::move(error)});
+        return;
+    }
+
+    const auto& sglist = guard.Get();
+
+    // Calculate offset and size
+    ui64 startOffset = request->Range.Start * blockSize;
+    ui64 totalSize = request->Range.Size() * blockSize;
+
+    if (totalSize != SgListGetSize(sglist)) {
+        auto error = MakeError(
+            E_ARGUMENT,
+            TStringBuilder() << "Buffer size and sglist size mismatch "
+                             << totalSize << " != " << SgListGetSize(sglist));
+        promise.SetValue({.Error = std::move(error)});
+        return;
+    }
+
+    // Sector map requires 4096-byte alignment
+    constexpr ui64 SECTOR_SIZE = 4096;
+
+    // Verify alignment
+    if (startOffset % SECTOR_SIZE != 0 || totalSize % SECTOR_SIZE != 0) {
+        auto error = MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
+        promise.SetValue({.Error = std::move(error)});
+        return;
+    }
+
+    // Prepare buffer to read into
+    TVector<ui8> buffer(totalSize);
+
+    // Read from sector map
+    bool readSuccess =
+        sectorMap->Read(buffer.data(), buffer.size(), startOffset);
+
+    if (!readSuccess) {
+        auto error = MakeError(E_IO, "Failed to read from sector map");
+        promise.SetValue({.Error = std::move(error)});
+        return;
+    }
+
+    // Copy data from buffer to sglist
+    SgListCopy(TBlockDataRef::Create(buffer), sglist);
+
+    promise.SetValue({.Error = MakeError(S_OK)});
+}
+
+}   // namespace
+
 TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
     ui64 tabletId,
     ui32 generation,
@@ -45,15 +108,13 @@ NThreading::TFuture<void> TInMemoryDirectBlockGroup::EstablishConnections(
     return NThreading::MakeFuture();
 }
 
-TVector<TPersistentBufferWriteMeta> TInMemoryDirectBlockGroup::WriteBlocksLocal(
-    TExecutorPtr executor,
+NThreading::TFuture<TDBGWriteBlocksResponse>
+TInMemoryDirectBlockGroup::WriteBlocksLocal(
     ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    NWilson::TTraceId traceId,
-    NThreading::TPromise<TWriteBlocksLocalResponse> promise)
+    NWilson::TTraceId traceId)
 {
-    Y_UNUSED(executor);
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
@@ -62,11 +123,9 @@ TVector<TPersistentBufferWriteMeta> TInMemoryDirectBlockGroup::WriteBlocksLocal(
     auto guard = request->Sglist.Acquire();
     if (!guard) {
         // Failed to acquire guard, return error
-        TWriteBlocksLocalResponse response;
-        response.Error =
-            MakeError(E_CANCELLED, "Failed to acquire sglist guard");
-        promise.SetValue(std::move(response));
-        return {};
+        auto error = MakeError(E_CANCELLED, "Failed to acquire sglist guard");
+        return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error = std::move(error)});
     }
 
     const auto& sglist = guard.Get();
@@ -76,13 +135,12 @@ TVector<TPersistentBufferWriteMeta> TInMemoryDirectBlockGroup::WriteBlocksLocal(
     ui64 totalSize = request->Range.Size() * BlockSize;
 
     if (totalSize != SgListGetSize(sglist)) {
-        TWriteBlocksLocalResponse response;
-        response.Error = MakeError(
+        auto error = MakeError(
             E_ARGUMENT,
             TStringBuilder() << "Buffer size and sglist size mismatch "
                              << totalSize << " != " << SgListGetSize(sglist));
-        promise.SetValue(std::move(response));
-        return {};
+        return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error = std::move(error)});
     }
 
     // Sector map requires 4096-byte alignment
@@ -90,11 +148,9 @@ TVector<TPersistentBufferWriteMeta> TInMemoryDirectBlockGroup::WriteBlocksLocal(
 
     // Verify alignment
     if (startOffset % SECTOR_SIZE != 0 || totalSize % SECTOR_SIZE != 0) {
-        TWriteBlocksLocalResponse response;
-        response.Error =
-            MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
-        promise.SetValue(std::move(response));
-        return {};
+        auto error = MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
+        return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error = std::move(error)});
     }
 
     // Prepare buffer to write
@@ -108,22 +164,19 @@ TVector<TPersistentBufferWriteMeta> TInMemoryDirectBlockGroup::WriteBlocksLocal(
     bool writeSuccess =
         SectorMap->Write(buffer.data(), buffer.size(), startOffset);
 
-    TWriteBlocksLocalResponse response;
     if (!writeSuccess) {
-        response.Error = MakeError(E_IO, "Failed to write to sector map");
-        promise.SetValue(std::move(response));
-        return {};
+        auto error = MakeError(E_IO, "Failed to write to sector map");
+        return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error = std::move(error)});
     }
-
-    promise.SetValue(std::move(response));
-
     // Return meta compatible with TDirectBlockGroup (3 replicas)
     TVector<TPersistentBufferWriteMeta> meta;
     meta.reserve(3);
     for (ui8 i = 0; i < 3; i++) {
         meta.emplace_back(i, 0);
     }
-    return meta;
+    return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
+        {.Meta = std::move(meta), .Error = MakeError(S_OK)});
 }
 
 void TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
@@ -148,107 +201,44 @@ void TInMemoryDirectBlockGroup::ErasePersistentBuffer(
     Y_UNUSED(requestHandler);
 }
 
-namespace {
-
-void DoReadFromSectorMap(
-    const TIntrusivePtr<NPDisk::TSectorMap>& sectorMap,
-    ui32 blockSize,
-    const std::shared_ptr<TReadBlocksLocalRequest>& request,
-    NThreading::TPromise<TReadBlocksLocalResponse> promise)
-{
-    // Acquire the sglist guard to access the data
-    auto guard = request->Sglist.Acquire();
-    if (!guard) {
-        // Failed to acquire guard, return error
-        TReadBlocksLocalResponse response;
-        response.Error =
-            MakeError(E_CANCELLED, "Failed to acquire sglist guard");
-        promise.SetValue(std::move(response));
-        return;
-    }
-
-    const auto& sglist = guard.Get();
-
-    // Calculate offset and size
-    ui64 startOffset = request->Range.Start * blockSize;
-    ui64 totalSize = request->Range.Size() * blockSize;
-
-    if (totalSize != SgListGetSize(sglist)) {
-        TReadBlocksLocalResponse response;
-        response.Error = MakeError(
-            E_ARGUMENT,
-            TStringBuilder() << "Buffer size and sglist size mismatch "
-                             << totalSize << " != " << SgListGetSize(sglist));
-        promise.SetValue(std::move(response));
-        return;
-    }
-
-    // Sector map requires 4096-byte alignment
-    constexpr ui64 SECTOR_SIZE = 4096;
-
-    // Verify alignment
-    if (startOffset % SECTOR_SIZE != 0 || totalSize % SECTOR_SIZE != 0) {
-        TReadBlocksLocalResponse response;
-        response.Error =
-            MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
-        promise.SetValue(std::move(response));
-        return;
-    }
-
-    // Prepare buffer to read into
-    TVector<ui8> buffer(totalSize);
-
-    // Read from sector map
-    bool readSuccess =
-        sectorMap->Read(buffer.data(), buffer.size(), startOffset);
-
-    TReadBlocksLocalResponse response;
-    if (!readSuccess) {
-        response.Error = MakeError(E_IO, "Failed to read from sector map");
-        promise.SetValue(std::move(response));
-        return;
-    }
-
-    // Copy data from buffer to sglist
-    SgListCopy(TBlockDataRef::Create(buffer), sglist);
-
-    promise.SetValue(std::move(response));
-}
-
-}   // namespace
-
-void TInMemoryDirectBlockGroup::ReadBlocksLocalFromPersistentBuffer(
-    TExecutorPtr executor,
+NThreading::TFuture<TDBGReadBlocksResponse>
+TInMemoryDirectBlockGroup::ReadBlocksLocalFromPersistentBuffer(
     ui32 vChunkIndex,
     ui8 persistentBufferIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    NThreading::TPromise<TReadBlocksLocalResponse> promise,
     ui64 lsn)
 {
-    Y_UNUSED(executor);
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(persistentBufferIndex);
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
     Y_UNUSED(lsn);
+
+    auto promise = NThreading::NewPromise<TDBGReadBlocksResponse>();
+    auto future = promise.GetFuture();
+
     DoReadFromSectorMap(SectorMap, BlockSize, request, std::move(promise));
+    return future;
 }
 
-void TInMemoryDirectBlockGroup::ReadBlocksLocalFromDDisk(
-    TExecutorPtr executor,
+NThreading::TFuture<TDBGReadBlocksResponse>
+TInMemoryDirectBlockGroup::ReadBlocksLocalFromDDisk(
     ui32 vChunkIndex,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId,
-    NThreading::TPromise<TReadBlocksLocalResponse> promise)
+    NWilson::TTraceId traceId)
 {
-    Y_UNUSED(executor);
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
+
+    auto promise = NThreading::NewPromise<TDBGReadBlocksResponse>();
+    auto future = promise.GetFuture();
+
     DoReadFromSectorMap(SectorMap, BlockSize, request, std::move(promise));
+    return future;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

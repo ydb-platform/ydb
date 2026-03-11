@@ -589,13 +589,13 @@ public:
 
     struct TSettings {
         std::optional<NACLib::TUserToken> UserToken;
-        bool AllowNotFoundAfteRretry = false;
+        bool AllowNotFoundAfterRetry = false;
     };
 
     TExecuteTransactionSchemeActor(const TString& database, const TString& queryPath, const NKikimrSchemeOp::TModifyScheme& schemeTx, const TSettings& settings)
         : TBase(__func__, database, queryPath, settings.UserToken)
         , SchemeTx(schemeTx)
-        , AllowNotFoundAfteRretry(settings.AllowNotFoundAfteRretry)
+        , AllowNotFoundAfterRetry(settings.AllowNotFoundAfterRetry)
     {}
 
     STFUNC(StateFunc) {
@@ -619,7 +619,7 @@ public:
             << ", TxId: " << TxId
             << ", SchemeShardTabletId: " << SchemeShardTabletId);
 
-        if (ssStatus == NKikimrScheme::EStatus::StatusPathDoesNotExist && IsIn({NTxProxy::TResultStatus::ResolveError, NTxProxy::TResultStatus::ExecError}, status) && AllowNotFoundAfteRretry && RetriesCount) {
+        if (ssStatus == NKikimrScheme::EStatus::StatusPathDoesNotExist && IsIn({NTxProxy::TResultStatus::ResolveError, NTxProxy::TResultStatus::ExecError}, status) && AllowNotFoundAfterRetry && RetriesCount) {
             // After retry previous transaction may continue working, finish DROP operation if path was deleted (path existence already validated before and path was externally locked)
             Finish(Ydb::StatusIds::SUCCESS);
             return;
@@ -848,7 +848,7 @@ private:
 
 private:
     const NKikimrSchemeOp::TModifyScheme SchemeTx;
-    const bool AllowNotFoundAfteRretry = false;
+    const bool AllowNotFoundAfterRetry = false;
     ui64 RetriesCount = 0;
     ui64 SchemeShardTabletId = 0;
     ui64 TxId = 0;
@@ -2086,7 +2086,7 @@ private:
 
             const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, schemeTx, {
                 .UserToken = NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}),
-                .AllowNotFoundAfteRretry = true,
+                .AllowNotFoundAfterRetry = true,
             }));
             LOG_D("Start TExecuteTransactionSchemeActor " << executerId << " (drop streaming query)");
             return;
@@ -2797,7 +2797,7 @@ private:
             // Remove query from SS
             const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
                 .UserToken = Context.GetUserToken(),
-                .AllowNotFoundAfteRretry = true,
+                .AllowNotFoundAfterRetry = true,
             }));
             LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
             return;

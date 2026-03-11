@@ -2,7 +2,7 @@ import logging
 import subprocess
 from typing import List, Optional
 
-from .hang_monitor import TransactionHangMonitor, TransactionHungError
+from .hang_monitor import TransactionHangMonitor, TransactionHangError
 
 
 class CommandExecutor:
@@ -40,7 +40,7 @@ class CommandExecutor:
                     )
                     process.kill()
                     process.wait()
-                    raise TransactionHungError(
+                    raise TransactionHangError(
                         f"Transaction hung for {self.hang_monitor.hang_timeout} seconds",
                         timeout_seconds=self.hang_monitor.hang_timeout
                     )
@@ -56,10 +56,10 @@ class CommandExecutor:
                 )
 
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"Exception 'CalledProcessError': {e}")
+            self.logger.error(f"Exception 'CalledProcessError': {e}, cmd: {cmd}")
             raise
         except Exception as e:
-            self.logger.error(f"Exception 'Exception': {e}")
+            self.logger.error(f"Exception 'Exception': {e}, cmd: {cmd}")
             process.kill()
             process.wait()
             raise

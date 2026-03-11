@@ -1,9 +1,7 @@
 import logging
 
 
-class TransactionHungError(Exception):
-    """Исключение, когда тест завис."""
-    """Исключение, когда тест завис."""
+class TransactionHangError(Exception):
     def __init__(self, message: str, timeout_seconds: int = 180):
         super().__init__(message)
         self.timeout_seconds = timeout_seconds

@@ -279,6 +279,9 @@ namespace NKikimr {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimit;
 
+        ///////////// CHUNK Keeper //////////////////
+        TControlWrapper EnableChunkKeeper;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 

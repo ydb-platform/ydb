@@ -28,5 +28,6 @@ RECURSE_FOR_TESTS(
     ut/functional
     ut/large
     ut/row_table
+    ut/transfer_metrics
 )
 

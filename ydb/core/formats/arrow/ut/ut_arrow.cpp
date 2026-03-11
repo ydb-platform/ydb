@@ -13,6 +13,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <util/random/shuffle.h>
 
+#include <array>
+
 namespace NKikimr {
 namespace {
 
@@ -662,6 +664,49 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
                             TDataRow::MakeTypeInfos(),
                             cellRows[i].size(), rowWriter.Rows[i].size()));
         }
+    }
+
+    Y_UNIT_TEST(ArrowToYdbConverterDecimalFixedSizeBinary) {
+        std::array<char, NScheme::FSB_SIZE> decimalBytes;
+        for (size_t i = 0; i < decimalBytes.size(); ++i) {
+            decimalBytes[i] = static_cast<char>(i + 1);
+        }
+
+        arrow::FixedSizeBinaryBuilder decimalBuilder(arrow::fixed_size_binary(NScheme::FSB_SIZE));
+        UNIT_ASSERT(decimalBuilder.Append(decimalBytes.data()).ok());
+        std::shared_ptr<arrow::FixedSizeBinaryArray> decimalArray;
+        UNIT_ASSERT(decimalBuilder.Finish(&decimalArray).ok());
+
+        auto schema = arrow::schema({
+            arrow::field("dec", arrow::fixed_size_binary(NScheme::FSB_SIZE))
+        });
+        auto batch = arrow::RecordBatch::Make(schema, 1, {decimalArray});
+        UNIT_ASSERT(batch);
+
+        struct TRowWriter : public NArrow::IRowWriter {
+            std::vector<TOwnedCellVec> Rows;
+
+            void AddRow(const TConstArrayRef<TCell>& cells) override {
+                Rows.push_back(TOwnedCellVec(cells));
+            }
+        } rowWriter;
+
+        std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
+            {"dec", TTypeInfo(NTypeIds::Decimal)}
+        };
+
+        NArrow::TArrowToYdbConverter toYdbConverter(ydbSchema, rowWriter);
+        TString errStr;
+        UNIT_ASSERT(toYdbConverter.Process(*batch, errStr));
+        UNIT_ASSERT_C(errStr.empty(), errStr);
+
+        UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows[0].size(), 1);
+
+        const TCell& converted = rowWriter.Rows[0][0];
+        UNIT_ASSERT_VALUES_EQUAL(converted.Size(), NScheme::FSB_SIZE);
+        UNIT_ASSERT_EQUAL(TStringBuf(converted.Data(), converted.Size()),
+            TStringBuf(decimalBytes.data(), decimalBytes.size()));
     }
 
     Y_UNIT_TEST(SortWithCompositeKey) {

@@ -1,6 +1,7 @@
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/converter.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NFormats {
@@ -344,6 +345,40 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
                 UNIT_ASSERT(i != 2 || strColumn.IsNull(i));
                 UNIT_ASSERT(i != 2 || utf8Column.IsNull(i));
             }
+        }
+    }
+
+    Y_UNIT_TEST(DecimalCsvToYdbConverter) {
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns = {
+            {"dec", NScheme::TTypeInfo(NScheme::TDecimalType(22, 9))}
+        };
+
+        TString csv;
+        csv += "1.000000000\n";
+        csv += "-2.500000000\n";
+
+        auto batch = TestReadSingleBatch(columns, csv, ',', false, 2);
+        auto decColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(batch->column(0));
+        UNIT_ASSERT_VALUES_EQUAL(decColumn->byte_width(), NScheme::FSB_SIZE);
+
+        struct TRowWriter : public NArrow::IRowWriter {
+            TVector<TOwnedCellVec> Rows;
+
+            void AddRow(const TConstArrayRef<TCell>& cells) override {
+                Rows.emplace_back(cells);
+            }
+        } rowWriter;
+
+        NArrow::TArrowToYdbConverter toYdbConverter(columns, rowWriter);
+        TString errorMessage;
+        UNIT_ASSERT(toYdbConverter.Process(*batch, errorMessage));
+        UNIT_ASSERT_C(errorMessage.empty(), errorMessage);
+
+        UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows.size(), 2);
+        for (const auto& row : rowWriter.Rows) {
+            UNIT_ASSERT_VALUES_EQUAL(row.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row[0].Size(), NScheme::FSB_SIZE);
+            UNIT_ASSERT(!row[0].IsNull());
         }
     }
 #if 0

@@ -245,17 +245,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         ev->Swap(newEv);
     }
 
-    void ChangeListNodesLocation(TEvInterconnect::TEvNodesInfo::TPtr* ev, const TString& dc, const TString& rack, const TString& unit) {
-        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
-        for (auto& node : *nodes) {
-            node.Location = TNodeLocation(dc, "", rack, unit);
-        }
-        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
-            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
-        );
-        ev->Swap(newEv);
-    }
-
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {
         ui64* cookie = const_cast<ui64*>(&(ev->Get()->Cookie));
         *cookie = nodeId;
@@ -831,7 +820,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&fields_required=DC,Rack HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -851,6 +840,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 case TEvHive::EvResponseHiveNodeStats: {
                     auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
+                    for (auto& nodeInfo : *nodes) {
+                        nodeInfo.Location = TNodeLocation("az-2", "", "eu-north1-c-13ct2", "1");
+                    }
+                    auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                        new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+                    );
+                    x->Swap(newEv);
                     break;
                 }
             }
@@ -875,6 +876,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
         auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
         UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), exclusiveDynNodeId);
+        UNIT_ASSERT_VALUES_EQUAL(node.at("DataCenter").GetStringSafe(), "az-2");
+        UNIT_ASSERT_VALUES_EQUAL(node.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
     }
 
     Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)
@@ -1020,61 +1023,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "DataShard");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
-    }
-
-    Y_UNIT_TEST(NodesDcRackFallbackToInterconnect)
-    {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-        ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port)
-                .SetNodeCount(1)
-                .SetUseRealThreads(false)
-                .SetDomainName("Root")
-                .SetUseSectorMap(true)
-                .InitKikimrRunConfig();
-        TServer server(settings);
-        server.EnableGRpc(grpcPort);
-
-        TClient client(settings);
-        TTestActorRuntime& runtime = *server.GetRuntime();
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?direct=1&fields_required=DC,Rack HTTP/1.1\r\n\r\n", endpoint, {});
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvInterconnect::EvNodesInfo: {
-                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    ChangeListNodesLocation(x, "az-2", "eu-north1-c-13ct2", "1");
-                    break;
-                }
-                case TEvWhiteboard::EvSystemStateResponse: {
-                    auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
-                    (*x)->Get()->Record.ClearSystemStateInfo();
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(observerFunc);
-
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
-        const auto& nodes = json.GetMap().at("Nodes").GetArraySafe();
-        UNIT_ASSERT(!nodes.empty());
-        UNIT_ASSERT(nodes.front().GetMap().contains("Disconnected"));
-        UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("Disconnected").GetBooleanSafe(), true);
-
-        UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("DataCenter").GetStringSafe(), "az-2");
-        UNIT_ASSERT_VALUES_EQUAL(nodes.front().GetMap().at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
-        UNIT_ASSERT(!nodes.front().GetMap().contains("SystemState"));
     }
 
     Y_UNIT_TEST(LevenshteinDistance)

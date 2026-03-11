@@ -277,9 +277,11 @@ void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TIndexMeta* me
                     if (!view.has_value()) {
                         return;
                     }
+
                     builder.BuildNGramms(view->data(), view->size(), {}, meta->GetNGrammSize(), filler);
                 });
         }
+
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
 }

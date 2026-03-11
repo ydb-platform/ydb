@@ -152,10 +152,6 @@ bool TTableConflictsCache::RegisterDistributedWrite(ui64 txId, const TOwnedCellV
                 ++itTxIds;
             }
         }
-
-        if (res.LockTxId != 0) {
-            txIds.insert(res.LockTxId);
-        }
     }
 
     auto& k = WriteKeys[key];

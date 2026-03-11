@@ -58,9 +58,6 @@ public:
                 Self->PlanQueue.Progress(ctx);
             }
 
-            // Cancel any waiting lock rows requests
-            Self->CheckLockRowsRejectAll();
-
             Self->Pipeline.CleanupWaitingVolatile(ctx, Replies);
         } else {
             // Check that this is the same split request

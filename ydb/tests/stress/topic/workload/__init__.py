@@ -2,7 +2,6 @@ import logging
 import tempfile
 import os
 import stat
-import time
 from library.python import resource
 
 from ydb.tests.stress.common.common import WorkloadBase
@@ -54,12 +53,12 @@ class YdbTopicWorkload(WorkloadBase):
 
     def get_command_prefix(self, subcmds: list[str]) -> list[str]:
         return [
-             *self._get_cli_common_args(),
+            *self._get_cli_common_args(),
             'workload', 'topic'
         ] + subcmds
 
     def _create_test_topic(self, topic_name, consumers=None, partitions=None,
-                          partitions_per_tablet=None) -> None:
+                           partitions_per_tablet=None) -> None:
         """Создает тестовый топик."""
         args = ['init']
         if consumers:

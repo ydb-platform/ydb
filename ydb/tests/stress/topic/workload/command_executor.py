@@ -1,6 +1,5 @@
 import logging
 import subprocess
-import time
 from typing import List, Optional
 
 from .hang_monitor import TransactionHangMonitor, TransactionHungError
@@ -20,19 +19,19 @@ class CommandExecutor:
         self.logger.debug(f"Begin cmd {cmd}")
         subprocess.run(cmd, check=True, text=True)
         self.logger.debug(f"End cmd {cmd}")
-    
+
     def run_with_monitoring(self, cmd: List[str]) -> None:
         self.logger.debug(f"Begin cmd {cmd}")
-        
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True
         )
-        
+
         self.hang_monitor.reset()
-        
+
         try:
             for line in process.stdout:
                 if self.hang_monitor.check_line(line):
@@ -45,9 +44,9 @@ class CommandExecutor:
                         f"Transaction hung for {self.hang_monitor.hang_timeout} seconds",
                         timeout_seconds=self.hang_monitor.hang_timeout
                     )
-            
+
             process.wait()
-            
+
             if process.returncode != 0:
                 self.logger.error(f"Command failed with exit code {process.returncode}")
                 raise subprocess.CalledProcessError(
@@ -55,7 +54,7 @@ class CommandExecutor:
                     cmd,
                     f"Command failed with exit code {process.returncode}"
                 )
-            
+
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Exception 'CalledProcessError': {e}")
             raise

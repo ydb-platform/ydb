@@ -671,7 +671,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         } else {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
-                << error.GetMessage();
+                << error;
             this->PassAway();
         }
     }

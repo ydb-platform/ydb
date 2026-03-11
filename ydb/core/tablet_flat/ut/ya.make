@@ -2,17 +2,15 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:2)
+
 IF (WITH_VALGRIND)
     TAG(ya:fat)
     SIZE(LARGE)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
 ENDIF()
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:1)
-ENDIF()
 
 SRCS(
     flat_cxx_database_ut.cpp

@@ -7,21 +7,13 @@ SPLIT_FACTOR(250)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(cpu:4)
+ELSEIF(SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(ram:16, cpu:4)
 ELSE()
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
-    IF (SANITIZER_TYPE)
-        REQUIREMENTS(cpu:4)
-    ENDIF()
-ENDIF()
-
-IF(SANITIZER_TYPE == "memory")
-    # Increase MSan memory limit due to YQL-19940.
-    # Just double default memory requirements since we run MSan without origin tracking by default.
-    REQUIREMENTS(
-        ram:16
-        cpu:4
-    )
 ENDIF()
 
 SRCS(

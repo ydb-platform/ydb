@@ -576,20 +576,11 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-<<<<<<< HEAD
-    if (ShredManager) {
-        ShredManager->Clear();
-=======
-    if (ForcedCompactionQueue) {
-        ForcedCompactionQueue->Clear();
-    }
-
     if (RootShredManager) {
         RootShredManager->Clear();
     }
     if (TenantShredManager) {
         TenantShredManager->Clear();
->>>>>>> 1f5b9862400 (Fix data shred stopping after some iterations (#35465))
     }
 
     ClearTempDirsState();
@@ -5061,13 +5052,6 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (BorrowedCompactionQueue) {
         BorrowedCompactionQueue->Shutdown(ctx);
     }
-<<<<<<< HEAD
-=======
-
-    if (ForcedCompactionQueue) {
-        ForcedCompactionQueue->Shutdown(ctx);
-    }
->>>>>>> 1f5b9862400 (Fix data shred stopping after some iterations (#35465))
 
     ClearTempDirsState();
     if (BackgroundCleaningQueue) {

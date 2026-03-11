@@ -52,6 +52,12 @@ void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceA
         "source_idx", sourceAddress.GetSourceIdx())(
         "sync_point_idx", sourceAddress.GetSyncPointIndex());
     
+    // Notify collection that page was sent (for backpressure)
+    Scanner->MutableSourcesCollection().OnPageSent();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_sent")(
+        "source_idx", sourceAddress.GetSourceIdx())(
+        "pages_in_flight", Scanner->GetSourcesCollection().GetPagesInFlightCount());
+    
     Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
 }
 

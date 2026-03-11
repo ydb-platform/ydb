@@ -15,6 +15,8 @@ ISourcesCollection::ISourcesCollection(
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
+    // Initialize MaxPagesInFlight from streaming config
+    MaxPagesInFlight = Context->GetStreamingConfig().MaxPagesInFlight;
 }
 
 TString ISourcesCollection::DebugString() const {
@@ -24,6 +26,8 @@ TString ISourcesCollection::DebugString() const {
     sb << "internal:{" << DoDebugString() << "};";
     sb << "constructor:{" << SourcesConstructor->DebugString() << "};";
     sb << "in_fly=" << SourcesInFlightCount.Val() << ";";
+    sb << "pages_in_fly=" << PagesInFlightCount.Val() << ";";
+    sb << "max_pages=" << MaxPagesInFlight << ";";
     sb << "type=" << GetClassName() << ";";
     sb << "}";
     return sb;

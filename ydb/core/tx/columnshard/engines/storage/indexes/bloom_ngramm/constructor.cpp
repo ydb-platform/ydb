@@ -30,14 +30,14 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
     }
 
     if (!jsonInfo["false_positive_probability"].IsDouble()) {
-        return TConclusionStatus::Fail("false_positive_probability have to be in bloom ngramm filter features as double field");
+        return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
     }
 
     FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
 
     if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
         return TConclusionStatus::Fail(
-            "false_positive_probability have to be in bloom ngramm filter features as double field in interval (0, 1)");
+            "false_positive_probability must be in bloom ngramm filter features as double field in interval (0, 1)");
     }
 
     if (!jsonInfo["ngramm_size"].IsUInteger()) {

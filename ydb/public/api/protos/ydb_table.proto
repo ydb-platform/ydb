@@ -323,6 +323,8 @@ message LocalBloomFilterIndex {
 message LocalBloomNgramFilterIndex {
     uint32 ngram_size = 1;
     uint32 hashes_count = 2;
+    reserved 3;
+    reserved 4;
     optional bool case_sensitive = 5;
     optional double false_positive_probability = 6;
 }

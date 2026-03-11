@@ -77,28 +77,33 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
                                          TDuration timeout = TDuration::Seconds(30)) {
     struct TMessageInfo {
         ui64 PartitionId;
+        TString ProducerId;
         ui64 SeqNo;
     };
     std::vector<TMessageInfo> messages;
     messages.reserve(expectedCount);
     NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
 
+    TTopicReadSettings topicSettings(topicPath);
+    topicSettings.ReadFromTimestamp(TInstant::Zero());
+
     auto readSettings = TReadSessionSettings()
         .ConsumerName(consumerName)
-        .AppendTopics(topicPath);
+        .AutoPartitioningSupport(true)
+        .AppendTopics(topicSettings);
 
     readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
         for (auto& msg : ev.GetMessages()) {
-            messages.push_back({
+            messages.push_back(TMessageInfo{
                 msg.GetPartitionSession()->GetPartitionId(),
+                TString(msg.GetProducerId()),
                 msg.GetSeqNo(),
             });
-            msg.Commit();
         }
         if (messages.size() >= expectedCount) {
             donePromise.SetValue();
         }
-    });
+    }, true);
 
     auto readSession = client.CreateReadSession(readSettings);
     UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
@@ -108,15 +113,18 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
     UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
         "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
 
-    // Group by partition and check seqNo is strictly increasing per partition
-    std::map<ui64, std::vector<ui64>> byPartition;
+    // SeqNo ordering is guaranteed within one producer stream.
+    // Multiple producers can write into the same partition with independent seqNo sequences.
+    std::map<std::pair<ui64, TString>, std::vector<ui64>> byPartitionAndProducer;
     for (const auto& m : messages) {
-        byPartition[m.PartitionId].push_back(m.SeqNo);
+        byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
     }
-    for (const auto& [partitionId, seqNos] : byPartition) {
+    for (const auto& [key, seqNos] : byPartitionAndProducer) {
+        const auto& [partitionId, producerId] = key;
         for (size_t i = 1; i < seqNos.size(); ++i) {
             UNIT_ASSERT_C(seqNos[i] > seqNos[i - 1],
-                "Partition " << partitionId << ": expected seqNo strictly increasing, got "
+                "Partition " << partitionId << ", producerId " << producerId
+                << ": expected seqNo strictly increasing, got "
                 << seqNos[i - 1] << " then " << seqNos[i] << " at index " << i);
         }
     }
@@ -218,6 +226,9 @@ static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
 void CreateTopicWithAutoPartitioning(TTopicClient& client) {
     TCreateTopicSettings createSettings;
         createSettings
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER)
+            .EndAddConsumer()
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(2)
             .MaxActivePartitions(100)
@@ -1663,6 +1674,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer3->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), 14);
     }
 
     Y_UNIT_TEST(AutoPartitioning_Producer_SmallMessages) {
@@ -1739,6 +1752,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), totalMessages);
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {

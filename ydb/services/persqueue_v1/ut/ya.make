@@ -4,6 +4,8 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
+REQUIREMENTS(cpu:2)
+
 SPLIT_FACTOR(20)
 FORK_SUBTESTS()
 FORK_TEST_FILES()
@@ -19,7 +21,6 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TAG(ya:fat)
     REQUIREMENTS(ram:32)
 ELSE()
-    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

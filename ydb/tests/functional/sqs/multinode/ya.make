@@ -6,12 +6,13 @@ TEST_SRCS(
     test_recompiles_requests.py
 )
 
+REQUIREMENTS(cpu:4)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:4)
 ENDIF()
 
 DEPENDS(

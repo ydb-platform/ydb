@@ -39,6 +39,7 @@ PEERDIR(
     yql/essentials/public/issue
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
+    ydb/library/testlib/service_mocks
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/library/naming_conventions

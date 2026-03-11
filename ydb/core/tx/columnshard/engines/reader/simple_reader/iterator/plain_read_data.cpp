@@ -47,6 +47,11 @@ void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceA
     if (!SpecialReadContext->IsActive()) {
         return;
     }
+    
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSentDataFromInterval")(
+        "source_idx", sourceAddress.GetSourceIdx())(
+        "sync_point_idx", sourceAddress.GetSyncPointIndex());
+    
     Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
 }
 

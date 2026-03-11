@@ -62,6 +62,11 @@ private:
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
+    // Page-based streaming fields
+    bool StreamingMode = false;
+    std::optional<ui32> CurrentPageIndex;
+    ui32 PageSize = 10000;  // Default page size in rows
+
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -191,6 +196,34 @@ public:
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
+
+    // Page-based streaming methods
+    bool IsStreamingMode() const {
+        return StreamingMode;
+    }
+
+    void InitializePagedReading(ui32 pageSize) {
+        StreamingMode = true;
+        PageSize = pageSize;
+        CurrentPageIndex = 0;
+    }
+
+    bool HasMorePages() const {
+        if (!StreamingMode || !StageResult) {
+            return false;
+        }
+        return !StageResult->IsFinished();
+    }
+
+    std::optional<ui32> GetCurrentPageIndex() const {
+        return CurrentPageIndex;
+    }
+
+    void AdvanceToNextPage() {
+        if (CurrentPageIndex) {
+            ++(*CurrentPageIndex);
+        }
+    }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);

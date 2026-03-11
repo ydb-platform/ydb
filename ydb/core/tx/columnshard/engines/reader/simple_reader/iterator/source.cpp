@@ -61,6 +61,25 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
+    
+    // In streaming mode, check if we need to advance to next page
+    if (IsStreamingMode() && HasMorePages()) {
+        AdvanceToNextPage();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+            "event", "ContinueCursor_NextPage")("page_index", CurrentPageIndex.value_or(0));
+        
+        // Continue with the same cursor to read next page
+        if (ScriptCursor->Next()) {
+            auto cursor = std::move(*ScriptCursor);
+            ScriptCursor.reset();
+            const auto& commonContext = *GetContext()->GetCommonContext();
+            auto sourceCopy = sourcePtr;
+            auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+            NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+            return;
+        }
+    }
+    
     if (ScriptCursor->Next()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
@@ -77,6 +96,14 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
 void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
     auto sourceSimple = std::static_pointer_cast<IDataSource>(sourcePtr);
+    
+    // In streaming mode, check if we need to send partial result
+    if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_partial_result")(
+            "source_idx", sourceSimple->GetSourceIdx())(
+            "page_index", sourceSimple->GetCurrentPageIndex().value_or(0));
+    }
+    
     plainReader->MutableScanner().GetSyncPoint(sourceSimple->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceSimple, *plainReader);
 }
 
@@ -102,14 +129,39 @@ void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!GetStageData().IsEmptyWithData());
-    if (memoryLimit && !IsSourceInMemory()) {
+    
+    // Get streaming configuration
+    auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
+    const auto& streamingConfig = context->GetStreamingConfig();
+    
+    // Decide whether to use streaming mode
+    const bool useStreaming = streamingConfig.ShouldUseStreamingMode(GetRecordsCount());
+    
+    if (useStreaming && memoryLimit && !IsSourceInMemory()) {
+        // Enable page-based streaming
+        const auto accessor = ExtractPortionAccessor();
+        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        
+        // Initialize streaming mode
+        StreamingMode = true;
+        CurrentPageIndex = 0;
+        PageSize = streamingConfig.PageSizeRows;
+        
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_enabled")(
+            "source_idx", GetSourceIdx())("records", GetRecordsCount())(
+            "pages", StageResult->GetPagesToResultVerified().size())("page_size", PageSize);
+    } else if (memoryLimit && !IsSourceInMemory()) {
+        // Use memory limit but without streaming (legacy behavior)
         const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
     } else {
+        // Read entire portion at once
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
+    
     if (StageResult->IsEmpty()) {
         StageResult = TFetchedResult::BuildEmpty();
         StageResult->SetPages({});
@@ -122,6 +174,23 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
+    
+    // Get page range if in streaming mode
+    std::optional<ui32> pageStartRow;
+    std::optional<ui32> pageEndRow;
+    auto currentPageIdx = GetCurrentPageIndex();
+    if (IsStreamingMode() && StageResult && currentPageIdx) {
+        const auto& pages = StageResult->GetPagesToResultVerified();
+        if (*currentPageIdx < pages.size()) {
+            const auto& page = pages[*currentPageIdx];
+            pageStartRow = page.GetIndexStart();
+            pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
+            
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_page_range")(
+                "page_index", *currentPageIdx)("start", *pageStartRow)("end", *pageEndRow);
+        }
+    }
+    
     for (auto&& i : columnIds) {
         auto columnChunks = GetPortionAccessor().GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
@@ -129,9 +198,21 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         }
         auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
+        ui32 currentRowOffset = 0;
+        
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
+            const ui32 chunkStart = currentRowOffset;
+            const ui32 chunkEnd = currentRowOffset + c->GetMeta().GetRecordsCount();
+            
+            // Check if chunk intersects with current page (if in streaming mode)
+            bool chunkNeeded = true;
+            if (pageStartRow && pageEndRow) {
+                // Chunk is needed only if it intersects with [pageStartRow, pageEndRow)
+                chunkNeeded = (chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow);
+            }
+            
+            if (chunkNeeded && !itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
@@ -142,11 +223,13 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 ++nullChunks;
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
+            currentRowOffset = chunkEnd;
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
-        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
+        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size())(
+        "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(

@@ -24,6 +24,7 @@ using namespace NThreading;
 namespace {
 
 constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
+constexpr TDuration AcquireSemaphorePeriod = TDuration::Seconds(3);
 
 constexpr char SemaphoreName[] = "RowDispatcher";
 constexpr char DefaultCoordinationNodePath[] = ".metadata/streaming/coordination_node";
@@ -120,6 +121,7 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
 
     TInstant SessionLastKnownGoodTimestamp;
     std::unordered_map<uint64_t, std::unique_ptr<TOperation>> SentRequests;
+    TInstant LastAcquireSemaphore;
 
 public:
     TLocalLeaderElection(
@@ -279,9 +281,12 @@ void TLocalLeaderElection::ResetState() {
     }
     PendingRpcResponses = 0;
     RpcResponses = {};
+    PendingDescribe = false;
+    PendingDescribeChanged = false;
     PendingAcquire = false;
     SentRequests.clear();
     RpcActor = {};
+    LastAcquireSemaphore = {};
 }
 
 void TLocalLeaderElection::CreateSemaphore() {
@@ -300,6 +305,11 @@ void TLocalLeaderElection::AcquireSemaphore() {
     if (PendingAcquire) {
         return;
     }
+    auto now = TInstant::Now();
+    if (now < LastAcquireSemaphore + AcquireSemaphorePeriod) {
+        return;
+    }
+    LastAcquireSemaphore = now;
     LOG_ROW_DISPATCHER_DEBUG("Try to acquire semaphore");
 
     NActorsProto::TActorId protoId;
@@ -764,6 +774,7 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     SentRequests.erase(reqId);
     if (source.acquired()) {
         LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
+        LastAcquireSemaphore = TInstant::Now();    // delay
     } else {
         LOG_ROW_DISPATCHER_DEBUG("Semaphore acquire timed out");
     }

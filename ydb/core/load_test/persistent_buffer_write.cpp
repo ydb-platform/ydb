@@ -306,7 +306,7 @@ public:
 
         while (InFlight < MaxInFlight) {
             bool doWrite = Rng() % 2;
-            if (Lsns.empty() || doWrite || FillRatio < FreeSpace * 100) {
+            if (Lsns.empty() || doWrite || FillRatio < (1 - FreeSpace) * 100) {
                 TWriteInfo& write = PickWriteByWeight();
                 Report->Size += write.Size;
                 const TInstant now = TAppData::TimeProvider->Now();

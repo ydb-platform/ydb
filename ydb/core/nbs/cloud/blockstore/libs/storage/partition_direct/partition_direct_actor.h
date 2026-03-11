@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>

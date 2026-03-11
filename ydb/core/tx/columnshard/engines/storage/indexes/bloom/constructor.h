@@ -2,6 +2,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+
 namespace NKikimr::NOlap::NIndexes {
 
 class TBloomIndexConstructor: public TSkipBitmapIndexConstructor {
@@ -14,8 +16,8 @@ public:
     }
 
 private:
-    double FalsePositiveProbability = 0.1;
-    bool CaseSensitive = true;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    bool CaseSensitive = NDefaults::CaseSensitive;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:

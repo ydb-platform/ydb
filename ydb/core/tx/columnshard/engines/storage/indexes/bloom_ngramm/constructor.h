@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -15,10 +16,10 @@ public:
     }
 
 private:
-    ui32 NGrammSize = 3;
-    ui32 HashesCount = 2;
-    double FalsePositiveProbability = 0.1;
-    bool CaseSensitive = true;
+    ui32 NGrammSize = NDefaults::NGrammSize;
+    ui32 HashesCount = NDefaults::HashesCount;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    bool CaseSensitive = NDefaults::CaseSensitive;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:

@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -16,10 +17,10 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
-    bool CaseSensitive = true;
-    ui32 NGrammSize = 3;
-    double FalsePositiveProbability = 0.1;
-    ui32 HashesCount = 2;
+    bool CaseSensitive = NDefaults::CaseSensitive;
+    ui32 NGrammSize = NDefaults::NGrammSize;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    ui32 HashesCount = NDefaults::HashesCount;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);

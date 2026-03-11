@@ -27,6 +27,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/docapi
     ydb/core/scheme
     ydb/core/kqp/query_data

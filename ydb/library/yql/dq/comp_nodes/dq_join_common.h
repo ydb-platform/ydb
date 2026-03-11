@@ -609,16 +609,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
                     if constexpr (Kind == EJoinKind::Left) {
                         if (Settings_.LeftIsBuild) {
-                            for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
-                                if (!state.Spiller.IsBucketSpilled(index)) {
-                                    TTable* table = std::get_if<TTable>(&state.Spiller.GetState().Buckets[index]);
-                                    if (table && !table->Empty()) {
-                                        table->ForEachUnused([&](TSingleTuple buildTuple) {
-                                            consume(buildTuple);
-                                        });
-                                    }
-                                }
-                            }
+                            EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
                         }
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
@@ -740,9 +731,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (Kind == EJoinKind::Left) {
                             if (Settings_.LeftIsBuild) {
-                                table->Table.ForEachUnused([&](TSingleTuple buildTuple) {
-                                    consume(buildTuple);
-                                });
+                                table->Table.ForEachUnused(consume);
                             }
                         }
                         state.SelectedPair = std::nullopt;
@@ -765,6 +754,19 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         }
 
         return EFetchResult::One;
+    }
+
+    template <typename TSpiller, typename F>
+    void EmitUnmatchedFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
+        for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
+            if (spiller.IsBucketSpilled(index)) {
+                continue;
+            }
+            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
+            if (table && !table->Empty()) {
+                table->ForEachUnused(std::forward<F>(consume));
+            }
+        }
     }
 
   private:

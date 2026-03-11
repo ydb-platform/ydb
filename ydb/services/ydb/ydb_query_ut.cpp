@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         EnsureSessionClosedWithHint(p,
             Ydb::StatusIds::SUCCESS,
-            Ydb::Query::SessionState::SHUTDOWN_HINT_NODE,
+            Ydb::Query::SessionState::kNodeShutdown,
             allDoneOk);
 
         p->Cancel();
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         EnsureSessionClosedWithHint(p,
             Ydb::StatusIds::SUCCESS,
-            Ydb::Query::SessionState::SHUTDOWN_HINT_SESSION,
+            Ydb::Query::SessionState::kSessionShutdown,
             allDoneOk);
 
         p->Cancel();

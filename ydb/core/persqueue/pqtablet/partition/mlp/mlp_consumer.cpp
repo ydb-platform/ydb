@@ -747,6 +747,9 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     auto& metrics = Storage->GetMetrics();
 
     auto maxMessages = Storage->HasRetentionExpiredMessages() ? Storage->MaxMessages : Storage->MinMessages;
+    if (metrics.UnprocessedMessageCount <= metrics.InflightMessageCount / 4) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.InflightMessageCount + metrics.InflightMessageCount / 2);
+    }
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
@@ -777,6 +780,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     if (!Config.GetKeepMessageOrder()
         && metrics.InflightMessageCount >= Storage->MinMessages
         && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
+        && metrics.UnprocessedMessageCount >= metrics.InflightMessageCount / 4
         && !Storage->HasRetentionExpiredMessages()) {
         LOG_D("Skip fetch: there are enough messages. InflightMessageCount=" << metrics.InflightMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount

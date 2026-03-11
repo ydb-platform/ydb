@@ -9,13 +9,12 @@ PY3TEST()
         test_delete_all_after_inserts.py
     )
 
+    REQUIREMENTS(cpu:2)
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
-        REQUIREMENTS(cpu:2)
         TAG(ya:fat)
     ELSE()
         SIZE(MEDIUM)
-        REQUIREMENTS(cpu:2)
     ENDIF()
 
     PEERDIR(

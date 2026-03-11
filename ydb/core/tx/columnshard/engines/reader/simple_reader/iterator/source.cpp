@@ -219,12 +219,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             if (pageStartRow && pageEndRow) {
                 // Chunk is needed only if it intersects with [pageStartRow, pageEndRow)
                 chunkNeeded = (chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow);
-            } else {
-                // If streaming with paging is enabled but the page range cannot be resolved
-                // (e.g. CurrentPageIndex is out of range and pageStartRow/pageEndRow were not set),
-                // treat this as "no more data" for this source and avoid fetching any more chunks.
-                chunkNeeded = false;
             }
+            // If not in streaming mode or page range is not set, fetch all chunks (chunkNeeded stays true)
 
             if (chunkNeeded && !itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));

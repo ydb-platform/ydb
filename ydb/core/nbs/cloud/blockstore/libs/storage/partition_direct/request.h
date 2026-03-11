@@ -57,8 +57,6 @@ public:
 
     [[nodiscard]] NActors::TActorSystem* GetActorSystem() const;
 
-    virtual bool IsCompleted(ui64 requestId) = 0;
-
     void ChildSpanEndOk(ui64 childRequestId);
 
     void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
@@ -101,8 +99,6 @@ public:
 
     NWilson::TSpan& GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
 
-    bool IsCompleted(ui64 requestId) override;
-
     void OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
     void OnWriteFinished(
         ui64 requestId,
@@ -115,6 +111,8 @@ public:
     void SetResponse(NProto::TError error);
 
 private:
+    void SetCompleted(ui64 requestId);
+    [[nodiscard]] bool IsCompleted() const;
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
     TSpinLock Lock;
@@ -149,8 +147,6 @@ public:
 
     NWilson::TSpan& GetChildSpan(ui64 requestId);
 
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
-
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
     [[nodiscard]] ui64 OnSyncRequested(ui64 startIndex, ui64 lsn);
@@ -179,8 +175,6 @@ public:
 
     NWilson::TSpan& GetChildSpan(ui64 requestId);
 
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
-
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
     [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector>
@@ -206,8 +200,6 @@ public:
     ~TReadRequestHandler() override = default;
 
     NWilson::TSpan& GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
-
-    bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] TGuardedSgList GetData();
 
@@ -236,7 +228,6 @@ public:
     NWilson::TSpan GetChildSpan(ui64 requestId, TString eventName);
 
     [[nodiscard]] bool IsCompleted() const;
-    bool IsCompleted(ui64 requestId) override;
 
     void RegisterCompetedRequest()
     {

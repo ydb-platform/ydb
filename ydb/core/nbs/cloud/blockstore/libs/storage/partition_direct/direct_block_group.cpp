@@ -662,12 +662,8 @@ void TDirectBlockGroup::HandleReadResult(
 
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         requestHandler->ChildSpanEndOk(storageRequestId);
-
-        if (requestHandler->IsCompleted(storageRequestId)) {
-            requestHandler->SetResponse(MakeError(S_OK));
-
-            requestHandler->Span.EndOk();
-        }
+        requestHandler->SetResponse(MakeError(S_OK));
+        requestHandler->Span.EndOk();
     } else {
         // TODO: add error handling
         requestHandler->ChildSpanEndError(

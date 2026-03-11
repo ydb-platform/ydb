@@ -120,7 +120,7 @@ NWilson::TSpan& TWriteRequestHandler::GetChildSpan(
     return ChildSpanByRequestId[requestId];
 }
 
-bool TWriteRequestHandler::IsCompleted(ui64 requestId)
+void TWriteRequestHandler::SetCompleted(ui64 requestId)
 {
     auto processedPersistentBufferIndex =
         WriteMetaByRequestId.at(requestId).Index;
@@ -128,12 +128,11 @@ bool TWriteRequestHandler::IsCompleted(ui64 requestId)
         AcksMask |= (1 << processedPersistentBufferIndex);
         AckCount++;
     }
+}
 
-    if (AckCount >= RequiredAckCount) {
-        return true;
-    }
-
-    return false;
+bool TWriteRequestHandler::IsCompleted() const
+{
+    return AckCount >= RequiredAckCount;
 }
 
 void TWriteRequestHandler::OnWriteRequested(
@@ -141,6 +140,8 @@ void TWriteRequestHandler::OnWriteRequested(
     ui8 persistentBufferIndex,
     ui64 lsn)
 {
+    auto guard = TGuard(Lock);
+
     WriteMetaByRequestId.emplace(
         requestId,
         TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
@@ -161,8 +162,8 @@ void TWriteRequestHandler::OnWriteFinished(
 
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         ChildSpanEndOk(requestId);
-
-        if (IsCompleted(requestId)) {
+        SetCompleted(requestId);
+        if (IsCompleted()) {
             execSpan.Event("Start SetResponse");
             SetResponse(MakeError(S_OK));
             execSpan.Event("Finish SetResponse");
@@ -256,13 +257,6 @@ NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
     return ChildSpanByRequestId[requestId];
 }
 
-bool TSyncRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
-}
-
 ui8 TSyncRequestHandler::GetPersistentBufferIndex() const
 {
     return PersistentBufferIndex;
@@ -342,13 +336,6 @@ NWilson::TSpan& TEraseRequestHandler::GetChildSpan(ui64 requestId)
     return ChildSpanByRequestId[requestId];
 }
 
-bool TEraseRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
-}
-
 ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
 {
     return SyncRequestHandler->GetPersistentBufferIndex();
@@ -411,13 +398,6 @@ NWilson::TSpan& TReadRequestHandler::GetChildSpan(
     return ChildSpanByRequestId[requestId];
 }
 
-bool TReadRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
-}
-
 TGuardedSgList TReadRequestHandler::GetData()
 {
     return Request->Sglist;
@@ -473,12 +453,6 @@ NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(
 bool TOverallAckRequestHandler::IsCompleted() const
 {
     return AckCount == RequiredAckCount;
-}
-
-bool TOverallAckRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-    return IsCompleted();
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

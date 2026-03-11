@@ -130,6 +130,10 @@ public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
+
+    ui32 GetNGrammSize() const {
+        return NGrammSize;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

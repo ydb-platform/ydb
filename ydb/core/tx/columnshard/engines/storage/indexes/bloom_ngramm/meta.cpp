@@ -262,6 +262,28 @@ public:
         return "";
     }
 };
+template <class TBuilder, class TFiller>
+void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TIndexMeta* meta, TBuilder& builder, TFiller& filler) {
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& r : reader) {
+            meta->GetDataExtractor()->VisitAll(
+                r.GetCurrentChunk(),
+                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                    builder.FillNGrammHashes(meta->GetNGrammSize(), arr, filler);
+                },
+                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                    auto view = data.GetScalarOptional();
+                    if (!view.has_value()) {
+                        return;
+                    }
+                    builder.BuildNGramms(view->data(), view->size(), {}, meta->GetNGrammSize(), filler);
+                });
+        }
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+    }
+}
+
 }   // namespace
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
@@ -273,26 +295,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         ++ngramCount;
     };
 
-    for (reader.Start(); reader.IsCorrect();) {
-        AFL_VERIFY(reader.GetColumnsCount() == 1);
-        for (auto&& r : reader) {
-            GetDataExtractor()->VisitAll(
-                r.GetCurrentChunk(),
-                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                    countBuilder.FillNGrammHashes(NGrammSize, arr, countNgram);
-                },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
-                    auto view = data.GetScalarOptional();
-                    if (!view.has_value()) {
-                        return;
-                    }
-
-                    countBuilder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, countNgram);
-                });
-        }
-
-        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
-    }
+    VisitAllChunksWithBuilder(reader, this, countBuilder, countNgram);
 
     const ui64 maxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
     const double itemsCount = static_cast<double>(std::max<ui64>(ngramCount, 10));
@@ -303,24 +306,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     const ui32 size = std::min<ui64>(maxBitsSize, std::bit_ceil(requestedBitsSize));
     TNGrammBuilder builder(HashesCount, CaseSensitive);
     const auto doFillFilter = [&](auto& inserter) {
-        for (reader.Start(); reader.IsCorrect();) {
-            AFL_VERIFY(reader.GetColumnsCount() == 1);
-            for (auto&& r : reader) {
-                GetDataExtractor()->VisitAll(
-                    r.GetCurrentChunk(),
-                    [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                        builder.FillNGrammHashes(NGrammSize, arr, inserter);
-                    },
-                    [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
-                        auto view = data.GetScalarOptional();
-                        if (!view.has_value()) {
-                            return;
-                        }
-                        builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, inserter);
-                    });
-            }
-            reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
-        }
+        VisitAllChunksWithBuilder(reader, this, builder, inserter);
     };
     TString indexData;
     if ((size & (size - 1)) == 0) {

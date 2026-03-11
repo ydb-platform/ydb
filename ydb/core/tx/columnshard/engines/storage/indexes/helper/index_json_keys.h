@@ -1,0 +1,16 @@
+#pragma once
+
+namespace NKikimr::NOlap::NIndexes::NJsonKeys {
+
+// Common
+inline constexpr const char* ColumnName = "column_name";
+
+// Bloom filter
+inline constexpr const char* FalsePositiveProbability = "false_positive_probability";
+inline constexpr const char* CaseSensitive = "case_sensitive";
+
+// Bloom ngram filter
+inline constexpr const char* NGrammSize = "ngramm_size";
+inline constexpr const char* HashesCount = "hashes_count";
+
+}   // namespace NKikimr::NOlap::NIndexes::NJsonKeys

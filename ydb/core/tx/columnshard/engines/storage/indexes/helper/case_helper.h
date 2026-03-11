@@ -104,7 +104,7 @@ public:
 
                 auto value = typedArray.GetView(idx);
                 if constexpr (arrow::has_string_view<T>()) {
-                    action(CalcString(value, seed), idx);
+                    action(CalcString(TStringBuf(value.data(), value.size()), seed), idx);
                 } else if constexpr (arrow::has_c_type<T>()) {
                     action(NArrow::NHash::TXX64::CalcSimple(&value, sizeof(value), seed), idx);
                 } else {

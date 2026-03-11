@@ -2,10 +2,13 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+
+using namespace NJsonKeys;
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
@@ -21,6 +24,26 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
         TBase::GetBitsStorageConstructor(), CaseSensitive);
 }
 
+TConclusionStatus TIndexConstructor::ValidateValues() const {
+    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
+        return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
+    }
+
+    if (!TConstants::CheckNGrammSize(NGrammSize)) {
+        return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + TConstants::GetNGrammSizeIntervalString());
+    }
+
+    if (!TConstants::CheckHashesCount(HashesCount)) {
+        return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
+    }
+
+    if (!ColumnName) {
+        return TConclusionStatus::Fail("empty column name");
+    }
+
+    return TConclusionStatus::Success();
+}
+
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
     {
         auto conclusion = TBase::DoDeserializeFromJson(jsonInfo);
@@ -29,46 +52,31 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         }
     }
 
-    if (!jsonInfo["false_positive_probability"].IsDouble()) {
+    if (!jsonInfo[NJsonKeys::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
     }
+    FalsePositiveProbability = jsonInfo[NJsonKeys::FalsePositiveProbability].GetDouble();
 
-    FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
-
-    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail(
-            "false_positive_probability must be in bloom ngramm filter features as double field in interval (0, 1)");
-    }
-
-    if (!jsonInfo["ngramm_size"].IsUInteger()) {
+    if (!jsonInfo[NJsonKeys::NGrammSize].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }
+    NGrammSize = jsonInfo[NJsonKeys::NGrammSize].GetUInteger();
 
-    NGrammSize = jsonInfo["ngramm_size"].GetUInteger();
-    if (!TConstants::CheckNGrammSize(NGrammSize)) {
-        return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + TConstants::GetNGrammSizeIntervalString());
-    }
-
-    if (jsonInfo.Has("hashes_count")) {
-        if (!jsonInfo["hashes_count"].IsUInteger()) {
+    if (jsonInfo.Has(NJsonKeys::HashesCount)) {
+        if (!jsonInfo[NJsonKeys::HashesCount].IsUInteger()) {
             return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter features as uint field");
         }
-
-        HashesCount = jsonInfo["hashes_count"].GetUInteger();
-        if (!TConstants::CheckHashesCount(HashesCount)) {
-            return TConclusionStatus::Fail(
-                "hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
-        }
+        HashesCount = jsonInfo[NJsonKeys::HashesCount].GetUInteger();
     }
 
-    if (jsonInfo.Has("case_sensitive")) {
-        if (!jsonInfo["case_sensitive"].IsBoolean()) {
+    if (jsonInfo.Has(NJsonKeys::CaseSensitive)) {
+        if (!jsonInfo[NJsonKeys::CaseSensitive].IsBoolean()) {
             return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
         }
-        CaseSensitive = jsonInfo["case_sensitive"].GetBoolean();
+        CaseSensitive = jsonInfo[NJsonKeys::CaseSensitive].GetBoolean();
     }
-    return TConclusionStatus::Success();
 
+    return ValidateValues();
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
@@ -90,32 +98,16 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (bFilter.HasCaseSensitive()) {
         CaseSensitive = bFilter.GetCaseSensitive();
     }
-
     NGrammSize = bFilter.GetNGrammSize();
-    if (!TConstants::CheckNGrammSize(NGrammSize)) {
-        return TConclusionStatus::Fail("NGrammSize have to be in " + TConstants::GetNGrammSizeIntervalString());
-    }
-
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
-    }
-
     HashesCount = bFilter.GetHashesCount();
-    if (!TConstants::CheckHashesCount(HashesCount)) {
-        return TConclusionStatus::Fail("HashesCount size have to be in " + TConstants::GetHashesCountIntervalString());
-    }
-
     ColumnName = bFilter.GetColumnName();
-    if (!ColumnName) {
-        return TConclusionStatus::Fail("empty column name");
-    }
 
     if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {
         return TConclusionStatus::Fail("cannot parse data extractor from proto: " + bFilter.GetDataExtractor().DebugString());
     }
 
-    return TConclusionStatus::Success();
+    return ValidateValues();
 }
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {

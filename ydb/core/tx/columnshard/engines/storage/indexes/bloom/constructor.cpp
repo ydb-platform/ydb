@@ -1,6 +1,7 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -19,6 +20,14 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         TBase::GetBitsStorageConstructor());
 }
 
+TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
+    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
+        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval (0, 1)");
+    }
+
+    return TConclusionStatus::Success();
+}
+
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
     {
         auto conclusion = TBase::DoDeserializeFromJson(jsonInfo);
@@ -26,22 +35,19 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
             return conclusion;
         }
     }
-    if (!jsonInfo["false_positive_probability"].IsDouble()) {
+    if (!jsonInfo[NJsonKeys::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
-    FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
-    if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval [0.01, 1)");
-    }
+    FalsePositiveProbability = jsonInfo[NJsonKeys::FalsePositiveProbability].GetDouble();
 
-    if (jsonInfo.Has("case_sensitive")) {
-        if (!jsonInfo["case_sensitive"].IsBoolean()) {
+    if (jsonInfo.Has(NJsonKeys::CaseSensitive)) {
+        if (!jsonInfo[NJsonKeys::CaseSensitive].IsBoolean()) {
             return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
         }
-        CaseSensitive = jsonInfo["case_sensitive"].GetBoolean();
+        CaseSensitive = jsonInfo[NJsonKeys::CaseSensitive].GetBoolean();
     }
 
-    return TConclusionStatus::Success();
+    return ValidateValues();
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
@@ -58,17 +64,11 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         }
     }
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
-        const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
-        return TConclusionStatus::Fail(errorMessage);
-    }
-
     if (bFilter.HasCaseSensitive()) {
         CaseSensitive = bFilter.GetCaseSensitive();
     }
 
-    return TConclusionStatus::Success();
+    return ValidateValues();
 }
 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {

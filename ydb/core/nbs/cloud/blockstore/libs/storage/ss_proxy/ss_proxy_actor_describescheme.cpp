@@ -1,9 +1,6 @@
 #include "ss_proxy_actor.h"
 
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/probes.h>
-// #include
-// <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/kikimr/helpers.h>
@@ -197,11 +194,18 @@ void TSSProxyActor::HandleDescribeScheme(
     auto requestInfo =
         CreateRequestInfo(ev->Sender, ev->Cookie, msg->CallContext);
 
+    auto schemeShardDir = NbsStorageConfig.GetSchemeShardDir();
+    auto diskId = msg->Path;
+    TString volumeDir, volumeName;
+    std::tie(volumeDir, volumeName) =
+        DiskIdToVolumeDirAndName(schemeShardDir, diskId);
+    const auto volumePath = volumeDir + "/" + volumeName;
+
     NYdb::NBS::Register<TDescribeSchemeActor>(
         ctx,
         std::move(requestInfo),
-        NbsStorageConfig.GetSchemeShardDir(),
-        msg->Path,
+        schemeShardDir,
+        volumePath,
         PathDescriptionBackup);
 }
 

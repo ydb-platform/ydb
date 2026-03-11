@@ -134,11 +134,11 @@ TActorId GetLoadActorAdapterActorId(
     auto res = env.WaitForEdgeActorEvent<
         TEvService::TEvGetLoadActorAdapterActorIdResponse>(edge, false);
     UNIT_ASSERT(res);
-    UNIT_ASSERT(!res->Get()->ActorId.empty());
+    UNIT_ASSERT(!res->Get()->Record.GetActorId().empty());
     NActors::TActorId loadActorAdapter;
     loadActorAdapter.Parse(
-        res->Get()->ActorId.data(),
-        res->Get()->ActorId.size());
+        res->Get()->Record.GetActorId().data(),
+        res->Get()->Record.GetActorId().size());
     return loadActorAdapter;
 }
 

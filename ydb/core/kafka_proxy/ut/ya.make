@@ -8,11 +8,9 @@ SPLIT_FACTOR(10)
 FORK_SUBTESTS()
 FORK_TEST_FILES()
 
-SIZE(medium)
+SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
+
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

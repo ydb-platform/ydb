@@ -47,11 +47,7 @@ namespace NKikimr::NKqp {
     ///
     std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver);
 
-<<<<<<< HEAD
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver);
-=======
-    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver);
 
     struct TKqpFederatedQuerySetup {
         // This Driver must be declared FIRST in this struct.
@@ -116,7 +112,6 @@ namespace NKikimr::NKqp {
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         NYql::TPqGatewayConfig PqGatewayConfig;
-        NYql::IPqGateway::TPtr PqGateway;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
     };

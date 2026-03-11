@@ -16,7 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -199,11 +199,7 @@ namespace {
         return settings;
     }
 
-<<<<<<< HEAD
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
-=======
-    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
         return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
@@ -269,7 +265,6 @@ namespace {
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-        PqGateway = MakePqGateway(Driver);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -333,13 +328,8 @@ namespace {
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-<<<<<<< HEAD
-            PqGateway,
+            MakePqGatewayFactory(Driver),
             ActorSystemPtr,
-=======
-            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
-            ActorSystemPtr
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
         };
 
         // Init DatabaseAsyncResolver only if all requirements are met
@@ -358,7 +348,6 @@ namespace {
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
         HttpGateway.reset();
-        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

@@ -347,7 +347,7 @@ public:
     using TRetry = TQueryRetryActor<TCreateScriptOperationQuery, TEvPrivate::TEvCreateScriptOperationResponse,
         TString, TActorId, NKikimrKqp::TEvQueryRequest, NKikimrKqp::TScriptExecutionOperationMeta, TDuration,
         NKikimrKqp::TScriptExecutionRetryState, std::optional<NKikimrKqp::TQueryPhysicalGraph>, NKikimrConfig::TQueryServiceConfig,
-        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition>, i64>;
+        i64>;
 
     TCreateScriptOperationQuery(const TString& executionId, const TActorId& runScriptActorId,
         const NKikimrKqp::TEvQueryRequest& req, const NKikimrKqp::TScriptExecutionOperationMeta& meta,
@@ -580,16 +580,7 @@ public:
             .StreamingQueryPath = ev.StreamingQueryPath
         }, QueryServiceConfig));
 
-<<<<<<< HEAD
-        const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
-=======
-        auto disposition = ev.StreamingDisposition;
-        if (ev.QueryPhysicalGraph && ev.QueryPhysicalGraph->GetZeroCheckpointSaved()) {
-            disposition = nullptr; // Do not save disposition if state already saved
-        }
-
-        const auto& creatorId = Register(new TCreateScriptOperationQuery::TRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
+        const auto& creatorId = Register(new TCreateScriptOperationQuery::TRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
         KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
     }
 

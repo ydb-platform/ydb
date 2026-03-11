@@ -20,12 +20,6 @@ class IFunctionRegistry;
 
 namespace NYql {
 
-<<<<<<< HEAD:ydb/library/yql/providers/pq/provider/yql_pq_gateway.h
-class TPqGatewayConfig;
-using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
-
-struct IPqGateway : public TThrRefBase {
-=======
 class IPqStaticGateway : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IPqStaticGateway>;
@@ -50,7 +44,6 @@ using TPqGatewayConfigPtr = std::shared_ptr<TPqGatewayConfig>;
 // - AddCluster (not thread safe)
 class IPqGateway : public IPqStaticGateway {
 public:
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636)):ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h
     using TPtr = TIntrusivePtr<IPqGateway>;
 
     struct TListStreams {
@@ -74,12 +67,6 @@ public:
     virtual NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName = {}) = 0;
     virtual TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0;
 
-<<<<<<< HEAD:ydb/library/yql/providers/pq/provider/yql_pq_gateway.h
-    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
-    virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
-
-=======
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636)):ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h
     virtual void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,

@@ -106,7 +106,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -1361,14 +1361,7 @@ namespace Tests {
 
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
                 FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-<<<<<<< HEAD
-                auto pqGateway = NKqp::MakePqGateway(FederatedQuerySetupDriver_);
-=======
-                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
-                    .ActorSystem = Runtime->GetActorSystem(nodeIdx),
-                    .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
-                });
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
+                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),

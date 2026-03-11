@@ -146,6 +146,7 @@ struct TEvYdbProxy {
         }
 
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+        FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \
@@ -157,6 +158,7 @@ struct TEvYdbProxy {
         PROXY_METHOD(ConsumerName);
         PROXY_METHOD(AppendTopics);
         PROXY_METHOD(MaxMemoryUsageBytes);
+        PROXY_METHOD(Decompress);
 
         #undef PROXY_METHOD
     };
@@ -164,7 +166,7 @@ struct TEvYdbProxy {
     struct TReadTopicSettings {
         using TSelf = TReadTopicSettings;
 
-        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // This option allows you to postpone the auto-commit of read messages. All previously
         // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
         FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
     };

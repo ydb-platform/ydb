@@ -45,6 +45,7 @@ PY3TEST()
             ydb/tests/stress/testshard_workload
             ydb/tests/stress/streaming
             ydb/tests/stress/kv_volume
+            ydb/tests/stress/topic_sqs
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

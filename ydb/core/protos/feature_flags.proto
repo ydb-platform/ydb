@@ -261,5 +261,6 @@ message TFeatureFlags {
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
-    optional bool EnableBulkUpsertFallbackToKqp = 237 [default = false];
+    optional bool TransferInternalDataDecompression = 237 [default = false];
+    optional bool EnableBulkUpsertFallbackToKqp = 238 [default = false];
 }

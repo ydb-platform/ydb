@@ -2281,6 +2281,7 @@ private:
                 "batch_size_bytes",
                 "consumer",
                 "directory",
+                "metrics_level",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -2316,7 +2317,8 @@ private:
                 "failover_mode",
                 "flush_interval",
                 "batch_size_bytes",
-                "directory"
+                "directory",
+                "metrics_level",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

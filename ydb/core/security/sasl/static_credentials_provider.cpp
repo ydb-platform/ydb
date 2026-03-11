@@ -38,7 +38,7 @@ TStaticCredentialsProvider::GetUserHashInitParams(const std::string& database, c
 void TStaticCredentialsProvider::UpdateDatabaseUsers(const NLoginProto::TSecurityState& securityState) {
     const auto& database = securityState.GetAudience();
     // Create a new map for updated user hashes
-    TTrueAtomicSharedPtr usersHashes(new std::unordered_map<std::string, THashInitParams>());
+    TTrueAtomicSharedPtr usersHashes = MakeTrueAtomicShared<std::unordered_map<std::string, THashInitParams>>();
     usersHashes->reserve(securityState.SidsSize());
     for (const auto& sid : securityState.GetSids()) {
         if (sid.GetType() == NLoginProto::ESidType::USER) {
@@ -58,7 +58,7 @@ void TStaticCredentialsProvider::UpdateDatabaseUsers(const NLoginProto::TSecurit
     if (itDb == staticCredsStorage->end()) {
         // Database doesn't exist - create a new storage map to avoid modifying the existing one
         // that other threads might be reading. This ensures thread-safe copy-on-write behavior.
-        TTrueAtomicSharedPtr newStaticCredsStorage(new std::unordered_map<std::string, TDatabaseUsersHashes>);
+        TTrueAtomicSharedPtr newStaticCredsStorage = MakeTrueAtomicShared<std::unordered_map<std::string, TDatabaseUsersHashes>>();
         // Copy all existing databases (only increments reference counters for nested shared pointers)
         for (const auto& [databaseName, databaseUsersHashes] : *staticCredsStorage) {
             newStaticCredsStorage->emplace(databaseName, databaseUsersHashes);
@@ -86,7 +86,7 @@ void TStaticCredentialsProvider::DeleteDatabaseUsers(const std::string& database
     if (itDb != staticCredsStorage->end()) {
         // Database exists - create a new storage map to avoid modifying the existing one
         // that other threads might be reading. This ensures thread-safe copy-on-write behavior.
-        TTrueAtomicSharedPtr newStaticCredsStorage(new std::unordered_map<std::string, TDatabaseUsersHashes>);
+        TTrueAtomicSharedPtr newStaticCredsStorage = MakeTrueAtomicShared<std::unordered_map<std::string, TDatabaseUsersHashes>>();
         // Copy all databases except the one being deleted (only increments reference counters for nested shared pointers)
         for (const auto& [databaseName, databaseUsersHashes] : *staticCredsStorage) {
             if (databaseName != database) {
@@ -97,6 +97,13 @@ void TStaticCredentialsProvider::DeleteDatabaseUsers(const std::string& database
         // Atomically swap the storage pointer
         StaticCredsStorage.swap(newStaticCredsStorage);
     }
+}
+
+void TStaticCredentialsProvider::Clear() {
+    // Create a new empty storage map to avoid modifying the existing one
+    TTrueAtomicSharedPtr newStaticCredsStorage = MakeTrueAtomicShared<std::unordered_map<std::string, TDatabaseUsersHashes>>();
+    // Atomically swap the storage pointer
+    StaticCredsStorage.swap(newStaticCredsStorage);
 }
 
 } // namespace NKikimr::NSasl

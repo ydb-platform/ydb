@@ -1694,7 +1694,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
                 TVector<TCoNameValueTuple> joinSettings;
-                if (blockHashJoinBuildSideLeft) {
+                if (blockHashJoinBuildSideLeft && joinType == "Left"sv) {
                     joinSettings.push_back(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
                             .Name().Build("BuildSide")

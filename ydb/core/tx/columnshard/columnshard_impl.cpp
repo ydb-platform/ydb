@@ -194,7 +194,7 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-NOlap::TSnapshot TColumnShard::GetMinShapshotForNewReads() const {
+NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
@@ -203,7 +203,7 @@ NOlap::TSnapshot TColumnShard::GetMinShapshotForNewReads() const {
 }
 
 NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
-    auto minSnapshotForNewReads = GetMinShapshotForNewReads();
+    auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
     // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
     // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
     // so we will get a live snapshot at that moment.

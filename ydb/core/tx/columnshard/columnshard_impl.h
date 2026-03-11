@@ -575,7 +575,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
-    NOlap::TSnapshot GetMinShapshotForNewReads() const;
+    NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     NOlap::TSnapshotHolders GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
     TDuration GetTxCompleteLag() const {

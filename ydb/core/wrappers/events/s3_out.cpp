@@ -56,7 +56,7 @@ void OutOutcome(IOutputStream& out, const Aws::Utils::Outcome<T, Aws::S3::S3Erro
     if (outcome.IsSuccess()) {
         out << outcome.GetResult();
     } else {
-        out << outcome.GetError().GetMessage().c_str();
+        out << outcome.GetError();
     }
 }
 
@@ -218,6 +218,10 @@ void Out(IOutputStream& out, const CompletedPart& part) {
 
 void Out(IOutputStream& out, const TStringOutcome& outcome) {
     OutOutcome(out, outcome);
+}
+
+void Out(IOutputStream& out, const Aws::S3::S3Error& error) {
+    out << static_cast<int>(error.GetResponseCode()) << " " << error.GetMessage().c_str();
 }
 
 } // NKikimr::NWrappers

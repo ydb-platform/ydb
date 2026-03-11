@@ -174,7 +174,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 **Log classes:** Depends on the RPC request type: `Ddl`, `Dml`, `Operations`, `ClusterAdmin`, `DatabaseAdmin`, or other classes.
 **Log phases:** `Received`, `Completed`.
 
-Тhe table below lists additional attributes specific to the `gRPC services` source.
+The table below lists additional attributes specific to the `gRPC services` source.
 
 #|
 || **Attribute**              | **Description** ||

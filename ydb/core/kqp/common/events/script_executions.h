@@ -175,13 +175,12 @@ struct TEvScriptLeaseUpdateResponse : public TEventLocal<TEvScriptLeaseUpdateRes
         , CurrentDeadline(currentDeadline)
         , Status(status)
         , Issues(std::move(issues))
-    {
-    }
+    {}
 
-    bool ExecutionEntryExists;
-    TInstant CurrentDeadline;
-    Ydb::StatusIds::StatusCode Status;
-    NYql::TIssues Issues;
+    const bool ExecutionEntryExists = false;
+    const TInstant CurrentDeadline;
+    const Ydb::StatusIds::StatusCode Status;
+    const NYql::TIssues Issues;
 };
 
 struct TEvCheckAliveRequest : public TEventPB<TEvCheckAliveRequest, NKikimrKqp::TEvCheckAliveRequest, TKqpScriptExecutionEvents::EvCheckAliveRequest> {

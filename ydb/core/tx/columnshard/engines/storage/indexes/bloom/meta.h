@@ -13,6 +13,7 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
+    bool CaseSensitive = true;
     double FalsePositiveProbability = 0.1;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
@@ -21,7 +22,7 @@ private:
     virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
-        return op.GetOperation() == EOperation::Equals && op.GetCaseSensitive();
+        return op.GetOperation() == EOperation::Equals && (!CaseSensitive || op.GetCaseSensitive());
     }
 
 protected:
@@ -39,8 +40,10 @@ public:
     TBloomIndexMeta() = default;
     TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage,
         const ui32 columnId, const double fpProbability, const TReadDataExtractorContainer& dataExtractor,
+        const bool caseSensitive,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
+        , CaseSensitive(caseSensitive)
         , FalsePositiveProbability(fpProbability)
     {
         Initialize();

@@ -18,7 +18,7 @@ private:
     std::shared_ptr<arrow::Schema> ResultSchema;
     bool CaseSensitive = true;
     ui32 NGrammSize = 3;
-    double FalsePositiveProbability = 0.001;
+    double FalsePositiveProbability = 0.1;
     ui32 HashesCount = 2;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {

@@ -15,6 +15,7 @@ public:
 
 private:
     double FalsePositiveProbability = 0.1;
+    bool CaseSensitive = true;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:

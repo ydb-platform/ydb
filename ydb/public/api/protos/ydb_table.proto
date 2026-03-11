@@ -318,6 +318,7 @@ message GlobalFulltextRelevanceIndex {
 
 message LocalBloomFilterIndex {
     optional double false_positive_probability = 1;
+    optional bool case_sensitive = 2;
 }
 
 message LocalBloomNgramFilterIndex {

@@ -70,12 +70,13 @@ struct TKikimrQueryLimits {
 struct TIndexDescription {
     struct TLocalBloomFilterDescription {
         std::optional<double> FalsePositiveProbability;
+        bool CaseSensitive = true;
     };
 
     struct TLocalBloomNgramFilterDescription {
         ui32 NgramSize = 3;
         ui32 HashesCount = 2;
-        double FalsePositiveProbability = 0.001;
+        double FalsePositiveProbability = 0.1;
         bool CaseSensitive = true;
     };
 

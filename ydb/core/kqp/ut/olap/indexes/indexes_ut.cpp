@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (resource_id)
-                WITH (false_positive_probability = 0.01);
+                WITH (false_positive_probability = 0.01, case_sensitive = false);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (uid)
-                WITH (false_positive_probability = 0.01);
+                WITH (false_positive_probability = 0.01, case_sensitive = false);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -183,6 +183,40 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             createText.Contains("\"case_sensitive\":true") ||
             createText.Contains("\\\"case_sensitive\\\":true");
         UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
+    }
+
+    Y_UNIT_TEST_DUO(LocalBloomIndexCaseSensitiveFalsePersisted, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomCaseInsensitive`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01, case_sensitive = false)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto showResult = session.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/olapTableBloomCaseInsensitive`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+        UNIT_ASSERT(!showResult.GetResultSets().empty());
+        NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+        TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+        UNIT_ASSERT_C(createText.Contains("case_sensitive=false"), "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
     }
 
     Y_UNIT_TEST_DUO(LocalIndexCannotBeUsedInTableView, UseQueryService) {

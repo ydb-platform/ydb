@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -11,14 +12,13 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
-#include <util/string/ascii.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
     const ui32 HashesCount;
-    const bool CaseSensitive;
+    TCaseStringNormalizer StringNormalizer;
 
     template <ui32 CharsRemained>
     class THashesBuilder {
@@ -136,29 +136,19 @@ private:
             AFL_VERIFY(false);
         }
     };
-    TBuffer LowerStringBuffer;
 
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , CaseSensitive(caseSensitive) {
+        , StringNormalizer(caseSensitive) {
     }
 
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
-        if (CaseSensitive) {
-            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-                (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
-        } else {
-            LowerStringBuffer.Clear();
-            LowerStringBuffer.Resize(dataSize);
-            for (ui32 i = 0; i < dataSize; ++i) {
-                LowerStringBuffer.Data()[i] = AsciiToLower(data[i]);
-            }
-            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-                (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
-        }
+        const TStringBuf normalized = StringNormalizer.Normalize(TStringBuf(data, dataSize));
+        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+            (const ui8*)normalized.data(), normalized.size(), HashesCount, nGrammSize, op, pred);
     }
 
     template <class TFiller>
@@ -187,12 +177,9 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-        if (CaseSensitive) {
-            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
-        } else {
-            const TString lowerString = to_lower(userReq);
-            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
-        }
+        const TStringBuf normalized = StringNormalizer.Normalize(userReq);
+        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+            (const ui8*)normalized.data(), normalized.size(), HashesCount, nGrammSize, op, fillData);
     }
 };
 

@@ -710,8 +710,16 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         Stream << ")";
     }
 
-    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
-        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
+    if (isLocalBloomFilter) {
+        const auto& settings = index.local_bloom_filter_index();
+        const double falsePositiveProbability = settings.has_false_positive_probability()
+            ? settings.false_positive_probability()
+            : 0.1;
+        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
+        Stream << " WITH ("
+               << "false_positive_probability=" << falsePositiveProbability
+               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
+               << ")";
     }
 
     if (isLocalBloomNgramFilter) {
@@ -719,13 +727,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
         Stream << " WITH ("
                << "ngram_size=" << settings.ngram_size()
-               << ", hashes_count=" << (settings.hashes_count() ? settings.hashes_count() : 2);
-
-        if (settings.has_false_positive_probability()) {
-            Stream << ", false_positive_probability=" << settings.false_positive_probability();
-        }
-
-        Stream << ", case_sensitive=" << (caseSensitive ? "true" : "false")
+               << ", hashes_count=" << settings.hashes_count()
+               << ", false_positive_probability=" << settings.false_positive_probability()
+               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
                << ")";
     }
 }
@@ -1766,6 +1770,9 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomFilter.HasFalsePositiveProbability()) {
                 json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
+            }
+            if (bloomFilter.HasCaseSensitive()) {
+                json["case_sensitive"] = bloomFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

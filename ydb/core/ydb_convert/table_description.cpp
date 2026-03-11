@@ -1062,6 +1062,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                 }
 
+                bloom->SetCaseSensitive(index.local_bloom_filter_index().has_case_sensitive()
+                    ? index.local_bloom_filter_index().case_sensitive()
+                    : true);
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -1083,7 +1086,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     : true);
                 ngram->SetFalsePositiveProbability(index.local_bloom_ngram_filter_index().has_false_positive_probability()
                     ? index.local_bloom_ngram_filter_index().false_positive_probability()
-                    : 0.001);
+                    : 0.1);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

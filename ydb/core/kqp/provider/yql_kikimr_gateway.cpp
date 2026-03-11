@@ -473,6 +473,17 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
         return;
     }
 
+    if (name == "case_sensitive") {
+        bool boolValue = true;
+        if (!TryFromString<bool>(value, boolValue)) {
+            error = TStringBuilder() << "Invalid case_sensitive value: " << value;
+            return;
+        }
+
+        desc.CaseSensitive = boolValue;
+        return;
+    }
+
     error = TStringBuilder() << "Unknown index setting: " << name;
     return;
 }

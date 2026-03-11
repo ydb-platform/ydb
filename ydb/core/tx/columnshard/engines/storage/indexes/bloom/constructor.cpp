@@ -15,7 +15,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(), CaseSensitive,
         TBase::GetBitsStorageConstructor());
 }
 
@@ -32,6 +32,12 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
     FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval [0.01, 1)");
+    }
+    if (jsonInfo.Has("case_sensitive")) {
+        if (!jsonInfo["case_sensitive"].IsBoolean()) {
+            return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
+        }
+        CaseSensitive = jsonInfo["case_sensitive"].GetBoolean();
     }
     return TConclusionStatus::Success();
 }
@@ -55,6 +61,11 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
+
+    if (bFilter.HasCaseSensitive()) {
+        CaseSensitive = bFilter.GetCaseSensitive();
+    }
+
     return TConclusionStatus::Success();
 }
 
@@ -62,6 +73,7 @@ void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexReque
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    filterProto->SetCaseSensitive(CaseSensitive);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

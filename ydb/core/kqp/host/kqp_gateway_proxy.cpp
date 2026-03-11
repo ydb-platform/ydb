@@ -540,6 +540,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
 
+                bloom->SetCaseSensitive(settings.CaseSensitive);
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {

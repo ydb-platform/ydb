@@ -2313,7 +2313,8 @@ public:
                                     return SyncError();
                                 }
 
-                                add_index->mutable_local_bloom_filter_index();
+                                auto* bloomIndex = add_index->mutable_local_bloom_filter_index();
+                                bloomIndex->set_case_sensitive(true);
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2418,8 +2419,13 @@ public:
                                 }
                             }
 
-                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex && localBloomFilterDesc.FalsePositiveProbability) {
-                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_filter_index();
+                                if (localBloomFilterDesc.FalsePositiveProbability) {
+                                    proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                                }
+
+                                proto->set_case_sensitive(localBloomFilterDesc.CaseSensitive);
                             }
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {

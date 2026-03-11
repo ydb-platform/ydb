@@ -23,8 +23,13 @@ Y_UNIT_TEST_SUITE(Builtin) {
         EXPECT_GT(GetObjectsCount(GetDefaultOpenSslX509Store()), 0);
     }
     Y_UNIT_TEST(OpensslDefaults) {
+#if defined(_win_)
+        UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_file(), "C:\\Program Files\\Common Files\\SSL/cert.pem");
+        UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_dir(), "C:\\Program Files\\Common Files\\SSL/certs");
+#else
         UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_file(), "/usr/local/ssl/cert.pem");
         UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_dir(), "/usr/local/ssl/certs");
+#endif
         UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_file_env(), "SSL_CERT_FILE");
         UNIT_ASSERT_STRINGS_EQUAL(X509_get_default_cert_dir_env(), "SSL_CERT_DIR");
     }

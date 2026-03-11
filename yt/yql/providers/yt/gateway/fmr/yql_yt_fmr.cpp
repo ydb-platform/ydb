@@ -1190,6 +1190,20 @@ private:
         return isOrdered;
     }
 
+    std::vector<TString> GetTableColumns(const TOutputInfo& outputTable) {
+        std::vector<TString> columns;
+
+        if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
+            const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
+            if (rowSpec.HasKey(RowSpecAttrType) && rowSpec[RowSpecAttrType].IsList()) {
+                for (const auto& entry : rowSpec[RowSpecAttrType].AsList()[1].AsList()) {
+                    columns.emplace_back(entry[0].AsString());
+                }
+            }
+        }
+        return columns;
+    }
+
     std::vector<TString> GetTableSortedColumns(const TOutputInfo& outputTable) {
         std::vector<TString> columns;
 
@@ -1244,6 +1258,7 @@ private:
 
         TFmrTableId originalTableId(outputCluster, outputPath);
         TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        fmrTableRef.Columns = GetTableColumns(fmrTable);
         auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
@@ -1353,6 +1368,7 @@ private:
 
         TFmrTableId originalTableId(outputCluster, outputPath);
         TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        fmrTableRef.Columns = GetTableColumns(fmrTable);
         auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {

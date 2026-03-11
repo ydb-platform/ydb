@@ -22,6 +22,7 @@ namespace NYql {
 using namespace NThreading;
 using namespace NKikimr::NMiniKQL;
 using namespace NUdf;
+namespace NJsonKeys = NKikimr::NOlap::NIndexes::NJsonKeys;
 
 static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
     TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)

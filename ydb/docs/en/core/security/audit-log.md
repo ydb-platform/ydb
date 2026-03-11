@@ -78,6 +78,7 @@ For test installations, forward the audit log to the standard error stream (`std
 
 The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
 
+#|
 || **Source / UID**                                     | **What it records** | **Configuration requirements** ||
 || [Schemeshard](#schemeshard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | Included in the [basic audit configuration](#enabling-audit-log). ||
 || [gRPC services](#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | Enable the relevant [log classes](#log-class-config) and optional [log phases](#log-phases). ||

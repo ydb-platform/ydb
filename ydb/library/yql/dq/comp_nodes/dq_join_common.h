@@ -359,7 +359,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
-            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild;
+            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild();
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
                 ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
             }
@@ -486,7 +486,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
-                if (Settings_.LeftIsBuild) {
+                if (Settings_.LeftIsBuild()) {
                     table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
@@ -608,7 +608,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
                     if constexpr (Kind == EJoinKind::Left) {
-                        if (Settings_.LeftIsBuild) {
+                        if (Settings_.LeftIsBuild()) {
                             EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
                         }
                     }
@@ -713,7 +713,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild;
+                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild();
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
@@ -730,7 +730,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (Kind == EJoinKind::Left) {
-                            if (Settings_.LeftIsBuild) {
+                            if (Settings_.LeftIsBuild()) {
                                 table->Table.ForEachUnused(consume);
                             }
                         }

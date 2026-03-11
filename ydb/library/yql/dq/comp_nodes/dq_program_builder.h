@@ -5,8 +5,15 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+enum class EBuildSide : ui32 {
+    Right = 0,
+    Left = 1,
+};
+
 struct TBlockHashJoinSettings {
-    bool LeftIsBuild = false;
+    EBuildSide BuildSide = EBuildSide::Right;
+
+    bool LeftIsBuild() const { return BuildSide == EBuildSide::Left; }
 };
 
 class TDqProgramBuilder : public TProgramBuilder {

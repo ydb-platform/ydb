@@ -1327,7 +1327,7 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinLeftIsBuild
+    bool blockHashJoinBuildSideLeft
 ) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
@@ -1694,11 +1694,11 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
                 TVector<TCoNameValueTuple> joinSettings;
-                if (blockHashJoinLeftIsBuild) {
+                if (blockHashJoinBuildSideLeft) {
                     joinSettings.push_back(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("LeftIsBuild")
-                            .Value<TCoAtom>().Build("true")
+                            .Name().Build("BuildSide")
+                            .Value<TCoAtom>().Build("Left")
                             .Done());
                 }
 

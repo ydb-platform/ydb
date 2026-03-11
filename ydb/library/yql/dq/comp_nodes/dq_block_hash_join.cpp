@@ -96,7 +96,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                               const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
         : Renames_(&meta->Renames)
         , Converters_(converters)
-        , LeftIsBuild_(meta->Settings.LeftIsBuild)
+        , LeftIsBuild_(meta->Settings.LeftIsBuild())
     {
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
             TVector<arrow::Datum> nulls;
@@ -230,7 +230,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild) ? userTypes.Probe : userTypes.Build;
+        const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes);
     }
 
@@ -406,10 +406,10 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     {
         const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
         if (settingsTuple->GetValuesCount() >= 1) {
-            meta.Settings.LeftIsBuild = AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>() != 0;
+            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
         }
     }
-    if (joinKind == EJoinKind::Left && meta.Settings.LeftIsBuild) {
+    if (meta.Settings.LeftIsBuild()) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
         for (auto& rename : meta.Renames) {
@@ -421,7 +421,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
     }
 
-    const ESide nullableSide = meta.Settings.LeftIsBuild ? ESide::Probe : ESide::Build;
+    const ESide nullableSide = meta.Settings.LeftIsBuild() ? ESide::Probe : ESide::Build;
     for (ESide side : EachSide) {
         for (int index = 0; index < std::ssize(meta.InputTypes.SelectSide(side)) - 1; ++index) {
             TType* thisType = meta.InputTypes.SelectSide(side)[index]->GetItemType();
@@ -433,21 +433,21 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }
     }
 
+    const auto streams = meta.Settings.LeftIsBuild()
+        ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
+        : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
+
     using enum EJoinKind;
     if (joinKind == Inner) {
-        return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, streams);
     } else if (joinKind == LeftOnly) {
-        return new TBlockHashJoinWrapper<LeftOnly>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<LeftOnly>(ctx.Mutables, meta, streams);
     } else if (joinKind == LeftSemi) {
-        return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, streams);
     } else if (joinKind == Left) {
-        if (meta.Settings.LeftIsBuild) {
-            return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, {.Build = leftStream, .Probe = rightStream});
-        } else {
-            return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
-        }
+        return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, streams);
     } else {
-        MKQL_ENSURE(false, "unsupported join type in block hash join" );
+        MKQL_ENSURE(false, "unsupported join type in block hash join");
     }
 }
 

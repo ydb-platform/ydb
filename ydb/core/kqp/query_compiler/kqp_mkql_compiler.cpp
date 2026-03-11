@@ -490,8 +490,10 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             NMiniKQL::TBlockHashJoinSettings settings;
             for (const auto& setting : node.Child(7)->Children()) {
-                if (setting->Child(0)->Content() == "LeftIsBuild") {
-                    settings.LeftIsBuild = FromString<bool>(setting->Child(1)->Content());
+                if (setting->Child(0)->Content() == "BuildSide") {
+                    if (setting->Child(1)->Content() == "Left") {
+                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
                 }
             }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,

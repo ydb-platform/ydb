@@ -253,13 +253,13 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LeftJoinTestDataLeftIsBuild() {
     auto td = LeftJoinTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinWithMatchesTestDataLeftIsBuild() {
     auto td = LeftJoinWithMatchesTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
@@ -377,19 +377,19 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTwoKeysTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingTwoKeysTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
 [[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestDataLeftIsBuild() {
     auto td = LeftJoinSpillingMultiKeyTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
@@ -503,7 +503,7 @@ TJoinTestData EmptyRightInnerTestData() {
 
 [[maybe_unused]] TJoinTestData LargeBothSidesLeftSpillingTestDataLeftIsBuild() {
     auto td = LargeBothSidesLeftSpillingTestData();
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
@@ -522,7 +522,7 @@ TJoinTestData EmptyRightInnerTestData() {
 [[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestDataLeftIsBuild() {
     auto td = LargeBothSidesLeftSpillingTestData();
     td.SliceBlocks = true;
-    td.JoinSettings.LeftIsBuild = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 

@@ -34,7 +34,6 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // RequestMetadata
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_request_id(info.RequestId);
 
     // Status
     if (info.Issue.empty()) {
@@ -66,7 +65,6 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_request_id(info.RequestId);
 
     if (info.Issue.empty()) {
         ev.set_event_status(EStatus::DONE);
@@ -96,7 +94,6 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_request_id(info.RequestId);
 
     if (info.Issue.empty()) {
         ev.set_event_status(EStatus::DONE);

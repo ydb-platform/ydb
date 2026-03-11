@@ -32,7 +32,6 @@ struct TCloudEventInfo {
     TString MaskedToken;
     TString UserSID;
     TString OperationType;
-    TString RequestId;
 
     TString RemoteAddress;
     TString UserAgent;

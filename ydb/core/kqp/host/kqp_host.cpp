@@ -1903,7 +1903,7 @@ private:
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
@@ -1927,7 +1927,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;
+        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1942,7 +1942,7 @@ private:
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
 
-        finalizers.emplace_back([pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
+        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
     }
@@ -1990,15 +1990,13 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            InitSolomonProvider();
 
             TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider(finalizers);
             }
-            if (FederatedQuerySetup->SolomonGateway) {
-                InitSolomonProvider();
-            }
-            if (FederatedQuerySetup->PqGateway) {
+            if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
             }
 

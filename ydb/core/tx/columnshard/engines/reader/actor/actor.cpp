@@ -32,7 +32,7 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     NKqp::TScanStatistics stats;
     int index = 0;
     for(auto& v: timesPerStep) {
-        stats.PerStepStats.emplace(index, std::move(v));
+        stats.emplace(index, std::move(v));
         index++;
     }
     return stats;

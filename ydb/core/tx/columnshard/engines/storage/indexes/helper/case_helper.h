@@ -69,11 +69,8 @@ public:
             auto& typedScalar = static_cast<const TScalar&>(*scalar);
             if constexpr (arrow::has_string_view<T>()) {
                 result = CalcString(TStringBuf((const char*)typedScalar.value->data(), typedScalar.value->size()), seed);
-            } else if constexpr (arrow::has_c_type<T>()) {
-                result = NArrow::NHash::TXX64::CalcSimple(typedScalar.data(), sizeof(typedScalar.value), seed);
             } else {
-                static_assert(arrow::is_decimal_type<T>());
-                AFL_VERIFY(false);
+                result = NArrow::NHash::TXX64::CalcForScalar(scalar, seed);
             }
 
             return true;

@@ -75,8 +75,10 @@ public:
                 static_assert(arrow::is_decimal_type<T>());
                 AFL_VERIFY(false);
             }
+
             return true;
         });
+
         return result;
     }
 
@@ -110,6 +112,7 @@ public:
                     AFL_VERIFY(false);
                 }
             }
+
             return true;
         });
     }

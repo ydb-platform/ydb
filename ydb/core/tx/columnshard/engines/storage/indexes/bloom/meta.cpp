@@ -131,6 +131,7 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     if (bFilter.HasCaseSensitive()) {
         CaseSensitive = bFilter.GetCaseSensitive();
     }
+
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

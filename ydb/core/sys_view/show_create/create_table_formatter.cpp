@@ -1771,6 +1771,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             if (bloomFilter.HasFalsePositiveProbability()) {
                 json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
             }
+
             if (bloomFilter.HasCaseSensitive()) {
                 json["case_sensitive"] = bloomFilter.GetCaseSensitive();
             }

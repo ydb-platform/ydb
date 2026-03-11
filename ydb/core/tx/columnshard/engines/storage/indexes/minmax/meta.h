@@ -8,7 +8,6 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <ydb/core/tx/columnshard/common/print_debug.h>
 
 #define AFL_VERIFY_UNREACHABLE(...) AFL_VERIFY(false)("error", "unreachable")
 
@@ -22,7 +21,7 @@ struct TKeyPair {
     std::shared_ptr<arrow::Scalar> Max;
 };
 
-namespace NArrowProtocol {
+namespace NSerializePair {
 constexpr static const char* MaxFieldName = "Max";
 constexpr static const char* MinFieldName = "Min";
 inline TString Serialize(TKeyPair typedPair) {
@@ -59,10 +58,9 @@ inline TKeyPair Deserialize(TStringBuf data, const std::shared_ptr<arrow::DataTy
     return typed;
 }
 
-}   // namespace NArrowProtocol
+}   // namespace NSerializePair
 
 inline bool cmp(NKikimr::NKernels::EOperation op , const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    Errs("calling arrow function %s with args: left: %s, right: %s\n", ToString(op), left->type->ToString(), right->type->ToString());
     arrow::Datum res = VALUE_OR_VERIFY(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
     return res.scalar_as<arrow::BooleanScalar>().value;
 }
@@ -136,9 +134,8 @@ protected:
             }
         }
         AFL_VERIFY(thisChunkIndex.Max->type->Equals(thisChunkIndex.Min->type));
-        Errs("serializing index of type: %s\n", thisChunkIndex.Max->type->ToString());
 
-        auto serializedIndex = NArrowProtocol::Serialize(thisChunkIndex);
+        auto serializedIndex = NSerializePair::Serialize(thisChunkIndex);
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, serializedIndex.size(), serializedIndex) };
     }
 
@@ -176,14 +173,12 @@ protected:
     virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
         const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const override {
         AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
-        TKeyPair chunkValue = NArrowProtocol::Deserialize(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+        TKeyPair chunkValue = NSerializePair::Deserialize(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
         return !Skip(chunkValue, requestValue, op);
     }
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override {
         auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-        // AFL_VERIFY(MinMaxType->Equals(gotType))(
-        //     "arrow error", MySprintf("inconsistent type field in TIndexInfo: TIndexInfo: %s, *this: %s", gotType->ToString(), MinMaxType->ToString()));
         return NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(data, gotType).DetachResult()->ToString();
     }
 

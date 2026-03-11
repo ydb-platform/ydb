@@ -2,7 +2,6 @@
 #include "meta.h"
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <ydb/core/tx/columnshard/common/print_debug.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
@@ -19,9 +18,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
             return nullptr;
         }
         columnId = columnInfo->GetId();
-        // currentSchema.GetIndexes()
     }
-    // currentSchema.GetIndexes().GetById(1)->GetIndexMeta()
     return std::make_shared<NMinMax::TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId),
         GetInheritPortionStorage().value_or(false), columnId, DataExtractor);
 }

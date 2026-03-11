@@ -15,7 +15,6 @@ struct TPerStepScanStatistics {
 
 struct TScanStatistics {
     TMap<ui32, TPerStepScanStatistics> PerStepStats;
-    TMap<TString, ui64> ArbitraryDeltas;
 };
 
 }   // namespace NKikimr::NKqp

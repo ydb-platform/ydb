@@ -372,7 +372,7 @@ public:
         this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
         
         if (request->WmSessionUpdater) {
-            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TInstant::Now());
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TActivationContext::Now());
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -723,7 +723,7 @@ protected:
 
         // Notify proxy that request entered WM pending queue via shared interface
         if (request->WmSessionUpdater) {
-            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TInstant::Now());
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TActivationContext::Now());
         }
 
         if (!PreparingFinished) {
@@ -878,7 +878,7 @@ private:
             LOG_REQ_QUEUED(PoolId, request, GlobalState.DelayedRequests);
             // Notify proxy that request moved to Delayed state via shared interface
             if (request->WmSessionUpdater) {
-                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TInstant::Now());
+                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());
             }
         } else {
             LOG_D("successfully delayed request, session id: " << sessionId);

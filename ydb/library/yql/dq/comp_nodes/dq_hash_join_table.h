@@ -89,7 +89,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
         : Table_(layout)
-        , Layout_(layout)
+        , RowWidth_(layout->TotalRowSize)
         , TrackUsed_(trackUsed)
     {
         MKQL_ENSURE(Empty(), "table should be empty by default");
@@ -118,8 +118,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
             if (TrackUsed_) {
-                size_t rowWidth = Layout_->TotalRowSize;
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / rowWidth;
+                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
                 MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
                 Used_[index] = 1;
             }
@@ -129,11 +128,10 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
         MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
-        size_t rowWidth = Layout_->TotalRowSize;
         for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
             if (!Used_[i]) {
                 consume(TSingleTuple{
-                    BuildData_.PackedTuples.data() + i * rowWidth,
+                    BuildData_.PackedTuples.data() + i * RowWidth_,
                     BuildData_.Overflow.data()
                 });
             }
@@ -143,7 +141,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
-    const NPackedTuple::TTupleLayout* Layout_;
+    size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
     TMKQLVector<ui8> Used_;
 };

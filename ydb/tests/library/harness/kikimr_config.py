@@ -200,7 +200,7 @@ class KikimrConfigGenerator(object):
             module=None,
             http_proxy_config=None,
             enable_nbs=False,
-            nbs_database="/Root/NBS",
+            nbs_database_name="/Root/NBS",
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -603,7 +603,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["nbs_config"] = {
                 "enabled": True,
                 "nbs_storage_config": {
-                    "scheme_shard_dir": nbs_database,
+                    "scheme_shard_dir": nbs_database_name,
                     "folder_id": "testFolder",
                     "ssd_system_channel_pool_kind": "hdd",
                     "ssd_log_channel_pool_kind": "hdd",

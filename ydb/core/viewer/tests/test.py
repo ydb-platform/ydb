@@ -608,6 +608,11 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_transfer_describe(cls, result):
+        cls.delete_keys_recursively(result, ['stats'])
+        return result
+
+    @classmethod
     def get_viewer_normalized(cls, url, params=None, headers=None):
         return cls.normalize_result(cls.get_viewer(url, params, headers))
 
@@ -1191,6 +1196,8 @@ class TestViewer(object):
                 break
 
             time.sleep(1)
+
+        describe_result = cls.normalize_result_transfer_describe(describe_result)
 
         return {
             'topic_result': topic_result,

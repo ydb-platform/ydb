@@ -6,6 +6,7 @@ EXCLUDE_TAGS(JAVA_PROTO)
 SRCS(
     headers.proto
     io.proto
+    partition.proto
 )
 
 PEERDIR(

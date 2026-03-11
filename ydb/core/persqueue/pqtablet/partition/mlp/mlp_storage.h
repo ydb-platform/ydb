@@ -166,6 +166,7 @@ public:
     TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
+    bool DLQEmpty() const;
     std::deque<TDLQMessage> GetDLQMessages();
     const absl::flat_hash_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();

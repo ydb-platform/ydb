@@ -256,9 +256,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DecimalOutOfPrecision, UseOltpSink, EnableParameterizedDecimal) {
+    Y_UNIT_TEST_TWIN(DecimalOutOfPrecision, EnableParameterizedDecimal) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseOltpSink);
         serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
         serverSettings.WithSampleTables = false;
 
@@ -1294,9 +1293,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(QueryStats, UseSink) {
+    Y_UNIT_TEST(QueryStats) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1335,51 +1333,22 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(compile.cpu_time_us() > 0);
         totalCpuTimeUs += compile.cpu_time_us();
 
-        if (UseSink) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            auto& phase0 = stats.query_phases(0);
-            UNIT_ASSERT(phase0.duration_us() > 0);
-            UNIT_ASSERT(phase0.cpu_time_us() > 0);
-            totalCpuTimeUs += phase0.cpu_time_us();
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/EightShard");
-            UNIT_ASSERT(!phase0.table_access(0).has_reads());
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).updates().rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(1).reads().rows(), 3);
-            UNIT_ASSERT(phase0.table_access(0).updates().bytes() > 0);
-            UNIT_ASSERT(phase0.table_access(1).reads().bytes() > 0);
-            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
+        auto& phase0 = stats.query_phases(0);
+        UNIT_ASSERT(phase0.duration_us() > 0);
+        UNIT_ASSERT(phase0.cpu_time_us() > 0);
+        totalCpuTimeUs += phase0.cpu_time_us();
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/EightShard");
+        UNIT_ASSERT(!phase0.table_access(0).has_reads());
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).updates().rows(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(1).reads().rows(), 3);
+        UNIT_ASSERT(phase0.table_access(0).updates().bytes() > 0);
+        UNIT_ASSERT(phase0.table_access(1).reads().bytes() > 0);
+        UNIT_ASSERT(!phase0.table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-            auto& phase0 = stats.query_phases(0);
-            UNIT_ASSERT(phase0.duration_us() > 0);
-            UNIT_ASSERT(phase0.cpu_time_us() > 0);
-            totalCpuTimeUs += phase0.cpu_time_us();
-
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/TwoShard");
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).reads().rows(), 3);
-            UNIT_ASSERT(phase0.table_access(0).reads().bytes() > 0);
-            UNIT_ASSERT(!phase0.table_access(0).has_updates());
-            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
-
-            auto& phase1 = stats.query_phases(1);
-            UNIT_ASSERT(phase1.duration_us() > 0);
-            UNIT_ASSERT(phase1.cpu_time_us() > 0);
-            totalCpuTimeUs += phase1.cpu_time_us();
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard");
-            UNIT_ASSERT(!phase1.table_access(0).has_reads());
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3);
-            UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
-            UNIT_ASSERT(!phase1.table_access(0).has_deletes());
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
     }
 
     Y_UNIT_TEST(RowsLimit) {
@@ -1985,7 +1954,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OltpCreateAsSelect_Simple) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -2242,7 +2210,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
@@ -2327,10 +2294,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardDataQuery, UseSink) {
+    Y_UNIT_TEST(TableSink_ReplaceDataShardDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2419,7 +2385,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(false);
@@ -2501,7 +2466,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(settings);
@@ -2875,7 +2839,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -3050,7 +3013,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_TWIN(CreateAsSelectBadTypes, IsOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -3099,7 +3061,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -3172,9 +3133,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpdateThenDelete, UseSink) {
+    Y_UNIT_TEST(UpdateThenDelete) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();

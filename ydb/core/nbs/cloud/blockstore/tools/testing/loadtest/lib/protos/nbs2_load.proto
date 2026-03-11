@@ -137,4 +137,7 @@ message TTestResults
 
     // Avg throughput
     uint64 ThroughputMbs = 13;
+
+    // Number of requests failed
+    uint64 RequestsFailed = 14;
 }

@@ -11,7 +11,6 @@ import ymake
 import _common
 import lib.test_const as consts
 
-
 CANON_RESULT_FILE_NAME = 'result.json'
 CANON_DATA_DIR_NAME = 'canondata'
 CANON_OUTPUT_STORAGE = 'canondata_storage'

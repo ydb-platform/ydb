@@ -910,9 +910,7 @@ class TestJoinStreaming(TestYdsBase):
 
             insert into myyds.`{output_topic}`
             select * from $enriched;
-            '''.format(
-            input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name
-        )
+            '''.format(input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name)
 
         query_id = fq_client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)

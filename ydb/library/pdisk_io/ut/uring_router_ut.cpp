@@ -591,8 +591,12 @@ void DoStopAfterFlush(TUringRouterConfig config) {
     }
     router.Flush();
 
-    // Don't wait for completion -- just stop.  Must not crash or deadlock.
+    // Don't wait for completion -- just stop. Must not crash or deadlock.
+    // Stop submits a drain marker and waits for poller shutdown.
     router.Stop();
+    for (int i = 0; i < N; ++i) {
+        UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(1)));
+    }
 }
 
 void DoStopWithoutFlush(TUringRouterConfig config) {
@@ -619,8 +623,12 @@ void DoStopWithoutFlush(TUringRouterConfig config) {
         UNIT_ASSERT(router.Write(&ops[i]));
     }
 
-    // Stop without flush.  Must not crash or deadlock.
+    // Stop without flush. Must not crash or deadlock.
+    // Stop submits the pending SQEs together with a drain marker.
     router.Stop();
+    for (int i = 0; i < N; ++i) {
+        UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(1)));
+    }
 }
 
 // Completion op that signals "entered" then blocks until "proceed" is signaled or times out
@@ -671,8 +679,8 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     enteredEvent.WaitI();
 
     // Now Stop() while the callback is still blocked inside OnComplete.
-    // Stop() sets IsStopping and calls Poller->Join(), which blocks until
-    // the callback's WaitT times out and the poller thread exits.
+    // Stop() submits a drain stop marker and calls Poller->Join(), which
+    // blocks until the callback's WaitT times out and the poller thread exits.
     // Must not crash or deadlock.
     router.Stop();
 }

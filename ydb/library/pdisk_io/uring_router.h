@@ -7,7 +7,6 @@
 
 #include <sys/uio.h>
 
-#include <atomic>
 #include <expected>
 #include <memory>
 
@@ -144,16 +143,12 @@ private:
     struct io_uring_sqe* GetSqe();
     void PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op);
 
-    // Submit a NOP to wake the completion poller blocked in io_uring_wait_cqe.
-    void WakePoller();
-
 private:
     FHANDLE Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
 
-    // we intentionally use a naked pointer to simplify the code
-    struct io_uring* Ring;
+    std::unique_ptr<struct io_uring> Ring;
 
     int FixedFdIndex = -1; // -1 means fd is not registered
     bool BuffersRegistered = false;
@@ -161,7 +156,6 @@ private:
     // Dedicated completion polling thread
     class TCompletionPoller;
     std::unique_ptr<TCompletionPoller> Poller;
-    std::atomic<bool> IsStopping{false};
 };
 
 } // namespace NKikimr::NPDisk

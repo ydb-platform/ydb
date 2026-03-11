@@ -4,7 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-
 SRCS(
     table_creator_ut.cpp
 )

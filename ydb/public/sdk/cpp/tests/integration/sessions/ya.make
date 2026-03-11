@@ -10,7 +10,6 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(cpu:1)
     SIZE(MEDIUM)
 ENDIF()
 

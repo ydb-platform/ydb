@@ -584,7 +584,8 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     TXdcCommandCounters counters;
     AccumulateXdcCommandCounters(CollectStreamData(main), counters);
 
-    UNIT_ASSERT(counters.DeclareSectionRdma > 0u);
+    UNIT_ASSERT(counters.DeclareSection > 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
 }
@@ -634,7 +635,8 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     }
 
     UNIT_ASSERT(done);
-    UNIT_ASSERT(counters.DeclareSectionRdma > 0u);
+    UNIT_ASSERT(counters.DeclareSection > 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
 }
@@ -692,7 +694,8 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     }
 
     UNIT_ASSERT(done);
-    UNIT_ASSERT(counters.DeclareSectionRdma > 0u);
+    UNIT_ASSERT(counters.DeclareSection > 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
 }

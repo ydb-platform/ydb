@@ -2,7 +2,6 @@
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/log.h>
@@ -10,6 +9,7 @@
 #include <ydb/library/actors/protos/interconnect.pb.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/prof/tag.h>
+#include <ydb/library/actors/util/rc_buf.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -32,6 +32,47 @@ static ui32 CalcRdmaCredsMinSizeSerialized() noexcept {
 
 namespace NActors {
     const ui32 TEventOutputChannel::RdmaCredsMinSizeSerialized = CalcRdmaCredsMinSizeSerialized();
+
+    namespace {
+        bool CanUseRdmaForCurrentEvent(const TEventHolder& event, ssize_t rdmaDeviceIndex) {
+#ifdef NDEBUG
+            Y_UNUSED(event);
+            Y_UNUSED(rdmaDeviceIndex);
+            return true;
+#else
+            Y_ABORT_UNLESS(event.Buffer);
+            Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
+
+            auto iter = event.Buffer->GetBeginIter();
+            const auto& sections = event.Buffer->GetSerializationInfo().Sections;
+            for (const auto& section : sections) {
+                size_t bytesLeft = section.Size;
+                while (bytesLeft) {
+                    Y_ABORT_UNLESS(iter.Valid());
+                    TRcBuf buf = iter.GetChunk();
+                    const char* data = iter.ContiguousData();
+                    Y_ABORT_UNLESS(data >= buf.GetData() && data <= buf.GetData() + buf.GetSize());
+                    const size_t offset = data - buf.GetData();
+                    const size_t leftInChunk = buf.GetSize() - offset;
+                    const size_t chunkSize = Min(leftInChunk, bytesLeft);
+
+                    if (section.IsRdmaCapable) {
+                        auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
+                        if (memReg.Empty()) {
+                            return false;
+                        }
+                        Y_UNUSED(memReg.GetRKey(rdmaDeviceIndex));
+                    }
+
+                    iter += chunkSize;
+                    bytesLeft -= chunkSize;
+                }
+            }
+
+            return true;
+#endif
+        }
+    }
 
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
@@ -97,6 +138,7 @@ namespace NActors {
                         Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
                     }
                     event.Span && event.Span.Event("FeedBuf:INITIAL");
+                    UseRdmaForCurrentEvent = false;
                     RdmaCredsBuffer.Clear();
                     RdmaCredPartPos = 0;
                     RdmaCredsPerByteAvg = 1.0 / RdmaCredsMinSizeSerialized;
@@ -133,8 +175,10 @@ namespace NActors {
                         for (const auto& section : SerializationInfo->Sections) {
                             hasRdmaSections |= section.IsRdmaCapable;
                         }
-                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdma && RdmaMemPool) {
+                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdma && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
+                                SerializationInfo = &event.Buffer->GetSerializationInfo();
+                                UseRdmaForCurrentEvent = CanUseRdmaForCurrentEvent(event, rdmaDeviceIndex);
                                 Chunker.DiscardEvent();
                             }
                         }
@@ -183,7 +227,7 @@ namespace NActors {
                         if (section.IsInline && Params.UseXdcShuffle) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
                         }
-                        if (Params.UseXdcShuffle && section.IsRdmaCapable && Params.UseRdma && RdmaMemPool) {
+                        if (UseRdmaForCurrentEvent && section.IsRdmaCapable) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_RDMA);
                         }
                         Y_ABORT_UNLESS(p <= std::end(sectionInfo));
@@ -275,6 +319,9 @@ namespace NActors {
     }
 
     bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
+        if (UseRdmaForCurrentEvent) {
+            Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
+        }
         for (;;) {
             // calculate inline or external part size (it may cover a few sections, not just single one)
             while (!PartLenRemain && RdmaCredsBuffer.CredsSize() == 0) {
@@ -306,7 +353,7 @@ namespace NActors {
             std::optional<bool> complete = false;
             if (IsPartInline) {
                 complete = FeedInlinePayload(task, event);
-            } else if (IsPartRdma && rdmaDeviceIndex >= 0) {
+            } else if (UseRdmaForCurrentEvent && IsPartRdma) {
                 complete = FeedRdmaPayload(task, event, rdmaDeviceIndex, task.Params.ChecksumRdmaEvent);
             } else {
                 complete = FeedExternalPayload(task, event);
@@ -363,28 +410,11 @@ namespace NActors {
 
         Y_ABORT_UNLESS(event.Buffer);
         if (RdmaCredsBuffer.CredsSize() == 0) {
-            auto prevIter = Iter;
-            size_t prevPartLenRemain = PartLenRemain;
-            const ui32 prevEventActuallySerialized = event.EventActuallySerialized;
-            XXH3_state_t prevRdmaCumulativeChecksumState;
-            if (checksumming) {
-                prevRdmaCumulativeChecksumState = RdmaCumulativeChecksumState;
-            }
             for (; Iter.Valid() && PartLenRemain; ) {
                 TRcBuf buf = Iter.GetChunk();
                 auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                 if (memReg.Empty()) {
-                    Iter = prevIter;
-                    IsPartRdma = false;
-                    RdmaCredsBuffer.Clear();
-                    RdmaCredPartPos = 0;
-                    PartLenRemain = prevPartLenRemain;
-                    // Fallback to PUSH_DATA must roll back all RDMA preparation progress to avoid double-accounting.
-                    event.EventActuallySerialized = prevEventActuallySerialized;
-                    if (checksumming) {
-                        RdmaCumulativeChecksumState = prevRdmaCumulativeChecksumState;
-                    }
-                    return false;
+                    Y_ABORT_UNLESS(false, "RDMA section contains a non-RDMA chunk after RDMA preflight");
                 }
 
                 const char* data = Iter.ContiguousData();

@@ -147,6 +147,7 @@ namespace NActors {
         const TEventSerializationInfo *SerializationInfo = nullptr;
         bool IsPartInline = false;
         bool IsPartRdma = false;
+        bool UseRdmaForCurrentEvent = false;
         NActorsInterconnect::TRdmaCreds RdmaCredsBuffer;
         ui32 RdmaCredPartPos = 0;
         float RdmaCredsPerByteAvg = 1.0f;

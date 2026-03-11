@@ -1,4 +1,5 @@
 #pragma once
+
 #include <util/datetime/base.h>
 namespace NKikimr::NKqp {
 TString FormatDurationAsMilliseconds(TDuration duration);

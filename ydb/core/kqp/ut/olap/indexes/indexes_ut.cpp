@@ -1,4 +1,3 @@
-#include <library/cpp/yson/parser.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>

@@ -1,12 +1,11 @@
 #pragma once
 #include <util/stream/output.h>
 #include <util/string/printf.h>
-// #include <util/string
 #include <util/generic/string.h>
 namespace NKikimr::NOlap {
-
+namespace NDetail{
 template<typename... Ts>
-TString MySprintf(const char* format, Ts... ts) {
+TString BetterSprintf(const char* format, Ts... ts) {
     return ::Sprintf(format, [](auto& value){
         // support printing TString, TStringBuf, std::string, std::string_view
         if constexpr ( requires (decltype(value) value) { value.c_str(); } ) {
@@ -16,10 +15,11 @@ TString MySprintf(const char* format, Ts... ts) {
         }
     }(ts)...);
 }
+} // NDetail
 
 template<typename... Ts>
 void Errs(const char* format, Ts... ts) {
-    Cerr << MySprintf(format, std::forward<Ts>(ts)...);
+    Cerr << NDetail::BetterSprintf(format, std::forward<Ts>(ts)...);
 }
 
-} // 
+} // NKikimr::NOlap

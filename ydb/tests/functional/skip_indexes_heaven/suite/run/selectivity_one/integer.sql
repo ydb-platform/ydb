@@ -1,1 +1,0 @@
-select count(*) from kv where ints_minmax = 4;

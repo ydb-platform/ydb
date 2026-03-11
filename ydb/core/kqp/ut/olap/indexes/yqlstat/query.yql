@@ -1,1 +1,0 @@
-select created_date as `Дата создания`, sum(yt_user_job_cpu_user_sum)/(1000*3600*365) as `Ядро-годы` from statistics2 where created_date BETWEEN Date("2025-01-01") and Date("2026-12-31") group by created_date

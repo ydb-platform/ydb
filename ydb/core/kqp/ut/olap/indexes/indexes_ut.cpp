@@ -13,8 +13,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#define CS_UNIT_ASSERT_LESS_INTS(A, B) UNIT_ASSERT_LT_C(A, B, Sprintf("Values: %i < %i", A, B))
-
 
 namespace NKikimr::NKqp {
 static void ExecSchemeQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
@@ -55,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
     }
-    Y_UNIT_TEST(MinMaxIndexTestCopiedFromIndexActualization) {
+    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -134,7 +132,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 WHERE level = -1
             )")
                           .GetValueSync();
-            //                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);

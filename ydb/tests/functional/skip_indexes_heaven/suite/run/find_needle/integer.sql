@@ -1,1 +1,0 @@
-select count(*) as count from kv where needle_in_a_haystack_minmax = 123;

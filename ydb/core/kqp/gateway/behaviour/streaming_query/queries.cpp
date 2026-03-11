@@ -587,9 +587,15 @@ class TExecuteTransactionSchemeActor final : public TSchemeActorBase<TExecuteTra
 public:
     using TBase::LogPrefix;
 
-    TExecuteTransactionSchemeActor(const TString& database, const TString& queryPath, const NKikimrSchemeOp::TModifyScheme& schemeTx, const std::optional<NACLib::TUserToken>& userToken)
-        : TBase(__func__, database, queryPath, userToken)
+    struct TSettings {
+        std::optional<NACLib::TUserToken> UserToken;
+        bool AllowNotFoundAfteRretry = false;
+    };
+
+    TExecuteTransactionSchemeActor(const TString& database, const TString& queryPath, const NKikimrSchemeOp::TModifyScheme& schemeTx, const TSettings& settings)
+        : TBase(__func__, database, queryPath, settings.UserToken)
         , SchemeTx(schemeTx)
+        , AllowNotFoundAfteRretry(settings.AllowNotFoundAfteRretry)
     {}
 
     STFUNC(StateFunc) {
@@ -613,10 +619,16 @@ public:
             << ", TxId: " << TxId
             << ", SchemeShardTabletId: " << SchemeShardTabletId);
 
+        if (ssStatus == NKikimrScheme::EStatus::StatusPathDoesNotExist && IsIn({NTxProxy::TResultStatus::ResolveError, NTxProxy::TResultStatus::ExecError}, status) && AllowNotFoundAfteRretry && RetriesCount) {
+            // After retry previous transaction may continue working, finish DROP operation if path was deleted (path existence already validated before and path was externally locked)
+            Finish(Ydb::StatusIds::SUCCESS);
+            return;
+        }
+
         switch (status) {
             case NTxProxy::TResultStatus::ExecInProgress: {
                 if (TxId == 0) {
-                    FatalError(Ydb::StatusIds::INTERNAL_ERROR, ExtractIssues(response, ssStatus, "unable to subscribe on creation transaction"));
+                    FatalError(Ydb::StatusIds::INTERNAL_ERROR, ExtractIssues(response, ssStatus, "unable to subscribe on inprogress transaction"));
                     return;
                 }
 
@@ -676,6 +688,12 @@ public:
             }
             case NTxProxy::TResultStatus::ExecError: {
                 switch (static_cast<NKikimrScheme::EStatus>(ssStatus)) {
+                    case NKikimrScheme::StatusMultipleModifications: {
+                        // All operations are expected to be retriable in case of scheme shard temporary unavailable
+                        LOG_W("Retry scheme transaction, previous tx execution is not finished, tablet id: " << SchemeShardTabletId << ", failed tx id: " << TxId);
+                        ScheduleRetry(response, "multiple modifications");
+                        break;
+                    }
                     case NKikimrScheme::StatusPathDoesNotExist: {
                         FatalError(Ydb::StatusIds::NOT_FOUND, ExtractIssues(response, ssStatus, TStringBuilder() << "execution error, streaming query " << QueryPath << " not found or you don't have access permissions"));
                         break;
@@ -794,6 +812,8 @@ private:
             .RetryLimitCount = 10,
             .MaxRetryTime = TDuration::Seconds(5),
         }));
+
+        Y_VALIDATE(TxId, "Can not subscribe on completion without tx id");
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
 
         LOG_D("Subscribe on scheme tx: " << TxId << " on scheme shard: " << SchemeShardTabletId << ", pipe id: " << SchemePipeActorId);
@@ -807,6 +827,7 @@ private:
     }
 
     void ScheduleRetry(const NKikimrTxUserProxy::TEvProposeTransactionStatus& response, const TString& message, bool longDelay = false) {
+        RetriesCount++;
         const auto ssStatus = response.GetSchemeShardStatus();
         if (!TBase::ScheduleRetry(ExtractIssues(response, ssStatus, message), longDelay)) {
             FatalError(Ydb::StatusIds::UNAVAILABLE, ExtractIssues(response, ssStatus, TStringBuilder() << "Retry limit exceeded on error: " << message));
@@ -819,6 +840,7 @@ private:
         return AddRootIssue(
             TStringBuilder() << "Scheme transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())
                 << " failed " << NKikimrScheme::EStatus_Name(ssStatus)
+                << " (tx status: " << static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(response.GetStatus()) << ")"
                 << ": " << message
                 << " (reason: " << response.GetSchemeShardReason() << ")",
             issues
@@ -827,6 +849,8 @@ private:
 
 private:
     const NKikimrSchemeOp::TModifyScheme SchemeTx;
+    const bool AllowNotFoundAfteRretry = false;
+    ui64 RetriesCount = 0;
     ui64 SchemeShardTabletId = 0;
     ui64 TxId = 0;
     TActorId SchemePipeActorId;
@@ -2061,7 +2085,10 @@ private:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropStreamingQuery);
             schemeTx.MutableDrop()->SetName(pathPair.second);
 
-            const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, schemeTx, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
+            const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, schemeTx, {
+                .UserToken = NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}),
+                .AllowNotFoundAfteRretry = true,
+            }));
             LOG_D("Start TExecuteTransactionSchemeActor " << executerId << " (drop streaming query)");
             return;
         }
@@ -2411,7 +2438,11 @@ protected:
 
 protected:
     void OnQueryLocked(bool queryExists) final {
-        if (TBase::SchemeInfo && (!queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState))) {
+        if ((TBase::SchemeInfo || queryExists) && (!TBase::SchemeInfo || !queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState))) {
+            // Query state changed between describe query and lock query:
+            // - query exists either in SS or table
+            // - query info in SS is not same as stored in table
+            // In this case we should redescribe query before synchronization
             TBase::Become(&TRequestHandlerWithSync::StateFuncSync);
             TBase::DescribeQuery("sync previous state");
             return;
@@ -2515,7 +2546,15 @@ protected:
             return;
         }
 
-        const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, Context.GetUserToken()));
+        if (ActionOnExists != EOnExists::Replace) {
+            // Scheme operation may be retried, so rewrite it to CREATE OR REPLACE.
+            // While query is externally locked and existence already validated - semantic is not changed.
+            SchemeTx.SetReplaceIfExists(true);
+        }
+
+        const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
+            .UserToken = Context.GetUserToken(),
+        }));
         LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
     }
 
@@ -2631,7 +2670,9 @@ protected:
             return;
         }
 
-        const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, Context.GetUserToken()));
+        const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
+            .UserToken = Context.GetUserToken(),
+        }));
         LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
     }
 
@@ -2755,7 +2796,10 @@ private:
 
         if (QueryExistsInSS) {
             // Remove query from SS
-            const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, Context.GetUserToken()));
+            const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
+                .UserToken = Context.GetUserToken(),
+                .AllowNotFoundAfteRretry = true,
+            }));
             LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
             return;
         }

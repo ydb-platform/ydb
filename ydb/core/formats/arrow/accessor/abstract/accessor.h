@@ -455,7 +455,7 @@ public:
         return DoGetMaxScalar();
     }
     
-    TMinMax GetMinMax() const {
+    TMinMax GetMinMaxScalars() const {
         AFL_VERIFY(GetRecordsCount());
         return DoGetMinMaxScalars();
     }

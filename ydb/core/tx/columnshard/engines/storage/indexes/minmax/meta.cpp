@@ -105,7 +105,7 @@ inline NArrow::NAccessor::TMinMax Deserialize(TStringBuf data, const std::shared
             TChunkedColumnReader cReader = *reader.begin();
             for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
                 // std::shared_ptr<arrow::Scalar> currentMaxScalar = cReader.GetCurrentChunk()->GetMaxScalar();
-                NArrow::NAccessor::TMinMax currentScalar = cReader.GetCurrentChunk()->GetMinMax();
+                NArrow::NAccessor::TMinMax currentScalar = cReader.GetCurrentChunk()->GetMinMaxScalars();
                 AFL_VERIFY(currentScalar.Max);
                 if (!thisChunkIndex.Max || thisChunkIndex.Max < currentScalar.Max) {
                     thisChunkIndex.Max = currentScalar.Max;
@@ -133,7 +133,7 @@ inline NArrow::NAccessor::TMinMax Deserialize(TStringBuf data, const std::shared
         }
         return true;
     }
-    bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat,
+    bool TIndexMeta::DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
         const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op,
         const TIndexInfo& info) const {
         AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");

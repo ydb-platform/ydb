@@ -29,9 +29,8 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
         return SourcesConstructor->TryExtractNext(Context, InFlightLimit);
     }
-    virtual bool DoCheckInFlightLimits() const override {
-        return GetSourcesInFlightCount() < InFlightLimit;
-    }
+    virtual bool DoCheckInFlightLimits() const override;
+
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override {
         if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
             InFlightLimit *= 2;

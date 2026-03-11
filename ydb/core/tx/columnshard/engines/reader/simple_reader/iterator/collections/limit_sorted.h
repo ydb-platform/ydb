@@ -85,7 +85,15 @@ private:
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return GetSourcesInFlightCount() < InFlightLimit;
+        // Check both sources and pages limits
+        if (GetSourcesInFlightCount() >= InFlightLimit) {
+            return false;
+        }
+        // If MaxPagesInFlight is set (non-zero), also check pages limit
+        if (GetMaxPagesInFlight() > 0 && GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
+            return false;
+        }
+        return true;
     }
 
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;

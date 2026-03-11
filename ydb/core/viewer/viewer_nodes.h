@@ -276,7 +276,7 @@ class TJsonNodes : public TViewerPipeClient {
             return SystemState.GetLocation().GetBridgePileName();
         }
 
-        void ApplyInterconnectLocationFallback() {
+        void ApplyNodeInfoLocationFallback() {
             std::optional<TString> dataCenter;
             std::optional<TString> rack;
             std::optional<TString> unit;
@@ -294,6 +294,10 @@ class TJsonNodes : public TViewerPipeClient {
                     default:
                         break;
                 }
+            }
+
+            if (!dataCenter.has_value() && !rack.has_value() && !unit.has_value()) {
+                return;
             }
 
             auto* location = SystemState.MutableLocation();
@@ -1917,6 +1921,8 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
+                        node.ApplyNodeInfoLocationFallback();
+
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }
@@ -3363,7 +3369,6 @@ public:
         }
         if (NodeGroups.empty()) {
             for (TNode* node : NodeView) {
-                node->ApplyInterconnectLocationFallback();
                 NKikimrViewer::TNodeInfo& jsonNode = *json.AddNodes();
                 if (FieldsAvailable.test(+ENodeFields::NodeInfo)) {
                     jsonNode.SetNodeId(node->GetNodeId());

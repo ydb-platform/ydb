@@ -887,8 +887,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
         auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
         UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), exclusiveDynNodeId);
-        UNIT_ASSERT(!node.contains("DataCenter"));
-        UNIT_ASSERT(!node.contains("Rack"));
         UNIT_ASSERT(node.contains("SystemState"));
         const auto& systemState = node.at("SystemState").GetMap();
         UNIT_ASSERT(systemState.contains("Location"));

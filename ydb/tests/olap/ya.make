@@ -23,13 +23,12 @@ PY3TEST()
     FORK_SUBTESTS()
     SPLIT_FACTOR(150)
 
+    REQUIREMENTS(cpu:2)
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
-        REQUIREMENTS(cpu:2)
         TAG(ya:fat)
     ELSE()
         SIZE(MEDIUM)
-        REQUIREMENTS(cpu:2)
     ENDIF()
 
     DEPENDS(

@@ -4,13 +4,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(39)
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
 ENDIF()
 
 TEST_SRCS(

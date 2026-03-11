@@ -2,12 +2,12 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:2)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(

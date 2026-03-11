@@ -7,12 +7,12 @@ TEST_SRCS(
     test_polling.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
-    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

@@ -5,12 +5,12 @@ TEST_SRCS(
     test.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:32 cpu:4)
+    REQUIREMENTS(ram:32)
 ELSE()
-    REQUIREMENTS(cpu:4)
     SIZE(MEDIUM)
 ENDIF()
 

@@ -368,6 +368,18 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 PRAGMA YqlSelect = 'force';
+                select t2.b, sum(t2.d), sum(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, min(t2.d), max(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, count(t2.d), count(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
                 select t2.b, avg(t2.d), avg(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
             )",
             R"(
@@ -531,6 +543,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         };
 
         std::vector<std::string> results = {
+                                            R"([[[1];["4.2"];"4.4"];[[2];["6.3"];"6.6"]])",
+                                            R"([[[1];["1.1"];"3.2"];[[2];["0.1"];"4.2"]])",
+                                            R"([[[1];2u;2u];[[2];3u;3u]])",
                                             R"([[[1];["2.1"];"2.2"];[[2];["2.1"];"2.2"]])",
                                             R"([[[1];[4]];[[2];[6]]])",
                                             R"([[[1];[4]];[[2];[6]]])",

@@ -539,8 +539,6 @@ private:
                 MetricsReporter.ReportInjectedToOutputsWatermark(*watermark);
                 WatermarksTracker.PopPendingWatermark();
             }
-            // sources or input channels was unpaused, trigger new poll
-            ResumeExecution(EResumeSource::CAWatermarkInject);
         }
 
         ReadyToCheckpointFlag = (bool) ev->Get()->ProgramState;
@@ -668,7 +666,6 @@ private:
         if (!shouldSkipData) {
             if (asyncData.Checkpoint.Defined()) {
                 ResumeInputsByCheckpoint();
-                ContinueExecute(EResumeSource::CheckpointInject);
             }
 
             for (ui32 i = 0; i < asyncData.Data.size(); i++) {
@@ -769,7 +766,6 @@ private:
         if (checkpoint) {
             CA_LOG_I("Resume inputs");
             ResumeInputsByCheckpoint();
-            ResumeExecution(EResumeSource::CheckpointInject);
         }
 
         sinkInfo.PopStarted = false;

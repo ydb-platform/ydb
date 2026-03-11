@@ -9,7 +9,6 @@ IF (WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
-
 ENDIF()
 
 SRCS(

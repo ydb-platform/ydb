@@ -220,13 +220,10 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
 }
 
 void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
-    auto& t = cfg.GetTransferSpecific().GetTarget();
     Config = std::make_shared<TTargetTransfer::TTransferConfig>(
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
-        t.GetTransformLambda(),
-        cfg.GetTransferSpecific().GetRunAsUser(),
-        t.GetDirectoryPath());
+        cfg);
 
     Y_ABORT_UNLESS(MetricsConfig);
     if (cfg.HasMetricsConfig()) {
@@ -273,11 +270,11 @@ TString TTargetTransfer::GetStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 
-TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath)
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const NKikimrReplication::TReplicationConfig& cfg)
     : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
-    , TransformLambda(transformLambda)
-    , RunAsUser(runAsUser)
-    , DirectoryPath(directoryPath)
+    , TransformLambda(cfg.GetTransferSpecific().GetTarget().GetTransformLambda())
+    , RunAsUser(cfg.GetTransferSpecific().GetRunAsUser())
+    , DirectoryPath(cfg.GetTransferSpecific().GetTarget().GetDirectoryPath())
 {
 }
 

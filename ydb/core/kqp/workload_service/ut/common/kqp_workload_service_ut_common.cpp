@@ -496,7 +496,13 @@ public:
 
     // Scheme queries helpers
     NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
+        Y_ENSURE(YdbDriver_);
         return NYdb::NScheme::TSchemeClient(*YdbDriver_);
+    }
+
+    NYdb::NTable::TTableClient GetTableClient(NYdb::NTable::TClientSettings settings) const override {
+        Y_ENSURE(YdbDriver_);
+        return NYdb::NTable::TTableClient(*YdbDriver_, settings.UseQueryCache(false));
     }
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {

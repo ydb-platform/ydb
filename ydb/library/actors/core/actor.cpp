@@ -65,10 +65,6 @@ namespace NActors {
         queue->Queue_.PushBack(item);
     }
 
-    void TActorRunnableQueue::Cancel(TActorRunnableItem* item) noexcept {
-        item->Unlink();
-    }
-
     void TActorRunnableQueue::Execute() noexcept {
         while (!Queue_.Empty()) {
             TActorRunnableItem* item = Queue_.PopFront();

@@ -520,11 +520,6 @@ namespace NActors {
         static void Schedule(TActorRunnableItem* runnable) noexcept;
 
         /**
-         * Removes a runnable item from the queue
-         */
-        static void Cancel(TActorRunnableItem* runnable) noexcept;
-
-        /**
          * Execute currently scheduled items
          */
         void Execute() noexcept;

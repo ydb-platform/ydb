@@ -29,13 +29,17 @@ struct TStreamingConfig {
         Auto         // Automatically decide based on portion size
     };
 
-    // Size of page in rows
+    // NOTE: The following fields are reserved for future use when row/byte-based
+    // page boundaries are implemented. Currently, BuildReadPages() only uses
+    // memory limits to determine page boundaries.
+    
+    // Size of page in rows (reserved for future use)
     ui32 PageSizeRows = 10000;
     
-    // Maximum page size in bytes
+    // Maximum page size in bytes (reserved for future use)
     ui64 PageSizeBytes = 8 * 1024 * 1024; // 8 MB
     
-    // Maximum number of pages in flight
+    // Maximum number of pages in flight (reserved for future use)
     ui32 MaxPagesInFlight = 10;
     
     // Enable page-based reading for portions larger than this

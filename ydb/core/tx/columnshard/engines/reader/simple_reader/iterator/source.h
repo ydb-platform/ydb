@@ -65,7 +65,6 @@ private:
     // Page-based streaming fields
     bool StreamingMode = false;
     std::optional<ui32> CurrentPageIndex;
-    ui32 PageSize = 10000;  // Default page size in rows
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -200,12 +199,6 @@ public:
     // Page-based streaming methods
     bool IsStreamingMode() const {
         return StreamingMode;
-    }
-
-    void InitializePagedReading(ui32 pageSize) {
-        StreamingMode = true;
-        PageSize = pageSize;
-        CurrentPageIndex = 0;
     }
 
     bool HasMorePages() const {

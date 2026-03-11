@@ -1,4 +1,0 @@
-requirements:
-  - typer-slim
-exclude:
-  - typer/*

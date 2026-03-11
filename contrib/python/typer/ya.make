@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.24.1)
+VERSION(0.24.0)
 
 LICENSE(MIT)
 
@@ -11,16 +11,36 @@ PEERDIR(
     contrib/python/click
     contrib/python/rich
     contrib/python/shellingham
-    contrib/python/typer-slim
 )
 
 NO_LINT()
+
+PY_SRCS(
+    TOP_LEVEL
+    typer/__init__.py
+    typer/__main__.py
+    typer/_completion_classes.py
+    typer/_completion_shared.py
+    typer/_types.py
+    typer/_typing.py
+    typer/cli.py
+    typer/colors.py
+    typer/completion.py
+    typer/core.py
+    typer/main.py
+    typer/models.py
+    typer/params.py
+    typer/rich_utils.py
+    typer/testing.py
+    typer/utils.py
+)
 
 RESOURCE_FILES(
     PREFIX contrib/python/typer/
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    typer/py.typed
 )
 
 END()

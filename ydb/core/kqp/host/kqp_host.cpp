@@ -1818,7 +1818,7 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
-    void InitYtProvider() {
+    void InitYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
             return;
         }
@@ -1844,9 +1844,9 @@ private:
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
-        DataProvidersFinalizer = [ytGateway = FederatedQuerySetup->YtGateway, sessionId](const NYql::IGraphTransformer::TStatus&) {
+        finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
-        };
+        });
     }
 
     void InitPgProvider() {
@@ -1877,7 +1877,7 @@ private:
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
     }
 
-    void InitPqProvider() {
+    void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
             return;
         }
@@ -1901,13 +1901,10 @@ private:
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
-<<<<<<< HEAD
-=======
 
         finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1948,25 +1945,24 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
-<<<<<<< HEAD
-=======
             InitSolomonProvider();
 
             TVector<std::function<TFuture<void>()>> finalizers;
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
             if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider();
+                InitYtProvider(finalizers);
             }
-<<<<<<< HEAD
-            if (FederatedQuerySetup->SolomonGateway) {
-                InitSolomonProvider();
-            }
-            if (FederatedQuerySetup->PqGateway) {
-                InitPqProvider();
-=======
             if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
->>>>>>> 4f3f67de666 (YQ-5161 fixed race with PQ / Solomon gateway (#35636))
+            }
+
+            if (!finalizers.empty()) {
+                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
+                    TVector<TFuture<void>> futures;
+                    for (const auto& f : finalizers) {
+                        futures.push_back(f());
+                    }
+                    return WaitAll(futures);
+                };
             }
             TypesCtx->StreamLookupJoin = Config->EnableDqSourceStreamLookupJoin;
         }

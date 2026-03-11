@@ -2130,6 +2130,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
     typeAnnotationContext->SqlFlags = SqlFlags_;
+    typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }

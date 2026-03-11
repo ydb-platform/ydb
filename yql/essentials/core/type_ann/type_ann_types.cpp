@@ -2047,7 +2047,7 @@ namespace NYql::NTypeAnnImpl {
 
         if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(input->Child(0)->GetTypeAnn());
-            return IGraphTransformer::TStatus::Error;
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureCodeResourceType(*input->Child(0), ctx.Expr)) {

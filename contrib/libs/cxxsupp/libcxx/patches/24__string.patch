@@ -1,48 +1,21 @@
 diff --git a/include/__string/extern_template_lists.h b/include/__string/extern_template_lists.h
-index dc66fa5..efc6086 100644
+index 18f0ff9..a4ffd48 100644
 --- a/include/__string/extern_template_lists.h
 +++ b/include/__string/extern_template_lists.h
-@@ -60,7 +60,6 @@
-   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
--  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::erase(size_type, size_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
-@@ -76,7 +75,8 @@
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \
--  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type))
-+  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type)) \
-+  _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
- 
- #define _LIBCPP_STRING_UNSTABLE_EXTERN_TEMPLATE_LIST(_Func, _CharType) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, value_type const*, size_type)) \
-@@ -110,7 +110,6 @@
-   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
--  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::__erase_external_with_move(size_type, size_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
-@@ -124,7 +123,16 @@
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
-   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \
--  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type))
-+  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type)) \
-+  _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
+@@ -68,7 +68,15 @@
+     Func(int basic_string<CharT>::compare(size_type, size_type, const value_type*) const)                              \
+     Func(int basic_string<CharT>::compare(size_type, size_type, const value_type*, size_type) const)                   \
+     Func(int basic_string<CharT>::compare(size_type, size_type, const basic_string&, size_type, size_type) const)      \
+-    Func(const basic_string<CharT>::size_type basic_string<CharT>::npos)                                               \
++    _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(Func, CharT)                                                          \
 +
 +// Workaround for CUDA which doesn't like extern templates for variables.
 +#ifdef __CUDACC__
-+#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
++#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(Func, CharT)
 +#else
-+#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType) \
-+  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos)
++#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(Func, CharT) \
++  Func(const basic_string<CharT>::size_type basic_string<CharT>::npos)
 +#endif
  
- // clang-format on
- 
+ #define _LIBCPP_STRING_V1_EXTERN_TEMPLATE_LIST(Func, CharT)                                                            \
+   _LIBCPP_STRING_COMMON_EXTERN_TEMPLATE_LIST(Func, CharT)                                                              \

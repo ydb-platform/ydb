@@ -308,10 +308,13 @@ private:
             finalCypressPaths.emplace_back(ptr->first);
         }
 
-        const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        TMaybe<TString> parentOutputHash;
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
+                TYtNodeHashCalculator hashCalculator(State_, cluster, config);
+                parentOutputHash = hashCalculator.GetParentOutputHash(*input);
+                operationHash = hashCalculator.GetHash(*optimizedNode);
                 if (!operationHash.empty()) {
                     THashBuilder builder;
                     builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
@@ -354,7 +357,6 @@ private:
             }
         }
 
-
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
                 .UserDataBlocks(files)
@@ -365,6 +367,7 @@ private:
                 .Config(std::move(config))
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
+                .OutputHash(parentOutputHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)

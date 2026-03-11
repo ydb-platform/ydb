@@ -199,14 +199,14 @@ public:
 
     void Initialize()
     {
-        [[likely]] if (InitializationFinished_.Test()) {
+        if (InitializationFinished_.Test()) [[likely]] {
             // Don't bother doing syscalls on a hot path.
             return;
         }
 
         // Sync is done via event so there is no need for stronger memory orders.
         // Case of recursive call is alright, because there sync is done via sequenced-before ordering.
-        [[likely]] if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) {
+        if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) [[likely]] {
             NThreading::TThreadId initializerThreadId = NThreading::InvalidThreadId;
             while (initializerThreadId == NThreading::InvalidThreadId) {
                 initializerThreadId = InitializerThreadId_.load(std::memory_order::relaxed);
@@ -1414,7 +1414,7 @@ TLogManager* TLogManager::Get()
 
 void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
@@ -1422,7 +1422,7 @@ void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
 
 bool TLogManager::IsDefaultConfigured()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->IsDefaultConfigured();
@@ -1430,7 +1430,7 @@ bool TLogManager::IsDefaultConfigured()
 
 void TLogManager::ConfigureFromEnv()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->ConfigureFromEnv();
@@ -1438,7 +1438,7 @@ void TLogManager::ConfigureFromEnv()
 
 bool TLogManager::IsConfiguredFromEnv()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->IsConfiguredFromEnv();
@@ -1446,7 +1446,7 @@ bool TLogManager::IsConfiguredFromEnv()
 
 void TLogManager::Shutdown()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Shutdown();
@@ -1454,7 +1454,7 @@ void TLogManager::Shutdown()
 
 int TLogManager::GetVersion() const
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return 0;
     }
     return Impl_->GetVersion();
@@ -1462,7 +1462,7 @@ int TLogManager::GetVersion() const
 
 bool TLogManager::GetAbortOnAlert() const
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->GetAbortOnAlert();
@@ -1470,7 +1470,7 @@ bool TLogManager::GetAbortOnAlert() const
 
 const TLoggingCategory* TLogManager::GetCategory(TStringBuf categoryName)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return nullptr;
     }
     return Impl_->GetCategory(categoryName);
@@ -1478,7 +1478,7 @@ const TLoggingCategory* TLogManager::GetCategory(TStringBuf categoryName)
 
 void TLogManager::UpdateCategory(TLoggingCategory* category)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UpdateCategory(category);
@@ -1486,7 +1486,7 @@ void TLogManager::UpdateCategory(TLoggingCategory* category)
 
 void TLogManager::UpdateAnchor(TLoggingAnchor* anchor)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UpdateAnchor(anchor);
@@ -1494,7 +1494,7 @@ void TLogManager::UpdateAnchor(TLoggingAnchor* anchor)
 
 void TLogManager::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf anchorMessage)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->RegisterStaticAnchor(anchor, sourceLocation, anchorMessage);
@@ -1502,7 +1502,7 @@ void TLogManager::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation
 
 TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return nullptr;
     }
     return Impl_->RegisterDynamicAnchor(std::move(anchorMessage));
@@ -1510,7 +1510,7 @@ TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
 
 void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->RegisterWriterFactory(typeName, factory);
@@ -1518,7 +1518,7 @@ void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWrite
 
 void TLogManager::UnregisterWriterFactory(const TString& typeName)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UnregisterWriterFactory(typeName);
@@ -1526,7 +1526,7 @@ void TLogManager::UnregisterWriterFactory(const TString& typeName)
 
 void TLogManager::Enqueue(TLogEvent&& event)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         Cerr << NYT::Format("Trying to log event during logger initialization -- skipping") << Endl;
         return;
     }
@@ -1535,7 +1535,7 @@ void TLogManager::Enqueue(TLogEvent&& event)
 
 void TLogManager::Reopen()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Reopen();
@@ -1543,7 +1543,7 @@ void TLogManager::Reopen()
 
 void TLogManager::EnableReopenOnSighup()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->EnableReopenOnSighup();
@@ -1551,7 +1551,7 @@ void TLogManager::EnableReopenOnSighup()
 
 void TLogManager::SuppressRequest(TRequestId requestId)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->SuppressRequest(requestId);
@@ -1559,7 +1559,7 @@ void TLogManager::SuppressRequest(TRequestId requestId)
 
 void TLogManager::Synchronize(TInstant deadline)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Synchronize(deadline);
@@ -1586,9 +1586,30 @@ TFiberMinLogLevelGuard::~TFiberMinLogLevelGuard()
 ////////////////////////////////////////////////////////////////////////////////
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
+    : TFiberMessageTagGuard(std::move(messageTag), EMode::Prepend)
+{ }
+
+TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag, EMode mode)
     : OldMessageTag_(std::move(GetThreadMessageTag()))
 {
-    SetThreadMessageTag(std::move(messageTag));
+    auto concatenateTags = [] (const std::string& lhs, const std::string& rhs) {
+        if (lhs.empty()) {
+            return rhs;
+        } else if (rhs.empty()) {
+            return lhs;
+        } else {
+            return lhs + ", " + rhs;
+        }
+    };
+
+    SetThreadMessageTag([&] {
+        switch (mode) {
+            case EMode::Replace:
+                return std::move(messageTag);
+            case EMode::Prepend:
+                return concatenateTags(messageTag, OldMessageTag_);
+        }
+    } ());
 }
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept

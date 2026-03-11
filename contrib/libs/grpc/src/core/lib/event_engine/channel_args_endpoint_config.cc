@@ -15,6 +15,9 @@
 
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
 #include "y_absl/types/optional.h"
 
 #include <grpc/event_engine/event_engine.h>

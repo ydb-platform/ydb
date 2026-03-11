@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: parso
-Version: 0.8.5
+Version: 0.8.6
 Summary: A Python Parser
 Home-page: https://github.com/davidhalter/parso
 Author: David Halter
@@ -37,7 +37,7 @@ Requires-Dist: pytest; extra == "testing"
 Requires-Dist: docopt; extra == "testing"
 Provides-Extra: qa
 Requires-Dist: flake8==5.0.4; extra == "qa"
-Requires-Dist: mypy==0.971; extra == "qa"
+Requires-Dist: zuban==0.5.1; extra == "qa"
 Requires-Dist: types-setuptools==67.2.0.1; extra == "qa"
 Dynamic: author
 Dynamic: author-email
@@ -159,6 +159,12 @@ Changelog
 
 Unreleased
 ++++++++++
+
+0.8.6 (2026-02-09)
+++++++++++++++++++
+
+- Switch the type checker to Zuban. It's faster and now also checks untyped
+  code.
 
 0.8.5 (2025-08-23)
 ++++++++++++++++++

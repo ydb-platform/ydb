@@ -263,14 +263,15 @@ public:
     }
 };
 template <class TBuilder, class TFiller>
-void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TIndexMeta* meta, TBuilder& builder, TFiller& filler) {
+void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor,
+    const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
-            meta->GetDataExtractor()->VisitAll(
+            dataExtractor->VisitAll(
                 r.GetCurrentChunk(),
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                    builder.FillNGrammHashes(meta->GetNGrammSize(), arr, filler);
+                    builder.FillNGrammHashes(nGrammSize, arr, filler);
                 },
                 [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
@@ -278,7 +279,7 @@ void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TIndexMeta* me
                         return;
                     }
 
-                    builder.BuildNGramms(view->data(), view->size(), {}, meta->GetNGrammSize(), filler);
+                    builder.BuildNGramms(view->data(), view->size(), {}, nGrammSize, filler);
                 });
         }
 
@@ -297,7 +298,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         ++ngramCount;
     };
 
-    VisitAllChunksWithBuilder(reader, this, countBuilder, countNgram);
+    VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, countBuilder, countNgram);
 
     const ui64 maxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
     const double itemsCount = static_cast<double>(std::max<ui64>(ngramCount, 10));
@@ -308,8 +309,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     const ui32 size = std::min<ui64>(maxBitsSize, std::bit_ceil(requestedBitsSize));
     TNGrammBuilder builder(HashesCount, CaseSensitive);
     const auto doFillFilter = [&](auto& inserter) {
-        VisitAllChunksWithBuilder(reader, this, builder, inserter);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, inserter);
     };
+
     TString indexData;
     if ((size & (size - 1)) == 0) {
         if (size == 1024) {

@@ -76,18 +76,15 @@ protected:
         }
 
         NGrammSize = bFilter.GetNGrammSize();
-        if (!TConstants::CheckNGrammSize(NGrammSize)) {
-            return false;
-        }
-
         FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-        if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-            return false;
-        }
-
         HashesCount = bFilter.GetHashesCount();
-        if (!TConstants::CheckHashesCount(HashesCount)) {
-            return false;
+
+        {
+            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize, HashesCount);
+            if (conclusion.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+                return false;
+            }
         }
 
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
@@ -129,10 +126,6 @@ public:
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
-    }
-
-    ui32 GetNGrammSize() const {
-        return NGrammSize;
     }
 };
 

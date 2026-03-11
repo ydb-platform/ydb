@@ -25,22 +25,12 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
-    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
+    if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize, HashesCount); conclusion.IsFail()) {
+        return conclusion;
     }
-
-    if (!TConstants::CheckNGrammSize(NGrammSize)) {
-        return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + TConstants::GetNGrammSizeIntervalString());
-    }
-
-    if (!TConstants::CheckHashesCount(HashesCount)) {
-        return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
-    }
-
     if (!ColumnName) {
         return TConclusionStatus::Fail("empty column name");
     }
-
     return TConclusionStatus::Success();
 }
 

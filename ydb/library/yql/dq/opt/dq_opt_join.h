@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 

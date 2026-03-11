@@ -3,7 +3,7 @@
 #include "dq_opt.h"
 
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
 enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };

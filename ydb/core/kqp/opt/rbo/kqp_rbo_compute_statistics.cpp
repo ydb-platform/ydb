@@ -1,7 +1,7 @@
 #include "kqp_operator.h"
 
 #include <yql/essentials/core/yql_cost_function.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 
 /***
@@ -158,6 +158,12 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
             break;
     }
     Props.Metadata->StorageType = storageType;
+
+    if (!tableData.Metadata->PartitionedByColumns.empty()) {
+        for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
+            Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
+        }
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }

@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     yql/essentials/ast
     yql/essentials/core
+    ydb/core/kqp/opt/cbo
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes
     yql/essentials/core/dq_integration

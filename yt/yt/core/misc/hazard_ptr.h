@@ -12,8 +12,11 @@ namespace NYT {
 
 void ReclaimHazardPointers(bool flush = true);
 
-using THazardPtrReclaimer = void(*)(TPackedPtr packedPtr);
-void RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer);
+using THazardPtrReclaimer = void(*)(void* reclaimPtr);
+void RetireHazardPointer(
+    void* protectedPtr,
+    void* reclaimPtr,
+    THazardPtrReclaimer reclaimer);
 
 //! NB: #reclaimer must be stateless.
 template <class T, class TReclaimer>

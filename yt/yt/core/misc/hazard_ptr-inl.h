@@ -53,8 +53,9 @@ template <class T, class TReclaimer>
 void RetireHazardPointer(T* ptr, TReclaimer /*reclaimer*/)
 {
     RetireHazardPointer(
-        reinterpret_cast<TPackedPtr>(ptr),
-        [] (TPackedPtr packedPtr) { TReclaimer()(reinterpret_cast<T*>(packedPtr)); });
+        ptr,
+        ptr,
+        [] (void* reclaimPtr) { TReclaimer()(static_cast<T*>(reclaimPtr)); });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

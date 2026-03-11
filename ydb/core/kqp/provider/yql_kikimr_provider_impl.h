@@ -275,15 +275,18 @@ struct TWriteBackupCollectionSettings {
 struct TWriteSecretSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
     NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
 
     TWriteSecretSettings(
         NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
     )
         : Mode(std::move(mode))
         , Value(std::move(value))
+        , ValueParamName(std::move(valueParamName))
         , InheritPermissions(std::move(inheritPermissions))
     {
     }

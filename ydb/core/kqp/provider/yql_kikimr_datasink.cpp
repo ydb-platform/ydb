@@ -1834,20 +1834,24 @@ public:
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
+                    const bool valueFromParam = settings.ValueParamName.IsValid();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : settings.ValueParamName.Cast())
+                        .ValueFromParam(Build<TCoAtom>(ctx, node->Pos()).Value(valueFromParam ? "1" : "0").Done())
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
+                    const bool valueFromParam = settings.ValueParamName.IsValid();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : settings.ValueParamName.Cast())
+                        .ValueFromParam(Build<TCoAtom>(ctx, node->Pos()).Value(valueFromParam ? "1" : "0").Done())
                         .Done()
                         .Ptr();
                 } else if (mode == "drop") {
@@ -1967,6 +1971,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> valueParamName;
     TMaybeNode<TCoAtom> inheritPermissions;
 
     for (auto child : node) {
@@ -1977,9 +1982,13 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "value") {
-                // TODO(yurikiselev): support parsing from declare
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                value = tuple.Value().Cast<TCoAtom>();
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    value = tuple.Value().Cast<TCoAtom>();
+                }
+            } else if (name == "value_param_name") {
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    valueParamName = tuple.Value().Cast<TCoAtom>();
+                }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 inheritPermissions = tuple.Value().Cast<TCoAtom>();
@@ -1987,7 +1996,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
         }
     }
 
-    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(valueParamName), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,

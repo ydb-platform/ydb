@@ -266,6 +266,7 @@ protected:
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
     bool BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result);
+    bool BindParameterClause(const TRule_bind_parameter& node, TString& paramName);
     bool ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result);
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);

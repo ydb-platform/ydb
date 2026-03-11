@@ -445,7 +445,13 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
-        settings.Value = TString(createSecret.Value());
+        if (auto value = createSecret.Value().Maybe<TCoAtom>()) {
+            if (createSecret.ValueFromParam().Value() == "1") {
+                settings.ValueParamName = TString(value.Cast().Value());
+            } else {
+                settings.Value = TString(value.Cast().Value());
+            }
+        }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
     }
@@ -453,7 +459,13 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
         TSecretSettings settings;
         settings.Name = TString(alterSecret.Secret());
-        settings.Value = TString(alterSecret.Value());
+        if (auto value = alterSecret.Value().Maybe<TCoAtom>()) {
+            if (alterSecret.ValueFromParam().Value() == "1") {
+                settings.ValueParamName = TString(value.Cast().Value());
+            } else {
+                settings.Value = TString(value.Cast().Value());
+            }
+        }
         return settings;
     }
 

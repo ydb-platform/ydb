@@ -2453,6 +2453,7 @@ message TSecretSchemaOp {
     optional string Name = 1;
     optional string Value = 2; // original, unencrypted value
     optional bool InheritPermissions = 3;
+    optional string ValueParamName = 4; // name of DECLARE parameter for value (resolved at execution)
 }
 
 message TStreamingQueryProperties {

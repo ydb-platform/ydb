@@ -5384,6 +5384,17 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
     return true;
 }
 
+bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TString& paramName) {
+    if (!NamedNodeImpl(node, paramName, *this)) {
+        return false;
+    }
+    auto named = GetNamedNode(paramName);
+    if (!named) {
+        return false;
+    }
+    return true;
+}
+
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
     // object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
     switch (node.Alt_case()) {
@@ -5578,7 +5589,7 @@ bool TSqlTranslation::StoreSecretValue(
     const TRule_secret_setting_value& value,
     const TString& key,
     TSecretParameters& secretParams) {
-    if (secretParams.Value) {
+    if (secretParams.Value || secretParams.ValueParamName) {
         Error() << "Duplicate parameter: " << key;
         return false;
     }
@@ -5595,11 +5606,11 @@ bool TSqlTranslation::StoreSecretValue(
             break;
         }
         case TRule_secret_setting_value::kAltSecretSettingValue3: {
-            TDeferredAtom result;
-            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), result)) {
+            TString paramName;
+            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), paramName)) {
                 errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
             } else {
-                secretParams.Value = std::move(result);
+                secretParams.ValueParamName = TDeferredAtom(Ctx_.Pos(), paramName);
             }
             break;
         }

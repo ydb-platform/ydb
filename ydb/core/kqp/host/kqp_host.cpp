@@ -691,6 +691,73 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
     return parameter;
 }
 
+// Collects parameters from CREATE/ALTER SECRET. We need this because parameters are not supported in DDL operations.
+// Secrets are the only schema objects that support parameters.
+class TCollectParametersForSecretsTransformer {
+public:
+    TCollectParametersForSecretsTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
+        : QueryCtx(queryCtx) {}
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!QueryCtx->PrepareOnly || !QueryCtx->PreparingQuery) {
+            output = input;
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = false;
+
+        auto& queryCtx = QueryCtx;
+        auto status = OptimizeExpr(input, output,
+            [&queryCtx](const TExprNode::TPtr& input, TExprContext&) -> TExprNode::TPtr {
+                auto ret = input;
+                TExprBase node(input);
+
+                auto addSecretValueParam = [&](auto secretNode) {
+                    if (secretNode.ValueFromParam().Value() != "1") {
+                        return;
+                    }
+                    if (!secretNode.Value().template Maybe<TCoAtom>()) {
+                        return;
+                    }
+                    TString paramName(secretNode.Value().template Cast<TCoAtom>().Value());
+                    if (!paramName.StartsWith("$")) {
+                        paramName = "$" + paramName;
+                    }
+                    for (const auto& param : queryCtx->PreparingQuery->GetParameters()) {
+                        if (param.GetName() == paramName) {
+                            return;
+                        }
+                    }
+                    auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
+                    paramDesc.SetName(paramName);
+                    auto guard = queryCtx->QueryData->TypeEnv().BindAllocator();
+                    auto* utf8Type = NKikimr::NMiniKQL::TDataType::Create(
+                        NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id,
+                        queryCtx->QueryData->TypeEnv());
+                    NKikimr::NMiniKQL::ExportTypeToProto(utf8Type, *paramDesc.MutableType());
+                };
+
+                if (auto createSecret = node.Maybe<TKiCreateSecret>()) {
+                    addSecretValueParam(createSecret.Cast());
+                } else if (auto alterSecret = node.Maybe<TKiAlterSecret>()) {
+                    addSecretValueParam(alterSecret.Cast());
+                }
+
+                return ret;
+            }, ctx, optSettings);
+
+        return status;
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx) {
+        return CreateFunctorTransformer(TCollectParametersForSecretsTransformer(queryCtx));
+    }
+
+private:
+    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+};
+
 class TCollectParametersTransformer {
 public:
     TCollectParametersTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
@@ -1768,6 +1835,7 @@ private:
             .AddIOAnnotation()
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .Build(false);
 
         return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
@@ -2063,6 +2131,7 @@ private:
             .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .AddPostTypeAnnotation()
             .AddOptimization(true, false)
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
@@ -2124,6 +2193,7 @@ private:
             .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .AddPostTypeAnnotation()
             //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")

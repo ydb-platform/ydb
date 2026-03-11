@@ -4431,11 +4431,10 @@ private:
         auto options = Y();
         options = L(options, Q(Y(Q("mode"), Q(GetMode()))));
         if (Params_.Value) {
-            if (Params_.Value->HasNode()) {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
-            } else {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
-            }
+            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
+        }
+        if (Params_.ValueParamName) {
+            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_param_name"), Params_.ValueParamName->Build())));
         }
         if (Params_.InheritPermissions) {
             if (Params_.InheritPermissions->HasNode()) {

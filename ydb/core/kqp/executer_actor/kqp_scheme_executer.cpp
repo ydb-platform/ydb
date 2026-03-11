@@ -16,6 +16,9 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <functional>
 
 
 namespace NKikimr::NKqp {
@@ -23,6 +26,24 @@ namespace NKikimr::NKqp {
 using namespace NThreading;
 
 namespace {
+
+bool ResolveSecretValueFromParam(TQueryData::TPtr queryData, const TString& paramName, const TString& operationDesc,
+    TString& outValue, std::function<void(Ydb::StatusIds::StatusCode, const NYql::TIssue&)> onErrorCallback
+) {
+    if (!queryData) {
+        onErrorCallback(Ydb::StatusIds::INTERNAL_ERROR,
+            NYql::TIssue(TStringBuilder() << "Parameter $" << paramName << " is required for " << operationDesc
+                << " but query has no parameters"));
+        return false;
+    }
+    TString outError;
+    if (!queryData->TryGetParameterAsString(paramName, outValue, outError)) {
+        onErrorCallback(Ydb::StatusIds::BAD_REQUEST,
+            NYql::TIssue(TStringBuilder() << outError << " for " << operationDesc));
+        return false;
+    }
+    return true;
+}
 
 bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
     bool isDatabaseEntry = true; // first entry is always database
@@ -78,13 +99,14 @@ public:
     }
 
     TKqpSchemeExecuter(
-        TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
+        TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         bool expectsResult, TTxAllocatorState::TPtr txAlloc,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
+        , QueryData(queryData)
         , Target(target)
         , Database(database)
         , UserToken(userToken)
@@ -633,13 +655,31 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateSecret: {
-                const auto& modifyScheme = schemeOp.GetCreateSecret();
+                auto modifyScheme = schemeOp.GetCreateSecret();
+                if (modifyScheme.GetCreateSecret().HasValueParamName()) {
+                    TString paramValue;
+                    if (!ResolveSecretValueFromParam(QueryData, modifyScheme.GetCreateSecret().GetValueParamName(),
+                            "CREATE SECRET", paramValue,
+                            [this](Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) { ReplyErrorAndDie(status, issue); })) {
+                        return;
+                    }
+                    modifyScheme.MutableCreateSecret()->SetValue(paramValue);
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAlterSecret: {
-                const auto& modifyScheme = schemeOp.GetAlterSecret();
+                auto modifyScheme = schemeOp.GetAlterSecret();
+                if (modifyScheme.GetAlterSecret().HasValueParamName()) {
+                    TString paramValue;
+                    if (!ResolveSecretValueFromParam(QueryData, modifyScheme.GetAlterSecret().GetValueParamName(),
+                            "ALTER SECRET", paramValue,
+                            [this](Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) { ReplyErrorAndDie(status, issue); })) {
+                        return;
+                    }
+                    modifyScheme.MutableAlterSecret()->SetValue(paramValue);
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -1262,6 +1302,7 @@ private:
 private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
     const NKikimrKqp::EQueryType QueryType;
+    const TQueryData::TPtr QueryData;
     const TActorId Target;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -1285,7 +1326,7 @@ private:
 } // namespace
 
 IActor* CreateKqpSchemeExecuter(
-    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
@@ -1293,7 +1334,7 @@ IActor* CreateKqpSchemeExecuter(
     bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
-        phyTx, queryType, target, requestType, database, userToken, clientAddress,
+        phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
         expectsResult, std::move(txAlloc), kqpTempTablesAgentActor);
 }

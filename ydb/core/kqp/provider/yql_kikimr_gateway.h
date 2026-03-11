@@ -1212,6 +1212,7 @@ struct TBackupSettings {
 struct TSecretSettings {
     TString Name;
     TString Value;
+    TString ValueParamName; // when set, value is taken from DECLARE parameter at execution
     bool InheritPermissions = false;
 };
 

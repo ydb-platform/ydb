@@ -619,6 +619,8 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;

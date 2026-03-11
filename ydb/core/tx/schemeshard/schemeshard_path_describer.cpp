@@ -184,7 +184,13 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
 
     if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
         && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
-        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+        bool hasChildren = pathEl->GetAliveChildren() > 0;
+        if (!hasChildren && pathEl->IsColumnTable() && Self->ColumnTables.contains(pathEl->PathId)) {
+            const auto& tableInfo = *Self->ColumnTables.GetVerified(pathEl->PathId);
+            hasChildren = tableInfo.Description.HasSchema()
+                && tableInfo.Description.GetSchema().IndexesSize() > 0;
+        }
+        descr->SetChildrenExist(hasChildren);
     }
 
     if (pathEl->PathType != NKikimrSchemeOp::EPathTypePersQueueGroup) {
@@ -195,6 +201,21 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
 TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
     if (!path.IsResolved()) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
+    }
+
+    if (path.Base()->IsTableIndex()) {
+        const auto& pathId = path.Base()->PathId;
+        if (Self->Indexes.contains(pathId)) {
+            auto indexInfo = Self->Indexes.at(pathId);
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
+                default:
+                    break;
+            }
+        }
     }
 
     if (path.IsCommonSensePath()) {
@@ -612,6 +633,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     }
 
     description->SetIsRestore(tableInfo->IsRestore);
+
+    DescribeChildren(TPath::Init(pathId, Self));
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1505,6 +1528,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            *entry.MutableBloomFilterDescription() = std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            *entry.MutableBloomNGrammFilterDescription() = std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
             break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));

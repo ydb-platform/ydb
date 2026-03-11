@@ -344,6 +344,11 @@ NKikimrKqp::EQueryAction GetActionFromExecMode(Ydb::Query::ExecMode execMode) {
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
+    using TRetry = TQueryRetryActor<TCreateScriptOperationQuery, TEvPrivate::TEvCreateScriptOperationResponse,
+        TString, TActorId, NKikimrKqp::TEvQueryRequest, NKikimrKqp::TScriptExecutionOperationMeta, TDuration,
+        NKikimrKqp::TScriptExecutionRetryState, std::optional<NKikimrKqp::TQueryPhysicalGraph>, NKikimrConfig::TQueryServiceConfig,
+        i64>;
+
     TCreateScriptOperationQuery(const TString& executionId, const TActorId& runScriptActorId,
         const NKikimrKqp::TEvQueryRequest& req, const NKikimrKqp::TScriptExecutionOperationMeta& meta,
         TDuration maxRunTime, const NKikimrKqp::TScriptExecutionRetryState& retryState,
@@ -575,7 +580,7 @@ public:
             .StreamingQueryPath = ev.StreamingQueryPath
         }, QueryServiceConfig));
 
-        const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
+        const auto& creatorId = Register(new TCreateScriptOperationQuery::TRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
         KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
     }
 

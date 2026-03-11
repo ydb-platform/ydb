@@ -1008,10 +1008,6 @@ void TProducer::TMessagesWorker::MoveTo(EState state) {
     State = state;
 }
 
-std::optional<std::uint64_t> TProducer::TMessagesWorker::GetCurrentSeqNo() const {
-    return State == EState::Ready ? std::make_optional(CurrentSeqNo) : std::nullopt;
-}
-
 void TProducer::TMessagesWorker::DoWork() {
     if (MessagesToResendIndex.empty() && PendingMessagesIndex.empty()) {
         return;

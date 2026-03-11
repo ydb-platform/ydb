@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard

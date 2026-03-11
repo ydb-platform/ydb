@@ -216,7 +216,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
-        UNIT_ASSERT_C(createText.Contains("case_sensitive=false"), "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
+        bool hasCaseSensitiveFalse = createText.Contains("case_sensitive=false") ||
+            createText.Contains("\"case_sensitive\":false") ||
+            createText.Contains("\\\"case_sensitive\\\":false");
+        UNIT_ASSERT_C(hasCaseSensitiveFalse, "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
     }
 
     Y_UNIT_TEST_DUO(LocalIndexCannotBeUsedInTableView, UseQueryService) {
@@ -1163,7 +1166,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -1173,7 +1176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.005}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

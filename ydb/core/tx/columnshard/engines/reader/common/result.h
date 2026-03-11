@@ -73,6 +73,17 @@ public:
         return ScanCursor;
     }
 
+    // Check if this is a partial result (source has more pages to read)
+    bool IsPartialResult() const {
+        return NotFinishedInterval.has_value();
+    }
+
+    // Get source address for continuing reading (only valid if IsPartialResult() == true)
+    const TPartialSourceAddress& GetSourceAddressForContinue() const {
+        AFL_VERIFY(NotFinishedInterval);
+        return *NotFinishedInterval;
+    }
+
     explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
         const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
         std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,

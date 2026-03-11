@@ -21,6 +21,42 @@ using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
+// Streaming configuration for page-based reading
+struct TStreamingConfig {
+    enum class EStrategy {
+        Always,      // Always use page-based streaming
+        Never,       // Never use streaming (read entire portion)
+        Auto         // Automatically decide based on portion size
+    };
+
+    // Size of page in rows
+    ui32 PageSizeRows = 10000;
+    
+    // Maximum page size in bytes
+    ui64 PageSizeBytes = 8 * 1024 * 1024; // 8 MB
+    
+    // Maximum number of pages in flight
+    ui32 MaxPagesInFlight = 10;
+    
+    // Enable page-based reading for portions larger than this
+    ui32 MinRecordsForPaging = 50000;
+    
+    // Strategy for enabling streaming
+    EStrategy Strategy = EStrategy::Auto;
+
+    bool ShouldUseStreamingMode(ui32 recordsCount) const {
+        switch (Strategy) {
+            case EStrategy::Always:
+                return true;
+            case EStrategy::Never:
+                return false;
+            case EStrategy::Auto:
+                return recordsCount >= MinRecordsForPaging;
+        }
+        return false;
+    }
+};
+
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
@@ -44,7 +80,17 @@ private:
                GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
+    // Streaming configuration
+    TStreamingConfig StreamingConfig;
+
 public:
+    const TStreamingConfig& GetStreamingConfig() const {
+        return StreamingConfig;
+    }
+
+    TStreamingConfig& MutableStreamingConfig() {
+        return StreamingConfig;
+    }
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
             auto graph = GetReadMetadata()->GetProgram().GetGraphOptional();

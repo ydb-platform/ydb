@@ -88,4 +88,6 @@ code workspace/workspace.code-workspace
 4) Run FIO from QEMU
     ```
     sudo fio --name=randomreadwritetest --blocksize=4096 --rw=randrw --direct=1 --buffered=0 --ioengine=libaio --iodepth=32 --runtime=30 --time_based --filename=/dev/vdb
+
+    sudo fio --rw=randwrite --name=test --filename=/dev/vdb --direct=1 --blocksize=4096 --ioengine=libaio --iodepth=32 --runtime=30 --numjobs=1 --time_based --group_reporting --verify_fatal=1 --verify_dump=1 --verify_async=2 --do_verify=1 --verify=sha1 --verify_backlog=500
     ```

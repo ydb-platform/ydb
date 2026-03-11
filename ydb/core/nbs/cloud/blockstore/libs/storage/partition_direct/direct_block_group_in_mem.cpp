@@ -17,55 +17,56 @@ void DoReadFromSectorMap(
     const std::shared_ptr<TReadBlocksLocalRequest>& request,
     NThreading::TPromise<TDBGReadBlocksResponse> promise)
 {
-    // Acquire the sglist guard to access the data
-    auto guard = request->Sglist.Acquire();
-    if (!guard) {
+    if (auto guard = request->Sglist.Acquire()) {
+        // Acquire the sglist guard to access the data
+        const auto& sglist = guard.Get();
+
+        // Calculate offset and size
+        ui64 startOffset = request->Range.Start * blockSize;
+        ui64 totalSize = request->Range.Size() * blockSize;
+
+        if (totalSize != SgListGetSize(sglist)) {
+            auto error = MakeError(
+                E_ARGUMENT,
+                TStringBuilder()
+                    << "Buffer size and sglist size mismatch " << totalSize
+                    << " != " << SgListGetSize(sglist));
+            promise.SetValue({.Error = std::move(error)});
+            return;
+        }
+
+        // Sector map requires 4096-byte alignment
+        constexpr ui64 SECTOR_SIZE = 4096;
+
+        // Verify alignment
+        if (startOffset % SECTOR_SIZE != 0 || totalSize % SECTOR_SIZE != 0) {
+            auto error =
+                MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
+            promise.SetValue({.Error = std::move(error)});
+            return;
+        }
+
+        // Prepare buffer to read into
+        TVector<ui8> buffer(totalSize);
+
+        // Read from sector map
+        bool readSuccess =
+            sectorMap->Read(buffer.data(), buffer.size(), startOffset);
+
+        if (!readSuccess) {
+            auto error = MakeError(E_IO, "Failed to read from sector map");
+            promise.SetValue({.Error = std::move(error)});
+            return;
+        }
+
+        // Copy data from buffer to sglist
+        SgListCopy(TBlockDataRef::Create(buffer), sglist);
+    } else {
         // Failed to acquire guard, return error
         auto error = MakeError(E_CANCELLED, "Failed to acquire sglist guard");
         promise.SetValue({.Error = std::move(error)});
         return;
     }
-
-    const auto& sglist = guard.Get();
-
-    // Calculate offset and size
-    ui64 startOffset = request->Range.Start * blockSize;
-    ui64 totalSize = request->Range.Size() * blockSize;
-
-    if (totalSize != SgListGetSize(sglist)) {
-        auto error = MakeError(
-            E_ARGUMENT,
-            TStringBuilder() << "Buffer size and sglist size mismatch "
-                             << totalSize << " != " << SgListGetSize(sglist));
-        promise.SetValue({.Error = std::move(error)});
-        return;
-    }
-
-    // Sector map requires 4096-byte alignment
-    constexpr ui64 SECTOR_SIZE = 4096;
-
-    // Verify alignment
-    if (startOffset % SECTOR_SIZE != 0 || totalSize % SECTOR_SIZE != 0) {
-        auto error = MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
-        promise.SetValue({.Error = std::move(error)});
-        return;
-    }
-
-    // Prepare buffer to read into
-    TVector<ui8> buffer(totalSize);
-
-    // Read from sector map
-    bool readSuccess =
-        sectorMap->Read(buffer.data(), buffer.size(), startOffset);
-
-    if (!readSuccess) {
-        auto error = MakeError(E_IO, "Failed to read from sector map");
-        promise.SetValue({.Error = std::move(error)});
-        return;
-    }
-
-    // Copy data from buffer to sglist
-    SgListCopy(TBlockDataRef::Create(buffer), sglist);
 
     promise.SetValue({.Error = MakeError(S_OK)});
 }

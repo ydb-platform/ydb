@@ -150,6 +150,8 @@ void TWriteRequestHandler::OnWriteFinished(
     ui64 requestId,
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult& result)
 {
+    auto guard = TGuard(Lock);
+
     auto execSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         std::move(Span.GetTraceId()),
@@ -201,7 +203,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse> TWriteRequestHandler::GetFuture()
 
 void TWriteRequestHandler::SetResponse(NProto::TError error)
 {
-    Promise.SetValue(TDBGWriteBlocksResponse{
+    Promise.TrySetValue(TDBGWriteBlocksResponse{
         .Meta = GetWritesMeta(),
         .Error = std::move(error)});
 }
@@ -428,7 +430,7 @@ NThreading::TFuture<TDBGReadBlocksResponse> TReadRequestHandler::GetFuture()
 
 void TReadRequestHandler::SetResponse(NProto::TError error)
 {
-    Promise.SetValue(TDBGReadBlocksResponse{.Error = std::move(error)});
+    Promise.TrySetValue(TDBGReadBlocksResponse{.Error = std::move(error)});
 }
 
 TOverallAckRequestHandler::TOverallAckRequestHandler(

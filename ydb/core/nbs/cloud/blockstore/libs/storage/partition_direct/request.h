@@ -117,6 +117,7 @@ public:
 private:
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
+    TSpinLock Lock;
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
     NThreading::TPromise<TDBGWriteBlocksResponse> Promise =
         NThreading::NewPromise<TDBGWriteBlocksResponse>();

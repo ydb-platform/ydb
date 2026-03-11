@@ -115,7 +115,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
 
     if (request->Range.Start >= BlocksCount) {
         return MakeFuture<TWriteBlocksLocalResponse>(TWriteBlocksLocalResponse{
-            .Error = MakeError(E_FAIL, "out of range")});
+            .Error = MakeError(E_ARGUMENT, "out of range")});
     }
 
     auto promise = NThreading::NewPromise<TWriteBlocksLocalResponse>();
@@ -254,6 +254,9 @@ void TVChunk::DoWriteBlocksLocal(
                             range,
                             traceId,
                             std::move(value));
+                    } else {
+                        promise.SetValue(TWriteBlocksLocalResponse{
+                            .Error = MakeError(E_CANCELLED)});
                     }
                 });
         });

@@ -509,7 +509,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1143,6 +1143,31 @@ namespace {
                     return false;
                 }
                 dstSettings.DirectoryPath = value;
+            } else if (name == "metrics_level") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
+                ui64 numericVal = 0;
+                const ui64 maxValue = static_cast<ui64>(TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed);
+                if (TryFromString<ui64>(value, numericVal) && numericVal <= maxValue) {
+                    levelSetting = static_cast<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                } else if (value == "database") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
+                } else if (value == "object") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Object;
+                } else if (value == "detailed") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " value is invalid: " << value << "."
+                            << "Expected numeric value from 0 to " << maxValue << " or one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                    ));
+                    return false;
+                }
             }
         }
 

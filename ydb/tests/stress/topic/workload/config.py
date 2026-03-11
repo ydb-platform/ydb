@@ -33,7 +33,6 @@ class WorkloadConfig:
     CONFIG_CONSUMERS_COUNT: str = "500"
 
     # Параметры авто-партиционирования
-    AUTO_PARTITIONING_STRATEGY: str = "up"
     AUTO_PARTITIONING_WINDOW: str = "20"
     AUTO_PARTITIONING_UTILIZATION: str = "50"
 

@@ -147,6 +147,10 @@ public:
         });
         SendPDiskResponse(disk, *init, initReply.release());
 
+        auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, "", 0);
+        SendPDiskResponse(disk, *checkSpace, res);
+
         auto readLog = WaitPDiskRequest<NPDisk::TEvReadLog>(disk);
         auto readLogReply = std::make_unique<NPDisk::TEvReadLogResult>(
             NKikimrProto::OK,
@@ -509,7 +513,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     }
 
-
     Y_UNIT_TEST(PersistentBufferWriteTunnel) {
         TTestContext ctx;
         const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
@@ -655,6 +658,44 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed2) {
         DoTest({TReplyStatus::ERROR, TReplyStatus::OK, TReplyStatus::ERROR});
     }
+
+    Y_UNIT_TEST(PersistentBufferPDiskOccupancy) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 40, 1);
+
+        const ui64 lsn = 10;
+        const TString payload = MakeData('P', BlockSize);
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+        auto checkSpace = ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, "", 0);
+        double expected = 0.123;
+        res->NormalizedOccupancy = expected;
+        ctx.SendPDiskResponse(disk, *checkSpace, res);
+
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+        write->AddPayload(TRope(payload));
+        SendToDDisk(ctx, disk.ServiceId, write.release());
+
+        auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
+        ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
+        UNIT_ASSERT(writeResult->Get()->Record.GetPDiskNormalizedOccupancy() == expected);
+
+
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvErasePersistentBuffer(creds, selector, lsn));
+
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto eraseResult = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        AssertStatus(eraseResult, TReplyStatus::OK);
+        UNIT_ASSERT(eraseResult->Get()->Record.GetPDiskNormalizedOccupancy() == expected);
+    }
+
 }
 
 } // NKikimr

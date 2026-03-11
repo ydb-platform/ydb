@@ -22,7 +22,20 @@ namespace NKikimr::NDDisk {
         PersistentBufferInitChunks = format->InitChunks;
         MaxPersistentBufferInMemoryCache = format->MaxInMemoryCache;
         MaxPersistentBufferChunkRestoreInflight = format->MaxChunkRestoreInflight;
+        UpdateFreeSpaceInfoMilliseconds = format->UpdateFreeSpaceInfoMilliseconds;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
+        UpdateFreeSpaceInfo();
+    }
+
+    void TDDiskActor::UpdateFreeSpaceInfo() {
+        Send(BaseInfo.PDiskActorID, new NPDisk::TEvCheckSpace(PDiskParams->Owner, PDiskParams->OwnerRound));
+        Schedule(TDuration::MilliSeconds(UpdateFreeSpaceInfoMilliseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupUpdateFreeSpaceInfo));
+    }
+
+    void TDDiskActor::Handle(NPDisk::TEvCheckSpaceResult::TPtr ev) {
+        if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
+            NormalizedOccupancy = ev->Get()->NormalizedOccupancy;
+        }
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
@@ -246,7 +259,7 @@ namespace NKikimr::NDDisk {
                 Counters.Interface.ErasePersistentBuffer.Reply(true);
 
                 auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace());
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
                 auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
                 if (inflight.Session) {
                     h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
@@ -273,7 +286,7 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(pr.DataParts.begin()->second == inflight.Data);
                 }
                 auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace());
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
                 auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
                 if (inflight.Session) {
                     h->Rewrite(TEvInterconnect::EvForward, inflight.Session);

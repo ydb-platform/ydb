@@ -237,6 +237,11 @@ namespace NKikimr::NDDisk {
             };
         };
 
+        enum EWakeupTag {
+            WakeupIoSubmitQueue = 1,
+            WakeupUpdateFreeSpaceInfo = 2,
+        };
+
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
@@ -545,6 +550,9 @@ namespace NKikimr::NDDisk {
         ui32 PersistentBufferInitChunks;
         ui32 MaxPersistentBufferInMemoryCache;
         ui32 MaxPersistentBufferChunkRestoreInflight;
+        ui32 UpdateFreeSpaceInfoMilliseconds;
+
+        double NormalizedOccupancy = -1;
 
         struct TPersistentBufferHeader {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
@@ -618,7 +626,9 @@ namespace NKikimr::NDDisk {
 
         void ProcessIoSubmitQueue();
         void ScheduleIoSubmitWakeup();
-        void HandleWakeup();
+        void HandleWakeup(TEvents::TEvWakeup::TPtr &ev);
+        void Handle(NPDisk::TEvCheckSpaceResult::TPtr ev);
+        void UpdateFreeSpaceInfo();
     };
 
 } // NKikimr::NDDisk

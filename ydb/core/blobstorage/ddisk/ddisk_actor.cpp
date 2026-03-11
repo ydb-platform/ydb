@@ -162,9 +162,11 @@ namespace NKikimr::NDDisk {
             hFunc(TEvPrivate::TEvShortIO, HandleShortIO)
 #endif
 
+            hFunc(NPDisk::TEvCheckSpaceResult, Handle);
+
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
             case TEvWritePersistentBuffers::EventType: {

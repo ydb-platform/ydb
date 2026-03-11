@@ -310,13 +310,13 @@ namespace NKikimr::NDDisk {
         if (currentInflight <= inDiskInflight) {
             // for some reason we failed to submit, but there should have been space
             // in the router. It's OK to retry just a little bit later
-            Schedule(TDuration::MicroSeconds(opMinLatencyUs), new TEvents::TEvWakeup());
+            Schedule(TDuration::MicroSeconds(opMinLatencyUs), new TEvents::TEvWakeup(EWakeupTag::WakeupIoSubmitQueue));
             return;
         }
 
         const ui32 opsToWait = currentInflight - inDiskInflight;
         const ui32 usecWait = (opsToWait + opsInParallel - 1) * opMinLatencyUs / opsInParallel;
-        Schedule(TDuration::MicroSeconds(usecWait), new TEvents::TEvWakeup());
+        Schedule(TDuration::MicroSeconds(usecWait), new TEvents::TEvWakeup(EWakeupTag::WakeupIoSubmitQueue));
     }
 
     void TDDiskActor::ProcessIoSubmitQueue() {
@@ -336,8 +336,17 @@ namespace NKikimr::NDDisk {
         ScheduleIoSubmitWakeup();
     }
 
-    void TDDiskActor::HandleWakeup() {
-        ProcessIoSubmitQueue();
+    void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
+        switch (ev->Get()->Tag) {
+            case EWakeupTag::WakeupIoSubmitQueue: {
+                ProcessIoSubmitQueue();
+                break;
+            }
+            case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
+                UpdateFreeSpaceInfo();
+                break;
+            }
+        }
     }
 
 } // NKikimr::NDDisk

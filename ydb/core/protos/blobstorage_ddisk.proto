@@ -130,6 +130,7 @@ message TEvWritePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
 }
 
 message TEvWritePersistentBuffers {
@@ -226,6 +227,7 @@ message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
 }
 
 message TEvListPersistentBuffer {

@@ -36,8 +36,6 @@
 
 #include <util/string/join.h>
 
-namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
-
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
@@ -73,14 +71,14 @@ struct TKikimrQueryLimits {
 struct TIndexDescription {
     struct TLocalBloomFilterDescription {
         std::optional<double> FalsePositiveProbability;
-        bool CaseSensitive = NDefaults::CaseSensitive;
+        bool CaseSensitive = NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive;
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = NDefaults::NGrammSize;
-        ui32 HashesCount = NDefaults::HashesCount;
-        double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-        bool CaseSensitive = NDefaults::CaseSensitive;
+        ui32 NgramSize = NKikimr::NOlap::NIndexes::NDefaults::NGrammSize;
+        ui32 HashesCount = NKikimr::NOlap::NIndexes::NDefaults::HashesCount;
+        double FalsePositiveProbability = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+        bool CaseSensitive = NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive;
     };
 
     enum class EType : ui32 {

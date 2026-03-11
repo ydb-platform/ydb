@@ -150,11 +150,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
 
-    {
-        TRuntimeNode::TList settingsNodes;
-        settingsNodes.push_back(NewDataLiteral(static_cast<ui32>(settings.BuildSide)));
-        callableBuilder.Add(NewTuple(settingsNodes));
-    }
+    callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

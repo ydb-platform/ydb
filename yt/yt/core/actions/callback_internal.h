@@ -70,7 +70,7 @@ public:
 
 protected:
     //! Swaps the state and the invoke function with other callback (without typechecking!).
-    void Swap(TCallbackBase& other);
+    void Swap(TCallbackBase& other) noexcept;
 
     /*!
      * Yup, out-of-line copy constructor. Yup, explicit.
@@ -87,7 +87,7 @@ protected:
      * We can construct #TCallback<> from a rvalue reference to the #TBindStateBase
      * since the #TBindStateBase is created at the #Bind() site.
      */
-    explicit TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState);
+    explicit TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState) noexcept;
 
 protected:
     /*!

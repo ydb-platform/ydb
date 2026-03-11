@@ -52,14 +52,14 @@ public:
     THazardPtr(THazardPtr&& other) noexcept;
 
     THazardPtr& operator=(const THazardPtr&) = delete;
-    THazardPtr& operator=(THazardPtr&& other);
+    THazardPtr& operator=(THazardPtr&& other) noexcept;
 
     template <class TPtrLoader>
     static THazardPtr Acquire(TPtrLoader&& ptrLoader, T* ptr);
     template <class TPtrLoader>
     static THazardPtr Acquire(TPtrLoader&& ptrLoader);
 
-    void Reset();
+    void Reset() noexcept;
 
     ~THazardPtr();
 

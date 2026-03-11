@@ -314,7 +314,7 @@ private:
             : Pollable_(pollable)
         { }
 
-        explicit TRunEventGuard(TRunEventGuard&& other)
+        explicit TRunEventGuard(TRunEventGuard&& other) noexcept
             : Pollable_(std::move(other.Pollable_))
         {
             other.Pollable_ = nullptr;

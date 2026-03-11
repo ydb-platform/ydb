@@ -119,7 +119,7 @@ public:
         Dumper_->BeginIndentedBlock();
     }
 
-    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other)
+    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;
@@ -154,7 +154,7 @@ public:
         Dumper_->BeginSuspendedBlock();
     }
 
-    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other)
+    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;

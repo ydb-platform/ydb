@@ -152,7 +152,7 @@ Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContex
     }
 }
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other) noexcept
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
 {
@@ -189,7 +189,7 @@ Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
     , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
 { }
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other) noexcept
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
 {
@@ -273,7 +273,7 @@ inline TTraceContextFinishGuard::~TTraceContextFinishGuard()
     Release();
 }
 
-inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceContextFinishGuard&& other)
+inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceContextFinishGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -283,7 +283,7 @@ inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceConte
 }
 
 inline void TTraceContextFinishGuard::Release(
-    std::optional<NProfiling::TCpuInstant> finishTime)
+    std::optional<NProfiling::TCpuInstant> finishTime) noexcept
 {
     if (TraceContext_) {
         TraceContext_->Finish(finishTime);

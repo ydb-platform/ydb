@@ -76,7 +76,7 @@ TCurrentAuthenticationIdentityGuard::TCurrentAuthenticationIdentityGuard()
 { }
 
 TCurrentAuthenticationIdentityGuard::TCurrentAuthenticationIdentityGuard(
-    TCurrentAuthenticationIdentityGuard&& other)
+    TCurrentAuthenticationIdentityGuard&& other) noexcept
     : OldIdentity_(other.OldIdentity_)
 {
     other.OldIdentity_ = nullptr;
@@ -95,7 +95,7 @@ TCurrentAuthenticationIdentityGuard::~TCurrentAuthenticationIdentityGuard()
 }
 
 TCurrentAuthenticationIdentityGuard& TCurrentAuthenticationIdentityGuard::operator=(
-    TCurrentAuthenticationIdentityGuard&& other)
+    TCurrentAuthenticationIdentityGuard&& other) noexcept
 {
     Release();
     OldIdentity_ = other.OldIdentity_;
@@ -103,7 +103,7 @@ TCurrentAuthenticationIdentityGuard& TCurrentAuthenticationIdentityGuard::operat
     return *this;
 }
 
-void TCurrentAuthenticationIdentityGuard::Release()
+void TCurrentAuthenticationIdentityGuard::Release() noexcept
 {
     if (OldIdentity_) {
         *GetCurrentAuthenticationIdentityPtr() = OldIdentity_;

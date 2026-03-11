@@ -37,9 +37,9 @@ struct TSimpleToken
     }
 
     TSimpleToken& operator=(const TSimpleToken&) = default;
-    TSimpleToken& operator=(TSimpleToken&&) = default;
+    TSimpleToken& operator=(TSimpleToken&&) noexcept = default;
 
-    TSimpleToken(TSimpleToken&& other)
+    TSimpleToken(TSimpleToken&& other) noexcept
         : Error(std::move(other.Error))
     {
         ++MoveCount;

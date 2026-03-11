@@ -1428,7 +1428,7 @@ private:
     struct FreeList
     {
         FreeList() : freeListHead(nullptr) { }
-        FreeList(FreeList&& other) : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
+        FreeList(FreeList&& other) noexcept : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
         void swap(FreeList& other) { details::swap_relaxed(freeListHead, other.freeListHead); }
 
         FreeList(FreeList const&) MOODYCAMEL_DELETE_FUNCTION;

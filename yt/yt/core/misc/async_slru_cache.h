@@ -166,7 +166,7 @@ public:
         TInsertCookie(const TInsertCookie& other) = delete;
         ~TInsertCookie();
 
-        TInsertCookie& operator=(TInsertCookie&& other);
+        TInsertCookie& operator=(TInsertCookie&& other) noexcept;
         TInsertCookie& operator=(const TInsertCookie& other) = delete;
 
         const TKey& GetKey() const;

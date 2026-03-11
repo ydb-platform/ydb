@@ -35,7 +35,7 @@ struct TRefCountedTracker::TGlobalSlot
 
     TGlobalSlot() = default;
 
-    TGlobalSlot(TGlobalSlot&& other)
+    TGlobalSlot(TGlobalSlot&& other) noexcept
     {
         #define XX(name) name = other.name.load();
         ENUMERATE_SLOT_FIELDS()

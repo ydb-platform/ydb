@@ -69,7 +69,7 @@ THazardPtr<T>::THazardPtr(THazardPtr&& other) noexcept
 }
 
 template <class T>
-THazardPtr<T>& THazardPtr<T>::operator=(THazardPtr&& other)
+THazardPtr<T>& THazardPtr<T>::operator=(THazardPtr&& other) noexcept
 {
     if (this != &other) {
         Reset();
@@ -126,7 +126,7 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader)
 }
 
 template <class T>
-void THazardPtr<T>::Reset()
+void THazardPtr<T>::Reset() noexcept
 {
     if (Ptr_) {
 #ifdef NDEBUG

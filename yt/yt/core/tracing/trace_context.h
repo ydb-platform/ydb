@@ -312,7 +312,7 @@ class TCurrentTraceContextGuard
 {
 public:
     explicit TCurrentTraceContextGuard(TTraceContextPtr traceContext);
-    TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
+    TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other) noexcept;
     ~TCurrentTraceContextGuard();
 
     bool IsActive() const;
@@ -332,7 +332,7 @@ class TNullTraceContextGuard
 {
 public:
     TNullTraceContextGuard();
-    TNullTraceContextGuard(TNullTraceContextGuard&& other);
+    TNullTraceContextGuard(TNullTraceContextGuard&& other) noexcept;
     ~TNullTraceContextGuard();
 
     bool IsActive() const;
@@ -355,13 +355,13 @@ public:
     ~TTraceContextFinishGuard();
 
     TTraceContextFinishGuard(const TTraceContextFinishGuard&) = delete;
-    TTraceContextFinishGuard(TTraceContextFinishGuard&&) = default;
+    TTraceContextFinishGuard(TTraceContextFinishGuard&&) noexcept = default;
 
     TTraceContextFinishGuard& operator=(const TTraceContextFinishGuard&) = delete;
-    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&);
+    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&) noexcept;
 
     void Release(
-        std::optional<NProfiling::TCpuInstant> finishTime = {});
+        std::optional<NProfiling::TCpuInstant> finishTime = {}) noexcept;
 private:
     TTraceContextPtr TraceContext_;
 };
@@ -374,7 +374,7 @@ class TTraceContextGuard
 {
 public:
     explicit TTraceContextGuard(TTraceContextPtr traceContext);
-    TTraceContextGuard(TTraceContextGuard&& other) = default;
+    TTraceContextGuard(TTraceContextGuard&& other) noexcept = default;
 
     void Release(
         std::optional<NProfiling::TCpuInstant> finishTime = {});
@@ -398,7 +398,7 @@ public:
     explicit TChildTraceContextGuard(
         const std::string& spanName,
         std::optional<NProfiling::TCpuInstant> startTime = {});
-    TChildTraceContextGuard(TChildTraceContextGuard&& other) = default;
+    TChildTraceContextGuard(TChildTraceContextGuard&& other) noexcept = default;
 
     void Finish(
         std::optional<NProfiling::TCpuInstant> finishTime = {});

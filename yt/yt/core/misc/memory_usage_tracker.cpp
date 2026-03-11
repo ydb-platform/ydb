@@ -78,7 +78,7 @@ IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMemoryUsageTrackerGuard::TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other)
+TMemoryUsageTrackerGuard::TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other) noexcept
 {
     MoveFrom(std::move(other));
 }
@@ -88,7 +88,7 @@ TMemoryUsageTrackerGuard::~TMemoryUsageTrackerGuard()
     Release();
 }
 
-TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTrackerGuard&& other)
+TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTrackerGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -97,7 +97,7 @@ TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTracke
     return *this;
 }
 
-void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other)
+void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other) noexcept
 {
     Tracker_ = other.Tracker_;
     Size_ = other.Size_;
@@ -169,7 +169,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     return guard;
 }
 
-void TMemoryUsageTrackerGuard::Release()
+void TMemoryUsageTrackerGuard::Release() noexcept
 {
     if (Tracker_) {
         if (AcquiredSize_) {
@@ -180,7 +180,7 @@ void TMemoryUsageTrackerGuard::Release()
     }
 }
 
-void TMemoryUsageTrackerGuard::ReleaseNoReclaim()
+void TMemoryUsageTrackerGuard::ReleaseNoReclaim() noexcept
 {
     Tracker_.Reset();
     Size_ = 0;

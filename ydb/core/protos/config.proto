@@ -1,7 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
-import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";

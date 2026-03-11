@@ -179,7 +179,7 @@ PEERDIR(
     ydb/core/config/protos
     ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
-    ydb/core/nbs/cloud/blockstore/config
+    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos

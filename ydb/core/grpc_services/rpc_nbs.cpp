@@ -7,7 +7,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>

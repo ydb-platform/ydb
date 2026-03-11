@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blockstore_config.proto";
-import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 
 package NYdb.NBS.PartitionDirect.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";

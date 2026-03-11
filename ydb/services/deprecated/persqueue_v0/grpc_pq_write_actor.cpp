@@ -451,9 +451,9 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
                             << ev->Get()->Error << " user: "
-                            << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));
+                            << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
-    if (!ev->Get()->Error.empty()) {
+    if (ev->Get()->HasError()) {
         CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
         return;
     }

@@ -54,9 +54,9 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMinScalar() const override {
+    virtual TMinMax DoGetMinMaxScalars() const override {
         AFL_VERIFY(false);
-        return nullptr;
+        return {};
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 

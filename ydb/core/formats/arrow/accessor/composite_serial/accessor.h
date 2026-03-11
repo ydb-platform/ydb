@@ -50,9 +50,9 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMinScalar() const override {
+    virtual TMinMax DoGetMinMaxScalars() const override {
         AFL_VERIFY(false);
-        return nullptr;
+        return {};
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {

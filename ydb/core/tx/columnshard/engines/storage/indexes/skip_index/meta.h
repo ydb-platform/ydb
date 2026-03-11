@@ -18,7 +18,7 @@ public:
 private:
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const = 0;
+        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const = 0;
 
 public:
     bool CheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
@@ -47,10 +47,10 @@ private:
     std::shared_ptr<IBitsStorageConstructor> BitsStorageConstructor;
     using TBase = TSkipIndex;
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const = 0;
+        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const = 0;
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, [[maybe_unused]]const TIndexInfo& info) const override final {
+        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override final {
         if (data.empty()) {
             return false;
         }

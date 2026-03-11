@@ -94,13 +94,15 @@ std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
     auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
     return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.second));
 }
-std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMinScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
+TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
+    TMinMax result;
     if (!ArrayVariants->length()) {
         return result;
     }
     auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
-    return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.first));
+    result.Min = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.first));
+    result.Max = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.second));
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

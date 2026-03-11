@@ -73,8 +73,8 @@ std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
     return Record.GetMaxScalar();
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMinScalar() const {
-    return Record.GetMinScalar();
+TMinMax TSparsedArray::DoGetMinMaxScalars() const {
+    return Record.GetMinMaxScalars();
 }
 
 ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -203,16 +203,25 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
     }
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMinScalar() const {
+TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
+    TMinMax result{DefaultValue, DefaultValue};
     if (!ColValue->length()) {
-        return DefaultValue;
+        return result;
     }
     auto minMax = NArrow::FindMinMaxPosition(ColValue);
-    auto currentScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.first));
-    if (!DefaultValue || ScalarCompare(DefaultValue, currentScalar) > 0) {
-        return currentScalar;
+    auto minScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.first));
+    auto maxScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.second));
+    
+    if (!DefaultValue || ScalarLess(minScalar, result.Min)) {
+        result.Min = minScalar;
     }
-    return DefaultValue;
+
+    if (!DefaultValue || ScalarLess(result.Max, maxScalar)) {
+        result.Max = maxScalar;
+    }
+
+
+    return result;
 }
 
 std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMaxScalar() const {

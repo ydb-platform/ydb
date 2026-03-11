@@ -40,6 +40,11 @@ public:
     TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
 };
 
+struct TMinMax {
+    std::shared_ptr<arrow::Scalar> Min;
+    std::shared_ptr<arrow::Scalar> Max;
+};
+
 class IChunkedArray {
 public:
 // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
@@ -287,7 +292,7 @@ protected:
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DoGetMinScalar() const = 0;
+    virtual TMinMax DoGetMinMaxScalars() const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -449,9 +454,10 @@ public:
         AFL_VERIFY(GetRecordsCount());
         return DoGetMaxScalar();
     }
-    std::shared_ptr<arrow::Scalar> GetMinScalar() const {
+    
+    TMinMax GetMinMax() const {
         AFL_VERIFY(GetRecordsCount());
-        return DoGetMinScalar();
+        return DoGetMinMaxScalars();
     }
 
     std::optional<ui64> GetRawSize() const {

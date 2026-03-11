@@ -227,6 +227,11 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
+                
+                // Log chunk fetch for streaming verification
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunk_fetched")(
+                    "chunk_start", chunkStart)("chunk_end", chunkEnd)(
+                    "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
                                                            Schema->GetExternalDefaultValueVerified(c->GetColumnId())));

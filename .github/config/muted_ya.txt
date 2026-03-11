@@ -1,5 +1,4 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
@@ -71,6 +70,7 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-8-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
+ydb/tests/fq/s3 test_s3_1.py.TestS3.test_top_level_listing_2[v1-kikimr_params0-false-client0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
@@ -79,6 +79,7 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/functional/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
@@ -107,7 +108,6 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[last_stabl
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
-ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]
@@ -131,6 +131,7 @@ ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
+ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk
@@ -149,4 +150,5 @@ ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

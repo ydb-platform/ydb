@@ -27,6 +27,8 @@ class TransactionHangMonitor:
         self.hang_timeout = hang_timeout
         self.window_interval = window_interval
         self.required_zero_windows = hang_timeout // window_interval
+        if self.required_zero_windows < 1:
+            self.required_zero_windows = 1
         self.consecutive_zero_windows = 0
         self.logger = logging.getLogger(__name__)
 

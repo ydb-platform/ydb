@@ -720,6 +720,10 @@ TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::GetOrCreateWriteSe
         return CreateWriteSession(partition, directToPartition);
     }
 
+    if (!sessionIter->second->DirectToPartition) {
+        sessionIter->second->NonDirectToPartitionOwnership++;
+    }
+
     return sessionIter->second;
 }
 

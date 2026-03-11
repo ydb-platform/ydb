@@ -3,9 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/proxy_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_proxy_ut.cpp

@@ -3,9 +3,7 @@ UNITTEST_FOR(ydb/core/cms/console)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/getopt

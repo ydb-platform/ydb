@@ -3,9 +3,7 @@ UNITTEST_FOR(ydb/core/grpc_streaming)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 SRCS(
     grpc_streaming_ut.cpp

@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -11,7 +12,6 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
         ram:32
     )
 ELSE()
-    REQUIREMENTS(cpu:4)
     SIZE(MEDIUM)
 ENDIF()
 

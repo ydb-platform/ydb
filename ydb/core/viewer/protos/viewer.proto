@@ -566,8 +566,6 @@ message TNodeInfo {
     float CpuUsage = 5;
     float DiskSpaceUsage = 6;
     optional uint32 Connections = 7; // total number of live connections
-    optional string DataCenter = 8;
-    optional string Rack = 9;
     EFlag ConnectStatus = 10; // Max
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;

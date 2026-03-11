@@ -276,6 +276,38 @@ class TJsonNodes : public TViewerPipeClient {
             return SystemState.GetLocation().GetBridgePileName();
         }
 
+        void ApplyInterconnectLocationFallback() {
+            std::optional<TString> dataCenter;
+            std::optional<TString> rack;
+            std::optional<TString> unit;
+            for (const auto& [key, value] : NodeInfo.Location.GetItems()) {
+                switch (key) {
+                    case NActors::TNodeLocation::TKeys::DataCenter:
+                        dataCenter = value;
+                        break;
+                    case NActors::TNodeLocation::TKeys::Rack:
+                        rack = value;
+                        break;
+                    case NActors::TNodeLocation::TKeys::Unit:
+                        unit = value;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            auto* location = SystemState.MutableLocation();
+            if (!location->HasDataCenter() && dataCenter.has_value()) {
+                location->SetDataCenter(*dataCenter);
+            }
+            if (!location->HasRack() && rack.has_value()) {
+                location->SetRack(*rack);
+            }
+            if (!location->HasUnit() && unit.has_value()) {
+                location->SetUnit(*unit);
+            }
+        }
+
         void Cleanup() {
             if (SystemState.HasSystemLocation()) {
                 SystemState.ClearSystemLocation();
@@ -3331,6 +3363,7 @@ public:
         }
         if (NodeGroups.empty()) {
             for (TNode* node : NodeView) {
+                node->ApplyInterconnectLocationFallback();
                 NKikimrViewer::TNodeInfo& jsonNode = *json.AddNodes();
                 if (FieldsAvailable.test(+ENodeFields::NodeInfo)) {
                     jsonNode.SetNodeId(node->GetNodeId());
@@ -3364,12 +3397,6 @@ public:
                 }
                 if (FieldsAvailable.test(+ENodeFields::CapacityAlert) && FieldsRequested.test(+ENodeFields::CapacityAlert)) {
                     jsonNode.SetCapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(node->CapacityAlert));
-                }
-                if (FieldsAvailable.test(+ENodeFields::DC) && FieldsRequested.test(+ENodeFields::DC)) {
-                    jsonNode.SetDataCenter(node->GetDataCenter());
-                }
-                if (FieldsAvailable.test(+ENodeFields::Rack) && FieldsRequested.test(+ENodeFields::Rack)) {
-                    jsonNode.SetRack(node->GetRack());
                 }
                 if (FieldsAvailable.test(+ENodeFields::Connections) && FieldsRequested.test(+ENodeFields::Connections)) {
                     jsonNode.SetConnections(node->Connections);

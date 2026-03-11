@@ -377,10 +377,12 @@ public:
                 if (Self->TryToDeleteNode(&node)) {
                     // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                } else if (node.IsUnknown() && node.LocationAcquired) {
-                    Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                } else {
+                    if (node.IsUnknown() && node.LocationAcquired) {
+                        Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                    }
+                    Self->UpdateNodeSegments(&node);
                 }
-                Self->UpdateNodeSegments(&node);
                 if (!nodeRowset.Next())
                     return false;
             }

@@ -204,17 +204,21 @@
           .build();
 
   try (RootAllocator allocator = new RootAllocator()) {
-      retryCtx.supplyResult(session -> {
-          QueryStream stream = session.createQuery(query, TxMode.SERIALIZABLE_RW, Params.empty(), settings);
-          return stream.execute(new ApacheArrowCompressedPartsHandler(allocator) {
-              @Override
-              public void onNextPart(QueryResultPart part) {
-                  ResultSetReader rs = part.getResultSetReader();
-                  System.out.printf("Record batch with %d rows and %d columns%n",
-                          rs.getRowCount(), rs.getColumnCount());
-              }
-          });
-      }).join().getStatus().expectSuccess("execute query problem");
+      retryCtx.supplyResult(session -> session
+              .createQuery(query, TxMode.SERIALIZABLE_RW, Params.empty(), settings)
+              .execute(new ApacheArrowCompressedPartsHandler(allocator) {
+                  @Override
+                  public void onNextPart(QueryResultPart part) {
+                      ResultSetReader rs = part.getResultSetReader();
+                      while (rs.next()) {
+                          String key = rs.getColumn("Key").getText();
+                          System.out.println("Read row with key " + key);
+                      }
+                      System.out.printf("Record batch with %d rows and %d columns%n",
+                              rs.getRowCount(), rs.getColumnCount());
+                  }
+              })
+      ).join().getStatus().expectSuccess("execute query problem");
   }
   ```
 

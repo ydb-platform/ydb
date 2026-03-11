@@ -1,9 +1,9 @@
 items:
 - name: Файловая структура выгрузки
   href: file-structure.md
-- name: Выгрузка в файловую систему
+- name: Выгрузка в локальную файловую систему
   href: tools-dump.md
-- name: Загрузка из файловой системы
+- name: Загрузка из локальной файловой системы
   href: tools-restore.md
 - name: Соединение и аутентификация с S3
   href: auth-s3.md
@@ -11,5 +11,9 @@ items:
   href: export-s3.md
 - name: Загрузка из S3
   href: import-s3.md
+- name: Выгрузка в файловую систему хостов кластера {{ ydb-short-name }}
+  href: export-fs.md
+- name: Загрузка из файловой системы хостов кластера {{ ydb-short-name }}
+  href: import-fs.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md

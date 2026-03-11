@@ -6,6 +6,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
+#include <ranges>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -935,7 +937,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     auto& moved = ev->Get()->MovedMessages;
-    LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
+    LOG_D("Moved to the DLQ: " << JoinSeq(", ", moved | std::views::transform(AsTDLQMessage)));
 
     DLQMoverActorId = {};
     for (auto [offset, seqNo] : moved) {

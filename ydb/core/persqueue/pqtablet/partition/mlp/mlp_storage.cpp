@@ -6,6 +6,8 @@
 
 #include <util/string/join.h>
 
+#include <ranges>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -666,7 +668,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
 
 ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     auto now = TimeProvider->Now();
-    
+
     AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
@@ -1005,7 +1007,7 @@ TString TStorage::DebugString() const {
 
     sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end()) << "]";
     sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
-    sb << " DLQMessages [" << JoinRange(", ", DLQMessages.begin(), DLQMessages.end()) << "]";
+    sb << " DLQMessages [" << JoinSeq(", ", DLQMessages | std::views::transform(AsTDLQMessage)) << "]";
     sb << " Metrics {"
         << "Inflight: " << Metrics.InflightMessageCount << ", "
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "

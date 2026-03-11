@@ -1,6 +1,10 @@
+#include <fmt/format.h>
+
+#include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr::NKqp {
 
@@ -10,6 +14,11 @@ using namespace NWorkload;
 using namespace NYdb;
 using namespace NActors;
 
+///
+/// Wraps the real IWmSessionUpdater and suppresses state transitions beyond
+/// FinalState. This lets a test freeze the WM state visible in
+/// .sys/query_sessions at a chosen level.
+///
 class TWmSessionUpdaterWrapper : public IWmSessionUpdater {
 public:
     TWmSessionUpdaterWrapper(EWmState finalState, std::shared_ptr<IWmSessionUpdater> inner)
@@ -17,19 +26,10 @@ public:
         , FinalState(finalState)
     {}
 
-    void SetUpdater(std::shared_ptr<IWmSessionUpdater> inner) {
-        Inner = std::move(inner);
-    }
-
-    std::shared_ptr<IWmSessionUpdater> GetUpdater() const {
-        return Inner;
-    }
-
     void SetRequestState(EWmState state, TInstant timestamp) override {
         if (state > FinalState) {
             return;
         }
-
         Inner->SetRequestState(state, timestamp);
     }
 
@@ -42,15 +42,101 @@ private:
     EWmState FinalState;
 };
 
-class TKqpWorkloadProxyActor : public TActorBootstrapped<TKqpWorkloadProxyActor> {
+///
+/// A proxy actor assigned to a specific KQP session to intercept its workload events.
+/// It acts as a middleman between the Workload Service and the session actor,
+/// allowing the test to 'freeze' the request flow at the Edge Actor level.
+/// This enables thread-safe inspection of system tables before the session
+/// actually starts its SQL execution.
+///
+class TSessionProxyActor : public TActorBootstrapped<TSessionProxyActor> {
 public:
-    TKqpWorkloadProxyActor(IWmSessionUpdater::EWmState finalState)
-        : FinalState(finalState)
+    TSessionProxyActor(TActorId sessionActorId, TActorId edgeActorId)
+        : SessionActorId(sessionActorId)
+        , EdgeActorId(edgeActorId)
     {}
 
-    void SetWorkloadServiceId(TActorId realServiceId) {
-        WorkloadServiceId = realServiceId;
+    void Bootstrap(const TActorContext&) {
+        Become(&TSessionProxyActor::StateWork);
     }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NWorkload::TEvContinueRequest, HandleContinueRequest);
+            default:
+                Send(ev->Forward(SessionActorId));
+        }
+    }
+
+    void HandleContinueRequest(NWorkload::TEvContinueRequest::TPtr& ev) {
+        senderId = ev->Sender;
+        Send(new IEventHandle(EdgeActorId, SelfId(), ev->Release().Release()));
+        Become(&TSessionProxyActor::StateWait);
+    }
+
+    STFUNC(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NWorkload::TEvContinueRequest, HandleRelease);
+            default:
+                Send(ev->Forward(SessionActorId));
+        }
+    }
+
+    void HandleRelease(NWorkload::TEvContinueRequest::TPtr& ev) {
+        Send(new IEventHandle(SessionActorId, senderId, ev->Release().Release()));
+    }
+
+private:
+    TActorId SessionActorId;
+    TActorId EdgeActorId;
+    TActorId senderId;
+};
+
+///
+/// Thread-safe mapping of a query text to an edge actor for interception
+/// Used by the proxy to decide which requests should be 'parked'
+///
+struct TInterceptorRules {
+    // Query Text -> EdgeActor
+    std::unordered_map<TString, TActorId> ActiveRules;
+    std::mutex Lock;
+
+    void Add(TString query, TActorId edge) {
+        std::lock_guard<std::mutex> g(Lock);
+        ActiveRules[query] = edge;
+    }
+
+    std::optional<TActorId> GetEdge(const TString& query) {
+        std::lock_guard<std::mutex> g(Lock);
+        if (auto it = ActiveRules.find(query); it != ActiveRules.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+};
+
+struct TEvIntercepted : public TEventLocal<TEvIntercepted, 101010101> {
+    TActorId SessionActorId;
+
+    explicit TEvIntercepted(TActorId sessionActorId)
+        : SessionActorId(sessionActorId)
+    {}
+};
+
+///
+/// Replaces the real KQP workload service in the actor system.
+///
+class TKqpWorkloadProxyActor : public TActorBootstrapped<TKqpWorkloadProxyActor> {
+public:
+    TKqpWorkloadProxyActor(
+        IWmSessionUpdater::EWmState finalState,
+        TActorId realWorkloadServiceId,
+        std::shared_ptr<TInterceptorRules> rules
+    )
+        : FinalState(finalState)
+        , WorkloadServiceId(realWorkloadServiceId)
+        , Rules(rules)
+    {}
 
     void Bootstrap(const TActorContext&) {
         Become(&TKqpWorkloadProxyActor::StateWork);
@@ -66,25 +152,36 @@ public:
 
     void HandlePlaceRequest(NWorkload::TEvPlaceRequestIntoPool::TPtr& ev) {
         auto* msg = ev->Get();
-        auto m = std::make_shared<TWmSessionUpdaterWrapper>(FinalState, msg->WmSessionUpdater);
-        
-        auto proxyMsg = new NWorkload::TEvPlaceRequestIntoPool(
+        auto wrapper = std::make_shared<TWmSessionUpdaterWrapper>(FinalState, msg->WmSessionUpdater);
+
+        auto* proxyMsg = new NWorkload::TEvPlaceRequestIntoPool(
             msg->DatabaseId,
             msg->SessionId,
             msg->PoolId,
             msg->UserToken,
             msg->RequestText,
-            m
+            wrapper
         );
 
-        Send(new IEventHandle(WorkloadServiceId, ev->Sender, proxyMsg));
+        TActorId senderForWorkload = ev->Sender;
+
+        if (auto edge = Rules->GetEdge(msg->RequestText)) {
+            auto* interceptor = new TSessionProxyActor(ev->Sender, *edge);
+            senderForWorkload = Register(interceptor);
+        }
+
+        Send(new IEventHandle(WorkloadServiceId, senderForWorkload, proxyMsg));
     }
 
 private:
-    TActorId WorkloadServiceId;
     IWmSessionUpdater::EWmState FinalState;
+    TActorId WorkloadServiceId;
+    std::shared_ptr<TInterceptorRules> Rules;
 };
 
+///
+/// Reads .sys/query_sessions for EXECUTING sessions.
+///
 class TQuerySessionReader {
 public:
     struct Row {
@@ -93,17 +190,27 @@ public:
     };
 
 public:
-    TQuerySessionReader(TIntrusivePtr<IYdbSetup> ydb) {
-        auto Result = ydb->ExecuteQuery(R"(
+    TQuerySessionReader(TIntrusivePtr<IYdbSetup> ydb)
+        : Ydb(ydb)
+    {}
+
+    void FetchAll(const TString& query) {
+        using namespace fmt::literals;
+
+        Results.clear();
+        TString q = fmt::format(R"(
             SELECT SessionId, WmPoolId, WmState
             FROM `.sys/query_sessions`
-            WHERE State = 'EXECUTING'
+            WHERE State = 'EXECUTING' and Query = '{query}'
             ORDER By WmState
-        )");
+        )",
+            "query"_a = query
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL_C(Result.GetStatus(), NYdb::EStatus::SUCCESS, Result.GetIssues().ToString());
+        auto result = Ydb->ExecuteQuery(q, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto rs = Result.GetResultSet(0);
+        auto rs = result.GetResultSet(0);
         auto parser = std::make_unique<NYdb::TResultSetParser>(rs);
 
         while (parser->TryNextRow()) {
@@ -124,13 +231,16 @@ public:
     }
 
 private:
-    TQueryRunnerResult Result;
+    TIntrusivePtr<IYdbSetup> Ydb;
     std::vector<Row> Results;
 };
 
 class TQuerySessionTestFixture {
 public:
-    TQuerySessionTestFixture(IWmSessionUpdater::EWmState state, const TString myPoolId, size_t limit = 10) {
+    TQuerySessionTestFixture(const TString myPoolId, IWmSessionUpdater::EWmState state, size_t limit = 10)
+        : State(state)
+        , Rules(std::make_shared<TInterceptorRules>())
+    {
         Ydb = TYdbSetupSettings()
             .NodeCount(1)
             .EnableResourcePools(true)
@@ -143,98 +253,137 @@ public:
 
         auto& runtime = *Ydb->GetRuntime();
         auto workloadServiceId = MakeKqpWorkloadServiceId(runtime.GetNodeId(0));
-        
-        auto actor = new TKqpWorkloadProxyActor(state);
-        auto newId = runtime.Register(actor);
-        auto oldId = runtime.RegisterService(workloadServiceId, newId);
-        
-        actor->SetWorkloadServiceId(oldId);
+        auto realWorkloadServiceId = runtime.GetLocalServiceId(workloadServiceId);
+        auto proxyActor = new TKqpWorkloadProxyActor(State, realWorkloadServiceId, Rules);
+
+        ProxyActorId = runtime.Register(proxyActor);
+
+        runtime.RegisterService(workloadServiceId, ProxyActorId);
     }
+
+    ~TQuerySessionTestFixture() {
+        if (ProxyActorId && Ydb) {
+            Ydb->GetRuntime()->Send(new IEventHandle(ProxyActorId, TActorId(), new TEvents::TEvPoisonPill()));
+        }
+    }
+
+    TActorId GetProxyId() const { return ProxyActorId; }
 
     TIntrusivePtr<IYdbSetup> GetYdb() {
         return Ydb;
     }
 
-    TQuerySessionReader GetReader() {
-        return TQuerySessionReader(Ydb);
+    TActorId SetupInterceptor(const TString& query) {
+        auto& runtime = *Ydb->GetRuntime();
+        TActorId edgeActor = runtime.AllocateEdgeActor();
+        Rules->Add(query, edgeActor);
+        return edgeActor;
     }
 
 private:
+    IWmSessionUpdater::EWmState State;
     TIntrusivePtr<IYdbSetup> Ydb;
+    TActorId ProxyActorId;
+    std::shared_ptr<TInterceptorRules> Rules;
 };
 
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
-    Y_UNIT_TEST(TestWmStateNone) {
-        TQuerySessionTestFixture f(IWmSessionUpdater::NONE, "my_pool");
+
+    TQuerySessionReader ReadQuerySessionAfterState(IWmSessionUpdater::EWmState state) {
+        TQuerySessionTestFixture f("my_pool", state);
         auto myPool = TQueryRunnerSettings().PoolId("my_pool");
+        const TString& query = TSampleQueries::TSelect42::Query;
+        TActorId edge = f.SetupInterceptor(query);
+        auto future = f.GetYdb()->ExecuteQueryAsync(query, myPool);
+        auto runtime = f.GetYdb()->GetRuntime();
 
-        TSampleQueries::TSelect42::CheckResult(
-            f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+        // Stop a request before a real execution to prevent read races from a .sys/query_sessions
+        // The request is now 'parked' in the interceptor actor
+        auto ev = runtime->GrabEdgeEvent<NWorkload::TEvContinueRequest>(edge);
 
-        auto r = f.GetReader();
+        TQuerySessionReader reader(f.GetYdb());
+        reader.FetchAll(query);
 
-        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "NONE");
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
+        // Continue a request execution by sending the event back to the interceptor
+        runtime->Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
+
+        auto result = future.GetResult();
+        TSampleQueries::TSelect42::CheckResult(result);
+
+        return reader;
+    }
+
+    Y_UNIT_TEST(TestWmStateNone) {
+        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::NONE);
+
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "NONE");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
     }
 
     Y_UNIT_TEST(TestWmStatePending) {
-        TQuerySessionTestFixture f(IWmSessionUpdater::PENDING, "my_pool");
-        auto myPool = TQueryRunnerSettings().PoolId("my_pool");
+        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::PENDING);
 
-        TSampleQueries::TSelect42::CheckResult(
-            f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
-
-        auto r = f.GetReader();
-
-        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "PENDING");
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
-    }
-
-    Y_UNIT_TEST(TestWmStateDelayed) {
-        TQuerySessionTestFixture f(IWmSessionUpdater::DELAYED, "my_pool", 1);
-        auto myPool = TQueryRunnerSettings().PoolId("my_pool");
-
-        auto hangingRequest = f.GetYdb()->ExecuteQueryAsync(
-            "select 121;",
-            myPool.HangUpDuringExecution(true)
-        );
-
-        f.GetYdb()->WaitQueryExecution(hangingRequest);
-
-        auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, myPool);
-
-        f.GetYdb()->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
-        f.GetYdb()->ContinueQueryExecution(hangingRequest);
-        f.GetYdb()->WaitQueryExecution(delayedRequest, TDuration::Seconds(5));
-
-        auto hangingResult = hangingRequest.GetResult();
-        auto delayedResult = delayedRequest.GetResult();
-
-        auto r = f.GetReader();
-
-        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "DELAYED");
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "PENDING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
     }
 
     Y_UNIT_TEST(TestWmStateExited) {
-        TQuerySessionTestFixture f(IWmSessionUpdater::EXITED, "my_pool");
-        auto myPool = TQueryRunnerSettings().PoolId("my_pool");
+        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::EXITED);
 
-        TSampleQueries::TSelect42::CheckResult(
-            f.GetYdb()->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
-
-        auto r = f.GetReader();
-
-        UNIT_ASSERT_VALUES_EQUAL(r.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmState, "EXITED");
-        UNIT_ASSERT_VALUES_EQUAL(r[0].WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "EXITED");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
     }
 
+    Y_UNIT_TEST(TestWmStateDelayedToExited) {
+        TQuerySessionTestFixture f("my_pool", IWmSessionUpdater::EXITED, /*limit=*/1);
+        auto myPool = TQueryRunnerSettings().PoolId("my_pool");
+        auto& runtime = *f.GetYdb()->GetRuntime();
+
+        const TString qHanging = "SELECT 'hanging' AS x;";
+        const TString qDelayed = TSampleQueries::TSelect42::Query;
+
+        TActorId edgeHanging = f.SetupInterceptor(qHanging);
+        TActorId edgeDelayed = f.SetupInterceptor(qDelayed);
+
+        // Stop a first request before a real execution to fill limits
+        auto hangingRequest = f.GetYdb()->ExecuteQueryAsync(qHanging, myPool);
+        auto evHanging = runtime.GrabEdgeEvent<NWorkload::TEvContinueRequest>(edgeHanging);
+
+        // Run a second request which has to be placed in a Delayed Queue
+        auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(qDelayed, myPool);
+
+        // Wait for condition
+        f.GetYdb()->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
+
+        TQuerySessionReader reader(f.GetYdb());
+        reader.FetchAll(qDelayed);
+
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "DELAYED");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
+
+        // Continue the first request and wait for the second request to be about to execute
+        runtime.Send(new IEventHandle(evHanging->Sender, edgeHanging, evHanging->Release().Release()));
+        auto evDelayed = runtime.GrabEdgeEvent<NWorkload::TEvContinueRequest>(edgeDelayed);
+
+        TQuerySessionReader reader2(f.GetYdb());
+        reader2.FetchAll(qDelayed);
+
+        UNIT_ASSERT_VALUES_EQUAL(reader2.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader2[0].WmState, "EXITED");
+        UNIT_ASSERT_VALUES_EQUAL(reader2[0].WmPoolId, "my_pool");
+
+        // Continue the second request
+        runtime.Send(new IEventHandle(evDelayed->Sender, edgeDelayed, evDelayed->Release().Release()));
+
+        hangingRequest.GetResult();
+        TSampleQueries::TSelect42::CheckResult(delayedRequest.GetResult());
+    }
 }
 
 }  // namespace NKikimr::NKqp

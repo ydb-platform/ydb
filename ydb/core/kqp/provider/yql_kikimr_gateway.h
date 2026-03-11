@@ -222,6 +222,10 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalFulltextRelevance;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
                 return TIndexDescription::EType::GlobalJson;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter:
+                return TIndexDescription::EType::LocalBloomFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter:
+                return TIndexDescription::EType::LocalBloomNgramFilter;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }

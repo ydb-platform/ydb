@@ -3386,6 +3386,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
                 return TestTableWithIndexBackupRestore(Value);
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -4693,6 +4695,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalJson:
                 TestTableWithIndexBackupRestore(Value);
                 break;
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

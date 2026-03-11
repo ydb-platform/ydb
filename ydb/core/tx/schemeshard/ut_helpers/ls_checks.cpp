@@ -946,6 +946,9 @@ TCheckFunc SpecializedIndexDescription(const TString& proto) {
                         << actual.ShortDebugString());
                 break;
             }
+            case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+            case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                break;
             case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET: {
                 UNIT_ASSERT_C(proto == "SPECIALIZEDINDEXDESCRIPTION_NOT_SET",
                     TStringBuilder() << "Expected"

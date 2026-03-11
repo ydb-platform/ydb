@@ -443,6 +443,10 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                                // Bloom filter scheme objects are not supported yet in row tables
+                                break;
                         }
 
                         break;
@@ -556,7 +560,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     // 'IsResolved' check is necessary because the dfs implementation expects that the vertex coming into the function exists.
     // If we do not do this check, then the Y_VERIFY may fire if the path does not exist.
 
-    // Since one check was added, it makes sense to add all the checks at once, 
+    // Since one check was added, it makes sense to add all the checks at once,
     // so as not to generate a large set of sub-operations in case even the main table is "wrong".
     TPath::TChecker checks = mainTablePath.Check();
     checks

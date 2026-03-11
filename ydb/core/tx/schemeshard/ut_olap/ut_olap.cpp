@@ -1445,4 +1445,244 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         env.TestWaitNotification(runtime, txId);
     }
+
+    Y_UNIT_TEST(CreateStandaloneTableWithBloomIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableWithIndex"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 3
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/ColumnTableWithIndex", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithIndex/bloom_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(CreateStandaloneTableWithBloomNgramIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableWithNgramIndex"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 3
+                    Name: "ngram_data"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        ColumnId: 2
+                        NGrammSize: 3
+                        FilterSizeBytes: 1024
+                        HashesCount: 2
+                        RecordsCount: 128
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/ColumnTableWithNgramIndex", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithNgramIndex/ngram_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(CreateStandaloneTableWithMultipleLocalIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TableMultiIdx"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "ngram_data"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        ColumnId: 3
+                        NGrammSize: 3
+                        FilterSizeBytes: 512
+                        HashesCount: 3
+                        RecordsCount: 128
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/TableMultiIdx", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TableMultiIdx/bloom_key");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"key"}),
+            });
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TableMultiIdx/ngram_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnTableAddLocalIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/TestTable", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_data");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["data"]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnTableDropLocalIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 3
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                DropIndexes: "bloom_data"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_data");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+    }
 }

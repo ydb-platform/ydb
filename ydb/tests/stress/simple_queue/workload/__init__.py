@@ -34,6 +34,9 @@ class EventKind(object):
     ADD_COLUMN_DEFAULT = 'add_column_default'
     DROP_COLUMN = 'drop_column'
 
+    SET_DEFAULT = 'set_default'
+    DROP_DEFAULT = 'drop_default'
+
     READ_TABLE = 'read_table'
 
     WRITE = 'write'
@@ -63,6 +66,8 @@ class EventKind(object):
         return (
             cls.ADD_COLUMN_DEFAULT,
             cls.DROP_COLUMN,
+            cls.SET_DEFAULT,
+            cls.DROP_DEFAULT,
         )
 
     @classmethod
@@ -84,6 +89,9 @@ class EventKind(object):
 
             cls.ADD_COLUMN_DEFAULT,
             cls.DROP_COLUMN,
+
+            cls.SET_DEFAULT,
+            cls.DROP_DEFAULT,
 
             cls.READ_TABLE,
 
@@ -251,6 +259,8 @@ class YdbQueue(object):
         self.outdated_keys_max_size = 50
         # a dict with table_name -> set of column ids
         self.alter_column_ids = dict()
+        # a dict with table_name -> set of column ids that currently have a DEFAULT expression
+        self.columns_with_default = dict()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -395,17 +405,18 @@ class YdbQueue(object):
             table_name=self.table_name,
             val=self.generate_alter_column_id(),
         )
-
         self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
 
     def add_column_default(self):
+        col_id = self.generate_alter_column_id()
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
             table_name=self.table_name,
-            val=self.generate_alter_column_id(),
+            val=col_id,
             default_value=random_string(10),
         )
-
-        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+        result = self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+        if result is not None:
+            self.columns_with_default.setdefault(self.table_name, set()).add(col_id)
 
     def drop_column(self):
         if len(self.alter_column_ids.get(self.table_name, set())) == 0:
@@ -413,13 +424,40 @@ class YdbQueue(object):
 
         val = random.choice(list(self.alter_column_ids[self.table_name]))
         self.alter_column_ids[self.table_name].remove(val)
+        self.columns_with_default.get(self.table_name, set()).discard(val)
 
         query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
             table_name=self.table_name,
             val=val,
         )
-
         self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+
+    def set_default(self):
+        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+            return
+
+        val = random.choice(list(self.alter_column_ids[self.table_name]))
+        query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} SET DEFAULT '{default_value}'".format(
+            table_name=self.table_name,
+            val=val,
+            default_value=random_string(10),
+        )
+        result = self.send_query(query, parameters=None, event_kind=EventKind.SET_DEFAULT)
+        if result is not None:
+            self.columns_with_default.setdefault(self.table_name, set()).add(val)
+
+    def drop_default(self):
+        if len(self.columns_with_default.get(self.table_name, set())) == 0:
+            return
+
+        val = random.choice(list(self.columns_with_default[self.table_name]))
+        query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} DROP DEFAULT".format(
+            table_name=self.table_name,
+            val=val,
+        )
+        result = self.send_query(query, parameters=None, event_kind=EventKind.DROP_DEFAULT)
+        if result is not None:
+            self.columns_with_default[self.table_name].discard(val)
 
     def drop_table(self):
         duplicates = set()
@@ -509,7 +547,7 @@ class Workload:
                 schedule.extend([(point, op) for point in self.random_points()])
 
             for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
-                schedule.extend([(point, op) for point in self.random_points(size=10)])
+                schedule.extend([(point, op) for point in self.random_points(size=30)])
 
             for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])

@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include <ydb/core/protos/feature_flags.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -42,7 +43,17 @@ public:
         if (AppData()->BridgeModeEnabled) {
             json["Cluster"]["BridgeModeEnabled"] = true;
         }
-        json["Features"]["EnableShowCreate"] = AppData()->FeatureFlags.GetEnableShowCreate();
+        {
+            NKikimrConfig::TFeatureFlags featureFlags = AppData()->FeatureFlags;
+            const auto* descriptor = featureFlags.GetDescriptor();
+            const auto* reflection = featureFlags.GetReflection();
+            for (int i = 0; i < descriptor->field_count(); ++i) {
+                const auto* field = descriptor->field(i);
+                if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_BOOL) {
+                    json["Features"][field->name()] = reflection->GetBool(featureFlags, field);
+                }
+            }
+        }
         return json;
     }
 

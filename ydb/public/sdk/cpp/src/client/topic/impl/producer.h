@@ -164,8 +164,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);  
-        std::optional<std::uint64_t> GetCurrentSeqNo() const; 
+        void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);
 
     private:
         enum class EState : std::uint8_t {

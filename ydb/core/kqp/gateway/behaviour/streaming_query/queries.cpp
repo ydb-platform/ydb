@@ -373,7 +373,7 @@ protected:
         }
 
         OnFinish(status);
-        TBase::PassAway();
+        this->PassAway();
     }
 
     void FatalError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
@@ -800,7 +800,6 @@ protected:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status) final {
-        ClosePipeClient();
         Send(Owner, new TEvPrivate::TEvExecuteSchemeTransactionResult(status, std::move(Issues)));
     }
 

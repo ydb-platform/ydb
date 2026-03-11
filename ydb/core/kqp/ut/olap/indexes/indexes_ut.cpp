@@ -136,12 +136,16 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             CompareYson(result, R"([[0u;]])");
-            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
-            ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesSkippedNoData().Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), 0);
+            UNIT_ASSERT_C(
+                csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val(),
+                TStringBuilder()
+                    << "approved: "
+                    << csController->GetIndexesApprovedOnSelect().Val()
+                    << ", skipped: "
+                    << csController->GetIndexesSkippingOnSelect().Val());
         }
-
     }
 
     Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {

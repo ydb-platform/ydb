@@ -10,7 +10,8 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
     {
         auto* columnInfo = currentSchema.GetColumns().GetByName(ColumnName);
         if (!columnInfo) {
-            errors.AddError(Sprintf("tried to create minmax index for column %s, but this column doesn't exist in target table",ColumnName.c_str()));
+            errors.AddError(
+                Sprintf("tried to create minmax index for column %s, but this column doesn't exist in target table", ColumnName.c_str()));
             return nullptr;
         }
         if (!TIndexMeta::IsAvailableType(columnInfo->GetType())) {
@@ -29,10 +30,10 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
     }
     AFL_VERIFY(DataExtractor);
     if (!jsonInfo.Has("column_name")) {
-        return TConclusionStatus::Fail("column_name have to be in minmax index features");
+        return TConclusionStatus::Fail("column_name must be present in minmax index features");
     }
     if (!jsonInfo["column_name"].GetString(&ColumnName)) {
-        return TConclusionStatus::Fail("column_name have to be in minmax index features as string");
+        return TConclusionStatus::Fail("column_name must be present in minmax index features as string");
     }
     return TConclusionStatus::Success();
 }
@@ -48,15 +49,15 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (!DataExtractor.DeserializeFromProto(bIndex.GetDataExtractor())) {
         return TConclusionStatus::Fail("cannot parse data extractor: " + bIndex.GetDataExtractor().DebugString());
     }
-    AFL_VERIFY(DataExtractor.HasObject());  
+    AFL_VERIFY(DataExtractor.HasObject());
     return TConclusionStatus::Success();
 }
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();
-    AFL_VERIFY(!!ColumnName)("problem", "not initialized max index info trying to serialize");
+    AFL_VERIFY(!!ColumnName)("problem", "not initialized minmax index info trying to serialize");
     filterProto->SetColumnName(ColumnName);
     *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }
 
-}   // namespace NKikimr::NOlap::NIndexes::NMax
+}   // namespace NKikimr::NOlap::NIndexes::NMinMax

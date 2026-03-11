@@ -1,6 +1,9 @@
 #include "serialization.h"
-#include <ydb/library/formats/arrow/switch/switch_type.h>
+
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
+
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NArrow::NScalar {
 
@@ -32,7 +35,8 @@ TConclusion<TString> TSerializer::SerializePayloadToString(const std::shared_ptr
     return resultString;
 }
 
-TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWithPayload(TStringBuf data, const std::shared_ptr<arrow::DataType>& dataType) {
+TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWithPayload(
+    TStringBuf data, const std::shared_ptr<arrow::DataType>& dataType) {
     AFL_VERIFY(dataType);
     std::shared_ptr<arrow::Scalar> result;
     const bool resultFlag = NArrow::SwitchType(dataType->id(), [&](const auto& type) {
@@ -41,14 +45,17 @@ TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWi
         if constexpr (arrow::has_c_type<T>()) {
             using CType = typename T::c_type;
             using ScalarType = typename arrow::TypeTraits<T>::ScalarType;
-            AFL_VERIFY(data.size() == sizeof(CType))("mismatch", Sprintf("data.size(): %i vs CType: %s with size %i", data.size(), T::type_name(), sizeof(CType)));
-            result = std::make_shared<ScalarType>(*(CType*)&data[0], dataType);
+            AFL_VERIFY(data.size() == sizeof(CType))(
+                "mismatch", Sprintf("data.size(): %i vs CType: %s with size %i", data.size(), T::type_name(), sizeof(CType)));
+            result = std::make_shared<ScalarType>(ReadUnaligned<CType>(data.data()), dataType);
             return true;
         } else if constexpr (arrow::has_string_view<T>()) {
             using ScalarType = typename arrow::TypeTraits<T>::ScalarType;
             result = std::make_shared<ScalarType>(arrow::Buffer::FromString(std::string(data.data(), data.size())), dataType);
             return true;
-        } else return false;
+        } else {
+            return false;
+        }
     });
     if (!resultFlag) {
         return TConclusionStatus::Fail("incorrect scalar type for payload deserialization: " + dataType->ToString());
@@ -56,4 +63,4 @@ TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWi
     return result;
 }
 
-}
+}   // namespace NKikimr::NArrow::NScalar

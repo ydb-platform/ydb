@@ -105,8 +105,6 @@ class TestYdbMinMaxIndex(TestBase):
         Test adding columns and verifying that minmax index is built correctly
         """
 
-        # INSERT_YOUR_CODE
-
         self.query("DROP TABLE IF EXISTS `minmax_index_all_types`;")
         self.query("""
             CREATE TABLE `minmax_index_all_types` (

@@ -1,5 +1,4 @@
 #pragma once
-#include <util/generic/map.h>
 #include <util/datetime/base.h>
 namespace NKikimr::NKqp {
 TString FormatDurationAsMilliseconds(TDuration duration);
@@ -13,8 +12,6 @@ struct TPerStepScanStatistics {
     TString DebugString() const;
 };
 
-struct TScanStatistics {
-    TMap<ui32, TPerStepScanStatistics> PerStepStats;
-};
+using TScanStatistics = TMap<ui32, TPerStepScanStatistics>;
 
 }   // namespace NKikimr::NKqp

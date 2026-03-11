@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The `admin cluster bridge takedown` command performs a [planned takedown](../../../../concepts/bridge.md#takedown) of a pile. If the current `PRIMARY` is being taken down, you must specify a new `PRIMARY`.
+The `admin cluster bridge takedown` command performs a planned takedown of a pile. If the current `PRIMARY` is being taken down, you must specify a new `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

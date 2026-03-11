@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The `admin cluster bridge list` command prints the status of each pile in [bridge mode](../../../../concepts/bridge.md).
+The `admin cluster bridge list` command prints the status of each pile in bridge mode.
 
 Command syntax:
 

@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The `admin cluster bridge rejoin` command [returns](../../../../concepts/bridge.md#rejoin) a pile to the cluster after maintenance or recovery. After running the command, the pile is expected to transition from `DISCONNECTED` to `NOT_SYNCHRONIZED`, then be synchronized automatically and transition to `SYNCHRONIZED`.
+The `admin cluster bridge rejoin` command returns a pile to the cluster after maintenance or recovery. After running the command, the pile is expected to transition from `DISCONNECTED` to `NOT_SYNCHRONIZED`, then be synchronized automatically and transition to `SYNCHRONIZED`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

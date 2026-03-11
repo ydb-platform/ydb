@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The `admin cluster bridge failover` command performs an [emergency failover](../../../../concepts/bridge.md#failover) for a pile when it is unavailable. If needed, you can specify which pile should become the new `PRIMARY`.
+The `admin cluster bridge failover` command performs an emergency failover for a pile when it is unavailable. If needed, you can specify which pile should become the new `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -33,7 +33,7 @@ View command help:
 
 - If the current `PRIMARY` is unavailable, you must specify `--new-primary` and choose a pile in the `SYNCHRONIZED` state. If `--new-primary` is omitted, or a pile in a state other than `SYNCHRONIZED` is selected, the command will return an error without making any changes.
 - The cluster will not transition into an invalid state: if requirements are violated, the command does not change anything and reports an error.
-- If a pile is not down, but you need to take it out, use a [planned takedown](../../../../concepts/bridge.md#takedown) via the [`takedown`](takedown.md) command.
+- If a pile is not down, but you need to take it out, use a planned takedown via the [`takedown`](takedown.md) command.
 
 ## Examples {#examples}
 

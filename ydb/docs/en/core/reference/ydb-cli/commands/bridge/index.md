@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The [bridge mode](../../../../concepts/bridge.md) cluster management commands let you view the state of each [pile](../../../../concepts/glossary.md#pile), perform planned and emergency PRIMARY switchovers, temporarily take a pile out for maintenance, and then return it back to the cluster.
+The bridge mode cluster management commands let you view the state of each [pile](../../../../concepts/glossary.md#pile), perform planned and emergency PRIMARY switchovers, temporarily take a pile out for maintenance, and then return it back to the cluster.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

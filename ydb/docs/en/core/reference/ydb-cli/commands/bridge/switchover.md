@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-The `admin cluster bridge switchover` command performs a smooth, planned switch of the specified pile to the `PRIMARY` state via an intermediate `PROMOTED` state. For details, see the [scenario description](../../../../concepts/bridge.md#switchover).
+The `admin cluster bridge switchover` command performs a smooth, planned switch of the specified pile to the `PRIMARY` state via an intermediate `PROMOTED` state. For details, see the scenario description.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

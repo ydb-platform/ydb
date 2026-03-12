@@ -2598,6 +2598,7 @@
             }
         }
     ],
+<<<<<<< HEAD
     "test.test_viewer_autocomplete": {
         "/Root": {
             "Result": {
@@ -2622,6 +2623,350 @@
                         "Name": "serverless_db",
                         "Type": "ext_sub_domain"
                     }
+=======
+    "test.TestViewer.test_viewer_acl_write_invalid": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Token is not in correct format\n</p></body></html>"
+    },
+    "test.TestViewer.test_viewer_autocomplete": {
+        "dedicated_db": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
+        },
+        "empty": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
+        },
+        "root": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
+        },
+        "root_dedicated_db": {
+            "/Root": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+>>>>>>> 811a68a82d2 (enhance error handling for invalid acl change (#35735))
                 ],
                 "Total": 5
             },
@@ -11896,10 +12241,15 @@
             }
         ]
     },
+<<<<<<< HEAD
     "test.test_wait_for_cluster_ready": {
         "wait_good": true
     },
     "test.test_whoami_database": {
+=======
+    "test.TestViewer.test_waiting_for_cluster_ready": {},
+    "test.TestViewer.test_whoami_database": {
+>>>>>>> 811a68a82d2 (enhance error handling for invalid acl change (#35735))
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"
     },

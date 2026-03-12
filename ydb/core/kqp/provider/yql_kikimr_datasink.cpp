@@ -1985,9 +1985,14 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 if (tuple.Value().Maybe<TCoAtom>()) {
                     value = tuple.Value().Cast<TCoAtom>();
                 }
-            } else if (name == "value_param_name") {
-                if (tuple.Value().Maybe<TCoAtom>()) {
-                    valueParamName = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "value_expr") {
+                auto expr = tuple.Value();
+                if (expr.Maybe<TCoParameter>()) {
+                    valueParamName = Build<TCoAtom>(ctx, tuple.Pos()).Value(expr.Cast<TCoParameter>().Name().StringValue()).Done();
+                } else if (expr.Maybe<TCoDataCtor>()) {
+                    value = expr.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), "Only literal or single parameter is supported here"));
                 }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());

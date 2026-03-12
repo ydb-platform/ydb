@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -1027,7 +1028,16 @@ class TestExecuteSqlFromStdinWithWideOutput(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
+
+        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_pg_syntax"]))
+        cls.cluster.start()
+        cls.root_dir = "/Root"
+        driver_config = ydb.DriverConfig(
+            database="/Root",
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
+        cls.driver = ydb.Driver(driver_config)
+        cls.driver.wait(timeout=4)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -1036,7 +1046,6 @@ class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
         self.table_path = self.tmp_path.name
         create_table_with_data(self.session, self.root_dir + "/" + self.table_path)
 
-    @pytest.mark.skip(reason="pg syntax disabled")
     def test_pg_syntax(self):
         script = "SELECT * FROM \"{}\" WHERE key = 1;".format(self.table_path)
         output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--syntax", "pg"])

@@ -503,10 +503,6 @@ public:
                 delete ptr;
             });
 
-            NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
-            res->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
-                delete ptr;
-            });
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
         }

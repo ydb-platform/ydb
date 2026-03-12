@@ -653,14 +653,6 @@ enum EFormatFlags {
     FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
 };
 
-struct TPersistentBufferFormat {
-    ui32 MaxChunks = 256;
-    ui32 InitChunks = 256;
-    ui32 MaxInMemoryCache = 128 << 20; // 128 MiB
-    ui32 MaxChunkRestoreInflight = 8;
-    ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
-};
-
 struct TDiskFormat {
     ui64 Version;
     ui64 DiskSize;

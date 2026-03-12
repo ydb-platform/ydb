@@ -244,7 +244,7 @@ namespace NKikimr::NDDisk {
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFunc);
@@ -546,11 +546,7 @@ namespace NKikimr::NDDisk {
         ui32 SectorSize;
         ui32 SectorInChunk;
         ui32 ChunkSize;
-        ui32 MaxChunks;
-        ui32 PersistentBufferInitChunks;
-        ui32 MaxPersistentBufferInMemoryCache;
-        ui32 MaxPersistentBufferChunkRestoreInflight;
-        ui32 UpdateFreeSpaceInfoMilliseconds;
+        TPersistentBufferFormat PersistentBufferFormat;
 
         double NormalizedOccupancy = -1;
 
@@ -600,7 +596,7 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
         std::unordered_set<ui32> PersistentBufferRestoredChunks;
 
-        void InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format);
+        void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);

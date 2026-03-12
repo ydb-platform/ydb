@@ -80,8 +80,8 @@ public:
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
-
-        const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, Counters),
+        NDDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
+        const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat), Counters),
             NodeId);
         const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);
@@ -139,10 +139,6 @@ public:
         NPDisk::TDiskFormat format;
         format.Clear(false);
         initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
-            delete ptr;
-        });
-        NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
-        initReply->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
             delete ptr;
         });
         SendPDiskResponse(disk, *init, initReply.release());

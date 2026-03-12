@@ -13,10 +13,11 @@
 namespace NKikimr::NDDisk {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : BaseInfo(std::move(baseInfo))
         , Info(std::move(info))
         , CountersBase(GetServiceCounters(counters, "ddisks"))
+        , PersistentBufferFormat(std::move(pbFormat))
     {
         CountersChain.emplace_back("ddiskPool", BaseInfo.StoragePoolName);
         CountersChain.emplace_back("group", Sprintf("%09" PRIu32, Info->GroupID));
@@ -191,8 +192,8 @@ namespace NKikimr::NDDisk {
     }
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(counters));
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(counters));
     }
 
 } // NKikimr::NDDisk

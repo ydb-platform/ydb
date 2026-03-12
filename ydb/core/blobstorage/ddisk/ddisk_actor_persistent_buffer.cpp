@@ -11,25 +11,20 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format) {
+    void TDDiskActor::InitPersistentBuffer() {
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
         ChunkSize = DiskFormat->ChunkSize;
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
-        MaxChunks = format->MaxChunks;
-        PersistentBufferInitChunks = format->InitChunks;
-        MaxPersistentBufferInMemoryCache = format->MaxInMemoryCache;
-        MaxPersistentBufferChunkRestoreInflight = format->MaxChunkRestoreInflight;
-        UpdateFreeSpaceInfoMilliseconds = format->UpdateFreeSpaceInfoMilliseconds;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
         UpdateFreeSpaceInfo();
     }
 
     void TDDiskActor::UpdateFreeSpaceInfo() {
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvCheckSpace(PDiskParams->Owner, PDiskParams->OwnerRound));
-        Schedule(TDuration::MilliSeconds(UpdateFreeSpaceInfoMilliseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupUpdateFreeSpaceInfo));
+        Schedule(TDuration::MilliSeconds(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupUpdateFreeSpaceInfo));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvCheckSpaceResult::TPtr ev) {
@@ -67,7 +62,7 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferReady) {
             return;
         }
-        if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferInitChunks) {
+        if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.InitChunks) {
             IssuePersistentBufferChunkAllocation();
             return;
         }
@@ -77,7 +72,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferReady = true;
             return;
         }
-        while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < MaxPersistentBufferChunkRestoreInflight) {
+        while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight) {
             auto chunkIdx = PersistentBufferSpaceAllocator.OwnedChunks[pos];
             STLOG(PRI_DEBUG, BS_DDISK, BSDD13, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
             if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0 || PersistentBufferRestoredChunks.count(chunkIdx) > 0) {
@@ -306,7 +301,7 @@ namespace NKikimr::NDDisk {
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
-            if (PersistentBufferSpaceAllocator.OwnedChunks.size() < MaxChunks) {
+            if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
                 STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
@@ -526,7 +521,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force) {
-        if ((force || PersistentBufferInMemoryCacheSize > MaxPersistentBufferInMemoryCache)
+        if ((force || PersistentBufferInMemoryCacheSize > PersistentBufferFormat.MaxInMemoryCache)
             && record.PartsCount > 0 && record.DataParts.size() == record.PartsCount) {
             Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
@@ -791,8 +786,8 @@ namespace NKikimr::NDDisk {
     double TDDiskActor::GetPersistentBufferFreeSpace() {
         double freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
         ui32 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
-        freeSpace += (MaxChunks - ownedChunks) * SectorInChunk;
-        freeSpace /= (MaxChunks * SectorInChunk);
+        freeSpace += (PersistentBufferFormat.MaxChunks - ownedChunks) * SectorInChunk;
+        freeSpace /= (PersistentBufferFormat.MaxChunks * SectorInChunk);
         Y_ABORT_UNLESS(freeSpace >= 0 && freeSpace <= 1);
         return freeSpace;
     }

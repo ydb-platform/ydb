@@ -158,6 +158,14 @@ namespace NKikimr::NDDisk {
         }
     };
 
+struct TPersistentBufferFormat {
+    ui32 MaxChunks = 256;
+    ui32 InitChunks = 256;
+    ui32 MaxInMemoryCache = 128 << 20; // 128 MiB
+    ui32 MaxChunkRestoreInflight = 8;
+    ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
+};
+
 #define DECLARE_DDISK_EVENT(NAME) \
     struct TEv##NAME : TEventPB<TEv##NAME, NKikimrBlobStorage::NDDisk::TEv##NAME, TEv::Ev##NAME>
 
@@ -532,6 +540,6 @@ namespace NKikimr::NDDisk {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr::NDDisk

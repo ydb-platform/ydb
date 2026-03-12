@@ -21,43 +21,40 @@ using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
-// Streaming configuration for page-based reading
-struct TStreamingConfig {
+// Helper class to work with streaming configuration from AppData
+class TStreamingConfigHelper {
+public:
     enum class EStrategy {
         Always,      // Always use page-based streaming
         Never,       // Never use streaming (read entire portion)
         Auto         // Automatically decide based on portion size
     };
 
-    // NOTE: The following fields are reserved for future use when row/byte-based
-    // page boundaries are implemented. Currently, BuildReadPages() only uses
-    // memory limits to determine page boundaries.
-    
-    // Size of page in rows (reserved for future use)
-    ui32 PageSizeRows = 10000;
-    
-    // Maximum page size in bytes (reserved for future use)
-    ui64 PageSizeBytes = 8 * 1024 * 1024; // 8 MB
-    
-    // Maximum number of pages in flight (reserved for future use)
-    ui32 MaxPagesInFlight = 10;
-    
-    // Enable page-based reading for portions larger than this
-    ui32 MinRecordsForPaging = 50000;
-    
-    // Strategy for enabling streaming
-    EStrategy Strategy = EStrategy::Auto;
-
-    bool ShouldUseStreamingMode(ui32 recordsCount) const {
-        switch (Strategy) {
+    static bool ShouldUseStreamingMode(ui32 recordsCount) {
+        if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+            // Default behavior: auto mode with 50000 records threshold
+            return recordsCount >= 50000;
+        }
+        
+        const auto& config = AppDataVerified().ColumnShardConfig.GetStreamingConfig();
+        const auto strategy = static_cast<EStrategy>(config.GetStrategy());
+        
+        switch (strategy) {
             case EStrategy::Always:
                 return true;
             case EStrategy::Never:
                 return false;
             case EStrategy::Auto:
-                return recordsCount >= MinRecordsForPaging;
+                return recordsCount >= config.GetMinRecordsForPaging();
         }
         return false;
+    }
+    
+    static ui32 GetMaxPagesInFlight() {
+        if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+            return 8; // Default value
+        }
+        return AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetMaxPagesInFlight();
     }
 };
 
@@ -84,17 +81,7 @@ private:
                GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
-    // Streaming configuration
-    TStreamingConfig StreamingConfig;
-
 public:
-    const TStreamingConfig& GetStreamingConfig() const {
-        return StreamingConfig;
-    }
-
-    TStreamingConfig& MutableStreamingConfig() {
-        return StreamingConfig;
-    }
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
             auto graph = GetReadMetadata()->GetProgram().GetGraphOptional();

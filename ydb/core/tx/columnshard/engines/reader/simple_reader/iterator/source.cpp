@@ -133,12 +133,8 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!GetStageData().IsEmptyWithData());
 
-    // Get streaming configuration
-    auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-    const auto& streamingConfig = context->GetStreamingConfig();
-
-    // Decide whether to use streaming mode
-    const bool useStreaming = streamingConfig.ShouldUseStreamingMode(GetRecordsCount());
+    // Decide whether to use streaming mode based on config from AppData
+    const bool useStreaming = TStreamingConfigHelper::ShouldUseStreamingMode(GetRecordsCount());
 
     if (useStreaming && memoryLimit && !IsSourceInMemory()) {
         // Enable page-based streaming

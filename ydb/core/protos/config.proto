@@ -2610,6 +2610,20 @@ message TColumnShardConfig {
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
+
+    message TStreamingConfig {
+        enum EStrategy {
+            STRATEGY_ALWAYS = 0;
+            STRATEGY_NEVER = 1;
+            STRATEGY_AUTO = 2;
+        }
+        
+        optional uint32 MinRecordsForPaging = 1 [default = 50000];
+        optional EStrategy Strategy = 2 [default = STRATEGY_AUTO];
+        optional uint32 MaxPagesInFlight = 3 [default = 8];
+    }
+    
+    optional TStreamingConfig StreamingConfig = 70;
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto

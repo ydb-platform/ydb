@@ -322,5 +322,3 @@ ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // m
 - [OWASP CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
-- [`library/cpp/monlib/service/pages/templates.h`](../library/cpp/monlib/service/pages/templates.h) — HTML macro definitions
-- [`ydb/core/viewer/viewer.cpp`](../ydb/core/viewer/viewer.cpp) — HTTP response helpers (`GetHTTPOK`, `FillCORS`)

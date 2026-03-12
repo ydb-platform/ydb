@@ -514,7 +514,6 @@ struct TTestEnvCompBroker {
 
         Env.Sim(TDuration::Seconds(5));
         for (ui32 i = 1; i <= Env.Settings.NodeCount; ++i) {
-            Env.SetIcbControl(i, "VDiskControls.EnableCompactionToken", 1);
             Env.SetIcbControl(i, "PDiskControls.MaxActiveCompactionsPerPDisk", MaxCompactionsLimit);
         }
         Env.Sim(TDuration::Seconds(5));

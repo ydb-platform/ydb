@@ -1831,13 +1831,6 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
-
-        optional uint64 EnableCompactionToken = 41 [(ControlOptions) = {
-            Description: "Enable compaction token",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0
-        }];
     }
 
     message TTabletControls {

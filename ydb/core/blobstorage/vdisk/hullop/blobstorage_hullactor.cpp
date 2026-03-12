@@ -213,6 +213,9 @@ namespace NKikimr {
         friend class TActorBootstrapped<TThis>;
 
         void UpdateTimingMetrics(const TActorContext& ctx) {
+            if (CompactionTokenState == ECompactionTokenState::NotNeeded) {
+                return;
+            }
             auto& group = HullDs->HullCtx->LsmHullGroup;
             const TMonotonic now = ctx.Monotonic();
 
@@ -384,7 +387,7 @@ namespace NKikimr {
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
                     
-                    if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->EnableCompactionToken) {
+                    if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
                         CancelOrReleaseCompactionTokenIfNeeded(ctx);
                         LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token not needed, starting compaction",

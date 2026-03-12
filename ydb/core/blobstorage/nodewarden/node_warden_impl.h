@@ -226,7 +226,6 @@ namespace NKikimr::NStorage {
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper GarbageThresholdToRunFullCompactionPerMille;
         TControlWrapper DefragThrottlerBytesRate;
-        TControlWrapper EnableCompactionToken;
 
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;

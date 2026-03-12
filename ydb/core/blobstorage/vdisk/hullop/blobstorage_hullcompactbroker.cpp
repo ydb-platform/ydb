@@ -181,7 +181,7 @@ namespace NKikimr {
         void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
             TCompactionKey key(groupId, vdiskId, actorId);
 
-            PendingCompactions.emplace(key, TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
+            PendingCompactions.insert_or_assign(key, TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
         }
 
         void ReleaseCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {

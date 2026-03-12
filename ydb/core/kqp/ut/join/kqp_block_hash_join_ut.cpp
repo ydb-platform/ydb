@@ -906,7 +906,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
     }
 
-    Y_UNIT_TEST(BlockHashJoinOptionalVsNonOptionalDifferentTypes) {
+    Y_UNIT_TEST(BlockHashJoinOptionalVsNonOptional) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
@@ -925,7 +925,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                     WITH (STORE = COLUMN);
 
                     CREATE TABLE `/Root/right_table` (
-                        id Int32 NOT NULL,
+                        id Int64 NOT NULL,
                         value String NOT NULL,
                         PRIMARY KEY (id)
                     )
@@ -1001,11 +1001,13 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             auto astOpt = explainResult.GetStats()->GetAst();
             UNIT_ASSERT(astOpt.has_value());
             TString ast = TString(*astOpt);
-            Cout << "AST (OptionalInt64 vs Int32 INNER): " << ast << Endl;
+            Cout << "AST (OptionalInt64 vs Int64 INNER): " << ast << Endl;
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("FilterNullMembers"),
                 TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("SkipNullMembers"),
+                TStringBuilder() << "SkipNullMembers should not appear for block hash join. AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
                 TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
         }
@@ -1056,11 +1058,13 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             auto astOpt = explainResult.GetStats()->GetAst();
             UNIT_ASSERT(astOpt.has_value());
             TString ast = TString(*astOpt);
-            Cout << "AST (OptionalInt64 vs Int32 LEFT): " << ast << Endl;
+            Cout << "AST (OptionalInt64 vs Int64 LEFT): " << ast << Endl;
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("FilterNullMembers"),
                 TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("SkipNullMembers"),
+                TStringBuilder() << "SkipNullMembers should not appear for block hash join. AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
                 TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
         }

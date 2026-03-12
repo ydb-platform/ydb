@@ -571,6 +571,10 @@ std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
+bool TStorage::DLQEmpty() const {
+    return DLQQueue.empty();
+}
+
 std::deque<TDLQMessage> TStorage::GetDLQMessages() {
     static constexpr size_t MaxBatchSize = 1000;
 
@@ -931,8 +935,12 @@ void TStorage::UpdateFirstUncommittedOffset() {
     }
 }
 
-TStorage::TBatch TStorage::GetBatch() {
+TStorage::TBatch TStorage::ExtractBatch() {
     return std::exchange(Batch, {this});
+}
+
+bool TStorage::IsBatchEmpty() const {
+    return Batch.Empty();
 }
 
 const TMetrics& TStorage::GetMetrics() const {

@@ -43,6 +43,7 @@ template <>
 struct TImportTraits<TEvImportFromS3Request> {
     using TSettings = Ydb::Import::ImportFromS3Settings;
     using TItem = Ydb::Import::ImportFromS3Settings::Item;
+    static constexpr TStringBuf SourcePathName = "source prefix";
 
     static const auto& GetSourcePath(const TSettings& settings) {
         return settings.source_prefix();
@@ -61,6 +62,7 @@ template <>
 struct TImportTraits<TEvImportFromFsRequest> {
     using TSettings = Ydb::Import::ImportFromFsSettings;
     using TItem = Ydb::Import::ImportFromFsSettings::Item;
+    static constexpr TStringBuf SourcePathName = "source path";
 
     static const auto& GetSourcePath(const TSettings& settings) {
         return settings.base_path();
@@ -137,11 +139,14 @@ public:
         using TTraits = TImportTraits<TEvRequest>;
         const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
         const bool commonSourcePrefixSpecified = !TTraits::GetSourcePath(settings).empty();
-        if (!encryptedExportFeatureFlag) {
-            // Check that no new fields are specified
-            if (commonSourcePrefixSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
+        if constexpr (IsS3Import) {
+            if (!encryptedExportFeatureFlag) {
+                if (commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
+                }
             }
+        }
+        if (!encryptedExportFeatureFlag) {
             if (!settings.destination_path().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
             }
@@ -154,14 +159,17 @@ public:
         }
         for (const auto& item : settings.items()) {
             if (TTraits::GetSourcePath(item).empty() && !commonSourcePrefixSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No source prefix or common source prefix specified for item \"" << item.destination_path() << "\"");
+                constexpr TStringBuf msgCommonSourcePrefix = IsS3Import ? " or common source prefix" : "";
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No " << TTraits::SourcePathName << msgCommonSourcePrefix << " specified for item \"" << item.destination_path() << "\"");
             }
-            if (!TTraits::GetSourcePath(item).empty()) {
-                if (!encryptedExportFeatureFlag) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
-                }
-                if (!commonSourcePrefixSpecified) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
+            if constexpr (IsS3Import) {
+                if (!item.source_path().empty()) {
+                    if (!encryptedExportFeatureFlag) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
+                    }
+                    if (!commonSourcePrefixSpecified) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
+                    }
                 }
             }
             if (TTraits::IsEmptyItem(item)) {

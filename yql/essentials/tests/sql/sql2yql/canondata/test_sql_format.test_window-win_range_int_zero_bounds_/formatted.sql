@@ -61,19 +61,19 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, 'int_preceding: ' || $str(actual_count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, 'int_preceding: ' || $str(actual_count))
 FROM
     $win_result_int_preceding
 ;
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, 'uint8_preceding: ' || $str(actual_count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, 'uint8_preceding: ' || $str(actual_count))
 FROM
     $win_result_uint8_preceding
 ;
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, 'float: ' || $str(actual_count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, 'float: ' || $str(actual_count))
 FROM
     $win_result_float
 ;

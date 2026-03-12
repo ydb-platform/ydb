@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -372,28 +373,30 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDirectBlockGroup::SyncWithPersistentBuffer(
-    TExecutorPtr executor,
+NThreading::TFuture<TDBGSyncBlocksResponse>
+TDirectBlockGroup::SyncWithPersistentBuffer(
     ui32 vChunkIndex,
     ui8 persistBufferIndex,
     const TVector<TSyncRequest>& syncRequests,
     NWilson::TTraceId traceId)
 {
-    auto requestHandler = std::make_shared<TSyncRequestHandler>(
+    using TEvSyncWithPersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+
+    auto requestHandler = std::make_shared<TSyncAndEraseRequestHandler>(
         ActorSystem,
         vChunkIndex,
         persistBufferIndex,
         std::move(traceId),
         TabletId,
-        std::move(syncRequests));
+        syncRequests);
 
-    auto persistentBufferIndex = requestHandler->GetPersistentBufferIndex();
-    const auto& ddiskConnection = DDiskConnections[persistentBufferIndex];
+    const auto& ddiskConnection = DDiskConnections[persistBufferIndex];
     const auto& persistentBufferConnection =
-        PersistentBufferConnections[persistentBufferIndex];
+        PersistentBufferConnections[persistBufferIndex];
 
     const ui64 storageRequestId = ++StorageRequestId;
-    auto& childSpan = requestHandler->GetChildSpan(storageRequestId);
+
     auto future = StorageTransport->SyncWithPersistentBuffer(
         ddiskConnection.GetServiceId(),
         ddiskConnection.Credentials,
@@ -404,40 +407,33 @@ void TDirectBlockGroup::SyncWithPersistentBuffer(
             persistentBufferConnection.DDiskId.PDiskId,
             persistentBufferConnection.DDiskId.DDiskSlotId),
         persistentBufferConnection.Credentials.DDiskInstanceGuid.value(),
-        childSpan);
+        requestHandler->GetChildSpan(storageRequestId));
 
-    const auto& resultOrError = executor->ResultOrError(std::move(future));
-    if (HasError(resultOrError)) {
-        // TODO: add error handling
-        requestHandler->ChildSpanEndError(
-            storageRequestId,
-            "SyncWithPersistentBuffer failed");
-        requestHandler->Span.EndError("SyncWithPersistentBuffer failed");
-        return;
-    }
-
-    HandleSyncWithPersistentBufferResult(
-        executor,
-        std::move(requestHandler),
-        storageRequestId,
-        resultOrError.GetResult());
+    future.Subscribe(
+        [weakSelf = weak_from_this(), requestHandler, storageRequestId]   //
+        (const TFuture<TEvSyncWithPersistentBufferResult>& f) mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                self->HandleSyncWithPersistentBufferResult(
+                    std::move(requestHandler),
+                    storageRequestId,
+                    UnsafeExtractValue(f));
+            } else {
+                requestHandler->SetResponse(MakeError(E_CANCELLED));
+            }
+        });
+    return requestHandler->GetFuture();
 }
 
 void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
-    TExecutorPtr executor,
-    std::shared_ptr<TSyncRequestHandler> requestHandler,
+    std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result)
 {
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         requestHandler->ChildSpanEndOk(storageRequestId);
-        requestHandler->Span.EndOk();
 
-        auto eraseRequestHandler = std::make_shared<TEraseRequestHandler>(
-            ActorSystem,
-            std::move(requestHandler));
-
-        ErasePersistentBuffer(executor, std::move(eraseRequestHandler));
+        ErasePersistentBuffer(std::move(requestHandler));
     } else {
         // TODO: add error handling
         requestHandler->ChildSpanEndError(
@@ -445,15 +441,19 @@ void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
             "HandleSyncWithPersistentBufferResult failed");
         requestHandler->Span.EndError(
             "HandleSyncWithPersistentBufferResult failed");
+
+        requestHandler->SetResponse(MakeError(result.GetStatus()));
     }
 }
 
 void TDirectBlockGroup::ErasePersistentBuffer(
-    TExecutorPtr executor,
-    std::shared_ptr<TEraseRequestHandler> requestHandler)
+    std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler)
 {
+    using TEvErasePersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
     const ui64 storageRequestId = ++StorageRequestId;
-    auto& childSpan = requestHandler->GetChildSpan(storageRequestId);
+
     auto future = StorageTransport->ErasePersistentBuffer(
         PersistentBufferConnections[requestHandler->GetPersistentBufferIndex()]
             .GetServiceId(),
@@ -461,20 +461,29 @@ void TDirectBlockGroup::ErasePersistentBuffer(
             .Credentials,
         requestHandler->GetBlockSelectors(),
         requestHandler->GetLsns(),
-        childSpan);
+        requestHandler->GetChildSpan(storageRequestId));
 
-    const auto& resultOrError = executor->ResultOrError(std::move(future));
-    if (!HasError(resultOrError)) {
-        HandleErasePersistentBufferResult(
-            std::move(requestHandler),
-            storageRequestId,
-            resultOrError.GetResult());
-    }
-    // TODO: add error handling
+    future.Subscribe(
+        [weakSelf = weak_from_this(), requestHandler, storageRequestId]   //
+        (const TFuture<TEvErasePersistentBufferResult>& f) mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                self->HandleErasePersistentBufferResult(
+                    std::move(requestHandler),
+                    storageRequestId,
+                    UnsafeExtractValue(f));
+            } else {
+                requestHandler->ChildSpanEndError(
+                    storageRequestId,
+                    "HandleEraseResult canceled");
+                requestHandler->Span.EndError("HandleEraseResult canceled");
+                requestHandler->SetResponse(MakeError(E_CANCELLED));
+            }
+        });
 }
 
 void TDirectBlockGroup::HandleErasePersistentBufferResult(
-    std::shared_ptr<TEraseRequestHandler> requestHandler,
+    std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult& result)
 {
@@ -488,12 +497,14 @@ void TDirectBlockGroup::HandleErasePersistentBufferResult(
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         requestHandler->ChildSpanEndOk(storageRequestId);
         requestHandler->Span.EndOk();
+        requestHandler->SetResponse(MakeError(S_OK));
     } else {
         // TODO: add error handling
         requestHandler->ChildSpanEndError(
             storageRequestId,
             "HandleEraseResult failed");
         requestHandler->Span.EndError("HandleEraseResult failed");
+        requestHandler->SetResponse(MakeError(result.GetStatus()));
     }
 
     execSpan.EndOk();

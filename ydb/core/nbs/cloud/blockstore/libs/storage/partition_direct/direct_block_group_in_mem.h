@@ -60,16 +60,11 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
 
-    void SyncWithPersistentBuffer(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistBufferIndex,
         const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) override;
-
-    void ErasePersistentBuffer(
-        TExecutorPtr executor,
-        std::shared_ptr<TEraseRequestHandler> requestHandler) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -285,6 +285,8 @@ void TVChunk::RequestBlockFlush(
     ui64 blockIndex,
     const NWilson::TTraceId& traceId)
 {
+    // Executor thread
+
     for (size_t i = 0; i < PersistentBufferCount; i++) {
         PendingSyncRequestsByPersistentBufferIndex[i].emplace_back(
             blockIndex,
@@ -302,33 +304,65 @@ void TVChunk::ProcessSyncQueue(
     size_t persistBufferIndex,
     const NWilson::TTraceId& traceId)
 {
-    Executor->ExecuteSimple(
+    // Executor thread
+    auto syncRequests = std::move(
+        PendingSyncRequestsByPersistentBufferIndex[persistBufferIndex]);
+    PendingSyncRequestsByPersistentBufferIndex[persistBufferIndex] = {};
+
+    auto future = DirectBlockGroup->SyncWithPersistentBuffer(
+        Index,
+        persistBufferIndex,
+        syncRequests,
+        NWilson::TTraceId(traceId));
+    future.Subscribe(
         [weakSelf = weak_from_this(),
          persistBufferIndex,
-         traceId = NWilson::TTraceId(traceId)]() mutable
+         syncRequests = std::move(syncRequests)]   //
+        (const NThreading::TFuture<TDBGSyncBlocksResponse>& f) mutable
         {
-            if (auto self = weakSelf.lock()) {
-                auto syncRequests =
-                    std::move(self->PendingSyncRequestsByPersistentBufferIndex
-                                  [persistBufferIndex]);
-                self->PendingSyncRequestsByPersistentBufferIndex
-                    [persistBufferIndex] = {};
-
-                self->DirectBlockGroup->SyncWithPersistentBuffer(
-                    self->Executor,
-                    self->Index,
-                    persistBufferIndex,
-                    syncRequests,
-                    std::move(traceId));
-
-                for (const auto& syncRequest: syncRequests) {
-                    self->DirtyMap->OnBlockFlushCompleted(
-                        syncRequest.StartIndex,
-                        persistBufferIndex,
-                        syncRequest.Lsn);
-                }
+            // ActorSystem thread
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
             }
+
+            self->Executor->ExecuteSimple(
+                [weakSelf,
+                 persistBufferIndex,
+                 syncRequests = std::move(syncRequests),
+                 response = UnsafeExtractValue(f)]   //
+                () mutable
+                {
+                    // Executor thread
+                    auto self = weakSelf.lock();
+                    if (!self) {
+                        return;
+                    }
+
+                    self->OnBlocksFlushed(
+                        persistBufferIndex,
+                        syncRequests,
+                        response);
+                });
         });
+}
+
+void TVChunk::OnBlocksFlushed(
+    size_t persistBufferIndex,
+    const TVector<TSyncRequest>& syncRequests,
+    const TDBGSyncBlocksResponse& response)
+{
+    // Executor thread
+    if (HasError(response.Error)) {
+        // TODO
+        return;
+    }
+    for (const auto& syncRequest: syncRequests) {
+        DirtyMap->OnBlockFlushCompleted(
+            syncRequest.StartIndex,
+            persistBufferIndex,
+            syncRequest.Lsn);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

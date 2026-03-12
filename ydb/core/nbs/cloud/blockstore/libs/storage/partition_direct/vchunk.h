@@ -57,6 +57,10 @@ private:
     void ProcessSyncQueue(
         size_t persistBufferIndex,
         const NWilson::TTraceId& traceId);
+    void OnBlocksFlushed(
+        size_t persistBufferIndex,
+        const TVector<TSyncRequest>& syncRequests,
+        const TDBGSyncBlocksResponse& response);
 
     const ui32 Index;
     const size_t BlocksCount;

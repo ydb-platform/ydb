@@ -30,6 +30,7 @@ public:
 private:
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
+    // Striping
     size_t GetVChunkIndex(ui64 blockIndex) const;
     size_t GetVChunkOffset(ui64 blockIndex) const;
 };

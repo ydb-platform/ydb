@@ -4,7 +4,7 @@
 # If you hit the Cursor indexing file limit, create a symlink:
 #   ln -sf .cursorindexingignore-personal .cursorindexingignore
 
-# .cpp/.cc/.c files from directories forbidden for modification (see AGENTS.md).
+# .cpp/.cc/.c files from library/util implementation directories are excluded from indexing.
 # .h/.hpp files are kept so the agent can see types and interfaces.
 /library/**/*.cpp
 /library/**/*.cc
@@ -26,8 +26,8 @@
 /contrib/tools/
 /contrib/libs/linux-headers/
 /contrib/restricted/grpc_py2/
-/contrib/libs/cxxsupp/	
-/contrib/restricted/boost/	
+/contrib/libs/cxxsupp/
+/contrib/restricted/boost/
 
 # Test and temporary files
 **/canondata/

@@ -493,19 +493,12 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
                         stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
                         break;
-                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                        stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
-                        break;
-                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                        stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
-                        break;
                     default:
                         YQL_ENSURE(false, "Unexpected table operation: " << (ui32) op.GetTypeCase());
                 }
             }
 
             YQL_ENSURE(tables.empty() || tables.size() == 1);
-            YQL_ENSURE(!stageInfo.Meta.HasReads() || !stageInfo.Meta.HasWrites());
         }
     }
 }
@@ -1075,36 +1068,7 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 }
 
 void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
-    if (task.Meta.ShardId && task.Meta.Writes) {
-        NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
-
-        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
-
-        if (task.Meta.Writes) {
-            auto* protoWrites = protoTaskMeta.MutableWrites();
-            task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
-            if (task.Meta.Writes->IsPureEraseOp()) {
-                protoWrites->SetIsPureEraseOp(true);
-            }
-
-            for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
-                auto& protoColumnWrite = *protoWrites->AddColumns();
-
-                auto& protoColumn = *protoColumnWrite.MutableColumn();
-                protoColumn.SetId(columnWrite.Column.Id);
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnWrite.Column.Type, columnWrite.Column.TypeMod);
-                protoColumn.SetType(columnType.TypeId);
-                if (columnType.TypeInfo) {
-                    *protoColumn.MutableTypeInfo() = *columnType.TypeInfo;
-                }
-                protoColumn.SetName(columnWrite.Column.Name);
-
-                protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
-            }
-        }
-
-        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
-    }  else if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
+    if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
@@ -1147,8 +1111,6 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                 break;
             }
         }
-
-        YQL_ENSURE(!task.Meta.Writes);
 
         if (!task.Meta.Reads->empty()) {
             protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
@@ -3418,14 +3380,6 @@ TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const N
                 sb << ", ";
             }
         }
-    } else {
-        sb << "none";
-    }
-
-    sb << " }, Writes: { ";
-
-    if (Writes) {
-        sb << "ranges: " << Writes->Ranges.ToString(keyTypes, typeRegistry);
     } else {
         sb << "none";
     }

@@ -340,11 +340,6 @@ public:
         bool IsPrimary = false;
     };
 
-    struct TColumnWrite {
-        TColumn Column;
-        ui32 MaxValueSizeBytes = 0;
-    };
-
     struct TShardReadInfo {
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
@@ -369,29 +364,8 @@ public:
         std::vector<std::string> GroupByColumnNames;
     };
 
-    struct TWriteInfo {
-        ui64 UpdateOps = 0;
-        ui64 EraseOps = 0;
-
-        TShardKeyRanges Ranges;
-        THashMap<ui32, TColumnWrite> ColumnWrites;
-
-        void AddUpdateOp() {
-            ++UpdateOps;
-        }
-
-        void AddEraseOp() {
-            ++EraseOps;
-        }
-
-        bool IsPureEraseOp() const {
-            return (EraseOps > 0) && (UpdateOps == 0);
-        }
-    };
-
     TReadInfo ReadInfo;
     TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
-    TMaybe<TWriteInfo> Writes;             // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };

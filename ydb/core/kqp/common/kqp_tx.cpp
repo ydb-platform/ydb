@@ -201,9 +201,9 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         return true;
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                        break;
                     case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                     case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                        break;
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }
@@ -219,7 +219,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
                     || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                    return true;
+                    AFL_ENSURE(false);
                 }
             }
 
@@ -261,10 +261,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                         break;
                     }
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                         modifiedTables.insert(getTable(tableOp.GetTable()));
                         break;
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }

@@ -285,19 +285,6 @@ protected:
                         Counters->Counters->FullScansExecuted->Inc();
                     }
                 }
-            }
-            // Write tasks to datashard (obsolete)
-            else if (!stageInfo.Meta.ShardOperations.empty() && stage.SinksSize() == 0) {
-                for (const auto& op : stage.GetTableOps()) {
-                    switch (op.GetTypeCase()) {
-                        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                        case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
-                            stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->PruneEffect(op, stageInfo));
-                        }
-                        default:
-                            break; // skip here - there will be an error when we will build tasks.
-                    }
-                }
             } else {
                 // TODO: make sure we don't miss any shards
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());

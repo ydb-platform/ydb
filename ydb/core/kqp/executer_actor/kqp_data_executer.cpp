@@ -684,9 +684,7 @@ private:
 
         for (const auto& task : TasksGraph.GetTasks()) {
             const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            if (task.Meta.ShardId && task.Meta.Writes) {
-                AFL_ENSURE(false); // TODO: ????
-            } else if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
+            if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
                 computeTasks.emplace_back(task.Id);
             }
         }

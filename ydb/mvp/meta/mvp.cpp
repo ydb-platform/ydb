@@ -25,9 +25,90 @@
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
 
+#include <mutex>
+
 using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
+
+namespace {
+
+class TGrafanaDashboardSource final : public NMVP::ILinkSource {
+public:
+    TGrafanaDashboardSource(NMVP::TSupportLinkEntryConfig config, TString grafanaEndpoint)
+        : Config_(std::move(config))
+        , GrafanaEndpoint_(std::move(grafanaEndpoint))
+    {}
+
+    const NMVP::TSupportLinkEntryConfig& Config() const override {
+        return Config_;
+    }
+
+    NMVP::TResolveOutput Resolve(const TResolveInput&) const override {
+        NMVP::TResolveOutput output{
+            .Name = Config_.GetSource(),
+            .Ready = true,
+        };
+        output.Links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
+            .Title = Config_.GetTitle(),
+            .Url = ResolveUrl(Config_.GetUrl(), GrafanaEndpoint_),
+        });
+        return output;
+    }
+
+private:
+    static bool IsAbsoluteUrl(const TString& url) {
+        return url.StartsWith("http://") || url.StartsWith("https://");
+    }
+
+    static TString ResolveUrl(const TString& configuredUrl, const TString& grafanaEndpoint) {
+        if (IsAbsoluteUrl(configuredUrl)) {
+            return configuredUrl;
+        }
+        if (grafanaEndpoint.empty()) {
+            return configuredUrl;
+        }
+
+        const bool endpointHasSlash = grafanaEndpoint.EndsWith('/');
+        const bool urlHasSlash = configuredUrl.StartsWith('/');
+        if (endpointHasSlash && urlHasSlash) {
+            return grafanaEndpoint.substr(0, grafanaEndpoint.size() - 1) + configuredUrl;
+        }
+        if (!endpointHasSlash && !urlHasSlash) {
+            return grafanaEndpoint + "/" + configuredUrl;
+        }
+        return grafanaEndpoint + configuredUrl;
+    }
+
+private:
+    NMVP::TSupportLinkEntryConfig Config_;
+    TString GrafanaEndpoint_;
+};
+
+std::shared_ptr<NMVP::ILinkSource> MakeGrafanaDashboardSource(NMVP::TSupportLinkEntryConfig config) {
+    if (config.GetUrl().empty()) {
+        ythrow yexception() << "url is required for source=" << config.GetSource();
+    }
+
+    const TString grafanaEndpoint = NMVP::InstanceMVP ? NMVP::InstanceMVP->MetaSettings.GrafanaEndpoint : TString();
+    if (!config.GetUrl().StartsWith("http://")
+        && !config.GetUrl().StartsWith("https://")
+        && grafanaEndpoint.empty())
+    {
+        ythrow yexception() << "grafana.endpoint is required for relative url";
+    }
+
+    return std::make_shared<TGrafanaDashboardSource>(std::move(config), grafanaEndpoint);
+}
+
+void RegisterSupportLinkSourcesOnce() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        NMVP::RegisterLinkSource("grafana/dashboard", &MakeGrafanaDashboardSource);
+    });
+}
+
+} // namespace
 
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -199,6 +280,8 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appCon
     }
 
     if (config.HasSupportLinks()) {
+        RegisterSupportLinkSourcesOnce();
+
         const auto& supportLinks = config.GetSupportLinks();
         MetaSettings.ClusterLinkSources.clear();
         MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());

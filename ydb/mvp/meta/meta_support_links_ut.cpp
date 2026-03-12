@@ -148,9 +148,8 @@ columns {
         return cfg;
     }
 
-    static void ClearConfig(NMVP::TMetaSettings& settings) {
-        settings.ClusterLinkSources.clear();
-        settings.DatabaseLinkSources.clear();
+    static NMVP::TSupportLinksConfig MakeEmptyConfig() {
+        return {};
     }
 
     Y_UNIT_TEST(SupportLinksReturnsBadRequestWhenClusterMissing) {

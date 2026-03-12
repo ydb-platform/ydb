@@ -57,7 +57,6 @@ public:
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
-        YQL_ENSURE(Request.DataShardLocks.empty());
         YQL_ENSURE(Request.LocksOp == ELocksOp::Unspecified);
         YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
@@ -159,7 +158,7 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get(), nullptr);
+        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
         OnEmptyResult();
 
         TIssue validateIssue;

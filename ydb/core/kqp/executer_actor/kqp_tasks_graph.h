@@ -317,10 +317,9 @@ public:
         Unknown = 0,
         Compute = 1,
         Scan = 2,
-        DataShard = 3,
     };
 
-    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
+    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans) // TODO: delete
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
     bool ScanTask = false;
     TActorId ExecuterId;
@@ -419,7 +418,7 @@ public:
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-        TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
+        TQueryExecutionStats* stats
     );
 
     // TODO: public used by TKqpLiteralExecuter

@@ -239,14 +239,13 @@ protected:
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (TxManager) {
-                if (stageInfo.Meta.ShardKey) {
-                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
-                }
-                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
-                    if (indexMeta.ShardKey) {
-                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
-                    }
+            AFL_ENSURE(TxManager);
+            if (stageInfo.Meta.ShardKey) {
+                TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+            }
+            for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                if (indexMeta.ShardKey) {
+                    TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
                 }
             }
 
@@ -353,10 +352,7 @@ protected:
             (trace_id, TraceId()));
 
         for (const auto& [_, nodeId] : reply.ShardsToNodes) {
-            ParticipantNodes.emplace(nodeId);
-            if (TxManager) {
-                TxManager->AddParticipantNode(nodeId);
-            }
+            TxManager->AddParticipantNode(nodeId);
         }
 
         TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
@@ -1547,8 +1543,6 @@ protected:
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
 
-        ResponseEv->ParticipantNodes = std::move(ParticipantNodes);
-
         // Fill response stats
         {
             auto& response = *ResponseEv->Record.MutableResponse();
@@ -1806,9 +1800,6 @@ protected:
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
 
     ui32 StatementResultIndex;
-
-    // Track which nodes (by shards) have been involved during execution
-    THashSet<ui32> ParticipantNodes;
 
     bool AlreadyReplied = false;
 

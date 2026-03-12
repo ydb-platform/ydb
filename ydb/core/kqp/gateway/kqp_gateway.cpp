@@ -7,7 +7,6 @@ void IKqpGateway::TExecPhysicalRequest::FillRequestFrom(IKqpGateway::TExecPhysic
     request.QueryType = from.QueryType;
     request.PerRequestDataSizeLimit = from.PerRequestDataSizeLimit;
     request.MaxShardCount = from.MaxShardCount;
-    request.DataShardLocks = from.DataShardLocks;
     request.LocksOp = from.LocksOp;
     request.AcquireLocksTxId = from.AcquireLocksTxId;
     request.Timeout = from.Timeout;

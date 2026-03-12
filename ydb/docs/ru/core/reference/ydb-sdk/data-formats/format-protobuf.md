@@ -22,6 +22,8 @@
 
 - Python
 
+  Данный формат используется по умолчанию при выполнении запроса через QueryService. Ниже приведён пример явного указания формата возвращаемых данных.
+
   ```python
   pool = ydb.QuerySessionPool(driver)
 
@@ -38,5 +40,9 @@
   for result_set in result:
       print(f"Record batch with {len(result_set.rows)} rows and {len(result_set.columns)} columns")
   ```
+
+- Java
+
+  Данный формат используется по умолчанию при выполнении запроса через QueryService.
 
 {% endlist %}

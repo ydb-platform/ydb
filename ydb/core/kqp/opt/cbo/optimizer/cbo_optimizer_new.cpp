@@ -1,4 +1,4 @@
-#include "cbo_optimizer_new.h"
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 #include <array>
 #include <utility>
@@ -10,12 +10,12 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
-const TString& ToString(NYql::EJoinKind);
-const TString& ToString(NYql::EJoinAlgoType);
+const TString& ToString(NKikimr::NKqp::EJoinKind);
+const TString& ToString(NKikimr::NKqp::EJoinAlgoType);
 
-namespace NYql {
+namespace NKikimr::NKqp {
 
-using namespace NYql::NDq;
+using namespace NYql;
 
 namespace {
 
@@ -364,4 +364,4 @@ TVector<TString> TOptimizerHints::GetUnappliedString() {
     return res;
 }
 
-} // namespace NYql
+} // namespace NKikimr::NKqp

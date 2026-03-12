@@ -9,7 +9,6 @@
 namespace NYql {
 
 struct TOptimizerStatistics;
-struct TRelOptimizerNode;
 
 namespace NDq {
 

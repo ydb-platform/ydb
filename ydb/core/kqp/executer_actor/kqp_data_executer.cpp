@@ -169,13 +169,13 @@ public:
             }
         }
 
-        bool immediateTx = sourceScanPartitionsCount <= 1 && !unknownAffectedShardCount && !HasOlapTable;
+        bool isSingleShardRead = sourceScanPartitionsCount <= 1 && !unknownAffectedShardCount && !HasOlapTable;
 
         return
             Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
             !GetSnapshot().IsValid() &&
             ReadOnlyTx && (
-                immediateTx ||
+                isSingleShardRead ||
                 HasPersistentChannels ||
                 HasOlapTable ||
                 (Database.empty() && !AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
@@ -720,7 +720,7 @@ private:
         }
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (TxManager->GetTopicOperations().GetSize() + sourceScanPartitionsCount) <= 1 // TODO: delete
+        ImmediateTx = (TxManager->GetTopicOperations().GetSize() + sourceScanPartitionsCount) <= 1
                     && !TasksGraph.GetMeta().UnknownAffectedShardCount
                     && !HasOlapTable;
 
@@ -906,18 +906,11 @@ private:
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        //if (ImmediateTx) {
-            KQP_STLOG_D(KQPDATA, "Immediate tx, become ExecuteState",
-                (current_state, CurrentStateFuncName()),
-                (immediate, true),
-                (trace_id, TraceId()));
-            Become(&TKqpDataExecuter::ExecuteState);
-        /*} else {
-            KQP_STLOG_D(KQPDATA, "Not immediate tx, become PrepareState",
-                (current_state, CurrentStateFuncName()),
-                (trace_id, TraceId()));
-            Become(&TKqpDataExecuter::PrepareState);
-        }*/
+        KQP_STLOG_D(KQPDATA, "become ExecuteState",
+            (current_state, CurrentStateFuncName()),
+            (immediate, true),
+            (trace_id, TraceId()));
+        Become(&TKqpDataExecuter::ExecuteState);
     }
 
     void ExecuteTasks() {
@@ -1278,7 +1271,7 @@ private:
     bool SaveScriptExternalEffectRequired = false;
 
     const bool ReadOnlyTx;
-    bool ImmediateTx = false; // TODO: delete
+    bool ImmediateTx = false;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;

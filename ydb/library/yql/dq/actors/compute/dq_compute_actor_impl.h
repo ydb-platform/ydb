@@ -1397,9 +1397,11 @@ protected:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
 
-            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            if (Channels) {
+                if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+                }
             }
 
             auto channel = info.Channel;
@@ -1605,11 +1607,11 @@ protected:
         HTML(str) {
             PRE() {
                 str << "TDqComputeActorBase, SelfId=" << this->SelfId() << ' ';
-                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"view", "dump"}})) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "dump"}})) {
                     str << "Dump";
                 }
                 str << ' ';
-                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"view", "run"}})) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "run"}})) {
                     str << "Run";
                 }
                 str << Endl;

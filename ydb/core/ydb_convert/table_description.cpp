@@ -24,8 +24,6 @@
 
 #include <util/generic/hash.h>
 
-namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
-
 namespace NKikimr {
 
 static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
@@ -1067,7 +1065,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 bloom->SetCaseSensitive(index.local_bloom_filter_index().has_case_sensitive()
                     ? index.local_bloom_filter_index().case_sensitive()
-                    : NDefaults::CaseSensitive);
+                    : true);
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -1083,13 +1081,13 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
                 ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count()
                     ? index.local_bloom_ngram_filter_index().hashes_count()
-                    : NDefaults::HashesCount);
+                    : 3);
                 ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().has_case_sensitive()
                     ? index.local_bloom_ngram_filter_index().case_sensitive()
-                    : NDefaults::CaseSensitive);
+                    : true);
                 ngram->SetFalsePositiveProbability(index.local_bloom_ngram_filter_index().has_false_positive_probability()
                     ? index.local_bloom_ngram_filter_index().false_positive_probability()
-                    : NDefaults::FalsePositiveProbability);
+                    : 0.1);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

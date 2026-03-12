@@ -51,12 +51,13 @@ namespace NKikimr::NDDisk {
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
         const auto it = Connections.find(creds.TabletId);
         if (it == Connections.end()) {
-            return false;
+            return creds.FromPersistentBuffer;
         }
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
-            creds.DDiskInstanceGuid == DDiskInstanceGuid && (creds.FromPersistentBuffer || (
+            (!creds.DDiskInstanceGuid || creds.DDiskInstanceGuid == DDiskInstanceGuid) &&
+            (creds.FromPersistentBuffer || (
             connection.NodeId == ev.Sender.NodeId() &&
             connection.InterconnectSessionId == ev.InterconnectSession));
     }

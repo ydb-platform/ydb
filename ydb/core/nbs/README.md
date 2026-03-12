@@ -100,17 +100,26 @@ code workspace/workspace.code-workspace
 
 ## Slice deployment
 
-1) Build on your remote dev machine:
+1) Ensure that you forward skotty default socket to your remote machine.
+In `.ssh/config`:
+```
+Host cloud
+  HostName <ipv6>
+  IdentityFile <your_key>
+  ForwardAgent ~/.skotty/sock/default.sock
+```
+
+2) Build on your remote dev machine:
 ```
 ya make ydb/apps/ydbd
 ```
 
-2) Build ydbd_slice on your remote dev machine:
+3) Build ydbd_slice on your remote dev machine:
 ```
 ya make ydb/tools/ydbd_slice/bin
 ```
 
-3) Create cluster config (but with your own server fqdn's)
+4) Create cluster config (but with your own server fqdn's)
 ```
 metadata:
   kind: MainConfig
@@ -205,7 +214,7 @@ config:
         level: 7
 ```
 
-4) Add databases config
+5) Add databases config
 ```
 domains:
    - domain_name: Root
@@ -221,12 +230,12 @@ domains:
              zone: any
 ```
 
-5) Run ydbd_slice
+6) Run ydbd_slice
 ```
 ydb/tools/ydbd_slice/bin/ydbd_slice install <path_to_databases_config.yaml> all --yaml-config <path_to_cluster_config.yaml> --binary <path_to_ydbd_binary>
 ```
 
-6) Now you can work with your own slice.
+7) Now you can work with your own slice.
 - Monitoring is available on `<fqdn>:8765/`
 - GRPC is available on `<fqdn>:2135/`
 

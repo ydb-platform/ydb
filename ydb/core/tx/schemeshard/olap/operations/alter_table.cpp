@@ -16,6 +16,7 @@ using namespace NSchemeShard;
 namespace {
 
 void DropLocalIndexPaths(
+    TTxId txId,
     const THashSet<TString>& targetIndexNames,
     NSchemeShard::TPath& tablePath,
     TOperationContext& context,
@@ -35,7 +36,7 @@ void DropLocalIndexPaths(
     for (const auto& pathId : toDrop) {
         context.SS->PersistRemoveTableIndex(db, pathId);
         auto childPath = context.SS->PathsById.at(pathId);
-        childPath->SetDropped(TStepId(1), TTxId(1));
+        childPath->SetDropped(TStepId(1), txId);
         context.SS->PersistRemovePath(db, childPath);
         tablePath.Base()->DecAliveChildrenPrivate();
         tablePath.DomainInfo()->DecPathsInside(context.SS);
@@ -71,7 +72,7 @@ void ApplyLocalIndexChanges(
     for (const auto& idx : targetSchema.GetIndexes()) {
         targetIndexNames.insert(idx.GetName());
     }
-    DropLocalIndexPaths(targetIndexNames, path, context, db);
+    DropLocalIndexPaths(txId, targetIndexNames, path, context, db);
 }
 
 } // anonymous namespace

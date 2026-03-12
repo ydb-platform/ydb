@@ -1008,8 +1008,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("SkipNullMembers"),
                 TStringBuilder() << "SkipNullMembers should not appear for block hash join. AST: " << ast);
-            UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
-                TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideToBlocks"),
+                TStringBuilder() << "WideToBlocks indicates block pipeline was interrupted and restored. AST: " << ast);
         }
 
         {
@@ -1065,8 +1065,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("SkipNullMembers"),
                 TStringBuilder() << "SkipNullMembers should not appear for block hash join. AST: " << ast);
-            UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
-                TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideToBlocks"),
+                TStringBuilder() << "WideToBlocks indicates block pipeline was interrupted and restored. AST: " << ast);
         }
     }
 }

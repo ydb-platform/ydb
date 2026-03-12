@@ -1218,8 +1218,7 @@ TCoLambda PrepareJoinSide(
     TModifyKeysList& remap,
     bool filter,
     TExprNode::TListType& keysList,
-    TExprContext& ctx,
-    bool useBlockJoin = false) {
+    TExprContext& ctx) {
 
     TCoArgument inputArg{ctx.NewArgument(pos, "flow")};
     auto preprocess = ctx.Builder(inputArg.Pos())
@@ -1263,11 +1262,7 @@ TCoLambda PrepareJoinSide(
         unwrap.reserve(remap.size());
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(check), [&](const TCoAtom& key) { return key.Ptr(); });
         std::for_each(remap.cbegin(), remap.cend(), [&](const TModifyKeysList::value_type& key) {
-            if (useBlockJoin) {
-                check.emplace_back(std::get<1>(key).Ptr());
-            } else {
-                (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());
-            }
+            (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());
         });
         preprocess = Build<TCoSkipNullMembers>(ctx, preprocess->Pos())
             .Input(std::move(preprocess))
@@ -1465,7 +1460,7 @@ TExprBase DqBuildHashJoin(
         bool canPushRightLambdaToStage = false;
 
         if (!remapLeft.empty()) {
-            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx, useBlockHashJoin);
+            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connLeft, std::move(lambda));
                 canPushLeftLambdaToStage = true;
@@ -1475,7 +1470,7 @@ TExprBase DqBuildHashJoin(
         }
 
         if (!remapRight.empty()) {
-            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx, useBlockHashJoin);
+            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connRight, std::move(lambda));
                 canPushRightLambdaToStage = true;

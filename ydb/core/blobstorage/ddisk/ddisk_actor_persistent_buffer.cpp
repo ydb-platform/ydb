@@ -75,10 +75,11 @@ namespace NKikimr::NDDisk {
         while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight) {
             auto chunkIdx = PersistentBufferSpaceAllocator.OwnedChunks[pos];
             STLOG(PRI_DEBUG, BS_DDISK, BSDD13, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
-            if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0 || PersistentBufferRestoredChunks.count(chunkIdx) > 0) {
+            if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0 || PersistentBufferRestoringChunks.count(chunkIdx) > 0) {
                 pos++;
                 continue;
             }
+            PersistentBufferRestoringChunks.insert(chunkIdx);
             const ui64 cookie = NextCookie++;
             PersistentBufferRestoreChunksInflight++;
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReadRaw(
@@ -128,7 +129,6 @@ namespace NKikimr::NDDisk {
                         PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = XXH3_64bits((char*)&sector, SectorSize);
                     }
                 }
-                PersistentBufferRestoredChunks.insert(chunkIdx);
                 StartRestorePersistentBuffer(pos + 1);
                 if (PersistentBufferRestoreChunksInflight == 0) {
                     for (auto& [_, pb] : PersistentBuffers) {
@@ -361,8 +361,7 @@ namespace NKikimr::NDDisk {
             partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
 
             const bool submitted = DirectUringOp(op);
-            if (submitted) {
-            } else {
+            if (!submitted) {
                 // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
                 inflightRecord.Span.End();
                 Counters.Interface.WritePersistentBuffer.Reply(false);
@@ -625,8 +624,7 @@ namespace NKikimr::NDDisk {
             }
 
             const bool submitted = DirectUringOp(op);
-            if (submitted) {
-            } else {
+            if (!submitted) {
                 // SQ ring full -- should not happen if MaxInFlight == QueueDepth, but handle gracefully
                 inflightRecord->second.Span.End();
                 Counters.Interface.ErasePersistentBuffer.Reply(false);

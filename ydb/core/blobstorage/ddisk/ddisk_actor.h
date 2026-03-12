@@ -594,7 +594,7 @@ namespace NKikimr::NDDisk {
 
         std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
-        std::unordered_set<ui32> PersistentBufferRestoredChunks;
+        std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();

@@ -155,7 +155,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCheckSum = 0;
+                ui32 RdmaCumulativeCheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -168,7 +168,7 @@ namespace NActors {
 
             void PrepareCatchBuffer();
             void ApplyCatchBuffer();
-            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            int FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};

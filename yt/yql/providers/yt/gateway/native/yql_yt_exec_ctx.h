@@ -63,7 +63,7 @@ public:
 
 protected:
     void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash) override;
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& OutputHash) override;
 
     void FillRichPathForPullCaseInput(NYT::TRichYPath& path, TYtTableBaseInfo::TPtr tableInfo) override;
     void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) override;
@@ -129,7 +129,8 @@ public:
     }
 
     void SetOutput(NNodes::TYtOutSection output) {
-        TExecContextBase::SetOutput(output, Options_.Config(), Options_.OperationHash());
+        TExecContextBase::SetOutput(output, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     void SetSingleOutput(const TYtOutTableInfo& outTable) {
@@ -137,7 +138,8 @@ public:
     }
 
     void SetCacheItem(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs, const TString& tmpFolder) {
-        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash());
+        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     TExpressionResorceUsage ScanExtraResourceUsage(const TExprNode& node, bool withInput) {

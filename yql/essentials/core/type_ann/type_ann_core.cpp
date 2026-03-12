@@ -152,6 +152,11 @@ namespace NTypeAnnImpl {
     {
         isUniversal = false;
         YQL_ENSURE(container->ChildrenSize() != 0);
+        for (const auto& child : container->Children()) {
+            if (!EnsureComputable(*child, ctx)) {
+                return false;
+            }
+        }
 
         size_t lhsIndex = 0;
         const TTypeAnnotationNode* lhsType = container->Child(lhsIndex)->GetTypeAnn();
@@ -2489,6 +2494,14 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!(Order ? EnsureComparableType : EnsureEquatableType)(input->Pos(), *input->Head().GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3907,7 +3920,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!input->Head().GetTypeAnn()) {
-            YQL_ENSURE(input->Type() == TExprNode::Lambda);
+            YQL_ENSURE(input->Head().Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
                 << "Expected (optional) String, but got lambda"));
             return IGraphTransformer::TStatus::Error;
@@ -6137,8 +6150,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!input->Tail().GetTypeAnn() || !IsSameAnnotation(*type->Cast<TOptionalExprType>()->GetItemType(),
-            *input->Tail().GetTypeAnn())) {
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!IsSameAnnotation(*type->Cast<TOptionalExprType>()->GetItemType(), *input->Tail().GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Mismatch item type, expected: " <<
                 *type->Cast<TOptionalExprType>()->GetItemType() << " but got: " << *input->Tail().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
@@ -11577,6 +11593,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
         if (input->ChildrenSize() == 4) {
+            if (!input->Child(3)->GetTypeAnn()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), "Lambda is not expected here"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
             TExprNode::TPtr normalized;
             auto status = NormalizeKeyValueTuples(input->ChildPtr(3), 0, normalized, ctx.Expr);
             if (status.Level == IGraphTransformer::TStatus::Repeat) {

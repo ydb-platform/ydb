@@ -202,6 +202,10 @@ NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 
+bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot) const {
+    return GetMinSnapshotForNewReads() <= snapshot || InFlightReadsTracker.HasLiveSnapshot(snapshot);
+}
+
 NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
     auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
     // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".

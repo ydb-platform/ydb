@@ -576,6 +576,7 @@ private:
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
+    bool MayStartScanAt(const NOlap::TSnapshot& snapshot) const;
     NOlap::TSnapshotHolders GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
     TDuration GetTxCompleteLag() const {

@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <functional>
-#include <initializer_list>
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
@@ -36,6 +35,7 @@
 #include "y_absl/types/optional.h"
 
 #include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpc/status.h>
 
 #include "src/core/lib/channel/channel_args.h"
@@ -44,13 +44,11 @@
 #include "src/core/lib/promise/latch.h"
 #include "src/core/lib/promise/map.h"
 #include "src/core/lib/promise/pipe.h"
-#include "src/core/lib/promise/poll.h"
 #include "src/core/lib/promise/race.h"
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/slice/percent_encoding.h"
 #include "src/core/lib/transport/status_conversion.h"
-#include "src/core/lib/transport/transport_fwd.h"
-#include "src/core/lib/transport/transport_impl.h"
+#include "src/core/lib/transport/transport.h"
 
 namespace grpc_core {
 
@@ -92,7 +90,8 @@ HttpSchemeMetadata::ValueType SchemeFromArgs(const ChannelArgs& args) {
   return scheme;
 }
 
-Slice UserAgentFromArgs(const ChannelArgs& args, const char* transport_name) {
+Slice UserAgentFromArgs(const ChannelArgs& args,
+                        y_absl::string_view transport_name) {
   std::vector<TString> fields;
   auto add = [&fields](y_absl::string_view x) {
     if (!x.empty()) fields.push_back(TString(x));
@@ -152,12 +151,13 @@ HttpClientFilter::HttpClientFilter(HttpSchemeMetadata::ValueType scheme,
 
 y_absl::StatusOr<HttpClientFilter> HttpClientFilter::Create(
     const ChannelArgs& args, ChannelFilter::Args) {
-  auto* transport = args.GetObject<grpc_transport>();
+  auto* transport = args.GetObject<Transport>();
   if (transport == nullptr) {
     return y_absl::InvalidArgumentError("HttpClientFilter needs a transport");
   }
   return HttpClientFilter(
-      SchemeFromArgs(args), UserAgentFromArgs(args, transport->vtable->name),
+      SchemeFromArgs(args),
+      UserAgentFromArgs(args, transport->GetTransportName()),
       args.GetInt(GRPC_ARG_TEST_ONLY_USE_PUT_REQUESTS).value_or(false));
 }
 

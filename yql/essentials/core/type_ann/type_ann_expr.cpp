@@ -138,6 +138,7 @@ public:
         FunctionStack_.Reset();
         CallableTimes_.clear();
         IsComplete_ = false;
+        FuzzLambdaNode_.Reset();
     }
 
 
@@ -589,10 +590,56 @@ private:
         }
     }
 
+    static constexpr ui32 MaxChildrenForFuzzing = 100;
+
+    void FuzzCallableWithUntypedLambdas(const TExprNode::TPtr& originalInput, TExprContext& ctx) {
+        if (originalInput->ChildrenSize() == 0) {
+            return;
+        }
+
+        if (originalInput->ChildrenSize() > MaxChildrenForFuzzing) {
+            return;
+        }
+
+        if (!FuzzLambdaNode_) {
+            auto voidNode = ctx.NewCallable(originalInput->Pos(), "Void", {});
+            voidNode->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+            auto argsNode = ctx.NewArguments(originalInput->Pos(), {});
+            argsNode->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+            FuzzLambdaNode_ = ctx.NewLambda(originalInput->Pos(),
+                                            std::move(argsNode), std::move(voidNode));
+        }
+
+        ctx.IssueManager.Mute();
+        Y_DEFER {
+            ctx.IssueManager.Unmute();
+        };
+
+        for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {
+            auto fuzzInput = ctx.ShallowCopy(*originalInput);
+            fuzzInput->ChildRef(i) = FuzzLambdaNode_;
+
+            TExprNode::TPtr fuzzOutput;
+            auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
+            Y_UNUSED(fuzzStatus);
+        }
+    }
+
 protected:
     virtual IGraphTransformer::TStatus DoCallableTransform(const TExprNode::TPtr& input,
-        TExprNode::TPtr& output, TExprContext& ctx) {
-        return CallableTransformer_->Transform(input, output, ctx);
+                                                           TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr inputCopy;
+        if (GetTypes().FuzzUntypedLambda) {
+            inputCopy = ctx.ShallowCopy(*input);
+        }
+
+        auto status = CallableTransformer_->Transform(input, output, ctx);
+
+        if (GetTypes().FuzzUntypedLambda && status != TStatus::Error) {
+            FuzzCallableWithUntypedLambdas(inputCopy, ctx);
+        }
+
+        return status;
     }
 
     TTypeAnnotationContext& GetTypes() {
@@ -611,6 +658,7 @@ private:
     TFunctionStack FunctionStack_;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes_;
     bool KeepWorldEnabled_ = false;
+    TExprNode::TPtr FuzzLambdaNode_;
 };
 
 } // namespace

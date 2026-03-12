@@ -969,7 +969,6 @@ BELONGS Lib/ya.make
         Lib/_pyrepl/__init__.py [7:19]
         Lib/_pyrepl/completing_reader.py [7:19]
         Lib/_pyrepl/console.py [6:18]
-        Lib/_pyrepl/curses.py [7:19]
         Lib/_pyrepl/fancy_termios.py [6:18]
         Lib/_pyrepl/reader.py [8:20]
         Lib/_pyrepl/unix_console.py [8:20]

@@ -133,7 +133,20 @@ public:
                     auto checkOperationStatuses = [this] (std::unordered_map<TString, TPromise<TFmrOperationResult>>& operationStatuses, const TString& sessionId) {
                         for (auto [operationId, promise]: operationStatuses) {
                             YQL_CLOG(TRACE, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << operationId;
-                            auto getOperationFuture = Coordinator_->GetOperation({operationId});
+                            NThreading::TFuture<TGetOperationResponse> getOperationFuture;
+                            try {
+                                getOperationFuture = Coordinator_->GetOperation({operationId});
+                            } catch (...) {
+                                YQL_CLOG(ERROR, FastMapReduce) << "Failed to get operation status for " << operationId << ": " << CurrentExceptionMessage();
+                                TFmrOperationResult fmrOperationResult{};
+                                fmrOperationResult.Errors.emplace_back(TFmrError{
+                                    .Component = EFmrComponent::Gateway,
+                                    .Reason = EFmrErrorReason::FallbackOperation,
+                                    .ErrorMessage = TStringBuilder() << "FMR Coordinator is unavailable for operation, fallback to native gateway"
+                                });
+                                promise.SetValue(fmrOperationResult);
+                                continue;
+                            }
                             getOperationFuture.Subscribe([this, operationId, sessionId, &operationStatuses] (const auto& getFuture) {
                                 auto getOperationResult = getFuture.GetValueSync();
                                 auto getOperationStatus = getOperationResult.Status;
@@ -736,7 +749,12 @@ public:
             TGetTableInfoOptions ytTablesOptions = std::move(options);
             ytTablesOptions.Tables() = ytBoundTables;
             return Slave_->GetTableInfo(std::move(ytTablesOptions)).Apply([fmrTablesInfo, tableIndex, fmrTableIndexes] (const auto& f) {
-                return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+                try {
+                    return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+                } catch (...) {
+                    YQL_CLOG(ERROR, FastMapReduce) << "Failed to get table info from slave gateway: " << CurrentExceptionMessage();
+                    return MakeFuture(ResultFromCurrentException<TTableInfoResult>());
+                }
             });
         }
 
@@ -760,7 +778,12 @@ public:
              fmrTablesInfo = std::move(fmrTablesInfo),
              fmrTableIndexes = std::move(fmrTableIndexes),
              tableIndex] (const auto& f) mutable {
-            f.GetValue();
+            try {
+                f.GetValue();
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to dump deferred FMR tables to YT: " << CurrentExceptionMessage();
+                return MakeFuture(ResultFromCurrentException<TTableInfoResult>());
+            }
 
             YQL_CLOG(INFO, FastMapReduce) << "Uploaded " << deferredTableFmrIds.size() << " deferred tables to YT";
 
@@ -783,7 +806,12 @@ public:
             return Slave_->GetTableInfo(std::move(ytTablesOptions)).Apply(
                 [fmrTablesInfo = std::move(fmrTablesInfo), fmrTableIndexes = std::move(fmrTableIndexes),
                  tableIndex] (const auto& f) {
-                return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+                try {
+                    return MergeTableInfoResults(f.GetValue(), fmrTablesInfo, fmrTableIndexes, tableIndex);
+                } catch (...) {
+                    YQL_CLOG(ERROR, FastMapReduce) << "Failed to get table info from slave gateway: " << CurrentExceptionMessage();
+                    return MakeFuture(ResultFromCurrentException<TTableInfoResult>());
+                }
             });
         });
     }
@@ -794,6 +822,15 @@ public:
         const std::unordered_set<ui64>& fmrTableIndexes,
         ui64 totalCount)
     {
+        ui64 expectedYtTables = totalCount - fmrTableIndexes.size();
+        if (ytTablesInfoResult.Data.size() < expectedYtTables) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Slave gateway returned " << ytTablesInfoResult.Data.size()
+                << " table info entries, expected " << expectedYtTables;
+            TTableInfoResult errorResult;
+            errorResult.AddIssue(TIssue("Slave gateway returned fewer table info entries than expected"));
+            return MakeFuture<TTableInfoResult>(errorResult);
+        }
+
         TTableInfoResult allTablesResult;
         allTablesResult.SetSuccess();
         ui64 fmrTablePos = 0, ytTablePos = 0;
@@ -1190,6 +1227,20 @@ private:
         return isOrdered;
     }
 
+    std::vector<TString> GetTableColumns(const TOutputInfo& outputTable) {
+        std::vector<TString> columns;
+
+        if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
+            const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
+            if (rowSpec.HasKey(RowSpecAttrType) && rowSpec[RowSpecAttrType].IsList()) {
+                for (const auto& entry : rowSpec[RowSpecAttrType].AsList()[1].AsList()) {
+                    columns.emplace_back(entry[0].AsString());
+                }
+            }
+        }
+        return columns;
+    }
+
     std::vector<TString> GetTableSortedColumns(const TOutputInfo& outputTable) {
         std::vector<TString> columns;
 
@@ -1244,6 +1295,7 @@ private:
 
         TFmrTableId originalTableId(outputCluster, outputPath);
         TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        fmrTableRef.Columns = GetTableColumns(fmrTable);
         auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
@@ -1353,6 +1405,7 @@ private:
 
         TFmrTableId originalTableId(outputCluster, outputPath);
         TFmrTableRef fmrTableRef = GetFmrTableRef(originalTableId, sessionId);
+        fmrTableRef.Columns = GetTableColumns(fmrTable);
         auto tablePresenceStatus = GetTablePresenceStatus(originalTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {

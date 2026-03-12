@@ -149,12 +149,12 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EHunkValueTag, ui8,
 );
 
 // Do not change these values since they are stored in the master snapshot.
-DEFINE_ENUM(ETableSchemaMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETableSchemaMode, i8,
     ((Weak)      (0))
     ((Strong)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i8,
     ((Lookup)  (0))
     ((Scan)    (1))
 );

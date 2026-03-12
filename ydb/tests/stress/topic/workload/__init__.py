@@ -97,8 +97,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def _run_workload(self, topic_name, duration, byte_rate, producers, consumers,
                       consumer_threads=None,
-                      tx_commit_interval=None, use_tx=True, with_config=True,
-                      use_memory_limit=False) -> None:
+                      tx_commit_interval=None, use_tx=True, with_config=True) -> None:
         """Запускает тестовую нагрузку с мониторингом.
 
         Args:
@@ -115,13 +114,6 @@ class YdbTopicWorkload(WorkloadBase):
             tx_commit_interval = self.config.TX_COMMIT_INTERVAL
 
         self._executor.set_monitor(hang_timeout=self.config.STATS_HANG_TIMEOUT, window_interval=self.stats_window)
-
-        if use_memory_limit and self.limit_memory_usage:
-            producers //= 3
-            consumers //= 3
-
-            if consumer_threads:
-                consumer_threads //= 3
 
         args = [
             'run', 'full', '-s', str(duration),
@@ -273,7 +265,6 @@ class YdbTopicWorkload(WorkloadBase):
             test_config.producers,
             test_config.consumers,
             consumer_threads=test_config.consumer_threads,
-            use_memory_limit=True,
             use_tx=True,
             with_config=True
         )
@@ -303,7 +294,6 @@ class YdbTopicWorkload(WorkloadBase):
             test_config.producers,
             test_config.consumers,
             consumer_threads=test_config.consumer_threads,
-            use_memory_limit=True,
             use_tx=False,
             with_config=True
         )

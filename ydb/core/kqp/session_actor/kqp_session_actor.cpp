@@ -2019,7 +2019,8 @@ public:
         if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
-
+        
+        AFL_ENSURE(txCtx->TxManager);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},

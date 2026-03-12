@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
-FORK_TEST_FILES()
 
 SPLIT_FACTOR(6)
 

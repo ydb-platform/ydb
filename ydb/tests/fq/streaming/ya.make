@@ -18,7 +18,6 @@ PY_SRCS(
     conftest.py
 )
 
-FORK_TESTS()
 
 REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)

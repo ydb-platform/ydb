@@ -116,7 +116,15 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
         }, tokenizeIssues, settings.MaxErrors);
 
         if (!hasRealTokens) {
-            res.Issues.Clear();
+            // Discard parser errors (e.g. "mismatched input '<EOF>'") but preserve
+            // any warnings or informational issues accumulated earlier (e.g. lexer warnings).
+            NYql::TIssues nonErrors;
+            for (const auto& issue : res.Issues) {
+                if (issue.GetSeverity() > NYql::TSeverityIds::S_ERROR) {
+                    nonErrors.AddIssue(issue);
+                }
+            }
+            res.Issues = std::move(nonErrors);
             SqlASTsToYqlsImpl(res, {}, ctx);
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstError");

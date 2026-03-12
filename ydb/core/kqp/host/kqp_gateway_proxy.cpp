@@ -1004,6 +1004,7 @@ public:
                             case TIndexDescription::EType::GlobalSync:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
+                            case TIndexDescription::EType::GlobalJson:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;

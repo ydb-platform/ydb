@@ -55,6 +55,7 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 JsonErrors = 0;
 
     ui64 DocCount = 0;
     ui64 TotalDocLength = 0;
@@ -62,6 +63,7 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
+    bool IsBinaryJson = false;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -96,6 +98,11 @@ public:
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
 
+        const auto& textType = types.at(TextColumn);
+        if (textType.GetTypeId() == NUdf::TDataType<NUdf::TJsonDocument>::Id) {
+            IsBinaryJson = true;
+        }
+
         {
             ScanTags.push_back(tags.at(TextColumn));
 
@@ -117,7 +124,11 @@ public:
 
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            {
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::STRING);
+                uploadTypes->emplace_back(TokenColumn, type);
+            } else {
                 Ydb::Type type;
                 NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
@@ -190,8 +201,20 @@ public:
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
-        TString text((*row).at(0).AsBuf());
-        auto tokens = Analyze(text, TextAnalyzers);
+        TVector<TString> tokens;
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+            if (IsBinaryJson) {
+                tokens = TokenizeBinaryJson(row.Get(0).AsBuf());
+            } else {
+                TString error;
+                tokens = TokenizeJson(row.Get(0).AsBuf(), error);
+                if (error != "") {
+                    JsonErrors++;
+                }
+            }
+        } else {
+            tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
+        }
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             ui32 totalTokens = 0;
             THashMap<TString, ui32> tokenFreq;
@@ -217,7 +240,7 @@ public:
                 if (dataColumn != TextColumn) {
                     uploadValue.push_back(row.Get(index++));
                 } else {
-                    uploadValue.push_back(TCell(text));
+                    uploadValue.push_back(row.Get(0));
                 }
             }
             // Document length column
@@ -239,7 +262,7 @@ public:
                     if (dataColumn != TextColumn) {
                         uploadValue.push_back(row.Get(index++));
                     } else {
-                        uploadValue.push_back(TCell(text));
+                        uploadValue.push_back(row.Get(0));
                     }
                 }
 
@@ -258,6 +281,9 @@ public:
 
     EScan Exhausted() final
     {
+        if (JsonErrors > 0) {
+            LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
+        }
         LOG_T("Exhausted " << Debug());
 
         // call Seek to wait uploads
@@ -461,9 +487,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         }
 
         auto tags = GetAllTags(userTable);
+        auto types = GetAllTypes(userTable);
         for (auto column : request.GetSettings().columns()) {
             if (!tags.contains(column.column())) {
                 badRequest(TStringBuilder() << "Unknown key column: " << column.column());
+            } else if (types.at(column.column()).GetTypeId() == NUdf::TDataType<NUdf::TJsonDocument>::Id) {
+                if (request.GetIndexType() != NKikimrTxDataShard::EFulltextIndexType::Json) {
+                    badRequest("Indexing binary JSON requires JSON index type");
+                }
             }
         }
         for (auto dataColumn : request.GetDataColumns()) {
@@ -479,6 +510,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         // 3. Validating fulltext index settings
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+            if (!request.GetSettings().columns_size()) {
+                badRequest(TStringBuilder() << "JSON columns should be set");
+            }
         } else {
             TString error;
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {

@@ -268,7 +268,8 @@ struct TReadMatch {
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
                 return {};
             }
 
@@ -284,7 +285,8 @@ struct TReadMatch {
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
                 return {};
             }
 
@@ -323,7 +325,8 @@ struct TReadMatch {
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
         if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
-            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance
+            && indexDesc->Type != TIndexDescription::EType::GlobalJson) {
             return {};
         }
 

@@ -8,7 +8,12 @@ items:
   - name: Параметризованные запросы
     href: parameterized_queries.md
   - name: Формат данных в результате запроса
-    href: result-formats.md
+    href: result-formats/index.md
+    items:
+    - name: Value
+      href: result-formats/format-value.md
+    - name: Apache Arrow
+      href: result-formats/format-arrow.md
   - name: Работа с топиками
     href: topic.md
   - name: Работа с узлами координации

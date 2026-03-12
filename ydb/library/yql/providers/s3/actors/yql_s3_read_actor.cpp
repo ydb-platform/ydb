@@ -515,10 +515,19 @@ public:
     std::map<ui64, ui64> RowGroupReaderIndex;
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvS3Provider::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
-        if (!result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
-        } else {
+        if (result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
+        } else if (const auto httpCode = result.Content.HttpResponseCode; httpCode < 200 || httpCode >= 300) {
+            const TString response = result.Content.Extract();
+            TString s3ErrorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(response, s3ErrorCode, message)) {
+                message = response;
+            }
+            SubstGlobal(message, '\r', ' ');
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, BuildIssues(httpCode, s3ErrorCode, message)), 0, cookie));
+        } else {
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         }
     }
 

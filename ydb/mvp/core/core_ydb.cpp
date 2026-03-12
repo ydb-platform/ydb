@@ -58,8 +58,8 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = TYdbLocation::GetDatabaseName(request)) {
-        clientSettings.Database(database);
+    if (TString metaDatabasePath = TYdbLocation::GetMetaDatabaseName(request)) {
+        clientSettings.Database(metaDatabasePath);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
 }
@@ -117,8 +117,8 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = TYdbLocation::GetDatabaseName(request)) {
-        clientSettings.Database(database);
+    if (TString metaDatabasePath = TYdbLocation::GetMetaDatabaseName(request)) {
+        clientSettings.Database(metaDatabasePath);
     }
     return GetTableClient(clientSettings);
 }
@@ -127,15 +127,17 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TCli
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }
 
-TString TYdbLocation::GetDatabaseName(const TRequest& request) const {
-    TString database = request.Parameters["database"];
-    if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
+TString TYdbLocation::GetMetaDatabaseName(const TRequest& request) const {
+    // Query parameter `metadb` explicitly controls DB override for internal meta queries.
+    // Keep query parameter `database` free for API business parameters (e.g. support_links context).
+    TString metaDatabasePath = request.Parameters["metadb"];
+    if (metaDatabasePath) {
+        if (!metaDatabasePath.StartsWith('/')) {
+            metaDatabasePath.insert(metaDatabasePath.begin(), '/');
         }
-        database.insert(0, RootDomain);
+        metaDatabasePath.insert(0, RootDomain);
     }
-    return database;
+    return metaDatabasePath;
 }
 
 NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TRequest& request) const {
@@ -144,9 +146,9 @@ NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TReque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = GetDatabaseName(request);
-    if (database) {
-        clientSettings.Database(database);
+    TString metaDatabasePath = GetMetaDatabaseName(request);
+    if (metaDatabasePath) {
+        clientSettings.Database(metaDatabasePath);
     }
     return NYdb::NScripting::TScriptingClient(GetDriver(), clientSettings);
 }

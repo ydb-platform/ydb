@@ -432,7 +432,6 @@ void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
 {
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         requestHandler->ChildSpanEndOk(storageRequestId);
-        requestHandler->Span.EndOk();
 
         ErasePersistentBuffer(std::move(requestHandler));
     } else {
@@ -474,6 +473,10 @@ void TDirectBlockGroup::ErasePersistentBuffer(
                     storageRequestId,
                     UnsafeExtractValue(f));
             } else {
+                requestHandler->ChildSpanEndError(
+                    storageRequestId,
+                    "HandleEraseResult canceled");
+                requestHandler->Span.EndError("HandleEraseResult canceled");
                 requestHandler->SetResponse(MakeError(E_CANCELLED));
             }
         });

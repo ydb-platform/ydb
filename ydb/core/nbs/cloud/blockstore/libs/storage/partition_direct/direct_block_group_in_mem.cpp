@@ -180,7 +180,8 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         {.Meta = std::move(meta), .Error = MakeError(S_OK)});
 }
 
-NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
+NThreading::TFuture<TDBGSyncBlocksResponse>
+TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
     ui32 vChunkIndex,
     ui8 persistBufferIndex,
     const TVector<TSyncRequest>& syncRequests,

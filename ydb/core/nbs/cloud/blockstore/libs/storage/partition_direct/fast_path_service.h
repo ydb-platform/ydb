@@ -17,7 +17,7 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
-    const std::shared_ptr<TRegion> Region;
+    const std::shared_ptr<TRegion> Region;   // 4 GiB
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system

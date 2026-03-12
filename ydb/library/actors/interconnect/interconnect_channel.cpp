@@ -34,7 +34,7 @@ namespace NActors {
     const ui32 TEventOutputChannel::RdmaCredsMinSizeSerialized = CalcRdmaCredsMinSizeSerialized();
 
     namespace {
-        bool CanUseRdmaForCurrentEvent(const TEventHolder& event, ssize_t rdmaDeviceIndex) {
+        bool IsRdmaSectionLayoutConsistentWithData(const TEventHolder& event, ssize_t rdmaDeviceIndex) {
 #ifdef NDEBUG
             Y_UNUSED(event);
             Y_UNUSED(rdmaDeviceIndex);
@@ -45,8 +45,10 @@ namespace NActors {
 
             auto iter = event.Buffer->GetBeginIter();
             const auto& sections = event.Buffer->GetSerializationInfo().Sections;
-            for (const auto& section : sections) {
+            for (size_t sectionIndex = 0; sectionIndex < sections.size(); ++sectionIndex) {
+                const auto& section = sections[sectionIndex];
                 size_t bytesLeft = section.Size;
+                size_t chunkIndex = 0;
                 while (bytesLeft) {
                     Y_ABORT_UNLESS(iter.Valid());
                     TRcBuf buf = iter.GetChunk();
@@ -59,6 +61,22 @@ namespace NActors {
                     if (section.IsRdmaCapable) {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                         if (memReg.Empty()) {
+                            if (NActors::TlsActivationContext) {
+                                LOG_WARN_S(*NActors::TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
+                                    TStringBuilder() << "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed,"
+                                        << " eventType# " << event.Descr.Type
+                                        << " eventSerializedSize# " << event.EventSerializedSize
+                                        << " bufferSize# " << event.Buffer->GetSize()
+                                        << " sectionIndex# " << sectionIndex
+                                        << " sectionSize# " << section.Size
+                                        << " bytesLeft# " << bytesLeft
+                                        << " chunkIndex# " << chunkIndex
+                                        << " chunkOffset# " << offset
+                                        << " chunkSize# " << chunkSize
+                                        << " chunkBufSize# " << buf.GetSize()
+                                        << " rdmaDeviceIndex# " << rdmaDeviceIndex
+                                        << " sections# " << SerializeEventSections(event.Buffer->GetSerializationInfo()));
+                            }
                             return false;
                         }
                         Y_UNUSED(memReg.GetRKey(rdmaDeviceIndex));
@@ -66,6 +84,7 @@ namespace NActors {
 
                     iter += chunkSize;
                     bytesLeft -= chunkSize;
+                    ++chunkIndex;
                 }
             }
 
@@ -178,7 +197,7 @@ namespace NActors {
                         if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdma && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
                                 SerializationInfo = &event.Buffer->GetSerializationInfo();
-                                UseRdmaForCurrentEvent = CanUseRdmaForCurrentEvent(event, rdmaDeviceIndex);
+                                UseRdmaForCurrentEvent = IsRdmaSectionLayoutConsistentWithData(event, rdmaDeviceIndex);
                                 Chunker.DiscardEvent();
                             }
                         }

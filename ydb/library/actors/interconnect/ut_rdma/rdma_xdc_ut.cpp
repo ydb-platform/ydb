@@ -16,6 +16,45 @@ using namespace NActors;
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
 
+struct TEvSerializeToRopeFailure : public TEventBase<TEvSerializeToRopeFailure, 124> {
+    TString Payload;
+    mutable ui32 SerializeToRopeCallCount = 0;
+
+    explicit TEvSerializeToRopeFailure(size_t payloadSize = 5000)
+        : Payload(payloadSize, 'R')
+    {}
+
+    TString ToStringHeader() const override {
+        return "TEvSerializeToRopeFailure";
+    }
+
+    bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
+        return serializer->WriteString(&Payload);
+    }
+
+    std::optional<TRope> SerializeToRope(IRcBufAllocator*) const override {
+        ++SerializeToRopeCallCount;
+        return std::nullopt;
+    }
+
+    TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+        if (!allowExternalDataChannel) {
+            return {};
+        }
+        TEventSerializationInfo info;
+        info.Sections.push_back(TEventSectionInfo{0, Payload.size(), 0, 0, false, true});
+        return info;
+    }
+
+    ui32 CalculateSerializedSize() const override {
+        return Payload.size();
+    }
+
+    bool IsSerializable() const override {
+        return true;
+    }
+};
+
 static void GTestSkip() {
     GTEST_SKIP() << "Skipping all rdma tests for suite, set \""
                  << NRdmaTest::RdmaTestEnvSwitchName << "\" env if it is RDMA compatible";
@@ -590,6 +629,45 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
 }
 
+TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
+    ctr->SetPeerInfo("peer", "1", "peer");
+    auto callback = [](THolder<IEventBase>) {};
+    TEventHolderPool pool(common, callback);
+
+    const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+    TSessionParams p;
+    p.UseExternalDataChannel = true;
+    p.UseXdcShuffle = true;
+    p.UseRdma = true;
+    TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
+
+    auto* ev = new TEvSerializeToRopeFailure();
+    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    channel.Push(*evHandle, pool, TInstant::Zero());
+
+    TXdcCommandCounters counters;
+    bool done = false;
+    for (ui64 serial = 1; serial <= 4 && !done; ++serial) {
+        NInterconnect::TOutgoingStream main;
+        NInterconnect::TOutgoingStream xdc;
+        TTcpPacketOutTask task(p, main, xdc);
+        done = channel.FeedBuf(task, serial, 0);
+        task.Finish(serial, 0);
+        AccumulateXdcCommandCounters(CollectStreamData(main), counters);
+    }
+
+    UNIT_ASSERT(done);
+    UNIT_ASSERT_C(ev->SerializeToRopeCallCount > 0u, "SerializeToRope should be attempted for RDMA-capable sections");
+    UNIT_ASSERT(counters.DeclareSection > 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
+    UNIT_ASSERT(counters.PushData > 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+}
+
+#ifndef NDEBUG
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -699,6 +777,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     UNIT_ASSERT(counters.PushData > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
 }
+#endif
 
 TEST_F(XdcRdmaTest, SendRdma) {
     TTestICCluster cluster(2);

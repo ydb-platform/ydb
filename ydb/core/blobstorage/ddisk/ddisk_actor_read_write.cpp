@@ -88,7 +88,7 @@ namespace NKikimr::NDDisk {
 
         // TODO: use pool
         std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDirectIoOpBase>(
-            SelfId(), InFlightCount, Counters, ev.Get());
+            SelfId(), Counters, ev.Get());
         op->SetSpan(std::move(span));
         op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
@@ -167,7 +167,7 @@ namespace NKikimr::NDDisk {
 
         // TODO: use pool
         std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDirectIoOpBase>(
-            SelfId(), InFlightCount, Counters, ev.Get());
+            SelfId(), Counters, ev.Get());
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
@@ -220,38 +220,48 @@ namespace NKikimr::NDDisk {
         ReadCallbacks.erase(it);
     }
 
-    bool TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
-        // TODO: add queue?
+    bool TDDiskActor::DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
+#if defined(__linux__)
+        Y_ABORT_UNLESS(UringRouter);
 
-        // TODO: we increase it in TDirectIoOpBase and decrease in destructor,
-        // which is bad, because check later here
-        if (InFlightCount.load(std::memory_order_relaxed) > MaxInFlight) {
-            return false;
+        // this is our main/regular path
+        bool submitted = false;
+        switch (op->GetOperationType()) {
+        case NPDisk::TUringOperationBase::EREAD:
+            submitted = UringRouter->Read(op.get());
+            break;
+        case NPDisk::TUringOperationBase::EWRITE:
+            submitted = UringRouter->Write(op.get());
+            break;
+        default:
+            Y_ABORT("Unknown OperationType");
         }
 
+        if (submitted) {
+            Y_UNUSED(op.release());
+        }
+
+        // note, we want to flush anyway (e.g. previous operations)
+        if (flush) {
+            // with SQ polling – usually no syscall
+            UringRouter->Flush();
+        }
+
+        return submitted;
+#endif
+        return false;
+    }
+
+    bool TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
 #if defined(__linux__)
         if (Y_LIKELY(UringRouter)) {
-            // this is our main/regular path
-            bool submitted;
-            switch (op->GetOperationType()) {
-            case NPDisk::TUringOperationBase::EREAD:
-                submitted = UringRouter->Read(op.get());
-                break;
-            case NPDisk::TUringOperationBase::EWRITE:
-                submitted = UringRouter->Write(op.get());
-                break;
-            default:
-                Y_ABORT("Unknown OperationType");
+            bool submitted = DirectUringOpImpl(op, flush);
+            if (!submitted) {
+                DirectIoQueue.push(std::move(op));
+                ScheduleIoSubmitWakeup();
             }
 
-            if (submitted) {
-                Y_UNUSED(op.release());
-                if (flush) {
-                    // with SQ polling – usually no syscall
-                    UringRouter->Flush();
-                }
-            }
-            return submitted;
+            return true;
         }
 #endif
 
@@ -283,6 +293,51 @@ namespace NKikimr::NDDisk {
         if (!submitted) {
             op->Reply(TActivationContext::ActorSystem(), NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
         }
+    }
+
+    void TDDiskActor::ScheduleIoSubmitWakeup() {
+        if (DirectIoQueue.empty()) {
+            return;
+        }
+
+        ui32 currentInflight = UringRouter->GetInflight();
+
+        // TODO: move to constants or config?
+        const ui32 opMinLatencyUs = 10;
+        const ui32 opsInParallel = 4;
+        const ui32 inDiskInflight = 128;
+
+        if (currentInflight <= inDiskInflight) {
+            // for some reason we failed to submit, but there should have been space
+            // in the router. It's OK to retry just a little bit later
+            Schedule(TDuration::MicroSeconds(opMinLatencyUs), new TEvents::TEvWakeup());
+            return;
+        }
+
+        const ui32 opsToWait = currentInflight - inDiskInflight;
+        const ui32 usecWait = (opsToWait + opsInParallel - 1) * opMinLatencyUs / opsInParallel;
+        Schedule(TDuration::MicroSeconds(usecWait), new TEvents::TEvWakeup());
+    }
+
+    void TDDiskActor::ProcessIoSubmitQueue() {
+        Y_ABORT_UNLESS(UringRouter);
+
+        while (!DirectIoQueue.empty()) {
+            auto& op = DirectIoQueue.front();
+            if (!DirectUringOpImpl(op, false)) {
+                break;
+            }
+            DirectIoQueue.pop();
+        }
+
+        // flush unconditionally
+        UringRouter->Flush();
+
+        ScheduleIoSubmitWakeup();
+    }
+
+    void TDDiskActor::HandleWakeup() {
+        ProcessIoSubmitQueue();
     }
 
 } // NKikimr::NDDisk

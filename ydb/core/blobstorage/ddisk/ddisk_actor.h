@@ -79,12 +79,13 @@ namespace NKikimr::NDDisk {
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
 #endif
 
-        std::atomic<ui32> InFlightCount{0};
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
         class TDirectIoOpBase;
         class TPersistentBufferPartIoOp;
         class TInternalSyncWriteOp;
+
+        std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
 
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
@@ -239,6 +240,7 @@ namespace NKikimr::NDDisk {
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFunc);
         void PassAway() override;
@@ -447,6 +449,9 @@ namespace NKikimr::NDDisk {
         // Note: releases the op on success (returns true).
         bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
 
+        // Do not call manually!
+        bool DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+
         void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -610,6 +615,10 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
 
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
+
+        void ProcessIoSubmitQueue();
+        void ScheduleIoSubmitWakeup();
+        void HandleWakeup();
     };
 
 } // NKikimr::NDDisk

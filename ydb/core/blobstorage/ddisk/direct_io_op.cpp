@@ -45,11 +45,9 @@ TReplyStatus::E UringErrorToStatus(i32 result, NPDisk::TUringOperationBase::EOpe
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TDDiskActor::TDirectIoOpBase::TDirectIoOpBase(const TActorId& ddiskId,
-                                              std::atomic<ui32>& inFlightCount,
                                               TCounters& counters,
                                               const IEventHandle* ev)
     : DDiskId(ddiskId)
-    , InFlightCount(inFlightCount)
     , Counters(counters)
 {
     if (ev) {
@@ -57,13 +55,9 @@ TDDiskActor::TDirectIoOpBase::TDirectIoOpBase(const TActorId& ddiskId,
         InterconnectSession = ev->InterconnectSession;
         Cookie = ev->Cookie;
     }
-
-    InFlightCount.fetch_add(1, std::memory_order_relaxed);
 }
 
-TDDiskActor::TDirectIoOpBase::~TDirectIoOpBase() {
-    InFlightCount.fetch_sub(1, std::memory_order_relaxed);
-}
+TDDiskActor::TDirectIoOpBase::~TDirectIoOpBase() = default;
 
 void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem) noexcept
 {

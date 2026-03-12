@@ -380,9 +380,6 @@ private:
 
     TString CurrentStateFuncName() const override {
         const auto& func = CurrentStateFunc();
-        //if (func == &TThis::PrepareState) {
-        //    return "PrepareState";
-        //} else 
         if (func == &TThis::ExecuteState) {
             return "ExecuteState";
         } else if (func == &TThis::WaitSnapshotState) {
@@ -397,44 +394,6 @@ private:
             return TBase::CurrentStateFuncName();
         }
     }
-
-    /*STATEFN(PrepareState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                //hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
-                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
-                hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
-                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
-                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
-                hFunc(TEvKqpBuffer::TEvError, Handle);
-                hFunc(TEvents::TEvUndelivered, HandleUndelivered);
-                hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
-                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-                hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
-                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-                default: {
-                    UnexpectedEvent("PrepareState", ev->GetTypeRewrite());
-                }
-            }
-        } catch (const yexception& e) {
-            InternalError(e.what());
-        } catch (const TMemoryLimitExceededException& e) {
-            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
-        }
-
-        ReportEventElapsedTime();
-    }
-
-    void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        if (IsCancelAfterAllowed(ev)) {
-            TBase::HandleAbortExecution(ev);
-        } else {
-            KQP_STLOG_D(KQPDATA, "Got TEvAbortExecution, but cancellation is not allowed",
-                (sender, ev->Sender),
-                (trace_id, TraceId()));
-        }
-    }*/
 
 private:
     STATEFN(ExecuteState) {

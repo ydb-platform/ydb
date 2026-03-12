@@ -266,6 +266,11 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
+        this->WatermarksTracker.SetNotifyHandler([this]() {
+            // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
+            this->ScheduleIdlenessCheck();
+        });
+
         TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {

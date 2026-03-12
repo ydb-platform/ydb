@@ -623,13 +623,6 @@ ui64 AsyncSplitTable(
         TActorId sender,
         const TString& path,
         ui64 sourceTablet,
-        NKikimrMiniKQL::TValue&& splitKey);
-
-ui64 AsyncSplitTable(
-        Tests::TServer::TPtr server,
-        TActorId sender,
-        const TString& path,
-        ui64 sourceTablet,
         ui32 splitKey);
 
 ui64 AsyncMergeTable(

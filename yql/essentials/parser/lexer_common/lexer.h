@@ -50,4 +50,12 @@ using TLexerFactoryPtr = TIntrusivePtr<ILexerFactory>;
 
 TLexerFactoryPtr MakeDummyLexerFactory(const TString& name);
 
+// Well-known token names produced by the SQL lexer.
+// Using these constants avoids fragile string literals scattered across the codebase.
+namespace TokenName {
+    constexpr TStringBuf WS = "WS";
+    constexpr TStringBuf Comment = "COMMENT";
+    constexpr TStringBuf Eof = "EOF";
+} // namespace TokenName
+
 } // namespace NSQLTranslation

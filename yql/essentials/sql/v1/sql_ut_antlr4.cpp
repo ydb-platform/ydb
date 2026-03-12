@@ -31,6 +31,15 @@ TParsedTokenList Tokenize(const TString& query) {
     return tokens;
 }
 
+// Verifies that the parse result is a valid program with no issues and no user SQL statements.
+void AssertEmptyProgram(const NYql::TAstParseResult& res) {
+    UNIT_ASSERT_C(res.Root, Err2Str(res));
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "");
+    TWordCountHive elementStat = {{"Write!", 0}};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat["Write!"]);
+}
+
 } // namespace
 
 #define ANTLR_VER 4
@@ -276,27 +285,27 @@ Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
 Y_UNIT_TEST_SUITE(CommentOnlyQuery) {
 
 Y_UNIT_TEST(SingleLineComment) {
-    UNIT_ASSERT(SqlToYql("-- This is a single-line comment").IsOk());
+    AssertEmptyProgram(SqlToYql("-- This is a single-line comment"));
 }
 
 Y_UNIT_TEST(MultiLineComment) {
-    UNIT_ASSERT(SqlToYql("/* This is a\n   multi-line comment */").IsOk());
+    AssertEmptyProgram(SqlToYql("/* This is a\n   multi-line comment */"));
 }
 
 Y_UNIT_TEST(MultipleComments) {
-    UNIT_ASSERT(SqlToYql("-- First comment\n-- Second comment\n-- Third comment").IsOk());
+    AssertEmptyProgram(SqlToYql("-- First comment\n-- Second comment\n-- Third comment"));
 }
 
 Y_UNIT_TEST(MixedCommentTypes) {
-    UNIT_ASSERT(SqlToYql("-- Single-line\n/* Multi-line */\n-- Another single-line").IsOk());
+    AssertEmptyProgram(SqlToYql("-- Single-line\n/* Multi-line */\n-- Another single-line"));
 }
 
 Y_UNIT_TEST(WhitespaceAndComments) {
-    UNIT_ASSERT(SqlToYql("   -- comment\n  ").IsOk());
+    AssertEmptyProgram(SqlToYql("   -- comment\n  "));
 }
 
 Y_UNIT_TEST(OnlyWhitespace) {
-    UNIT_ASSERT(SqlToYql("   \n\t  ").IsOk());
+    AssertEmptyProgram(SqlToYql("   \n\t  "));
 }
 
 } // Y_UNIT_TEST_SUITE(CommentOnlyQuery)

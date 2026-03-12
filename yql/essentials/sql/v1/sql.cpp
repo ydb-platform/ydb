@@ -110,7 +110,7 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
         NYql::TIssues tokenizeIssues;
         lexer->Tokenize(query, queryName, [&hasRealTokens](NSQLTranslation::TParsedToken&& token) {
             const auto& name = token.Name;
-            if (name != "WS" && name != "COMMENT" && name != "EOF") {
+            if (name != NSQLTranslation::TokenName::WS && name != NSQLTranslation::TokenName::Comment && name != NSQLTranslation::TokenName::Eof) {
                 hasRealTokens = true;
             }
         }, tokenizeIssues, settings.MaxErrors);

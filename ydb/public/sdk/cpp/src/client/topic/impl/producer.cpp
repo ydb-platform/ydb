@@ -5,6 +5,8 @@
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
 
+#include <format>
+
 namespace NYdb::inline Dev::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2044,10 +2046,6 @@ TInstant TProducer::GetCloseDeadline() {
 void TProducer::HandleAutoPartitioning(std::uint32_t partition) {
     auto splittedPartitionWorker = std::make_shared<TSplittedPartitionWorker>(this, partition);
     SplittedPartitionWorkers.try_emplace(partition, splittedPartitionWorker);
-}
-
-std::string TProducer::GetProducerId(std::uint32_t partition) {
-    return std::format("{}_{}", Settings.ProducerIdPrefix_, partition);
 }
 
 TWriterCounters::TPtr TProducer::GetCounters() {

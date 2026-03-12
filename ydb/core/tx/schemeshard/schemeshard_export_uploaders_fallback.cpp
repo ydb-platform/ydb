@@ -65,7 +65,7 @@ private:
 };
 
 template <typename TSettings>
-IActor* CreateSchemeUploaderFallback(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
@@ -74,7 +74,7 @@ IActor* CreateSchemeUploaderFallback(TActorId schemeShard, ui64 exportId, ui32 i
 }
 
 template <typename TSettings>
-NActors::IActor* CreateExportMetadataUploaderFallback(NActors::TActorId schemeShard, ui64 exportId,
+NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
 ) {

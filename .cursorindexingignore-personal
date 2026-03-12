@@ -17,9 +17,10 @@
 /contrib/go/
 /vendor/
 
-# Python dependencies
-/contrib/python/
-!/contrib/python/ydb/
+# Python dependencies, exclude files with extension only for prevent ignore directories
+# and allow return some dependencies to index with ! pattern
+/contrib/python/**/*.* 
+!/contrib/python/ydb/**
 
 # Large dependencies
 /contrib/libs/llvm16/

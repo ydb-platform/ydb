@@ -1366,7 +1366,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
     THashMap<TString, TString> leftColumnRemap;
     THashMap<TString, TString> rightColumnRemap;
-    if (shuffleLeftSide && shuffleRightSide /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */) {
+    if ((shuffleLeftSide && shuffleRightSide) /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */
+        || useBlockHashJoin /* block hash join peephole needs aligned types; remap must happen regardless of shuffle */) {
         for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
             const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
             const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);

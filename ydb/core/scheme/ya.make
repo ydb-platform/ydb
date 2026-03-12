@@ -22,7 +22,6 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/library/aclib
     yql/essentials/parser/pg_wrapper/interface
-    yql/essentials/parser/pg_wrapper
     ydb/public/lib/scheme_types
     # temporary.
     ydb/library/pretty_types_print/protobuf

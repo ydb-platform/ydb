@@ -8,6 +8,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/pqtablet/partition
+    yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

@@ -400,7 +400,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
-                hFunc(TEvPrivate::TEvRetry, HandleRetry); // TODO: what is this?????
+                hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);

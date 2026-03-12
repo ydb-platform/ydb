@@ -320,7 +320,7 @@ private:
         ui64 QueuedRows = 0;
     };
 
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
     // Set on Children
@@ -357,7 +357,7 @@ public:
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
@@ -547,7 +547,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
@@ -1628,7 +1628,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway,
+    const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();

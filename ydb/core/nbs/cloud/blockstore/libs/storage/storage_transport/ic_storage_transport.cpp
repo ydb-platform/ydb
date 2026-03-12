@@ -405,7 +405,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
 {
     auto* msg = ev->Get();
 
-    const ui64 requestId = ev->Cookie;
+    const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] = ReadPersistentBufferEventsByRequestId.emplace(
         requestId,

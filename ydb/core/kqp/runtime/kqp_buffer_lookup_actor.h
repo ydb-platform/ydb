@@ -48,6 +48,8 @@ public:
 
     // Clear all memory
     virtual void Terminate() = 0;
+
+    virtual void Unlink() = 0;
 };
 
 struct TKqpBufferTableLookupSettings {

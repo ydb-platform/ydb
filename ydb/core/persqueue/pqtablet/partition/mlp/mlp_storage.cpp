@@ -571,6 +571,10 @@ std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
+bool TStorage::DLQEmpty() const {
+    return DLQQueue.empty();
+}
+
 std::deque<TDLQMessage> TStorage::GetDLQMessages() {
     static constexpr size_t MaxBatchSize = 1000;
 

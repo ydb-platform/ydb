@@ -4,7 +4,6 @@ import json
 import os
 import base64
 
-
 DELIM = '================================'
 CONTRIB_JAVA_PREFIX = 'contrib/java/'
 

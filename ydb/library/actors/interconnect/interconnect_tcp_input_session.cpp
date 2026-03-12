@@ -259,7 +259,17 @@ namespace NActors {
 
     void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
-        Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+
+        // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
+        // They must be switched off together; otherwise one actor may still assume legacy liveness while the
+        // other already relies on kernel keepalive/user-timeout.
+        //
+        // UseKernelLivenessMode() intentionally mirrors the condition in TInterconnectSessionTCP.
+        if (UseKernelLivenessMode()) {
+            Become(&TThis::WorkingState);
+        } else {
+            Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+        }
         if (RdmaQp) {
             LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {

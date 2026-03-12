@@ -29,7 +29,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     }
 
     NMonitoring::TDynamicCounterPtr result =
-        GetServiceCounters(counters, "nbs_partitions");
+        GetServiceCounters(std::move(counters), "nbs_partitions");
     result = result->GetSubgroup("ddiskPool", ddiskPool);
     result = result->GetSubgroup("tabletId", ToString(tabletId));
     result = result->GetSubgroup("subsystem", "interface");
@@ -56,8 +56,8 @@ TFastPathService::TFastPathService(
           storageConfig.GetDDiskPoolName(),
           tabletId))
 {
-    Y_UNUSED(generation);
     Y_UNUSED(ActorSystem);
+    Y_UNUSED(generation);
 }
 
 NWilson::TTraceId TFastPathService::SpanTrace()
@@ -75,31 +75,29 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
-    with_lock (Lock) {
-        auto traceId = SpanTrace();
+    auto traceId = SpanTrace();
 
-        Counters.RequestStarted(
-            EBlockStoreRequest::ReadBlocks,
-            request->Range.Size() * BlockSize);
+    Counters.RequestStarted(
+        EBlockStoreRequest::ReadBlocks,
+        request->Range.Size() * BlockSize);
 
-        auto result = Region->ReadBlocksLocal(
-            std::move(callContext),
-            std::move(request),
-            std::move(traceId));
+    auto result = Region->ReadBlocksLocal(
+        std::move(callContext),
+        std::move(request),
+        std::move(traceId));
 
-        result.Subscribe(
-            [weakSelf =
-                 weak_from_this()](const TFuture<TReadBlocksLocalResponse>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->Counters.RequestFinished(
-                        EBlockStoreRequest::ReadBlocks,
-                        !HasError(f.GetValue().Error));
-                }
-            });
+    result.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const TFuture<TReadBlocksLocalResponse>& f)
+        {
+            if (auto self = weakSelf.lock()) {
+                self->Counters.RequestFinished(
+                    EBlockStoreRequest::ReadBlocks,
+                    !HasError(f.GetValue().Error));
+            }
+        });
 
-        return result;
-    }
+    return result;
 }
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
@@ -107,37 +105,29 @@ TFastPathService::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request)
 {
-    with_lock (Lock) {
-        auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
-            15,                           // verbosity
-            4095,                         // timeToLive
-            LastTraceTs,                  // atomic counter for throttling
-            NActors::TMonotonic::Now(),   // current monotonic time
-            TraceSamplePeriod             // 100ms between samples
-        );
+    auto traceId = SpanTrace();
 
-        Counters.RequestStarted(
-            EBlockStoreRequest::WriteBlocks,
-            request->Range.Size() * BlockSize);
+    Counters.RequestStarted(
+        EBlockStoreRequest::WriteBlocks,
+        request->Range.Size() * BlockSize);
 
-        auto result = Region->WriteBlocksLocal(
-            std::move(callContext),
-            std::move(request),
-            std::move(traceId));
+    auto result = Region->WriteBlocksLocal(
+        std::move(callContext),
+        std::move(request),
+        std::move(traceId));
 
-        result.Subscribe(
-            [weakSelf =
-                 weak_from_this()](const TFuture<TWriteBlocksLocalResponse>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->Counters.RequestFinished(
-                        EBlockStoreRequest::WriteBlocks,
-                        !HasError(f.GetValue().Error));
-                }
-            });
+    result.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const TFuture<TWriteBlocksLocalResponse>& f)
+        {
+            if (auto self = weakSelf.lock()) {
+                self->Counters.RequestFinished(
+                    EBlockStoreRequest::WriteBlocks,
+                    !HasError(f.GetValue().Error));
+            }
+        });
 
-        return result;
-    }
+    return result;
 }
 
 NThreading::TFuture<TZeroBlocksLocalResponse> TFastPathService::ZeroBlocksLocal(

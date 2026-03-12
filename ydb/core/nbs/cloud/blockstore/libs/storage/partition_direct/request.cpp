@@ -83,11 +83,9 @@ TWriteRequestHandler::TWriteRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId,
-    NThreading::TPromise<TWriteBlocksLocalResponse> promise)
+    ui64 tabletId)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
-    , Promise(std::move(promise))
 {
     Span = NWilson::TSpan(
         TWilsonNbs::NbsTopLevel,
@@ -122,7 +120,7 @@ NWilson::TSpan& TWriteRequestHandler::GetChildSpan(
     return ChildSpanByRequestId[requestId];
 }
 
-bool TWriteRequestHandler::IsCompleted(ui64 requestId)
+void TWriteRequestHandler::SetCompleted(ui64 requestId)
 {
     auto processedPersistentBufferIndex =
         WriteMetaByRequestId.at(requestId).Index;
@@ -130,12 +128,11 @@ bool TWriteRequestHandler::IsCompleted(ui64 requestId)
         AcksMask |= (1 << processedPersistentBufferIndex);
         AckCount++;
     }
+}
 
-    if (AckCount >= RequiredAckCount) {
-        return true;
-    }
-
-    return false;
+bool TWriteRequestHandler::IsCompleted() const
+{
+    return AckCount >= RequiredAckCount;
 }
 
 void TWriteRequestHandler::OnWriteRequested(
@@ -143,9 +140,46 @@ void TWriteRequestHandler::OnWriteRequested(
     ui8 persistentBufferIndex,
     ui64 lsn)
 {
+    auto guard = TGuard(Lock);
+
     WriteMetaByRequestId.emplace(
         requestId,
         TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
+}
+
+void TWriteRequestHandler::OnWriteFinished(
+    ui64 requestId,
+    const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult& result)
+{
+    auto guard = TGuard(Lock);
+
+    auto execSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(Span.GetTraceId()),
+        "NbsPartition.WriteBlocks.HandlePBWriteResult.Exec",
+        NWilson::EFlags::NONE,
+        GetActorSystem());
+
+    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        ChildSpanEndOk(requestId);
+        SetCompleted(requestId);
+        if (IsCompleted()) {
+            execSpan.Event("Start SetResponse");
+            SetResponse(MakeError(S_OK));
+            execSpan.Event("Finish SetResponse");
+            Span.EndOk();
+        }
+    } else {
+        // TODO: add error handling
+        ChildSpanEndError(
+            requestId,
+            "HandleWritePersistentBufferResult failed");
+        Span.EndError("HandleWritePersistentBufferResult failed");
+
+        SetResponse(MakeError(E_FAIL, result.GetErrorReason()));
+    }
+
+    execSpan.EndOk();
 }
 
 TVector<TPersistentBufferWriteMeta> TWriteRequestHandler::GetWritesMeta() const
@@ -163,11 +197,16 @@ TGuardedSgList TWriteRequestHandler::GetData()
     return Request->Sglist;
 }
 
+NThreading::TFuture<TDBGWriteBlocksResponse> TWriteRequestHandler::GetFuture()
+{
+    return Promise.GetFuture();
+}
+
 void TWriteRequestHandler::SetResponse(NProto::TError error)
 {
-    TWriteBlocksLocalResponse response;
-    response.Error = std::move(error);
-    Promise.SetValue(std::move(response));
+    Promise.TrySetValue(TDBGWriteBlocksResponse{
+        .Meta = GetWritesMeta(),
+        .Error = std::move(error)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -216,13 +255,6 @@ NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
     ChildSpanByRequestId[requestId] = std::move(childSpan);
 
     return ChildSpanByRequestId[requestId];
-}
-
-bool TSyncRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
 }
 
 ui8 TSyncRequestHandler::GetPersistentBufferIndex() const
@@ -304,13 +336,6 @@ NWilson::TSpan& TEraseRequestHandler::GetChildSpan(ui64 requestId)
     return ChildSpanByRequestId[requestId];
 }
 
-bool TEraseRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
-}
-
 ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
 {
     return SyncRequestHandler->GetPersistentBufferIndex();
@@ -334,15 +359,10 @@ TReadRequestHandler::TReadRequestHandler(
     ui32 vChunkIndex,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId,
-    ui64 tabletId,
-    NThreading::TPromise<TReadBlocksLocalResponse> promise)
+    ui64 tabletId)
     : TIORequestsHandler(actorSystem, vChunkIndex, request->Range)
     , Request(std::move(request))
-    , Promise(std::move(promise))
 {
-    Y_UNUSED(traceId);
-    Y_UNUSED(tabletId);
-
     Span = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsTopLevel,
         std::move(traceId),
@@ -378,23 +398,19 @@ NWilson::TSpan& TReadRequestHandler::GetChildSpan(
     return ChildSpanByRequestId[requestId];
 }
 
-bool TReadRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-
-    return true;
-}
-
 TGuardedSgList TReadRequestHandler::GetData()
 {
     return Request->Sglist;
 }
 
+NThreading::TFuture<TDBGReadBlocksResponse> TReadRequestHandler::GetFuture()
+{
+    return Promise;
+}
+
 void TReadRequestHandler::SetResponse(NProto::TError error)
 {
-    TReadBlocksLocalResponse response;
-    response.Error = std::move(error);
-    Promise.SetValue(std::move(response));
+    Promise.TrySetValue(TDBGReadBlocksResponse{.Error = std::move(error)});
 }
 
 TOverallAckRequestHandler::TOverallAckRequestHandler(
@@ -437,12 +453,6 @@ NWilson::TSpan TOverallAckRequestHandler::GetChildSpan(
 bool TOverallAckRequestHandler::IsCompleted() const
 {
     return AckCount == RequiredAckCount;
-}
-
-bool TOverallAckRequestHandler::IsCompleted(ui64 requestId)
-{
-    Y_UNUSED(requestId);
-    return IsCompleted();
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

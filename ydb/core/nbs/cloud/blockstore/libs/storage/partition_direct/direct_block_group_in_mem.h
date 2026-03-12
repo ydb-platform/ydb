@@ -39,31 +39,26 @@ public:
         NWilson::TTraceId traceId,
         ui32 vChunkIndex) override;
 
-    void ReadBlocksLocalFromPersistentBuffer(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGReadBlocksResponse>
+    ReadBlocksLocalFromPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise,
         ui64 lsn) override;
 
-    void ReadBlocksLocalFromDDisk(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksLocalFromDDisk(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise) override;
+        NWilson::TTraceId traceId) override;
 
-    TVector<TPersistentBufferWriteMeta> WriteBlocksLocal(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksLocal(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise) override;
+        NWilson::TTraceId traceId) override;
 
     void SyncWithPersistentBuffer(
         TExecutorPtr executor,

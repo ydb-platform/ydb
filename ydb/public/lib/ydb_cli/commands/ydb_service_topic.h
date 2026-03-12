@@ -14,6 +14,7 @@ namespace NYdb::NConsoleClient {
     TVector<NTopic::ECodec> InitAllowedCodecs();
     const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
     std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination); // parses timestamp in the following formats: unix time, ISO-8601
+    ui32 ParsePartitionPerTabletValue(TStringBuf s);
 
     class TCommandWithSupportedCodecs {
     protected:

@@ -116,14 +116,15 @@ std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
     auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
     return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
 }
+
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
     TMinMax result;
-    if (!ArrayVariants->length()) {
+    if (!ArrayDictionary->length()) {
         return result;
     }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
-    result.Min = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.first));
-    result.Max = NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.second));
+    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
+    result.Min = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.first));
+    result.Max = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
     return result;
 }
 

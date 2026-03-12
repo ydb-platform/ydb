@@ -3,7 +3,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void EmitTopicCloudEvent(
+void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
     NKikimrScheme::EStatus status,
     TSchemeShard* ss,

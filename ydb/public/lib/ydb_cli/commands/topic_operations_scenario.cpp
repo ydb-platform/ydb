@@ -206,7 +206,9 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
         settings.AddAttribute("_cleanup_policy", "compact");
     }
 
-    settings.AddAttribute("_partitions_per_tablet", ToString(PartitionsPerTablet));
+    if (PartitionsPerTablet.Defined()) {
+        settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet));
+    }
 
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {
         settings

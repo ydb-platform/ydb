@@ -96,7 +96,7 @@ public:
     size_t ConfigConsumerCount = 0;
     bool NeedDescribeTopic = false;
     TString DescribeConsumerName;
-    ui32 PartitionsPerTablet = 1;
+    TMaybe<ui32> PartitionsPerTablet;
 
 protected:
     void CreateTopic(const TString& database,

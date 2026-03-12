@@ -211,7 +211,7 @@ void TWriteRequestHandler::SetResponse(NProto::TError error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSyncRequestHandler::TSyncRequestHandler(
+TSyncAndEraseRequestHandler::TSyncAndEraseRequestHandler(
     NActors::TActorSystem* actorSystem,
     ui32 vChunkIndex,
     ui8 persistentBufferIndex,
@@ -234,7 +234,7 @@ TSyncRequestHandler::TSyncRequestHandler(
         static_cast<i64>(persistentBufferIndex));
 }
 
-NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
+NWilson::TSpan& TSyncAndEraseRequestHandler::GetChildSpan(ui64 requestId)
 {
     auto childSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
@@ -257,24 +257,25 @@ NWilson::TSpan& TSyncRequestHandler::GetChildSpan(ui64 requestId)
     return ChildSpanByRequestId[requestId];
 }
 
-ui8 TSyncRequestHandler::GetPersistentBufferIndex() const
+ui8 TSyncAndEraseRequestHandler::GetPersistentBufferIndex() const
 {
     return PersistentBufferIndex;
 }
 
-ui64 TSyncRequestHandler::OnSyncRequested(ui64 startIndex, ui64 lsn)
+ui64 TSyncAndEraseRequestHandler::OnSyncRequested(ui64 startIndex, ui64 lsn)
 {
     SyncRequests.emplace_back(startIndex, lsn);
     return SyncRequests.size();
 }
 
-const TVector<TSyncRequest>& TSyncRequestHandler::GetSyncRequests() const
+const TVector<TSyncRequest>&
+TSyncAndEraseRequestHandler::GetSyncRequests() const
 {
     return SyncRequests;
 }
 
 TVector<NKikimr::NDDisk::TBlockSelector>
-TSyncRequestHandler::GetBlockSelectors() const
+TSyncAndEraseRequestHandler::GetBlockSelectors() const
 {
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     for (const auto& request: SyncRequests) {
@@ -287,7 +288,7 @@ TSyncRequestHandler::GetBlockSelectors() const
     return selectors;
 }
 
-TVector<ui64> TSyncRequestHandler::GetLsns() const
+TVector<ui64> TSyncAndEraseRequestHandler::GetLsns() const
 {
     TVector<ui64> lsns;
     for (const auto& request: SyncRequests) {
@@ -297,8 +298,19 @@ TVector<ui64> TSyncRequestHandler::GetLsns() const
     return lsns;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+NThreading::TFuture<TDBGSyncBlocksResponse>
+TSyncAndEraseRequestHandler::GetFuture()
+{
+    return Promise.GetFuture();
+}
 
+void TSyncAndEraseRequestHandler::SetResponse(NProto::TError error)
+{
+    Promise.TrySetValue(TDBGSyncBlocksResponse{.Error = std::move(error)});
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/*
 TEraseRequestHandler::TEraseRequestHandler(
     NActors::TActorSystem* actorSystem,
     std::shared_ptr<TSyncRequestHandler> syncRequestHandler)
@@ -335,23 +347,7 @@ NWilson::TSpan& TEraseRequestHandler::GetChildSpan(ui64 requestId)
 
     return ChildSpanByRequestId[requestId];
 }
-
-ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
-{
-    return SyncRequestHandler->GetPersistentBufferIndex();
-}
-
-TVector<NKikimr::NDDisk::TBlockSelector>
-TEraseRequestHandler::GetBlockSelectors() const
-{
-    return SyncRequestHandler->GetBlockSelectors();
-}
-
-TVector<ui64> TEraseRequestHandler::GetLsns() const
-{
-    return SyncRequestHandler->GetLsns();
-}
-
+*/
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadRequestHandler::TReadRequestHandler(

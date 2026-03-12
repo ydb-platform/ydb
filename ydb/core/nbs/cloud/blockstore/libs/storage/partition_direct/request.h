@@ -42,6 +42,11 @@ struct TDBGWriteBlocksResponse
     NProto::TError Error;
 };
 
+struct TDBGSyncBlocksResponse
+{
+    NProto::TError Error;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBaseRequestHandler
@@ -125,17 +130,17 @@ private:
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TSyncRequestHandler: public TBaseRequestHandler
+class TSyncAndEraseRequestHandler: public TBaseRequestHandler
 {
 public:
-    TSyncRequestHandler(
+    TSyncAndEraseRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         NWilson::TTraceId traceId,
         ui64 tabletId);
 
-    TSyncRequestHandler(
+    TSyncAndEraseRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
@@ -143,7 +148,7 @@ public:
         ui64 tabletId,
         TVector<TSyncRequest> syncRequests);
 
-    ~TSyncRequestHandler() override = default;
+    ~TSyncAndEraseRequestHandler() override = default;
 
     NWilson::TSpan& GetChildSpan(ui64 requestId);
 
@@ -157,32 +162,14 @@ public:
     GetBlockSelectors() const;
     [[nodiscard]] TVector<ui64> GetLsns() const;
 
+    NThreading::TFuture<TDBGSyncBlocksResponse> GetFuture();
+    void SetResponse(NProto::TError error);
+
 private:
+    NThreading::TPromise<TDBGSyncBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGSyncBlocksResponse>();
     ui8 PersistentBufferIndex;
     TVector<TSyncRequest> SyncRequests;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TEraseRequestHandler: public TBaseRequestHandler
-{
-public:
-    TEraseRequestHandler(
-        NActors::TActorSystem* actorSystem,
-        std::shared_ptr<TSyncRequestHandler> syncRequestHandler);
-
-    ~TEraseRequestHandler() override = default;
-
-    NWilson::TSpan& GetChildSpan(ui64 requestId);
-
-    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
-
-    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector>
-    GetBlockSelectors() const;
-    [[nodiscard]] TVector<ui64> GetLsns() const;
-
-private:
-    std::shared_ptr<TSyncRequestHandler> SyncRequestHandler;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

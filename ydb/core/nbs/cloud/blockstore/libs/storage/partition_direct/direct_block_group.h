@@ -48,16 +48,12 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
 
-    virtual void SyncWithPersistentBuffer(
-        TExecutorPtr executor,
+    virtual NThreading::TFuture<TDBGSyncBlocksResponse>
+    SyncWithPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistBufferIndex,
         const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) = 0;
-
-    virtual void ErasePersistentBuffer(
-        TExecutorPtr executor,
-        std::shared_ptr<TEraseRequestHandler> requestHandler) = 0;
 
     virtual TVector<TRestoreMeta> RestoreFromPersistentBuffers(
         TExecutorPtr executor,
@@ -143,16 +139,11 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
 
-    void SyncWithPersistentBuffer(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistBufferIndex,
         const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) override;
-
-    void ErasePersistentBuffer(
-        TExecutorPtr executor,
-        std::shared_ptr<TEraseRequestHandler> requestHandler) override;
 
 private:
     void DoEstablishPersistentBufferConnection(
@@ -175,14 +166,16 @@ private:
         std::shared_ptr<TWriteRequestHandler> requestHandler);
 
     void HandleSyncWithPersistentBufferResult(
-        TExecutorPtr executor,
-        std::shared_ptr<TSyncRequestHandler> requestHandler,
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
+    void ErasePersistentBuffer(
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler);
+
     void HandleErasePersistentBufferResult(
-        std::shared_ptr<TEraseRequestHandler> requestHandler,
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);

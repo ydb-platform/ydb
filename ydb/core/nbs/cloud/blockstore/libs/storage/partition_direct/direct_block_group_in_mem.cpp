@@ -180,26 +180,19 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         {.Meta = std::move(meta), .Error = MakeError(S_OK)});
 }
 
-void TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
-    TExecutorPtr executor,
+NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
     ui32 vChunkIndex,
     ui8 persistBufferIndex,
     const TVector<TSyncRequest>& syncRequests,
     NWilson::TTraceId traceId)
 {
-    Y_UNUSED(executor);
     Y_UNUSED(vChunkIndex);
     Y_UNUSED(persistBufferIndex);
     Y_UNUSED(syncRequests);
     Y_UNUSED(traceId);
-}
 
-void TInMemoryDirectBlockGroup::ErasePersistentBuffer(
-    TExecutorPtr executor,
-    std::shared_ptr<TEraseRequestHandler> requestHandler)
-{
-    Y_UNUSED(executor);
-    Y_UNUSED(requestHandler);
+    return NThreading::MakeFuture<TDBGSyncBlocksResponse>(
+        {.Error = MakeError(S_OK)});
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>

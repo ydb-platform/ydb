@@ -775,7 +775,6 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             sourceInfo.ResumeByWatermark(watermark);
         }
-<<<<<<< HEAD
 
         // XXX Does nothing in async CA, not used (yet) in sync CA
         for (auto& [id, channelInfo] : InputChannelsMap) {
@@ -788,10 +787,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             channelInfo.ResumeByWatermark(watermark);
         }
-=======
         // sources or input channels was unpaused, trigger new poll
         ResumeExecution(EResumeSource::CAResumeByWatermark);
->>>>>>> 8ae1308bc23 (async ca/checkpointing: fix stall on full input and empty checkpoint (#35793))
     }
 
     void ResumeInputsByCheckpoint() override final {

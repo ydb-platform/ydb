@@ -68,6 +68,8 @@ public:
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
         }
+        #else
+            Y_UNUSED(withRdma);
         #endif
 
         if (withTls) {

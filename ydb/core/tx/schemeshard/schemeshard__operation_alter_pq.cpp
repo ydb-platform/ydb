@@ -1043,17 +1043,6 @@ public:
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        // Emit topic CloudEvent after successful alter
-        SendTopicCloudEvent(
-            Transaction,
-            NKikimrScheme::StatusSuccess,
-            TString(),
-            context.SS,
-            context.PeerName,
-            context.UserToken ? context.UserToken->GetUserSID() : TString(),
-            TString() /* maskedToken */,
-            ui64(OperationId.GetTxId()));
-
         path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
@@ -1066,6 +1055,17 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(oldReserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
+
+        // Emit topic CloudEvent after successful alter
+        SendTopicCloudEvent(
+            Transaction,
+            NKikimrScheme::StatusSuccess,
+            TString(),
+            context.SS,
+            context.PeerName,
+            context.UserToken ? context.UserToken->GetUserSID() : TString(),
+            TString() /* maskedToken */,
+            ui64(OperationId.GetTxId()));
 
         SetState(NextState());
         return result;

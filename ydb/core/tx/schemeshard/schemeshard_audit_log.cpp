@@ -48,6 +48,21 @@ TString RenderList(const TVector<TString>& list) {
     return result;
 }
 
+TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) {
+    auto databasePath = TPath::Resolve(opWorkingDir, SS);
+    if (!databasePath.IsResolved()) {
+        databasePath.RiseUntilFirstResolvedParent();
+    }
+    //NOTE: operation working dir is usually set to a path of some database/subdomain,
+    // so the next lines is only a safety measure
+    if (!databasePath.IsEmpty() && !databasePath->IsDomainRoot()) {
+        databasePath = TPath::Init(databasePath.GetPathIdForDomain(), SS);
+    }
+    return databasePath;
+}
+
+} // anonymous namespace
+
 std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databasePath) {
     if (databasePath.IsEmpty()) {
         return {};
@@ -65,21 +80,6 @@ std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databaseP
         getAttr("database_id")
     );
 }
-
-TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) {
-    auto databasePath = TPath::Resolve(opWorkingDir, SS);
-    if (!databasePath.IsResolved()) {
-        databasePath.RiseUntilFirstResolvedParent();
-    }
-    //NOTE: operation working dir is usually set to a path of some database/subdomain,
-    // so the next lines is only a safety measure
-    if (!databasePath.IsEmpty() && !databasePath->IsDomainRoot()) {
-        databasePath = TPath::Init(databasePath.GetPathIdForDomain(), SS);
-    }
-    return databasePath;
-}
-
-} // anonymous namespace
 
 TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchemeOp::TModifyScheme& operation) {
     if (operation.GetWorkingDir().empty()) {

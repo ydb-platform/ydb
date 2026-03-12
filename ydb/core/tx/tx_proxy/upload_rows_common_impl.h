@@ -192,6 +192,7 @@ protected:
     bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
+    bool IsTableWithFeatures = false;
 
     TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
@@ -292,6 +293,7 @@ private:
     virtual bool ExtractBatch(TString& errorMessage) = 0;
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
+    virtual bool TryFallbackToKqp(const NActors::TActorContext&) = 0;
     virtual void AuditContextStart() {}
     virtual bool ValidateTable(TString& errorMessage) {
         Y_UNUSED(errorMessage);
@@ -561,6 +563,7 @@ private:
             }
 
             if (!allowUpdate) {
+                IsTableWithFeatures = true;
                 return TConclusionStatus::Fail("Only async-indexed tables are supported by BulkUpsert");
             }
         }
@@ -592,6 +595,7 @@ private:
         }
 
         if (!keyColumnsLeft.empty()) {
+            IsTableWithFeatures = true;
             return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
         }
 
@@ -602,6 +606,7 @@ private:
         }
 
         if (!notNullColumnsLeft.empty()) {
+            IsTableWithFeatures = true;
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
@@ -613,6 +618,7 @@ private:
 
         if (!defaultColumnsLeft.empty()) {
             if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
+                IsTableWithFeatures = true;
                 return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
             }
 
@@ -732,6 +738,10 @@ private:
         {
             auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable);
             if (conclusion.IsFail()) {
+                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertFallbackToKqp() && TryFallbackToKqp(ctx)) {
+                    return;
+                }
+
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
             }
         }

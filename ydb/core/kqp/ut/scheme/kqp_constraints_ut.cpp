@@ -1696,6 +1696,60 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
+    Y_UNIT_TEST(DefaultWithBulkUpsertFallbackToKqp) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableBulkUpsertFallbackToKqp(true)
+            .SetWithSampleTables(false));
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DefaultColumnAndBulkUpsert` (
+                    Key Uint32 NOT NULL,
+                    Value1 String DEFAULT "Default value",
+                    Value2 Int64 DEFAULT 123,
+                    PRIMARY KEY (Key),
+                );
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 10; i <= 15; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .Uint32(i)
+                    .AddMember("Value2")
+                        .OptionalInt64(0)
+                    .EndStruct();
+
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            Cerr << "TEST: " << result.GetIssues().ToString() << Endl;
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            // UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
+        }
+
+        {
+            auto query = R"(
+                SELECT * FROM `/Root/DefaultColumnAndBulkUpsert`;
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "TEST: " << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
+    }
+
     Y_UNIT_TEST(AlterTableAddColumnDefaultNullIsNotAllowed) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);

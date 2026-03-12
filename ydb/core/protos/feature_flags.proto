@@ -262,4 +262,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
+    optional bool EnableSQSMigrationTopicCreation = 238 [default = false];
+    optional bool EnableSQSMigration = 239 [default = false];
+    optional bool EnableSQSMigrationFinished = 240 [default = false];
 }

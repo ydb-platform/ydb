@@ -1336,6 +1336,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
+    LOG_ROW_DISPATCHER_TRACE("UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
     LastCpuTime = currentCpuTime;
 }
 

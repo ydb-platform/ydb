@@ -1884,7 +1884,7 @@ private:
             pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
-            Counters->GetKqpCounters(),
+            Counters->GetRootCounters(),
             {},
             FeatureFlags.GetEnableStreamingQueriesCounters());
 

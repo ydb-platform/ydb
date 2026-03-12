@@ -7,13 +7,13 @@ items:
     href: auth.md
   - name: Параметризованные запросы
     href: parameterized_queries.md
-  - name: Формат данных в результате запроса
-    href: result-formats/index.md
+  - name: Форматы данных
+    href: data-formats/index.md
     items:
-    - name: Value
-      href: result-formats/format-value.md
+    - name: Protobuf
+      href: data-formats/format-protobuf.md
     - name: Apache Arrow
-      href: result-formats/format-arrow.md
+      href: data-formats/format-arrow.md
   - name: Работа с топиками
     href: topic.md
   - name: Работа с узлами координации

@@ -19,7 +19,7 @@ jobs:
       branches: ${{ steps.set-branches.outputs.branches }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         sparse-checkout: |
           .github/config
@@ -43,7 +43,7 @@ jobs:
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 2

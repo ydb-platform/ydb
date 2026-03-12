@@ -31,7 +31,7 @@ jobs:
       prs: ${{ steps.pr-list.outputs.prs }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get merged PRs
         id: pr-list
@@ -80,7 +80,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 

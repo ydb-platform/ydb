@@ -30,7 +30,7 @@ jobs:
       TAG_NAME: ${{ github.event.inputs && github.event.inputs.tag_name || github.event.client_payload.tag_name }}
       TEMP_ASSET_DIR: /tmp/asset
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Asset Download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

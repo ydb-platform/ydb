@@ -1004,6 +1004,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             Cout << "AST (OptionalInt64 vs Int32 INNER): " << ast << Endl;
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("FilterNullMembers"),
+                TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
+                TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
         }
 
         {
@@ -1055,6 +1059,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             Cout << "AST (OptionalInt64 vs Int32 LEFT): " << ast << Endl;
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("FilterNullMembers"),
+                TStringBuilder() << "FilterNullMembers breaks block pipeline and should not appear. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideFromBlocks"),
+                TStringBuilder() << "WideFromBlocks indicates block pipeline interruption. AST: " << ast);
         }
     }
 }

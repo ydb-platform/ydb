@@ -162,7 +162,7 @@ namespace NKikimr::NDDisk {
             cFunc(TEvents::TSystem::Poison, PassAway)
 
             case TEvWritePersistentBuffers::EventType: {
-                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TWritePersistentBuffersRequest()));
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor()));
                 break;
             }
         )

@@ -5,7 +5,7 @@
 #include "ddisk.h"
 
 namespace NKikimr::NDDisk {
-    class TWritePersistentBuffersRequest : public TActor<TWritePersistentBuffersRequest> {
+    class TWritePersistentBuffersRequestActor : public TActor<TWritePersistentBuffersRequestActor> {
         struct TPersistentBufferInflight {
             ui32 NodeId;
             ui32 PDiskId;
@@ -33,7 +33,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
 
     public:
-        TWritePersistentBuffersRequest();
+        TWritePersistentBuffersRequestActor();
 
         STFUNC(StateFunc);
     };

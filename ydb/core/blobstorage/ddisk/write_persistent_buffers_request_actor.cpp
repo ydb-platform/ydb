@@ -4,11 +4,11 @@
 
 namespace NKikimr::NDDisk {
 
-    TWritePersistentBuffersRequest::TWritePersistentBuffersRequest()
+    TWritePersistentBuffersRequestActor::TWritePersistentBuffersRequestActor()
         : TActor(&TThis::StateFunc)
         {}
 
-    void TWritePersistentBuffersRequest::Reply() {
+    void TWritePersistentBuffersRequestActor::Reply() {
         auto msg = std::make_unique<TEvWritePersistentBuffersResult>();
         for (auto& inflight : Inflights) {
             if (!inflight.Replied && inflight.Received) {
@@ -28,12 +28,12 @@ namespace NKikimr::NDDisk {
         Send(Sender, msg.release(), 0, Cookie);
     }
 
-    void TWritePersistentBuffersRequest::ReplyAndDie() {
+    void TWritePersistentBuffersRequestActor::ReplyAndDie() {
         Reply();
         PassAway();
     }
 
-    void TWritePersistentBuffersRequest::Timeout() {
+    void TWritePersistentBuffersRequestActor::Timeout() {
         if (Received == Inflights.size()) {
             ReplyAndDie();
         } else {
@@ -41,7 +41,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TWritePersistentBuffersRequest::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
+    void TWritePersistentBuffersRequestActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 node = ev->Get()->NodeId;
         for (auto& inflight : Inflights) {
             if (!inflight.Received && inflight.NodeId == node) {
@@ -53,13 +53,13 @@ namespace NKikimr::NDDisk {
         CheckReply();
     }
 
-    void TWritePersistentBuffersRequest::CheckReply() {
+    void TWritePersistentBuffersRequestActor::CheckReply() {
         if (Received == Inflights.size()) {
             ReplyAndDie();
         }
     }
 
-    void TWritePersistentBuffersRequest::Handle(TEvWritePersistentBufferResult::TPtr ev) {
+    void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBufferResult::TPtr ev) {
         auto cookie = ev->Cookie;
         Y_ABORT_UNLESS(cookie < Inflights.size());
         auto& inflight = Inflights[cookie];
@@ -73,7 +73,7 @@ namespace NKikimr::NDDisk {
         CheckReply();
     }
 
-    void TWritePersistentBuffersRequest::Handle(TEvWritePersistentBuffers::TPtr ev) {
+    void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
         Sender = ev->Sender;
         Cookie = ev->Cookie;
         const auto& record = ev->Get()->Record;
@@ -110,7 +110,7 @@ namespace NKikimr::NDDisk {
         Schedule(TDuration::MicroSeconds(record.GetReplyTimeoutMicroseconds()), new TEvents::TEvWakeup());
     }
 
-    void TWritePersistentBuffersRequest::PassAway() {
+    void TWritePersistentBuffersRequestActor::PassAway() {
         for (auto& inflight : Inflights) {
             if (inflight.NodeId != SelfId().NodeId()) {
                 Send(TActivationContext::InterconnectProxy(inflight.NodeId), new TEvents::TEvUnsubscribe());
@@ -119,7 +119,7 @@ namespace NKikimr::NDDisk {
         TActor::PassAway();
     }
 
-    STFUNC(TWritePersistentBuffersRequest::StateFunc) {
+    STFUNC(TWritePersistentBuffersRequestActor::StateFunc) {
         STRICT_STFUNC_BODY(
             hFunc(TEvWritePersistentBufferResult, Handle)
             hFunc(TEvWritePersistentBuffers, Handle)

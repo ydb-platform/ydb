@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include "direct_io_op.h"
 #include "write_persistent_buffers_request_actor.h"
 
 #include <ydb/core/base/counters.h>
@@ -77,6 +78,10 @@ namespace NKikimr::NDDisk {
 
         DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
             << ':' << BaseInfo.VDiskSlotId << ']';
+    }
+
+    TDDiskActor::~TDDiskActor() {
+        [[maybe_unused]] constexpr size_t CompleteTypeGuard = sizeof(TDirectIoOpBase);
     }
 
     void TDDiskActor::Bootstrap() {
@@ -159,6 +164,7 @@ namespace NKikimr::NDDisk {
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
             case TEvWritePersistentBuffers::EventType: {
@@ -171,7 +177,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::PassAway() {
 #if defined(__linux__)
         if (UringRouter) {
-            for (int i = 0; i < 1000 && InFlightCount.load(std::memory_order_acquire) > 0; ++i) {
+            for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
                 usleep(1000);
             }
             UringRouter->Stop();

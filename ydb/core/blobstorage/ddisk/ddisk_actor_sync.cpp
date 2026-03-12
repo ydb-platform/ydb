@@ -255,7 +255,7 @@ namespace NKikimr::NDDisk {
             cuttedFromData = end;
 
             auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TInternalSyncWriteOp>(SelfId(), InFlightCount, Counters);
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TInternalSyncWriteOp>(SelfId(), Counters);
             auto* syncWriteOp = static_cast<TInternalSyncWriteOp*>(op.get());
             syncWriteOp->SetSyncId(syncId);
             syncWriteOp->SetRequestId(ev->Cookie);

@@ -346,7 +346,7 @@ namespace NKikimr::NDDisk {
             const ui64 cookie = NextCookie++;
             inflightRecord.OperationCookies.insert(cookie);
             auto diskOffset = DiskFormat->Offset(chunkIdx, 0, offset);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
@@ -604,7 +604,7 @@ namespace NKikimr::NDDisk {
 
             auto chunkOffset = pr.Sectors[0].SectorIdx * SectorSize;
             auto diskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, chunkOffset);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(batchEraseCookie);
             partOp->SetPartCookie(cookie);
@@ -699,7 +699,7 @@ namespace NKikimr::NDDisk {
         inflightRecord->second.OperationCookies.insert(cookie);
         auto chunkOffset = pr.Sectors[0].SectorIdx * SectorSize;
         auto diskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, chunkOffset);
-        std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), InFlightCount, Counters);
+        std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
         auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
         partOp->SetCookie(eraseCookie);
         partOp->SetPartCookie(cookie);

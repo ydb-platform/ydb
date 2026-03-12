@@ -7,6 +7,7 @@
 
 #include <sys/uio.h>
 
+#include <atomic>
 #include <expected>
 #include <memory>
 
@@ -31,7 +32,8 @@ enum class EUringFavor {
 struct TUringRouterConfig {
     // Target maximum number of in-flight I/O operations (SQ ring size).
     // Typical devices have hardware queue depth around 128; using 256 entries
-    // gives additional headroom to reduce the risk of SQ exhaustion under load.
+    // gives additional headroom to reduce the risk of SQ exhaustion under load
+    // and a better device utilization: there is in-kernel queue in front of the device
     ui32 QueueDepth = 256;
 
     // Submission kernel thread idle timeout before sleeping (only when UseSQPoll)
@@ -135,6 +137,9 @@ public:
     bool IsFileRegistered() const;
     EUringFavor GetUringFavor() const;
 
+    // both waiting, on-device and completed events
+    ui32 GetInflight() const;
+
     // Returns true if an io_uring instance can be created on this system with either the given config or fallback config.
     // Always use in tests to skip when running in restricted environments (seccomp, containers, etc.).
     static bool Probe(TUringRouterConfig config = {});
@@ -156,6 +161,8 @@ private:
     // Dedicated completion polling thread
     class TCompletionPoller;
     std::unique_ptr<TCompletionPoller> Poller;
+
+    std::atomic<ui32> InFlightCount{0};
 };
 
 } // namespace NKikimr::NPDisk

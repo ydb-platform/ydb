@@ -31,6 +31,8 @@ def build_html_dashboard(
     resources_overlay: Optional[dict[str, Any]] = None,
     tests_per_suite: Optional[dict[str, int]] = None,
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
+    issues_summary: Optional[dict[str, int]] = None,
+    suite_chunk_issues_summary: Optional[dict[str, int]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -45,6 +47,8 @@ def build_html_dashboard(
         resources_overlay=resources_overlay,
         tests_per_suite=tests_per_suite,
         tests_per_chunk_by_label=tests_per_chunk_by_label,
+        issues_summary=issues_summary,
+        suite_chunk_issues_summary=suite_chunk_issues_summary,
     )
 
     html = f"""<!doctype html>
@@ -119,6 +123,36 @@ def build_html_dashboard(
       font-size: 12px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }}
+    .headline-stats {{
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      background: #f8fafc;
+    }}
+    .headline-stats-title {{
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }}
+    .headline-stats-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+    }}
+    .headline-card {{
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .headline-card-name {{
+      color: #334155;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }}
     .btn-primary {{
       padding: 7px 12px;
       border: 1px solid #1d4ed8;
@@ -167,6 +201,10 @@ def build_html_dashboard(
       Suite filter: {suite_filter or 'ALL SUITES'}
     </div>
     <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
+  </div>
+  <div id="headlineStats" class="headline-stats" style="display:none;">
+    <div class="headline-stats-title">Resource summary (max / p95 / median)</div>
+    <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
   <details style="margin: 8px 0 12px 0;">
     <summary><b>Run stats</b></summary>
@@ -390,6 +428,101 @@ def build_html_dashboard(
     const data = {json.dumps(payload, ensure_ascii=False)};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
+    function formatHeadlineValue(metric, value) {{
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      if (metric === 'cpu') return n.toFixed(3) + ' cores';
+      if (metric === 'ram') return n.toFixed(3) + ' GB';
+      if (metric === 'total_duration_sec') {{
+        const sec = Math.max(0, Math.round(n));
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        const hh = String(h).padStart(2, '0');
+        const mm = String(m).padStart(2, '0');
+        const ss = String(s).padStart(2, '0');
+        return hh + ':' + mm + ':' + ss + ' (' + sec + 's)';
+      }}
+      return String(Math.round(n));
+    }}
+    function renderHeadlineStats() {{
+      const wrap = document.getElementById('headlineStats');
+      const grid = document.getElementById('headlineStatsGrid');
+      const hs = data.headline_stats || {{}};
+      if (!wrap || !grid || !hs || typeof hs !== 'object') return;
+      const total = hs.total || {{}};
+      const issues = hs.issues || {{}};
+      const chunkIssues = hs.suite_chunk_issues || {{}};
+      const timeoutTotal = Math.round(Number(issues.timeout || 0));
+      const timeoutMuted = Math.round(Number(issues.timeout_muted || 0));
+      const regularBase = Math.round(Number(issues.regular || 0));
+      const regularMutedBase = Math.round(Number(issues.regular_muted || 0));
+      const mutedTotal = Math.round(Number(issues.muted || 0));
+      const mutedOther = Math.max(0, mutedTotal - timeoutMuted - regularMutedBase);
+      // Include muted-only tests into "regular" bucket so totals remain consistent.
+      const regularTotal = regularBase + mutedOther;
+      const regularMuted = regularMutedBase + mutedOther;
+      const skippedTotal = Math.round(Number(issues.skipped || 0));
+      const failedTotal = timeoutTotal + regularTotal;
+      const failedMuted = timeoutMuted + regularMuted;
+      const totalCard =
+        '<div class="headline-card">' +
+          '<div class="headline-card-name">Total</div>' +
+          '<div><b>suites:</b> ' + String(Math.round(Number(total.suites || 0))) + '</div>' +
+          '<div><b>chunks:</b> ' + String(Math.round(Number(total.chunks || 0))) + '</div>' +
+          '<div><b>tests:</b> ' + String(Math.round(Number(total.tests || 0))) + '</div>' +
+        '</div>';
+      const issuesCard =
+        '<div class="headline-card">' +
+          '<div class="headline-card-name">Test issues</div>' +
+          '<div><b>failed:</b> ' + String(failedTotal) + ' (muted ' + String(failedMuted) + ')</div>' +
+          '<div><b>timeout:</b> ' + String(timeoutTotal) + ' (muted ' + String(timeoutMuted) + ')</div>' +
+          '<div><b>regular:</b> ' + String(regularTotal) + ' (muted ' + String(regularMuted) + ')</div>' +
+          '<div><b>skipped:</b> ' + String(skippedTotal) + '</div>' +
+        '</div>';
+      const cTimeoutTotal = Math.round(Number(chunkIssues.timeout || 0));
+      const cTimeoutMuted = Math.round(Number(chunkIssues.timeout_muted || 0));
+      const cRegularBase = Math.round(Number(chunkIssues.regular || 0));
+      const cRegularMutedBase = Math.round(Number(chunkIssues.regular_muted || 0));
+      const cMutedTotal = Math.round(Number(chunkIssues.muted || 0));
+      const cMutedOther = Math.max(0, cMutedTotal - cTimeoutMuted - cRegularMutedBase);
+      const cRegularTotal = cRegularBase + cMutedOther;
+      const cRegularMuted = cRegularMutedBase + cMutedOther;
+      const cFailedTotal = cTimeoutTotal + cRegularTotal;
+      const cFailedMuted = cTimeoutMuted + cRegularMuted;
+      const suiteChunkIssuesCard =
+        '<div class="headline-card">' +
+          '<div class="headline-card-name">Chunk issues</div>' +
+          '<div><b>failed:</b> ' + String(cFailedTotal) + ' (muted ' + String(cFailedMuted) + ')</div>' +
+          '<div><b>timeout:</b> ' + String(cTimeoutTotal) + ' (muted ' + String(cTimeoutMuted) + ')</div>' +
+          '<div><b>regular:</b> ' + String(cRegularTotal) + ' (muted ' + String(cRegularMuted) + ')</div>' +
+        '</div>';
+      const metrics = [
+        ['cpu', 'CPU'],
+        ['ram', 'RAM'],
+        ['active_chunks', 'Active chunks'],
+        ['tests', 'Tests running in parallel'],
+      ];
+      const metricCards = metrics.map(([key, title]) => {{
+        const s = (hs[key] && typeof hs[key] === 'object') ? hs[key] : {{}};
+        return (
+          '<div class="headline-card">' +
+            '<div class="headline-card-name">' + title + '</div>' +
+            '<div><b>max:</b> ' + formatHeadlineValue(key, s.max) + '</div>' +
+            '<div><b>p95:</b> ' + formatHeadlineValue(key, s.p95) + '</div>' +
+            '<div><b>median:</b> ' + formatHeadlineValue(key, s.median) + '</div>' +
+          '</div>'
+        );
+      }}).join('');
+      const durationCard =
+        '<div class="headline-card">' +
+          '<div class="headline-card-name">Total duration (start → end)</div>' +
+          '<div><b>duration:</b> ' + formatHeadlineValue('total_duration_sec', hs.total_duration_sec) + '</div>' +
+        '</div>';
+      grid.innerHTML = totalCard + issuesCard + suiteChunkIssuesCard + metricCards + durationCard;
+      wrap.style.display = 'block';
+    }}
+    renderHeadlineStats();
     function _selectedTimeZone() {{
       const sel = document.getElementById('tzSelect');
       const v = sel ? String(sel.value || 'Europe/Moscow') : 'Europe/Moscow';

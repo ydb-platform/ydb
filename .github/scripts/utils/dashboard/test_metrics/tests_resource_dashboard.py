@@ -219,6 +219,8 @@ def parse_report_chunks(
     dict[str, int],
     dict[str, float],
     dict[str, dict[str, Any]],
+    dict[str, int],
+    dict[str, int],
 ]:
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -227,6 +229,27 @@ def parse_report_chunks(
     report_test_fail_chunk_hids_by_suite: dict[str, dict[str, set[Any]]] = defaultdict(
         lambda: {"error_hids": set(), "timeout_hids": set()}
     )
+    muted_test_chunk_hids: set[Any] = set()
+    issues_summary: dict[str, int] = {
+        "failed_total": 0,
+        "timeout": 0,
+        "timeout_muted": 0,
+        "regular": 0,
+        "regular_muted": 0,
+        "muted": 0,
+        "skipped": 0,
+    }
+    suite_chunk_issues_summary: dict[str, int] = {
+        "failed_total": 0,
+        "timeout": 0,
+        "timeout_muted": 0,
+        "regular": 0,
+        "regular_muted": 0,
+        "muted": 0,
+        "skipped": 0,
+        "affected_suites": 0,
+        "affected_chunks": 0,
+    }
 
     def ensure_suite(suite: str) -> dict[str, dict[str, int]]:
         if suite not in report_status_by_suite:
@@ -271,12 +294,40 @@ def parse_report_chunks(
             if status_u in {"SKIP", "SKIPPED"}:
                 bucket["skipped"] += 1
         if bucket_key == "tests" and not is_suite_row:
+            if status_u in {"SKIP", "SKIPPED"}:
+                issues_summary["skipped"] += 1
+            if muted:
+                issues_summary["muted"] += 1
+                chunk_hid_for_muted = item.get("chunk_hid")
+                if chunk_hid_for_muted is not None:
+                    muted_test_chunk_hids.add(chunk_hid_for_muted)
+            if timeout:
+                issues_summary["timeout"] += 1
+                if muted:
+                    issues_summary["timeout_muted"] += 1
+            elif failedish:
+                issues_summary["regular"] += 1
+                if muted:
+                    issues_summary["regular_muted"] += 1
             chunk_hid = item.get("chunk_hid")
             if chunk_hid is not None:
                 if timeout:
                     report_test_fail_chunk_hids_by_suite[suite]["timeout_hids"].add(chunk_hid)
                 elif failedish and not muted:
                     report_test_fail_chunk_hids_by_suite[suite]["error_hids"].add(chunk_hid)
+        elif bucket_key == "chunks" and not is_suite_row:
+            if status_u in {"SKIP", "SKIPPED"}:
+                suite_chunk_issues_summary["skipped"] += 1
+            if muted:
+                suite_chunk_issues_summary["muted"] += 1
+            if timeout:
+                suite_chunk_issues_summary["timeout"] += 1
+                if muted:
+                    suite_chunk_issues_summary["timeout_muted"] += 1
+            elif failedish:
+                suite_chunk_issues_summary["regular"] += 1
+                if muted:
+                    suite_chunk_issues_summary["regular_muted"] += 1
 
         if not item.get("chunk"):
             continue
@@ -311,6 +362,23 @@ def parse_report_chunks(
     for suite_raw, group, idx, meta in parsed_chunk_rows:
         chunks[(suite_raw, group, idx)] = meta
 
+    affected_chunk_labels: set[str] = set()
+    affected_suite_names: set[str] = set()
+    for suite_raw, group, idx, meta in parsed_chunk_rows:
+        suite_norm = normalize_suite_path(suite_raw)
+        status_u = str(meta.get("status", "") or "").upper()
+        timeout, muted, failedish = _classify_failure(
+            str(meta.get("status", "") or ""),
+            str(meta.get("error_type", "") or ""),
+            bool(meta.get("is_muted")),
+        )
+        is_skipped = status_u in {"SKIP", "SKIPPED"}
+        if timeout or failedish or muted or is_skipped:
+            label = f"{suite_norm}::{group}/chunk{idx}" if group else f"{suite_norm}::chunk{idx}"
+            affected_chunk_labels.add(label)
+            if suite_norm:
+                affected_suite_names.add(suite_norm)
+
     # Backward-compatible fallback key: (suite_raw, None, chunk_idx).
     # Add only when chunk_idx is unique within suite_raw to avoid cross-group mixups.
     per_suite_idx_count: dict[tuple[str, int], int] = defaultdict(int)
@@ -336,6 +404,15 @@ def parse_report_chunks(
     for suite_raw, group, idx, meta in parsed_chunk_rows:
         if meta.get("hid") is not None:
             hid_to_chunk_key[meta["hid"]] = (suite_raw, group, idx)
+    muted_chunk_labels_from_tests: set[str] = set()
+    for hid in muted_test_chunk_hids:
+        chunk_key = hid_to_chunk_key.get(hid)
+        if chunk_key is None:
+            continue
+        suite_raw, group, idx = chunk_key
+        suite_norm = normalize_suite_path(suite_raw)
+        label = f"{suite_norm}::{group}/chunk{idx}" if group else f"{suite_norm}::chunk{idx}"
+        muted_chunk_labels_from_tests.add(label)
     tests_per_chunk: dict[tuple[str, Optional[str], int], int] = defaultdict(int)
     tests_per_suite: dict[str, int] = defaultdict(int)
     max_test_duration_sec_by_suite: dict[str, float] = defaultdict(float)
@@ -460,6 +537,17 @@ def parse_report_chunks(
         dict(tests_per_suite),
         dict(max_test_duration_sec_by_suite),
         test_duration_stats_by_suite,
+        {
+            **issues_summary,
+            "failed_total": int(issues_summary["timeout"] + issues_summary["regular"]),
+        },
+        {
+            **suite_chunk_issues_summary,
+            "failed_total": int(suite_chunk_issues_summary["timeout"] + suite_chunk_issues_summary["regular"]),
+            "muted": int(max(int(suite_chunk_issues_summary["muted"]), len(muted_chunk_labels_from_tests))),
+            "affected_suites": int(len(affected_suite_names)),
+            "affected_chunks": int(len(affected_chunk_labels)),
+        },
     )
 
 
@@ -1297,6 +1385,8 @@ def main() -> None:
         tests_per_suite,
         max_test_duration_sec_by_suite,
         test_duration_stats_by_suite,
+        issues_summary,
+        suite_chunk_issues_summary,
     ) = parse_report_chunks(
         args.report, args.suite_path
     )
@@ -1526,6 +1616,8 @@ def main() -> None:
             resources_overlay=resources_overlay,
             tests_per_suite=tests_per_suite,
             tests_per_chunk_by_label=tests_per_chunk_by_label,
+            issues_summary=issues_summary,
+            suite_chunk_issues_summary=suite_chunk_issues_summary,
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")

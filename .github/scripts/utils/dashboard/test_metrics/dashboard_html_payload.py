@@ -26,6 +26,108 @@ except ImportError:
     )
 
 
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return float(values[0])
+    q = max(0.0, min(1.0, float(p)))
+    sorted_vals = sorted(float(v) for v in values)
+    pos = (len(sorted_vals) - 1) * q
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    w = pos - lo
+    return float(sorted_vals[lo] * (1.0 - w) + sorted_vals[hi] * w)
+
+
+def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
+    if not tracks:
+        return []
+    max_len = max((len(vals) for vals in tracks.values()), default=0)
+    totals = [0.0] * max_len
+    for vals in tracks.values():
+        for i, v in enumerate(vals):
+            totals[i] += float(v or 0.0)
+    return totals
+
+
+def _describe_distribution(values: list[float]) -> dict[str, float]:
+    vals = [float(v or 0.0) for v in values]
+    if not vals:
+        return {"max": 0.0, "p95": 0.0, "median": 0.0}
+    return {
+        "max": float(max(vals)),
+        "p95": _percentile(vals, 0.95),
+        "median": _percentile(vals, 0.5),
+    }
+
+
+def _build_headline_stats(
+    cpu_tracks_suite: dict[str, list[float]],
+    ram_tracks_suite: dict[str, list[float]],
+    ys_active: list[float],
+    tests_tracks_suite: dict[str, list[float]],
+    runs: list[dict[str, Any]],
+    tests_per_suite: Optional[dict[str, int]],
+    issues_summary: Optional[dict[str, int]],
+    suite_chunk_issues_summary: Optional[dict[str, int]],
+) -> dict[str, Any]:
+    starts = [float(r.get("start_us", 0.0) or 0.0) for r in runs if float(r.get("start_us", 0.0) or 0.0) > 0.0]
+    ends = [float(r.get("end_us", 0.0) or 0.0) for r in runs if float(r.get("end_us", 0.0) or 0.0) > 0.0]
+    duration_sec = 0.0
+    if starts and ends:
+        duration_sec = max(0.0, (max(ends) - min(starts)) / 1_000_000.0)
+
+    suite_total = len(set(str(r.get("suite_path") or "") for r in runs if str(r.get("suite_path") or "")))
+    chunk_labels = set()
+    for r in runs:
+        suite = str(r.get("suite_path") or "")
+        if not suite:
+            continue
+        group = normalize_chunk_group(r.get("chunk_group"))
+        chunk = r.get("chunk")
+        lb = f"{suite}::{group}/chunk{chunk}" if group else f"{suite}::chunk{chunk}"
+        chunk_labels.add(lb)
+    chunk_total = len(chunk_labels)
+    tests_total = int(sum(int(v or 0) for v in (tests_per_suite or {}).values()))
+
+    issues = {
+        "failed_total": int((issues_summary or {}).get("failed_total", 0) or 0),
+        "timeout": int((issues_summary or {}).get("timeout", 0) or 0),
+        "timeout_muted": int((issues_summary or {}).get("timeout_muted", 0) or 0),
+        "regular": int((issues_summary or {}).get("regular", 0) or 0),
+        "regular_muted": int((issues_summary or {}).get("regular_muted", 0) or 0),
+        "muted": int((issues_summary or {}).get("muted", 0) or 0),
+        "skipped": int((issues_summary or {}).get("skipped", 0) or 0),
+    }
+    suite_chunk_issues = {
+        "failed_total": int((suite_chunk_issues_summary or {}).get("failed_total", 0) or 0),
+        "timeout": int((suite_chunk_issues_summary or {}).get("timeout", 0) or 0),
+        "timeout_muted": int((suite_chunk_issues_summary or {}).get("timeout_muted", 0) or 0),
+        "regular": int((suite_chunk_issues_summary or {}).get("regular", 0) or 0),
+        "regular_muted": int((suite_chunk_issues_summary or {}).get("regular_muted", 0) or 0),
+        "muted": int((suite_chunk_issues_summary or {}).get("muted", 0) or 0),
+        "skipped": int((suite_chunk_issues_summary or {}).get("skipped", 0) or 0),
+        "affected_suites": int((suite_chunk_issues_summary or {}).get("affected_suites", 0) or 0),
+        "affected_chunks": int((suite_chunk_issues_summary or {}).get("affected_chunks", 0) or 0),
+    }
+
+    return {
+        "total": {
+            "suites": suite_total,
+            "chunks": chunk_total,
+            "tests": tests_total,
+        },
+        "issues": issues,
+        "suite_chunk_issues": suite_chunk_issues,
+        "cpu": _describe_distribution(_series_total_values(cpu_tracks_suite)),
+        "ram": _describe_distribution(_series_total_values(ram_tracks_suite)),
+        "active_chunks": _describe_distribution([float(v or 0.0) for v in ys_active]),
+        "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
+        "total_duration_sec": duration_sec,
+    }
+
+
 def build_dashboard_payload(
     suite_filter: Optional[str],
     runs: list[dict[str, Any]],
@@ -39,6 +141,8 @@ def build_dashboard_payload(
     resources_overlay: Optional[dict[str, Any]] = None,
     tests_per_suite: Optional[dict[str, int]] = None,
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
+    issues_summary: Optional[dict[str, int]] = None,
+    suite_chunk_issues_summary: Optional[dict[str, int]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -83,6 +187,17 @@ def build_dashboard_payload(
     top_tests_suite = topn_other_map(tests_time_by_suite, top_n)
     xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
     xs_active, ys_active = build_active_series(enriched)
+
+    headline_stats = _build_headline_stats(
+        cpu_tracks_suite=cpu_tracks_suite,
+        ram_tracks_suite=ram_tracks_suite,
+        ys_active=ys_active,
+        tests_tracks_suite=tests_tracks_suite,
+        runs=runs,
+        tests_per_suite=tests_per_suite,
+        issues_summary=issues_summary,
+        suite_chunk_issues_summary=suite_chunk_issues_summary,
+    )
 
     xs_cpu_suite, cpu_tracks_suite = downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)
     xs_ram_suite, ram_tracks_suite = downsample_step_series(xs_ram_suite, ram_tracks_suite, max_points)
@@ -271,6 +386,7 @@ def build_dashboard_payload(
     return {
         "suite_filter": suite_filter,
         "stats": stats,
+        "headline_stats": headline_stats,
         "by_chunk": by_chunk,
         "has_synthetic_metrics": has_synthetic,
         "cpu_tracks_suite_no_synthetic": cpu_tracks_suite_no_synthetic,

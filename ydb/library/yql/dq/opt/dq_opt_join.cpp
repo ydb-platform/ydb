@@ -1218,7 +1218,8 @@ TCoLambda PrepareJoinSide(
     TModifyKeysList& remap,
     bool filter,
     TExprNode::TListType& keysList,
-    TExprContext& ctx) {
+    TExprContext& ctx,
+    bool useBlockJoin = false) {
 
     TCoArgument inputArg{ctx.NewArgument(pos, "flow")};
     auto preprocess = ctx.Builder(inputArg.Pos())
@@ -1262,7 +1263,13 @@ TCoLambda PrepareJoinSide(
         unwrap.reserve(remap.size());
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(check), [&](const TCoAtom& key) { return key.Ptr(); });
         std::for_each(remap.cbegin(), remap.cend(), [&](const TModifyKeysList::value_type& key) {
-            (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());
+            if (useBlockJoin) {
+                // For block hash join: use SkipNullMembers for all keys to maintain block compatibility.
+                // FilterNullMembers is not block-convertible; the peephole ExpandJoinInput handles unwrapping.
+                check.emplace_back(std::get<1>(key).Ptr());
+            } else {
+                (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());
+            }
         });
         preprocess = Build<TCoSkipNullMembers>(ctx, preprocess->Pos())
             .Input(std::move(preprocess))
@@ -1332,6 +1339,9 @@ TExprBase DqBuildHashJoin(
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
+
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
@@ -1379,14 +1389,24 @@ TExprBase DqBuildHashJoin(
 
             if (commonType) {
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
-                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
-                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
-                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    const bool isJustOptionalDiff = useBlockHashJoin
+                        && keyType1->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType1->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!isJustOptionalDiff) {
+                        TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                        leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
+                        remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    }
                 }
                 if (!IsSameAnnotation(*keyType2, *commonType)) {
-                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
-                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
-                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    const bool isJustOptionalDiff = useBlockHashJoin
+                        && keyType2->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType2->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!isJustOptionalDiff) {
+                        TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                        rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
+                        remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    }
                 }
             } else
                 badKey = true;
@@ -1447,7 +1467,7 @@ TExprBase DqBuildHashJoin(
         bool canPushRightLambdaToStage = false;
 
         if (!remapLeft.empty()) {
-            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx);
+            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx, useBlockHashJoin);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connLeft, std::move(lambda));
                 canPushLeftLambdaToStage = true;
@@ -1457,7 +1477,7 @@ TExprBase DqBuildHashJoin(
         }
 
         if (!remapRight.empty()) {
-            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx);
+            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx, useBlockHashJoin);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connRight, std::move(lambda));
                 canPushRightLambdaToStage = true;
@@ -1684,9 +1704,6 @@ TExprBase DqBuildHashJoin(
             flags = maybeFlags.Cast().Ref().ChildrenList();
         }
     }
-
-    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
-    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
 
     TExprNode::TPtr hashJoin;
     switch (mode) {

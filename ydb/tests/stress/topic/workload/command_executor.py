@@ -16,12 +16,12 @@ class CommandExecutor:
         self.hang_monitor = TransactionHangMonitor(hang_timeout, window_interval)
 
     def run(self, cmd: List[str]) -> None:
-        self.logger.debug(f"Begin cmd {cmd}")
+        self.logger.error(f"Begin cmd {cmd}")
         subprocess.run(cmd, check=True, text=True)
-        self.logger.debug(f"End cmd {cmd}")
+        self.logger.error(f"End cmd {cmd}")
 
     def run_with_monitoring(self, cmd: List[str]) -> None:
-        self.logger.debug(f"Begin cmd {cmd}")
+        self.logger.error(f"Begin cmd {cmd}")
 
         process = subprocess.Popen(
             cmd,
@@ -64,4 +64,4 @@ class CommandExecutor:
             process.wait()
             raise
         finally:
-            self.logger.debug(f"End cmd {cmd}")
+            self.logger.error(f"End cmd {cmd}")

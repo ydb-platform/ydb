@@ -67,17 +67,17 @@ class TransactionHangMonitor:
 
             if hang_detected:
                 self.consecutive_zero_windows += 1
-                self.logger.debug(
+                self.logger.error(
                     f"Hang window detected: zero windows={self.consecutive_zero_windows}, "
                     f"required={self.required_zero_windows}, write={write_msg_s}, read={read_msg_s}"
                 )
             else:
                 if self.consecutive_zero_windows > 0:
-                    self.logger.debug(f"Hang window cleared: zero windows={self.consecutive_zero_windows}")
+                    self.logger.error(f"Hang window cleared: zero windows={self.consecutive_zero_windows}")
                 self.consecutive_zero_windows = 0
 
             return self.consecutive_zero_windows >= self.required_zero_windows
 
         except (ValueError, IndexError) as e:
-            self.logger.debug(f"Failed to parse line: {line}, error: {e}")
+            self.logger.error(f"Failed to parse line: {line}, error: {e}")
             return False

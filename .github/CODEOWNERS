@@ -8,6 +8,7 @@
 
 /CLAUDE.md @ydb-platform/ai-reviewers
 
+/.cursorindexingignore-personal @ydb-platform/ai-reviewers
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci

@@ -364,8 +364,6 @@ private:
 
     TDuration GetCloseTimeout();
 
-    std::string GetProducerId(std::uint32_t partition);
-
     void HandleAutoPartitioning(std::uint32_t partition);
 
     bool RunSplittedPartitionWorkers();

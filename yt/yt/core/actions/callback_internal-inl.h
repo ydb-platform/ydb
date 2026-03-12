@@ -35,7 +35,7 @@ inline void* TCallbackBase::GetHandle() const
     return (void*)((size_t)(void*)BindState.Get() ^ (size_t)(void*)UntypedInvoke);
 }
 
-inline void TCallbackBase::Swap(TCallbackBase& other)
+inline void TCallbackBase::Swap(TCallbackBase& other) noexcept
 {
     auto tempBindState = std::move(other.BindState);
     auto tempUntypedInvoke = std::move(other.UntypedInvoke);
@@ -61,7 +61,7 @@ inline bool TCallbackBase::operator!=(const TCallbackBase& other) const
 }
 #endif
 
-inline TCallbackBase::TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState)
+inline TCallbackBase::TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState) noexcept
     : BindState(std::move(bindState))
     , UntypedInvoke(nullptr)
 { }

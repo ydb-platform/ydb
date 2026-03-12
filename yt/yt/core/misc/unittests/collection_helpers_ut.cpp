@@ -14,12 +14,12 @@ public:
     TMoveCounter(const TMoveCounter&) = delete;
     TMoveCounter& operator=(const TMoveCounter&) = delete;
 
-    TMoveCounter(TMoveCounter&&)
+    TMoveCounter(TMoveCounter&&) noexcept
     {
         ++Moves_;
     }
 
-    TMoveCounter& operator=(TMoveCounter&&)
+    TMoveCounter& operator=(TMoveCounter&&) noexcept
     {
         ++Moves_;
         return *this;

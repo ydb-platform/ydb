@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.1.0)
+VERSION(4.2.0)
 
 LICENSE(MIT)
 
@@ -10,6 +10,7 @@ PEERDIR(
     contrib/python/jaraco.context
     contrib/python/jaraco.functools
     contrib/python/more-itertools
+    contrib/python/typer
 )
 
 NO_LINT()

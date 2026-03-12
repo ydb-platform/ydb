@@ -1,5 +1,5 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index dac5b00..32f6271 100644
+index b1fe9a1..5b7e4aa 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
 @@ -54,8 +54,6 @@ _LIBCPP_OVERRIDABLE_FUNC_VIS __cxa_exception* __cxa_init_primary_exception(
@@ -11,7 +11,7 @@ index dac5b00..32f6271 100644
  class _LIBCPP_EXPORTED_FROM_ABI exception_ptr {
    void* __ptr_;
  
-@@ -85,10 +83,18 @@ public:
+@@ -87,10 +85,18 @@ public:
      return !(__x == __y);
    }
  
@@ -30,7 +30,7 @@ index dac5b00..32f6271 100644
  template <class _Ep>
  _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
  #  if _LIBCPP_HAS_EXCEPTIONS
-@@ -131,34 +137,7 @@ _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
+@@ -133,34 +139,7 @@ _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
  
  #else // _LIBCPP_ABI_MICROSOFT
  
@@ -65,7 +65,7 @@ index dac5b00..32f6271 100644
  
  // This is a built-in template function which automagically extracts the required
  // information.
-@@ -166,7 +145,7 @@ template <class _E>
+@@ -168,7 +147,7 @@ template <class _E>
  void* __GetExceptionInfo(_E);
  
  template <class _Ep>

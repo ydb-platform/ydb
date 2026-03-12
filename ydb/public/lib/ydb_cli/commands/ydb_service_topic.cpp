@@ -156,6 +156,15 @@ namespace NYdb::NConsoleClient {
         return description.Str();
     }
 
+    ui32 ParsePartitionPerTabletValue(TStringBuf s)
+    {
+        auto v = FromString<ui32>(s);
+        if ((v < 1) || (v > 20)) {
+            throw TMisuseException() << "Incorrect number of partitions in PQ tablet (" << v << "). Expected value from 1 to 20";
+        }
+        return v;
+    }
+
     namespace {
         NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
             auto exists = ExistingCodecs.find(to_lower(codecStr));
@@ -384,7 +393,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
             .Optional()
             .Hidden()
-            .StoreResult(&PartitionsPerTablet_);
+            .StoreMappedResult(&PartitionsPerTablet_, ParsePartitionPerTabletValue);
 
         config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }

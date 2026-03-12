@@ -16,10 +16,13 @@
 
 #include "src/core/lib/gprpp/crash.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+
+#include "y_absl/strings/str_cat.h"
 
 #include <grpc/support/log.h>
 
@@ -41,6 +44,13 @@ void Crash(y_absl::string_view message, SourceLocation location) {
   } else {
       abort();
   }
+}
+
+void CrashWithStdio(y_absl::string_view message, SourceLocation location) {
+  fputs(y_absl::StrCat(location.file(), ":", location.line(), ": ", message, "\n")
+            .c_str(),
+        stderr);
+  abort();
 }
 
 }  // namespace grpc_core

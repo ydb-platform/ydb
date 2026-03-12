@@ -75,7 +75,7 @@ public:
         other.IsValid_ = false;
     }
 
-    TPassedWrapper(TPassedWrapper&& other)
+    TPassedWrapper(TPassedWrapper&& other) noexcept
         : IsValid_(other.IsValid_)
         , T_(std::move(other.T_))
     {

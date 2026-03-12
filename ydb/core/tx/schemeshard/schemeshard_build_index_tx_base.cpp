@@ -308,6 +308,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
             *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+            *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
+            break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }

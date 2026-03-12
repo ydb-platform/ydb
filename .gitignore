@@ -107,6 +107,7 @@ path.bash.inc
 # Cursor ignore
 .cursor/
 .cursorignore
+.cursorindexingignore
 
 # Claude Code
 .claude/

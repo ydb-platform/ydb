@@ -263,4 +263,7 @@ message TFeatureFlags {
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
     optional bool EnableJsonIndex = 238 [default = false];
+    optional bool EnableSQSMigrationTopicCreation = 239 [default = false];
+    optional bool EnableSQSMigrationCompatibility = 240 [default = false];
+    optional bool EnableSQSMigrationFinished = 241 [default = false];
 }

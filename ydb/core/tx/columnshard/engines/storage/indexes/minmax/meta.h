@@ -24,7 +24,7 @@ protected:
     bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
         const NArrow::NSSA::TIndexCheckOperation& op) const;
 
-    virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
+    virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat,
         const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;

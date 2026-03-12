@@ -511,7 +511,7 @@ message TMaxIndex {
 
 message TMinMaxIndex {
     optional uint32 ColumnId = 1;
-    optional TIndexDataExtractor DataExtractor = 4;
+    optional TIndexDataExtractor DataExtractor = 2;
 }
 
 message TCountMinSketch {

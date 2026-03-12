@@ -36,12 +36,12 @@ class CommandExecutor:
             for line in process.stdout:
                 if self.hang_monitor.check_line(line):
                     self.logger.error(
-                        f"Transaction hung for {self.hang_monitor.hang_timeout} seconds"
+                        f"Transaction hang for {self.hang_monitor.hang_timeout} seconds"
                     )
                     process.kill()
                     process.wait()
                     raise TransactionHangError(
-                        f"Transaction hung for {self.hang_monitor.hang_timeout} seconds",
+                        f"Transaction hang for {self.hang_monitor.hang_timeout} seconds",
                         timeout_seconds=self.hang_monitor.hang_timeout
                     )
 

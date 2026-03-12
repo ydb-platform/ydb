@@ -1822,6 +1822,13 @@ message TImmediateControlsConfig {
             MaxValue: 100000000000, // 100 GB
             DefaultValue: 10000000, // 10 MB
         }];
+
+        optional uint64 EnableChunkKeeper = 40 [(ControlOptions) = {
+            Description: "Enable internal VDisk subsystem ChunkKeeper",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

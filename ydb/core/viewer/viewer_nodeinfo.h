@@ -1,4 +1,5 @@
 #pragma once
+
 #include "json_wb_req.h"
 
 namespace NKikimr::NViewer {
@@ -27,14 +28,10 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse> {
         TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
     }
 
-    static void InitMerger() {
-        const auto* field = NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("ConnectStatus");
-        TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeEnumField;
-        field = NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("Connected");
-        TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeBoolField;
-    }
+private:
+    static const TWhiteboardMergerBase::TRegistrator Registrator;
 };
 
 using TJsonNodeInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>;
 
-}
+} // namespace NKikimr::NViewer

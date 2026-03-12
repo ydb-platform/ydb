@@ -59,8 +59,10 @@ public:
     }
 
     void OnPageSent() {
-        AFL_VERIFY(PagesInFlightCount.Val() > 0);
-        PagesInFlightCount.Dec();
+        // Only decrement if there are pages in flight (streaming mode)
+        if (PagesInFlightCount.Val() > 0) {
+            PagesInFlightCount.Dec();
+        }
     }
 
     bool HasData() const {

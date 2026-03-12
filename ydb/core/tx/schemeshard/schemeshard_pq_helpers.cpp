@@ -6,11 +6,12 @@ namespace NKikimr::NSchemeShard {
 void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
     NKikimrScheme::EStatus status,
+    const TString& reason,
     TSchemeShard* ss,
     const TString& peerName,
     const TString& userSID,
     const TString& maskedToken,
-    ui64)
+    [[maybe_unused]] ui64 txId)
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     const TString workingDir = operation.GetWorkingDir();
@@ -42,6 +43,7 @@ void SendTopicCloudEvent(
     info.RemoteAddress = peerName;
     info.UserSID = userSID;
     info.MaskedToken = maskedToken;
+    info.Issue = reason;
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = std::move(operation);
     info.OperationStatus = status;

@@ -45,7 +45,8 @@ namespace NKikimr::NDDisk {
         const ui32 node = ev->Get()->NodeId;
         for (auto& inflight : Inflights) {
             if (!inflight.Received && inflight.NodeId == node) {
-                inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::DISCONNECTED;
+                inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                inflight.ErrorReason = TStringBuilder() << "Node " << node << " disconnected";
                 inflight.Received = true;
                 Received++;
             }

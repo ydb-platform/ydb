@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         ctx.Runtime.FilterFunction = [&](ui32 _, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffer::EventType) {
-                return expected[ev->Cookie] != TReplyStatus::DISCONNECTED;
+                return expected[ev->Cookie] != TReplyStatus::ERROR;
             }
             if (ev->GetTypeRewrite() == NDDisk::TEvWritePersistentBufferResult::EventType) {
                 okCnt--;
@@ -570,11 +570,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
     Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed1) {
-        DoTest({TReplyStatus::OK, TReplyStatus::OK, TReplyStatus::DISCONNECTED});
+        DoTest({TReplyStatus::OK, TReplyStatus::OK, TReplyStatus::ERROR});
     }
 
     Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed2) {
-        DoTest({TReplyStatus::DISCONNECTED, TReplyStatus::OK, TReplyStatus::DISCONNECTED});
+        DoTest({TReplyStatus::ERROR, TReplyStatus::OK, TReplyStatus::ERROR});
     }
 }
 

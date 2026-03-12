@@ -34,6 +34,10 @@ class CommandExecutor:
 
         try:
             for line in process.stdout:
+                prefix = cmd[19] if len(cmd) >= 20 else ""
+
+                self.logger.error(f"{prefix}: {line}")
+
                 if self.hang_monitor.check_line(line):
                     self.logger.error(
                         f"Transaction hang for {self.hang_monitor.hang_timeout} seconds"

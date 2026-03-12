@@ -114,6 +114,9 @@ class YdbTopicWorkload(WorkloadBase):
         )
 
     def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, byte_rate):
+        if self.limit_memory_usage:
+            number_of_producers //= 3
+
         topic_name = f'workload_topic_pr{number_of_producers}_p{number_of_partitions_in_the_topic}_pq{number_of_partitions_per_tablet}'
 
         self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet)
@@ -124,6 +127,7 @@ class YdbTopicWorkload(WorkloadBase):
             '-s', self.duration,
             '--byte-rate', byte_rate,
             '--use-tx', '--tx-commit-interval', '2000',
+            '-t', str(number_of_producers),
             '--topic', topic_name
         ])
 
@@ -131,11 +135,6 @@ class YdbTopicWorkload(WorkloadBase):
             cmd_run_args.extend([
                 '--max-memory-usage-per-producer', '2M'
             ])
-            number_of_producers //= 3
-
-        cmd_run_args.extend([
-            '-t', str(number_of_producers)
-        ])
 
         self.cmd_run(cmd_run_args)
 

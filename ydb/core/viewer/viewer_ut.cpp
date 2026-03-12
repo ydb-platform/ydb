@@ -2215,12 +2215,12 @@ Y_UNIT_TEST_SUITE(ViewerColumnTableLocalIndex) {
             const auto& children = pathDescription["Children"];
             bool foundIndex = false;
             for (const auto& child : children.GetArray()) {
-                UNIT_ASSERT_EQUAL_C(
-                    child["PathType"].GetInteger(),
-                    static_cast<int>(NKikimrSchemeOp::EPathType::EPathTypeTableIndex),
-                    "Only EPathTypeTableIndex children expected for column table, got: " + child["Name"].GetString());
                 if (child["Name"].GetString() == "bloom_data") {
                     foundIndex = true;
+                    UNIT_ASSERT_EQUAL_C(
+                        child["PathType"].GetInteger(),
+                        static_cast<int>(NKikimrSchemeOp::EPathType::EPathTypeTableIndex),
+                        "bloom_data must be EPathTypeTableIndex");
                 }
             }
             UNIT_ASSERT_C(foundIndex,

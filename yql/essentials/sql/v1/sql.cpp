@@ -125,6 +125,9 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
                 }
             }
             res.Issues = std::move(nonErrors);
+            // Emit an informational issue so callers can detect the empty-query case.
+            res.Issues.AddIssue(NYql::TIssue("Query contains no statements").SetCode(
+                NYql::TIssuesIds::YQL_EMPTY_QUERY, NYql::TSeverityIds::S_INFO));
             SqlASTsToYqlsImpl(res, {}, ctx);
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstError");

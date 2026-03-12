@@ -3,6 +3,7 @@
 #include "format/sql_format.h"
 #include "lexer/lexer.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -31,10 +32,14 @@ TParsedTokenList Tokenize(const TString& query) {
     return tokens;
 }
 
-// Verifies that the parse result is a valid program with no issues and no user SQL statements.
+// Verifies that the parse result is a valid program with the expected YQL_EMPTY_QUERY info issue
+// and no user SQL statements.
 void AssertEmptyProgram(const NYql::TAstParseResult& res) {
     UNIT_ASSERT_C(res.Root, Err2Str(res));
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "");
+    // The only issue should be the informational YQL_EMPTY_QUERY notice.
+    UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 1, Err2Str(res));
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.begin()->GetCode(), NYql::TIssuesIds::YQL_EMPTY_QUERY);
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.begin()->GetSeverity(), NYql::TSeverityIds::S_INFO);
     TWordCountHive elementStat = {{"Write!", 0}};
     VerifyProgram(res, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(0, elementStat["Write!"]);

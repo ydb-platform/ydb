@@ -106,7 +106,9 @@ private:
                 auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount())
                     .WithAdditionalData(meta.GetAdditionalAccessorData());
                 ColumnChunks.emplace_back(range, chunkInfo);
-                reading->AddRange(*ColumnChunks.back().GetDictionaryBlobRangeOptional());
+                const auto dictBlobRange = ColumnChunks.back().GetDictionaryBlobRangeOptional();
+                AFL_VERIFY(dictBlobRange.has_value());
+                reading->AddRange(dictBlobRange.value());
             } else {
                 ColumnChunks.emplace_back(TDictionaryChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(meta.GetRecordsCount())));
             }

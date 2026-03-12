@@ -26,13 +26,6 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 
-    TKikimrSettings GetSettingsForDictionary() {
-        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableColumnShardConfig()->SetOptimizeForFetchDictionaryOnly(true);
-        return settings;
-    }
-
     TString scriptDifferentPages = R"(
         STOP_COMPACTION
         ------
@@ -87,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
                 PARTS_COUNT:16
         )",
             arrowString.data());
-        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute(GetSettingsForDictionary());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
 
     TString scriptEmptyStringVariants = R"(
@@ -117,7 +110,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 
     )";
     Y_UNIT_TEST_STRING_VARIATOR(EmptyStringVariants, scriptEmptyStringVariants) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetSettingsForDictionary());
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
     TString scriptSimpleStringVariants = R"(
@@ -168,7 +161,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[1u;["abc"]];[2u;#];[3u;["abc"]];[4u;["ab"]]]
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimpleStringVariants, scriptSimpleStringVariants) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetSettingsForDictionary());
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
     TString scriptGroupBySomeDictionary = R"(
@@ -192,7 +185,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
-        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES (1u, 1u, 'a', 4u), (2u, 2u, 'b', 3u), (3u, 3u, 'a', 2u), (4u, 4u, 'c', 1u);
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, 'a', 4u),
+            (2u, 2u, 'b', 3u),
+            (3u, 3u, 'a', 2u),
+            (4u, 4u, 'c', 1u);
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
@@ -212,14 +209,39 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 2
         ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 3
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 4
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk >= 1 AND pk <= 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 5
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
         EXPECTED: [[["a"]];[["b"]];[["c"]]]
         ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(pk), pk FROM `/Root/ColumnTable` GROUP BY pk ORDER BY pk;
         EXPECTED: [[1u;1u];[2u;2u];[3u;3u];[4u;4u]]
-        ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 2 GROUP BY message;
-        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
         ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE other > 2 GROUP BY message;
         EXPECTED_UNORDERED: [[["a"]];[["b"]]]
@@ -227,15 +249,135 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 2 GROUP BY message;
         EXPECTED_UNORDERED: [[["a"]];[["c"]]]
         ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk <= 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(pk) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
         EXPECTED: [[["a"];["a"];1u];[["b"];["b"];2u];[["c"];["c"];4u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(message) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"];["a"]];[["b"];["b"];["b"]];[["c"];["c"];["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
+    )";
+    Y_UNIT_TEST(GroupBySomeDictionary) {
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
+    }
+
+    TString scriptGroupBySomeDictionaryWithNulls = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8,
+            other Uint64,
+            PRIMARY KEY (pk, otherPk)
+        )
+        PARTITION BY HASH(pk, otherPk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, 'a', 4u),
+            (2u, 2u, 'b', 3u),
+            (3u, 3u, 'a', 2u),
+            (4u, 4u, NULL, 1u);
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#;#];[["a"];["a"]];[["b"];["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 2
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 3
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 4
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk >= 1 AND pk <= 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 5
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#];[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(pk), pk FROM `/Root/ColumnTable` GROUP BY pk ORDER BY pk;
+        EXPECTED: [[1u;1u];[2u;2u];[3u;3u];[4u;4u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE other > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk <= 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(pk) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#;#;4u];[["a"];["a"];1u];[["b"];["b"];2u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(message) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#;#;#];[["a"];["a"];["a"]];[["b"];["b"];["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
     )";
-    Y_UNIT_TEST(GroupBySomeDictionary) {
-        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute(GetSettingsForDictionary());
+    Y_UNIT_TEST(GroupBySomeDictionaryWithNulls) {
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithNulls)).Execute();
     }
 
     TString scriptDictCompactionAndActualization = R"(
@@ -291,7 +433,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             cycleBlocks += "ONE_ACTUALIZATION\n------\n";
             cycleBlocks += readCheck;
         }
-        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute(GetSettingsForDictionary());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute();
     }
 
     // ChunkDetails in .sys/primary_index_stats for dictionary column: check deterministic output for 1 row.
@@ -322,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[["{\"positions_blob_size\":152,\"dictionary_blob_size\":176}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute(GetSettingsForDictionary());
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();
     }
 }
 

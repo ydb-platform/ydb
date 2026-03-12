@@ -302,23 +302,44 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     return changed;
 }
 
+// Strict: only allow dictionary-only when the entire request needs exactly one data column,
+// and that column is an aggregation key used only in SOME (no filters on other columns, no other aggregates).
 TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds) {
     if (!node->Is(EProcessorType::Aggregation)) {
         return false;
     }
-    auto* aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>().get();
+
+    const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
     if (!aggrProc) {
         return false;
     }
-    // Strict: only allow dictionary-only when the entire request needs exactly one data column,
-    // and that column is an aggregation key used only in SOME (no filters on other columns, no other aggregates).
+
     if (requiredDataColumnIds.size() != 1) {
         return false;
     }
+
     const ui32 columnId = *requiredDataColumnIds.begin();
-    if (!aggrProc->IsKeyColumnOnlyUsedInSome(columnId)) {
+
+    // True if columnId is used only as argument to SOME(columnId)
+    auto isKeyColumnOnlyUsedInSome = [aggrProc](const ui32 columnId) -> bool {
+        bool usedInAggr = false;
+        for (const auto& aggr : aggrProc->GetAggregations()) {
+            for (const auto& inp : aggr.GetInputs()) {
+                if (inp.GetColumnId() == columnId) {
+                    usedInAggr = true;
+                    if (aggr.GetAggregationId() != NAggregation::EAggregate::Some || aggr.GetInputs().size() != 1) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return usedInAggr;
+    };
+
+    if (!isKeyColumnOnlyUsedInSome(columnId)) {
         return false;
     }
+
     THashSet<ui32> keyIds;
     for (const auto& k : aggrProc->GetAggregationKeys()) {
         keyIds.insert(k.GetColumnId());
@@ -326,6 +347,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
     if (!keyIds.contains(columnId)) {
         return false;
     }
+
     bool changed = false;
     TGraphNode* producer = GetProducerVerified(columnId);
     for (const auto& [addr, inputNode] : producer->GetInputEdges()) {
@@ -346,6 +368,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
         }
         break;
     }
+
     return changed;
 }
 
@@ -697,13 +720,6 @@ TConclusionStatus TGraph::Collapse() {
         }
     }
 
-    bool optimizeForFetchDictionaryOnly = false;
-    THashSet<ui32> requiredDataColumnIds;
-    if (HasAppData() && AppData()->ColumnShardConfig.GetOptimizeForFetchDictionaryOnly()) {
-        optimizeForFetchDictionaryOnly = true;
-        requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
-    }
-
     hasChanges = true;
     while (hasChanges) {
         hasChanges = false;
@@ -716,16 +732,21 @@ TConclusionStatus TGraph::Collapse() {
                 hasChanges = true;
                 break;
             }
+        }
+    }
 
-            if (optimizeForFetchDictionaryOnly) {
-                conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
+    THashSet<ui32> requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
+    hasChanges = true;
+    while (hasChanges) {
+        hasChanges = false;
+        for (auto&& [_, n] : Nodes) {
+            auto conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+            if (*conclusion) {
+                hasChanges = true;
+                break;
             }
         }
     }
@@ -814,7 +835,7 @@ THashSet<ui32> TGraph::CollectRequiredDataColumnIdsFromGraph() const {
         if (!node->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        const auto* proc = node->GetProcessorAs<TOriginalColumnDataProcessor>().get();
+        const auto proc = node->GetProcessorAs<TOriginalColumnDataProcessor>();
         for (const auto& [colId, _] : proc->GetDataAddresses()) {
             columnIds.insert(colId);
         }

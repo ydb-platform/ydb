@@ -24,7 +24,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     }
     const ui32 dictionaryBlobSize = dictData->DictionaryBlobSize;
     const ui32 positionsBlobSize = dictData->PositionsBlobSize;
-    if (!dictionaryBlobSize && !positionsBlobSize) {
+    if (!dictionaryBlobSize || !positionsBlobSize) {
         return TConclusionStatus::Fail("dictionary blob requires non-zero DictionaryBlobSize and PositionsBlobSize in chunk metadata");
     }
     TStringBuf sbOriginal(originalData.data(), originalData.size());
@@ -126,6 +126,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     std::vector<i32> remap;
     AFL_VERIFY(SwitchType(chunked->type()->id(), [&](const auto type) {
         if constexpr (type.IsAppropriate) {
+            bool hasNulls = false;
             std::map<typename decltype(type)::ValueType, ui32> indexByValue;
             for (ui32 chunk = 0; chunk < (ui32)chunked->num_chunks(); ++chunk) {
                 auto chunkArr = chunked->chunk(chunk);
@@ -133,6 +134,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
                 for (ui32 pos = 0; pos < typedArray->length(); ++pos) {
                     if (typedArray->IsNull(pos)) {
                         records.emplace_back(-1);
+                        hasNulls = true;
                         continue;
                     }
                     auto sv = type.GetValue(*typedArray, pos);
@@ -147,6 +149,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
                 auto* builder = type.CastBuilder(builderVariants.get());
                 for (auto&& i : indexByValue) {
                     TStatusValidator::Validate(builder->Append(i.first));
+                }
+                if (hasNulls) {
+                    TStatusValidator::Validate(builder->AppendNull());
                 }
             }
             auto recordsType = GetTypeByVariantsCount(indexByValue.size());

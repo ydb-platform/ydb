@@ -197,20 +197,8 @@ public:
         return AggregationKeys;
     }
 
-    // True if columnId is used only as argument to SOME(columnId) (and at least once). Then dictionary-only fetch is safe.
-    bool IsKeyColumnOnlyUsedInSome(const ui32 columnId) const {
-        bool usedInAggr = false;
-        for (const auto& aggr : Aggregations) {
-            for (const auto& inp : aggr.GetInputs()) {
-                if (inp.GetColumnId() == columnId) {
-                    usedInAggr = true;
-                    if (aggr.GetAggregationId() != EAggregate::Some || aggr.GetInputs().size() != 1) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return usedInAggr;
+    const std::vector<TWithKeysAggregationOption>& GetAggregations() const {
+        return Aggregations;
     }
 
     static const char* GetHouseGroupByName() {

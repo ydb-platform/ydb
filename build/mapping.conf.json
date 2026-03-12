@@ -2052,7 +2052,11 @@
         "9859917178": "{registry_endpoint}/9859917178",
         "2980468199": "{registry_endpoint}/2980468199",
         "5562224408": "{registry_endpoint}/5562224408",
-        "7663495611": "{registry_endpoint}/7663495611"
+        "7663495611": "{registry_endpoint}/7663495611",
+        "11341804306": "{registry_endpoint}/11341804306",
+        "11341801062": "{registry_endpoint}/11341801062",
+        "11341798770": "{registry_endpoint}/11341798770",
+        "11341796438": "{registry_endpoint}/11341796438"
     },
     "resources_descriptions": {
         "6277415836": "Allure 2.29.0",
@@ -4103,7 +4107,11 @@
         "9859917178": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
-        "7663495611": "ytexec for linux"
+        "7663495611": "ytexec for linux",
+        "11341804306": "ast-index for win32",
+        "11341801062": "ast-index for linux",
+        "11341798770": "ast-index for darwin",
+        "11341796438": "ast-index for darwin-arm64"
     },
     "resources_info": {},
     "tasks": {}

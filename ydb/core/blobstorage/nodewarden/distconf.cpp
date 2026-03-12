@@ -475,6 +475,10 @@ namespace NKikimr::NStorage {
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();
         }
+        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
+            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
+                this, std::placeholders::_1));
+        }
         ConsistencyCheck();
     }
 

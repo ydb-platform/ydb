@@ -268,46 +268,9 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         void MergeInterconnectLocation() {
-            std::optional<TString> dataCenter;
-            std::optional<TString> rack;
-            std::optional<TString> unit;
-            std::optional<TString> bridgePileName;
-            for (const auto& [key, value] : NodeInfo.Location.GetItems()) {
-                switch (key) {
-                    case NActors::TNodeLocation::TKeys::BridgePileName:
-                        bridgePileName = value;
-                        break;
-                    case NActors::TNodeLocation::TKeys::DataCenter:
-                        dataCenter = value;
-                        break;
-                    case NActors::TNodeLocation::TKeys::Rack:
-                        rack = value;
-                        break;
-                    case NActors::TNodeLocation::TKeys::Unit:
-                        unit = value;
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            if (!bridgePileName && !dataCenter && !rack && !unit) {
-                return;
-            }
-
-            auto* location = SystemState.MutableLocation();
-            if (!location->HasBridgePileName() && bridgePileName.has_value()) {
-                location->SetBridgePileName(*bridgePileName);
-            }
-            if (!location->HasDataCenter() && dataCenter.has_value()) {
-                location->SetDataCenter(*dataCenter);
-            }
-            if (!location->HasRack() && rack.has_value()) {
-                location->SetRack(*rack);
-            }
-            if (!location->HasUnit() && unit.has_value()) {
-                location->SetUnit(*unit);
-            }
+            NActorsInterconnect::TNodeLocation location;
+            NodeInfo.Location.Serialize(&location, false);
+            SystemState.MutableLocation()->MergeFrom(location);
         }
 
         void Cleanup() {

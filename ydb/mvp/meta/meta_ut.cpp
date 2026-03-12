@@ -177,8 +177,11 @@ meta:
 
         UNIT_ASSERT_VALUES_EQUAL(mvp.MetaSettings.ClusterLinkSources.size(), 1);
 
-        THashMap<TString, TString> clusterColumns;
-        NHttp::TUrlParameters urlParameters("");
+        THashMap<TString, TString> clusterColumns{
+            {"k8s_namespace", "ws"},
+            {"datasource", "ds"},
+        };
+        NHttp::TUrlParameters urlParameters("/meta/support_links?cluster=testing-global&database=%2Froot%2Ftest");
         const NMVP::ILinkSource::TResolveInput input{
             .Place = 0,
             .ClusterColumns = clusterColumns,
@@ -191,6 +194,9 @@ meta:
         UNIT_ASSERT_VALUES_EQUAL(output.Errors.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(output.Links.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(output.Links.front().Title, "Overview");
-        UNIT_ASSERT_VALUES_EQUAL(output.Links.front().Url, "https://grafana.example.test/d/ydb/overview");
+        UNIT_ASSERT_VALUES_EQUAL(
+            output.Links.front().Url,
+            "https://grafana.example.test/d/ydb/overview?var-workspace=ws&var-ds=ds&var-cluster=testing-global&var-database=/root/test"
+        );
     }
 }

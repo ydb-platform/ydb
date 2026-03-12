@@ -16,6 +16,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <google/protobuf/text_format.h>
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <yaml-cpp/yaml.h>
 
@@ -44,14 +45,43 @@ public:
         return Config_;
     }
 
-    NMVP::TResolveOutput Resolve(const TResolveInput&) const override {
+    NMVP::TResolveOutput Resolve(const TResolveInput& input) const override {
         NMVP::TResolveOutput output{
             .Name = Config_.GetSource(),
             .Ready = true,
         };
+        TString url = ResolveUrl(Config_.GetUrl(), GrafanaEndpoint_);
+
+        static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
+        static constexpr TStringBuf DatasourceColumn = "datasource";
+
+        const auto workspaceIt = input.ClusterColumns.find(WorkspaceColumn);
+        if (workspaceIt == input.ClusterColumns.end() || workspaceIt->second.empty()) {
+            output.Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << WorkspaceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-workspace", workspaceIt->second);
+        }
+
+        const auto datasourceIt = input.ClusterColumns.find(DatasourceColumn);
+        if (datasourceIt == input.ClusterColumns.end() || datasourceIt->second.empty()) {
+            output.Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << DatasourceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-ds", datasourceIt->second);
+        }
+
+        for (const auto& [name, _] : input.UrlParameters.Parameters) {
+            url = AppendQueryParam(url, TStringBuilder() << "var-" << name, input.UrlParameters[name]);
+        }
+
         output.Links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
             .Title = Config_.GetTitle(),
-            .Url = ResolveUrl(Config_.GetUrl(), GrafanaEndpoint_),
+            .Url = std::move(url),
         });
         return output;
     }
@@ -78,6 +108,14 @@ private:
             return grafanaEndpoint + "/" + configuredUrl;
         }
         return grafanaEndpoint + configuredUrl;
+    }
+
+    static TString AppendQueryParam(const TString& url, TStringBuf key, TStringBuf value) {
+        TStringBuilder result;
+        result << url;
+        result << (url.Contains('?') ? '&' : '?');
+        result << key << "=" << CGIEscapeRet(value);
+        return result;
     }
 
 private:

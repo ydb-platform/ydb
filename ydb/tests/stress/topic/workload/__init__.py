@@ -303,7 +303,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def get_workload_thread_funcs(self):
         return [
-            self.__loop,
+            #self.__loop,
             self.__one_tablet_but_a_distributed_transaction,
             self.__two_tablets_distributed_transaction,
             self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,

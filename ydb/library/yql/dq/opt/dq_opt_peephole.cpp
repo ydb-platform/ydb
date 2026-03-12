@@ -939,45 +939,17 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
-    auto stripOptional = [](const TTypeAnnotationNode* type) -> const TTypeAnnotationNode* {
-        return type->GetKind() == ETypeAnnotationKind::Optional
-            ? type->Cast<TOptionalExprType>()->GetItemType() : type;
-    };
-
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
-
         auto leftName = leftKeyColumnNodes[i]->Content();
         auto leftIndex = FindJoinKeyIndex(itemTypeLeft, leftName, leftTableLabel, true, i);
         YQL_ENSURE(leftIndex, "Left join key column '" << leftName << "' not found in left input type (left label: '" << leftTableLabel << "')");
-        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+        leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
 
         auto rightName = rightKeyColumnNodes[i]->Content();
         auto rightIndex = FindJoinKeyIndex(itemTypeRight, rightName, rightTableLabel, false, i);
         YQL_ENSURE(rightIndex, "Right join key column '" << rightName << "' not found in right input type (right label: '" << rightTableLabel << "')");
-        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
-
-        if (stripOptional(keyTypeLeft)->Equals(*stripOptional(keyTypeRight))) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
-            continue;
-        }
-
-        bool hasOptional = false;
-        auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
-
-        if (keyTypeLeft->Equals(*dryType)) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
-        } else {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
-            leftConvertedItems.emplace_back(leftName, dryType);
-        }
-        if (keyTypeRight->Equals(*dryType)) {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
-        } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
-            rightConvertedItems.emplace_back(rightName, dryType);
-        }
+        rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
     }
 
     // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)

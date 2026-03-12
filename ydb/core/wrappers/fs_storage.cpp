@@ -50,6 +50,8 @@ private:
     };
 
     THashMap<TString, TMultipartUploadSession> ActiveUploads;
+    static constexpr std::pair<ui64, ui64> EmptyRange = std::make_pair(0, 0);
+    static constexpr auto InvalidRange = EmptyRange;
 
     template<typename TEvResponse>
     struct RequiresKey : std::true_type {};
@@ -281,7 +283,7 @@ public:
                 awsResult.SetETag("\"fs-file\"");
                 Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
-                auto response = std::make_unique<TEvGetObjectResponse>(key, std::make_pair(0, 0), std::move(outcome), TString());
+                auto response = std::make_unique<TEvGetObjectResponse>(key, EmptyRange, std::move(outcome), TString());
                 Send(ev->Sender, response.release());
                 return;
             }
@@ -291,7 +293,7 @@ public:
 
             if (!rangeStr.empty()) {
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
-                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, std::make_pair(0, 0), TStringBuilder() << "Invalid range format: " << rangeStr);
+                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TStringBuilder() << "Invalid range format: " << rangeStr);
                     return;
                 }
             } else {
@@ -301,7 +303,7 @@ public:
             ui64 start = range.first;
             ui64 end = range.second;
             if (start > end) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, TStringBuilder() << "Invalid range: start > end: " << rangeStr);
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TStringBuilder() << "Invalid range: start > end: " << rangeStr);
                 return;
             }
             const ui64 length = end - start + 1;
@@ -333,7 +335,7 @@ public:
             FS_LOG_E("GetObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
-            ReplyError<TEvGetObjectResponse>(ev->Sender, key, std::make_pair(0, 0), TString("File read error: ") + ex.what());
+            ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TString("File read error: ") + ex.what());
         }
     }
 

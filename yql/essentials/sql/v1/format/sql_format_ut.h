@@ -1689,6 +1689,34 @@ Y_UNIT_TEST(Comment) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(CommentAfterListItem) {
+    TSetup().Run(TCases{
+        {
+            TrimIndent(R"sql(
+                SELECT
+                    AsList(
+                        1
+                        /*a*/
+                        /*b*/
+                        /*c*/
+                    )
+                ;
+
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    AsList(
+                        1 /*a*/
+                        /*b*/
+                        /*c*/
+                    )
+                ;
+
+            )sql"),
+        },
+    });
+}
+
 Y_UNIT_TEST(CommentAfterLastSelect) {
     TCases cases = {
         {"SELECT 1--comment\n",
@@ -2125,7 +2153,8 @@ Y_UNIT_TEST(NamedNodeCommentAndBraces) {
             )sql"),
             TrimIndent(R"sql(
                 $x = /*a
-                */ (
+                */
+                (
                     SELECT
                         1
                 );

@@ -109,6 +109,65 @@ void FillTopicDetails(TopicDetails* details, const NKikimrSchemeOp::TPersQueueGr
     }
 }
 
+template <typename TRequestParameters>
+void FillTopicRequestParameters(TRequestParameters* params, const TString& path, const NKikimrSchemeOp::TPersQueueGroupDescription& desc) {
+    if (!params) {
+        return;
+    }
+
+    params->set_path(path);
+
+    if (desc.HasPQTabletConfig()) {
+        const auto& cfg = desc.GetPQTabletConfig();
+
+        if (cfg.HasPartitionStrategy()) {
+            const auto& ps = cfg.GetPartitionStrategy();
+            auto* part = params->mutable_partitioning_settings();
+
+            if (ps.HasMinPartitionCount()) {
+                part->set_min_active_partitions(ps.GetMinPartitionCount());
+            }
+            if (ps.HasMaxPartitionCount()) {
+                part->set_max_active_partitions(ps.GetMaxPartitionCount());
+            }
+
+            auto* autoPart = part->mutable_auto_partitioning_settings();
+            autoPart->set_strategy(ConvertPartitionStrategyType(ps.GetPartitionStrategyType()));
+        }
+
+        const auto& partCfg = cfg.GetPartitionConfig();
+
+        if (partCfg.HasLifetimeSeconds()) {
+            auto* retention = params->mutable_retention_period();
+            *retention = google::protobuf::util::TimeUtil::SecondsToDuration(partCfg.GetLifetimeSeconds());
+        }
+
+        if (partCfg.HasStorageLimitBytes()) {
+            constexpr ui64 BYTES_IN_MB = 1024ull * 1024ull;
+            params->set_retention_storage_mb(partCfg.GetStorageLimitBytes() / BYTES_IN_MB);
+        }
+
+        if (partCfg.HasWriteSpeedInBytesPerSecond()) {
+            params->set_partition_write_speed_bytes_per_second(partCfg.GetWriteSpeedInBytesPerSecond());
+        }
+
+        if (cfg.HasMeteringMode()) {
+            params->set_metering_mode(ConvertMeteringMode(cfg.GetMeteringMode()));
+        }
+
+        if (cfg.HasMetricsLevel()) {
+            params->set_metrics_level(cfg.GetMetricsLevel());
+        }
+
+        for (const auto& c : cfg.GetConsumers()) {
+            if (c.HasName()) {
+                auto* consumer = params->add_consumers();
+                consumer->set_name(c.GetName());
+            }
+        }
+    }
+}
+
 static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
@@ -144,11 +203,14 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
         ev.mutable_error()->set_message(info.Issue);
     }
 
+    Y_VERIFY(info.ModifyScheme.HasCreatePersQueueGroup());
+
     auto* details = ev.mutable_details();
     details->set_path(info.TopicPath);
-
-    Y_VERIFY(info.ModifyScheme.HasCreatePersQueueGroup());
     FillTopicDetails(details, info.ModifyScheme.GetCreatePersQueueGroup());
+
+    auto* requestParams = ev.mutable_request_parameters();
+    FillTopicRequestParameters(requestParams, info.TopicPath, info.ModifyScheme.GetCreatePersQueueGroup());
 }
 
 static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
@@ -181,11 +243,14 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
         ev.mutable_error()->set_message(info.Issue);
     }
 
+    Y_VERIFY(info.ModifyScheme.HasAlterPersQueueGroup());
+
     auto* details = ev.mutable_details();
     details->set_path(info.TopicPath);
-
-    Y_VERIFY(info.ModifyScheme.HasAlterPersQueueGroup());
     FillTopicDetails(details, info.ModifyScheme.GetAlterPersQueueGroup());
+
+    auto* requestParams = ev.mutable_request_parameters();
+    FillTopicRequestParameters(requestParams, info.TopicPath, info.ModifyScheme.GetAlterPersQueueGroup());
 }
 
 static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
@@ -217,6 +282,9 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     }
 
     ev.mutable_details()->set_path(info.TopicPath);
+
+    auto* requestParams = ev.mutable_request_parameters();
+    requestParams->set_path(info.TopicPath);
 }
 
 template<typename TEvent>

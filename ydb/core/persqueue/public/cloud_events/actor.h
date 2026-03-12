@@ -27,14 +27,12 @@ struct TCloudEventInfo {
     TString DatabaseId;
 
     TString TopicPath;
-    TString Type;
     TString Issue;
     TString MaskedToken;
     TString UserSID;
-    TString OperationType;
 
     TString RemoteAddress;
-    TString UserAgent;
+    TString UserAgent; // TODO: add user agent
 
     TInstant CreatedAt;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;

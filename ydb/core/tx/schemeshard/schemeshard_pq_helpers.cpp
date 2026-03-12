@@ -18,13 +18,10 @@ void SendTopicCloudEvent(
     TString name;
     if (operation.HasCreatePersQueueGroup()) {
         name = operation.GetCreatePersQueueGroup().GetName();
-        info.OperationType = "CreateTopic";
     } else if (operation.HasAlterPersQueueGroup()) {
         name = operation.GetAlterPersQueueGroup().GetName();
-        info.OperationType = "AlterTopic";
     } else if (operation.HasDeallocatePersQueueGroup()) {
         name = operation.GetDeallocatePersQueueGroup().GetName();
-        info.OperationType = "DeleteTopic";
     } else {
         return;
     }

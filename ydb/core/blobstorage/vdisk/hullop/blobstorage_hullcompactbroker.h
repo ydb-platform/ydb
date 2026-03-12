@@ -7,14 +7,15 @@
 
 namespace NKikimr {
     using TCompactionTokenId = ui64;
+    using TPDiskId = ui32;
 
     struct TEvCompactionTokenRequest : public TEventLocal<TEvCompactionTokenRequest, TEvBlobStorage::EvCompactionTokenRequest> {
-        ui32 PDiskId;
+        TPDiskId PDiskId;
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
         double Ratio;
 
-        TEvCompactionTokenRequest(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
+        TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
             : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Ratio(ratio) {}
 
         TString ToString() const {
@@ -40,24 +41,25 @@ namespace NKikimr {
     };
 
     struct TEvReleaseCompactionToken : TEventLocal<TEvReleaseCompactionToken, TEvBlobStorage::EvReleaseCompactionToken> {
-        ui32 PDiskId;
+        TPDiskId PDiskId;
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
         TCompactionTokenId Token;
-        TEvReleaseCompactionToken(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionTokenId token) 
+        bool Force;
+        TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionTokenId token) 
             : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token) {}
+        TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, bool force) 
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Force(force) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvReleaseCompactionToken PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Token# " << Token << "}";
+            str << "{TEvReleaseCompactionToken PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Token# " << Token << " Force# " << Force << "}";
             return str.Str();
         }
     };
 
     extern IActor *CreateCompBrokerActor(
         const TControlWrapper& maxActiveCompactionsPerPDisk,
-        const TControlWrapper& longWaitingThresholdSec,
-        const TControlWrapper& longWorkingThresholdSec,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr

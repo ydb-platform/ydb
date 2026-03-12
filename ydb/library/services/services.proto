@@ -60,11 +60,8 @@ enum EServiceKikimr {
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
     BS_PHANTOM_FLAG_STORAGE = 2607;
-<<<<<<< HEAD
     BS_CHUNK_KEEPER = 2608;
-=======
-    BS_COMP_BROKER = 2608;
->>>>>>> ff41a03f644 (EXT-1313: add compaction token)
+    BS_COMP_BROKER = 2609;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //

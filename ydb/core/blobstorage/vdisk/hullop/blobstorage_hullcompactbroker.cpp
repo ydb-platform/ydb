@@ -14,22 +14,23 @@ namespace NKikimr {
     struct TCompBrokerMon : public TThrRefBase {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
         
-        NMonitoring::TDynamicCounters::TCounterPtr PendingCompactions;
-        NMonitoring::TDynamicCounters::TCounterPtr ActiveCompactions;
+        NMonitoring::TDynamicCounters::TCounterPtr CompBrokerPendingCompactions;
+        NMonitoring::TDynamicCounters::TCounterPtr CompBrokerActiveCompactions;
         
-        NMonitoring::TDynamicCounters::TCounterPtr TokenRequests;
-        NMonitoring::TDynamicCounters::TCounterPtr TokenGrants;
-        NMonitoring::TDynamicCounters::TCounterPtr TokenReleases;
+        NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenRequests;
+        NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenGrants;
+        NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenReleases;
         
         TCompBrokerMon(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-            : Group(GetServiceCounters(counters, "utils|comp_broker"))
+            : Group(GetServiceCounters(counters, "storage_utils"))
         {
-            PendingCompactions = Group->GetCounter("PendingCompactions", false);
-            ActiveCompactions = Group->GetCounter("ActiveCompactions", false);
+            CompBrokerPendingCompactions = Group->GetCounter("CompBrokerPendingCompactions", false);
+            CompBrokerActiveCompactions = Group->GetCounter("CompBrokerActiveCompactions", false);
             
-            TokenRequests = Group->GetCounter("TokenRequests", true);
-            TokenGrants = Group->GetCounter("TokenGrants", true);
-            TokenReleases = Group->GetCounter("TokenReleases", true);
+            CompBrokerTokenRequests = Group->GetCounter("CompBrokerTokenRequests", true);
+            CompBrokerTokenGrants = Group->GetCounter("CompBrokerTokenGrants", true);
+            CompBrokerTokenReleases = Group->GetCounter("CompBrokerTokenReleases", true);
+            
         }
     };
 
@@ -53,7 +54,24 @@ namespace NKikimr {
             str << "{GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " ActorId# " << ActorId << "}";
             return str.Str();
         }
+
+        ui64 Hash() const {
+            size_t h = THash<NKikimr::TGroupId>{}(GroupId);
+            h = CombineHashes(h, VDiskId.Hash());
+            h = CombineHashes(h, THash<TActorId>{}(ActorId));
+            return h;
+        }
     };
+} // namespace NKikimr
+
+template <>
+struct THash<NKikimr::TCompactionKey> {
+    ui64 operator()(const NKikimr::TCompactionKey& key) const {
+        return key.Hash();
+    }
+};
+
+namespace NKikimr {
 
     struct TCompactionRequest{
         TCompactionKey Key;
@@ -70,20 +88,25 @@ namespace NKikimr {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TCompactionRequest " << Key.ToString() << " Priority# " << Priority << " RequestTime# " << RequestTime.ToStringUpToSeconds() << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds() << " RequestOrder# " << RequestOrder << "}";
+            str << "{TCompactionRequest " << Key.ToString()
+                << " Priority# " << Priority
+                << " RequestTime# " << RequestTime.ToStringUpToSeconds()
+                << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds()
+                << " RequestOrder# " << RequestOrder
+                << "}";
             return str.Str();
         }
     };
 
     struct TCompactionInfo{
-        ui32 PDiskId;
+        TPDiskId PDiskId;
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
         TActorId ActorId;
         TCompactionTokenId Token;
         TInstant StartTime;
 
-        TCompactionInfo(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId actorId, const TCompactionTokenId token)
+        TCompactionInfo(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId actorId, const TCompactionTokenId token)
             : PDiskId(pdiskId)
             , GroupId(groupId)
             , VDiskId(vdiskId)
@@ -94,7 +117,14 @@ namespace NKikimr {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TCompactionInfo PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " ActorId# " << ActorId << " Token# " << Token << " StartTime# " << StartTime.ToStringUpToSeconds() << " WorkingTimeMs# " << (TInstant::Now() - StartTime).MilliSeconds() << "}";
+            str << "{TCompactionInfo PDiskId# " << PDiskId
+                << " GroupId# " << GroupId
+                << " VDiskId# " << VDiskId.ToString()
+                << " ActorId# " << ActorId
+                << " Token# " << Token
+                << " StartTime# " << StartTime.ToStringUpToSeconds()
+                << " WorkingTimeMs# " << (TInstant::Now() - StartTime).MilliSeconds()
+                << "}";
             return str.Str();
         }
     };
@@ -103,14 +133,14 @@ namespace NKikimr {
         i64 MaxActiveCompactions;
         ui64 NextRequestOrder = 0;
 
-        struct TCompactionRequests : public THashMap<TString, TCompactionRequest> {
+        struct TCompactionRequests : public THashMap<TCompactionKey, TCompactionRequest> {
             TString ToString() const {
                 TStringStream str;
                 str << "{TCompactionRequests Size# " << size() << ", Compactions# [";
                 TVector<TString> items;
                 for (const auto& [key, request] : *this) {
                     TStringStream item;
-                    item << " {Key# " << key << " Request# " << request.ToString() << "}";
+                    item << " {Key# " << key.ToString() << " Request# " << request.ToString() << "}";
                     items.push_back(item.Str());
                 }
                 str << JoinSeq(", ", items) << "]}";
@@ -118,14 +148,14 @@ namespace NKikimr {
             }
         };
 
-        struct TCompactionsInfo : public THashMap<TString, TCompactionInfo> {
+        struct TCompactionsInfo : public THashMap<TCompactionKey, TCompactionInfo> {
             TString ToString() const {
                 TStringStream str;
                 str << "{TCompactionsInfo Size# " << size() << ", Compactions# [";
                 TVector<TString> items;
                 for (const auto& [key, info] : *this) {
                     TStringStream item;
-                    item << " {Key# " << key << " Info# " << info.ToString() << "}";
+                    item << " {Key# " << key.ToString() << " Info# " << info.ToString() << "}";
                     items.push_back(item.Str());
                 }
                 str << JoinSeq(", ", items) << "]}";
@@ -141,14 +171,17 @@ namespace NKikimr {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TCompactionQueue MaxActiveCompactions# " << MaxActiveCompactions << " PendingCompactions# " << PendingCompactions.ToString() << " ActiveCompactions# " << ActiveCompactionsInfo.ToString() << "}";
+            str << "{TCompactionQueue MaxActiveCompactions# " << MaxActiveCompactions
+                << " PendingCompactions# " << PendingCompactions.ToString()
+                << " ActiveCompactions# " << ActiveCompactionsInfo.ToString()
+                << "}";
             return str.Str();
         }
 
         void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
             TCompactionKey key(groupId, vdiskId, actorId);
 
-            PendingCompactions.emplace(key.ToString(), TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
+            PendingCompactions.emplace(key, TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
         }
 
         void ReleaseCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
@@ -159,15 +192,27 @@ namespace NKikimr {
             Y_VERIFY_S(tokenIt->second == key, "ReleaseCompactionToken: token " << token << " belongs to " << tokenIt->second.ToString() 
                 << ", not " << key.ToString());
             
-            auto infoIt = ActiveCompactionsInfo.find(key.ToString());
+            auto infoIt = ActiveCompactionsInfo.find(key);
             Y_VERIFY_S(infoIt != ActiveCompactionsInfo.end(), "ReleaseCompactionToken: no active compaction for " << key.ToString());
 
             CompactionsToken.erase(token);
-            ActiveCompactionsInfo.erase(key.ToString());
-            PendingCompactions.erase(key.ToString());
+            ActiveCompactionsInfo.erase(key);
+            PendingCompactions.erase(key);
         }
 
-        TMaybe<TCompactionInfo> StartNewCompaction(i64 maxCompactions, ui32 pdiskId, TCompactionTokenId token) {
+        void RemoveCompaction(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId) {
+            TCompactionKey key(groupId, vdiskId, actorId);
+            auto compactionInfo = ActiveCompactionsInfo.find(key);
+
+            if (compactionInfo != ActiveCompactionsInfo.end()) {
+                CompactionsToken.erase(compactionInfo->second.Token);
+                ActiveCompactionsInfo.erase(key);
+            }
+
+            PendingCompactions.erase(key);
+        }
+
+        TMaybe<TCompactionInfo> StartNewCompaction(i64 maxCompactions, TPDiskId pdiskId, TCompactionTokenId token) {
             MaxActiveCompactions = maxCompactions;
             if (ActiveCompactionsInfo.size() >= (ui64)maxCompactions) {
                 return Nothing();
@@ -185,7 +230,7 @@ namespace NKikimr {
                         return lhs.second.RequestOrder > rhs.second.RequestOrder;
                     });
             Y_VERIFY(it != PendingCompactions.end());
-            const TString& key = it->first;
+            const TCompactionKey& key = it->first;
             const TCompactionRequest& request = it->second;
             ActiveCompactionsInfo.emplace(key, TCompactionInfo(pdiskId, request.Key.GroupId, request.Key.VDiskId, request.Key.ActorId, token));
             CompactionsToken.emplace(token, request.Key);
@@ -195,7 +240,7 @@ namespace NKikimr {
     };
 
     struct TPDiskCompactions {
-        THashMap<ui32, TCompactionQueue> CompactionsPerPDisk;
+        THashMap<TPDiskId, TCompactionQueue> CompactionsPerPDisk;
 
         TString ToString() const {
             TStringStream str;
@@ -210,12 +255,16 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RequestCompactionToken(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
+        void RequestCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
             return CompactionsPerPDisk[pdiskId].RequestCompactionToken(groupId, vdiskId, actorId, priority);
         }
 
-        void ReleaseCompactionToken(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
+        void ReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
             return CompactionsPerPDisk[pdiskId].ReleaseCompactionToken(groupId, vdiskId, actorId, token);
+        }
+
+        void RemoveCompaction(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId) {
+            return CompactionsPerPDisk[pdiskId].RemoveCompaction(groupId, vdiskId, actorId);
         }
 
         TMaybe<TCompactionInfo> StartNewCompaction(i64 maxCompactionsPerPDisk, TCompactionTokenId token) {
@@ -245,12 +294,13 @@ namespace NKikimr {
         }
     };
 
+    ui64 LongWorkingThresholdSec = 60*60*6; // 6h
+    ui64 LongWaitingThresholdSec = 60*60*24; // 24h
+
     class TCompBroker : public TActorBootstrapped<TCompBroker> {
         TPDiskCompactions CompactionsPerPDisk;
         ui64 Token = 1;
         TMemorizableControlWrapper MaxActiveCompactionsPerPDisk;
-        TMemorizableControlWrapper LongWaitingThresholdSec;
-        TMemorizableControlWrapper LongWorkingThresholdSec;
         TIntrusivePtr<TCompBrokerMon> Mon;
 
     public:
@@ -260,13 +310,9 @@ namespace NKikimr {
 
         TCompBroker(
             const TControlWrapper& maxActiveCompactionsPerPDisk,
-            const TControlWrapper& longWaitingThresholdSec,
-            const TControlWrapper& longWorkingThresholdSec,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
             : TActorBootstrapped<TThis>()
             , MaxActiveCompactionsPerPDisk(maxActiveCompactionsPerPDisk)
-            , LongWaitingThresholdSec(longWaitingThresholdSec)
-            , LongWorkingThresholdSec(longWorkingThresholdSec)
             , Mon(new TCompBrokerMon(counters))
         {}
 
@@ -278,7 +324,7 @@ namespace NKikimr {
         void Handle(TEvCompactionTokenRequest::TPtr& ev, const TActorContext &ctx) {
             LOG_TRACE_S(ctx, NKikimrServices::BS_COMP_BROKER, "Handle TEvCompactionTokenRequest: " << ev->Get()->ToString());
 
-            Mon->TokenRequests->Inc();
+            Mon->CompBrokerTokenRequests->Inc();
             CompactionsPerPDisk.RequestCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Ratio);
             TryToStartNewCompactions(ctx);
         }
@@ -286,8 +332,12 @@ namespace NKikimr {
         void Handle(TEvReleaseCompactionToken::TPtr& ev, const TActorContext &ctx) {
             LOG_TRACE_S(ctx, NKikimrServices::BS_COMP_BROKER, "Handle TEvReleaseCompactionToken: " << ev->Get()->ToString());
 
-            Mon->TokenReleases->Inc();
-            CompactionsPerPDisk.ReleaseCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Token);
+            Mon->CompBrokerTokenReleases->Inc();
+            if (ev->Get()->Force) {
+                CompactionsPerPDisk.RemoveCompaction(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender);
+            } else {
+                CompactionsPerPDisk.ReleaseCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Token);
+            }
             TryToStartNewCompactions(ctx);
         }
 
@@ -299,11 +349,12 @@ namespace NKikimr {
         }
 
         void TryToStartNewCompactions(const TActorContext &ctx) {
-            LOG_INFO_S(ctx, NKikimrServices::BS_COMP_BROKER, "Compactions queue state: " << CompactionsPerPDisk.ToString());
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_COMP_BROKER, "Compactions queue state: " << CompactionsPerPDisk.ToString());
 
-            while (auto compactionInfo = CompactionsPerPDisk.StartNewCompaction(MaxActiveCompactionsPerPDisk.Update(ctx.Now()), Token)) {
+            auto maxCompactions = MaxActiveCompactionsPerPDisk.Update(ctx.Now());
+            while (auto compactionInfo = CompactionsPerPDisk.StartNewCompaction(maxCompactions, Token)) {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_COMP_BROKER, "Start new compaction: " << compactionInfo->ToString());
-                Mon->TokenGrants->Inc();
+                Mon->CompBrokerTokenGrants->Inc();
                 Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
                 Token++;
             }
@@ -313,8 +364,6 @@ namespace NKikimr {
 
         void CollectCurrentCompactionsStats(const TActorContext& ctx) {
             TInstant now = TInstant::Now();
-            i64 longWaitingThreshold = LongWaitingThresholdSec.Update(ctx.Now());
-            i64 longWorkingThreshold = LongWorkingThresholdSec.Update(ctx.Now());
             
             TVector<TString> longWaitingCompactions;
             TVector<TString> longWorkingCompactions;
@@ -323,10 +372,10 @@ namespace NKikimr {
                 for (const auto& [key, request] : queue.PendingCompactions) {
                     double waitTimeSeconds = (now - request.RequestTime).SecondsFloat();
 
-                    if (longWaitingThreshold > 0 && waitTimeSeconds >= longWaitingThreshold) {
+                    if (waitTimeSeconds >= LongWaitingThresholdSec) {
                         TStringStream ss;
-                        ss << "{PDiskId# " << pdiskId 
-                           << " VDiskId# " << request.Key.VDiskId 
+                        ss << "{PDiskId# " << pdiskId
+                           << " VDiskId# " << request.Key.VDiskId
                            << " ActorId# " << request.Key.ActorId
                            << " WaitTimeSec# " << static_cast<i64>(waitTimeSeconds)
                            << " Priority# " << request.Priority << "}";
@@ -336,8 +385,8 @@ namespace NKikimr {
                 
                 for (const auto& [key, info] : queue.ActiveCompactionsInfo) {
                     double workTimeSeconds = (now - info.StartTime).SecondsFloat();
-                    
-                    if (longWorkingThreshold > 0 && workTimeSeconds >= longWorkingThreshold) {
+
+                    if (workTimeSeconds >= LongWorkingThresholdSec) {
                         TStringStream ss;
                         ss << "{PDiskId# " << pdiskId
                            << " VDiskId# " << info.VDiskId
@@ -365,8 +414,8 @@ namespace NKikimr {
 
         void UpdateMetrics(const TActorContext& ctx) {
             CollectCurrentCompactionsStats(ctx);
-            Mon->PendingCompactions->Set(CompactionsPerPDisk.GetTotalPending());
-            Mon->ActiveCompactions->Set(CompactionsPerPDisk.GetTotalActive());
+            Mon->CompBrokerPendingCompactions->Set(CompactionsPerPDisk.GetTotalPending());
+            Mon->CompBrokerActiveCompactions->Set(CompactionsPerPDisk.GetTotalActive());
         }
 
         STRICT_STFUNC(StateFunc,
@@ -378,10 +427,8 @@ namespace NKikimr {
 
     IActor *CreateCompBrokerActor(
         const TControlWrapper& maxActiveCompactionsPerPDisk,
-        const TControlWrapper& longWaitingThresholdSec,
-        const TControlWrapper& longWorkingThresholdSec,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-        return new TCompBroker(maxActiveCompactionsPerPDisk, longWaitingThresholdSec, longWorkingThresholdSec, counters);
+        return new TCompBroker(maxActiveCompactionsPerPDisk, counters);
     }
 
 } // NKikimr

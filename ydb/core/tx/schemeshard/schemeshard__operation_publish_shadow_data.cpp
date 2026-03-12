@@ -66,16 +66,13 @@ public:
             auto seqNo = context.SS->StartRound(*txState);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            auto* tableDesc = tx.MutableAlterTable();
-            context.SS->FillTableDescription(pathId, i, table->AlterVersion+1, tableDesc);
-            tableDesc->MutablePartitionConfig()->SetShadowData(false);
-            tableDesc->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
-            tableDesc->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
 
             auto* createSnapshot = tx.MutableCreatePersistentSnapshot();
             createSnapshot->SetOwnerId(pathId.OwnerId);
             createSnapshot->SetPathId(pathId.LocalPathId);
             createSnapshot->SetName("Snapshot0");
+            createSnapshot->SetPublishShadow(true);
+            createSnapshot->SetTableSchemaVersion(table->AlterVersion+1);
 
             context.SS->FillSeqNo(tx, seqNo);
 

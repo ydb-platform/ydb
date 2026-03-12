@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -15,7 +16,7 @@ public:
         return true;
     }
 
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -33,6 +34,21 @@ public:
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();
         Y_ENSURE(step != 0);
+
+        if (params.GetPublishShadow()) {
+            TPathId tableId(ownerId, pathId);
+            auto oldInfo = DataShard.FindUserTable(tableId);
+            Y_ENSURE(oldInfo);
+            NKikimrSchemeOp::TTableDescription description;
+            oldInfo->GetSchema(description);
+            description.SetTableSchemaVersion(params.GetTableSchemaVersion());
+            Y_ENSURE(description.MutablePartitionConfig()->GetShadowData());
+            description.MutablePartitionConfig()->SetShadowData(false);
+            description.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
+            auto newInfo = DataShard.AlterUserTable(ctx, txc, description);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.AddUserTable(tableId, newInfo, &locksDb);
+        }
 
         const TSnapshotKey key(ownerId, pathId, step, txId);
 

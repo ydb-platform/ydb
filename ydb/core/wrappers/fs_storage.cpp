@@ -123,7 +123,7 @@ private:
             bool retryable = false)
     {
         std::unique_ptr<TEvResponse> response;
-        response = std::make_unique<TEvResponse>(std::move(key), CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
+        response = std::make_unique<TEvResponse>(key, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
         this->Send(sender, response.release());
     }
 
@@ -137,7 +137,7 @@ private:
             bool retryable = false)
     {
         std::unique_ptr<TEvResponse> response;
-        response = std::make_unique<TEvResponse>(std::move(key), range, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
+        response = std::make_unique<TEvResponse>(key, range, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
         this->Send(sender, response.release());
     }
 
@@ -291,7 +291,7 @@ public:
 
             if (!rangeStr.empty()) {
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
-                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Invalid range format");
+                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, std::make_pair(0, 0), TStringBuilder() << "Invalid range format: " << rangeStr);
                     return;
                 }
             } else {
@@ -301,7 +301,7 @@ public:
             ui64 start = range.first;
             ui64 end = range.second;
             if (start > end) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Invalid range: start > end");
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, TStringBuilder() << "Invalid range: start > end: " << rangeStr);
                 return;
             }
             const ui64 length = end - start + 1;

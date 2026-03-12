@@ -383,6 +383,76 @@ void TestBackpressureSlowConsumer() {
     }
 }
 
+void TestPartialResultEmission() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write large dataset to trigger streaming with multiple pages
+    const ui32 numRecords = 200000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+    
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Test that partial results are emitted
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+        
+        UNIT_ASSERT(reader.InitializeScanner());
+        
+        ui32 totalBatches = 0;
+        ui32 totalRows = 0;
+        
+        // Read data and verify we get multiple batches
+        reader.Ack();
+        while (reader.Receive()) {
+            totalBatches++;
+            Cerr << "Received batch " << totalBatches << Endl;
+            reader.Ack();
+        }
+        
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        auto finalResult = reader.GetResult();
+        UNIT_ASSERT(finalResult);
+        totalRows = finalResult->num_rows();
+        
+        Cerr << "Partial result emission test: " << totalBatches << " batches, "
+             << totalRows << " total rows" << Endl;
+        
+        // Verify we got all data
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, numRecords);
+        
+        // Verify streaming worked - should have many batches for 200k records
+        UNIT_ASSERT_GT(totalBatches, 10);
+        UNIT_ASSERT_GT(reader.GetIterationsCount(), 10);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(StreamingRead) {
@@ -404,6 +474,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(BackpressureSlowConsumer) {
         TestBackpressureSlowConsumer();
+    }
+
+    Y_UNIT_TEST(PartialResultEmission) {
+        TestPartialResultEmission();
     }
 }
 

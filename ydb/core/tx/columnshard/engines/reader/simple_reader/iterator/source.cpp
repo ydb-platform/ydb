@@ -99,14 +99,20 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
     auto sourceSimple = std::static_pointer_cast<IDataSource>(sourcePtr);
 
-    // In streaming mode, log progress (partial result emission not yet implemented)
+    // In streaming mode, log progress for debugging
+    // Note: Partial result emission happens automatically in TSyncPointResult::OnSourceReady()
+    // which processes pages one by one via TPrepareResultStep -> TBuildResultStep
     if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_page_fetched")(
             "source_idx", sourceSimple->GetSourceIdx())(
             "page_index", sourceSimple->GetCurrentPageIndex().value_or(0))(
-            "note", "partial_result_emission_not_implemented");
+            "has_more_pages", sourceSimple->HasMorePages());
     }
 
+    // Pass control to sync point which will:
+    // 1. Extract result chunk for current page (if available)
+    // 2. Emit partial result with partialSourceAddress if more pages exist
+    // 3. Continue to next page via ContinueCursor() if !isFinished
     plainReader->MutableScanner().GetSyncPoint(sourceSimple->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceSimple, *plainReader);
 }
 

@@ -184,13 +184,7 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
 
     if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
         && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
-        bool hasChildren = pathEl->GetAliveChildren() > 0;
-        if (!hasChildren && pathEl->IsColumnTable() && Self->ColumnTables.contains(pathEl->PathId)) {
-            const auto& tableInfo = *Self->ColumnTables.GetVerified(pathEl->PathId);
-            hasChildren = tableInfo.Description.HasSchema()
-                && tableInfo.Description.GetSchema().IndexesSize() > 0;
-        }
-        descr->SetChildrenExist(hasChildren);
+        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
     }
 
     if (pathEl->PathType != NKikimrSchemeOp::EPathTypePersQueueGroup) {
@@ -299,6 +293,9 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
             Y_ASSERT(childElPtr);
             TPathElement::TPtr childEl = *childElPtr;
             if (childEl->Dropped() || childEl->IsMigrated()) {
+                continue;
+            }
+            if (pathEl->IsColumnTable() && !childEl->IsTableIndex()) {
                 continue;
             }
             auto entry = pathDescription->AddChildren();
@@ -634,6 +631,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
 
     description->SetIsRestore(tableInfo->IsRestore);
 
+    pathEl->PreSerializedChildrenListing.clear();
     DescribeChildren(TPath::Init(pathId, Self));
 }
 

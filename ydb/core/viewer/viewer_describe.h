@@ -382,32 +382,6 @@ public:
                         }
                     }
                 }
-                if (pathDescription.HasColumnTableDescription()) {
-                    if (ExpandSubElements) {
-                        const auto& colTable = pathDescription.GetColumnTableDescription();
-                        if (colTable.HasSchema()) {
-                            THashSet<TString> existingChildren;
-                            for (const auto& child : pathDescription.GetChildren()) {
-                                existingChildren.insert(child.GetName());
-                            }
-                            for (const auto& olapIndex : colTable.GetSchema().GetIndexes()) {
-                                if (!existingChildren.contains(olapIndex.GetName())) {
-                                    NKikimrSchemeOp::TDirEntry& child = *pathDescription.AddChildren();
-                                    child.SetName(olapIndex.GetName());
-                                    child.SetPathType(NKikimrSchemeOp::EPathType::EPathTypeTableIndex);
-                                }
-                            }
-                        }
-                    }
-                    auto* children = pathDescription.MutableChildren();
-                    google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TDirEntry> indexChildren;
-                    for (const auto& child : *children) {
-                        if (child.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeTableIndex) {
-                            *indexChildren.Add() = child;
-                        }
-                    }
-                    children->Swap(&indexChildren);
-                }
             }
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();

@@ -281,6 +281,18 @@ def build_html_dashboard(
         <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
         <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
         <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is read from <code>ya.make</code>. Column <code>chunks</code> is real runtime chunk count from evlog/report. Highlight means mismatch (<code>chunks != SPLIT_FACTOR</code>), which can explain differences between expected and observed parallelism.</li>
+        <li><b>Recommended split formula:</b>
+          let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
+          and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
+          <code>sum_duration_sec(chunk)</code> from test durations in that chunk.
+          Overloaded chunks are those with <code>sum_duration_sec &gt; B</code>.
+          Then:
+          <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
+          <code>needed = ceil(overloaded_total / L)</code>,
+          <code>extra = max(0, needed - overloaded_chunks_count)</code>,
+          <code>recommended_split = chunks_real + extra</code>.
+          If there are no overloaded chunks (or no timeouts), <code>extra = 0</code> and split is not raised.
+        </li>
       </ul>
       <details style="margin-top:8px;">
         <summary><b>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</b></summary>

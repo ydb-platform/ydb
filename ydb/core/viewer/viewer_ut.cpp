@@ -846,7 +846,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                     auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
                     for (auto& nodeInfo : *nodes) {
-                        nodeInfo.Location = TNodeLocation("az-2", "", "eu-north1-c-13ct2", "1");
+                        NActorsInterconnect::TNodeLocation location;
+                        location.SetBridgePileName("pile0");
+                        location.SetDataCenter("az-2");
+                        location.SetRack("eu-north1-c-13ct2");
+                        location.SetUnit("1");
+                        nodeInfo.Location = TNodeLocation(location);
                     }
                     auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
                         new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
@@ -857,6 +862,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     for (auto& systemStateInfo : *(*x)->Get()->Record.MutableSystemStateInfo()) {
+                        systemStateInfo.MutableLocation()->ClearBridgePileName();
                         systemStateInfo.MutableLocation()->ClearDataCenter();
                         systemStateInfo.MutableLocation()->ClearRack();
                         systemStateInfo.MutableLocation()->ClearUnit();
@@ -891,8 +897,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& systemState = node.at("SystemState").GetMap();
         UNIT_ASSERT(systemState.contains("Location"));
         const auto& location = systemState.at("Location").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(location.at("BridgePileName").GetStringSafe(), "pile0");
         UNIT_ASSERT_VALUES_EQUAL(location.at("DataCenter").GetStringSafe(), "az-2");
         UNIT_ASSERT_VALUES_EQUAL(location.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("Unit").GetStringSafe(), "1");
     }
 
     Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)

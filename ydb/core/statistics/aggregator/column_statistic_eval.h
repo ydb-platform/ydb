@@ -16,19 +16,21 @@ class TSimpleColumnStatisticEval {
     std::optional<ui32> CountDistinctSeq;
     std::optional<ui32> MinSeq;
     std::optional<ui32> MaxSeq;
+
+    struct TIntermediateState;
+    std::unique_ptr<TIntermediateState> IntermediateState;
+
 public:
     using TPtr = std::unique_ptr<TSimpleColumnStatisticEval>;
 
-    explicit TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod)
-        : Type(std::move(type))
-        , PgTypeMod(std::move(pgTypeMod))
-    {}
+    TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod);
+    ~TSimpleColumnStatisticEval();
 
     EStatType GetType() const;
     size_t EstimateSize() const;
     void AddAggregations(const TString& columnName, TSelectBuilder& builder);
-    NKikimrStat::TSimpleColumnStatistics Extract(
-        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) const;
+    void Merge(const TVector<NYdb::TValue>& aggColumns);
+    NKikimrStat::TSimpleColumnStatistics Extract(ui64 rowCount, const TVector<NYdb::TValue>& aggColumns);
 };
 
 // Base class for classes that manage evaluation of column statistics
@@ -47,7 +49,8 @@ public:
     virtual EStatType GetType() const = 0;
     virtual size_t EstimateSize() const = 0;
     virtual void AddAggregations(const TString& columnName, TSelectBuilder&) = 0;
-    virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const = 0;
+    virtual void Merge(const TVector<NYdb::TValue>& aggColumns) = 0;
+    virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) = 0;
     virtual ~IStage2ColumnStatisticEval() = default;
 };
 

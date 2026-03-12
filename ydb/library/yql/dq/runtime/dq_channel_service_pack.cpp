@@ -59,6 +59,10 @@ public:
         Rows = 0;
     }
 
+    void Push(NDqProto::TCheckpoint&& /*checkpoint*/) override {
+        Y_ENSURE(false);
+    }
+    
     void Push(NUdf::TUnboxedValue&& value) override {
         Packer.AddItem(value);
         Rows++;
@@ -102,6 +106,10 @@ public:
         YQL_ENSURE(false, "Push to Wide Channel");
     }
 
+    void Push(NDqProto::TCheckpoint&& /*checkpoint*/) override {
+        Y_ENSURE(false);
+    }
+
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         Packer.AddWideItem(values, width);
         Rows++;
@@ -138,6 +146,10 @@ public:
 
     void Push(NUdf::TUnboxedValue&&) override {
         YQL_ENSURE(false, "Push to Wide Channel");
+    }
+
+    void Push(NDqProto::TCheckpoint&& /*checkpoint*/) override {
+        Y_ENSURE(false);
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {

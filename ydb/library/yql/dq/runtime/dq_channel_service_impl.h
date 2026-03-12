@@ -88,6 +88,7 @@ public:
 
     virtual ~TOutputSerializer() {};
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) = 0;
     virtual void Flush(bool finished) = 0;
 
@@ -778,8 +779,10 @@ public:
         Y_ENSURE(false);
     }
 
-    void Push(NDqProto::TCheckpoint&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(checkpoint));
+        }
     }
 
     void Finish() override {

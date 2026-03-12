@@ -115,14 +115,6 @@ struct TInterceptorRules {
     }
 };
 
-struct TEvIntercepted : public TEventLocal<TEvIntercepted, 101010101> {
-    TActorId SessionActorId;
-
-    explicit TEvIntercepted(TActorId sessionActorId)
-        : SessionActorId(sessionActorId)
-    {}
-};
-
 ///
 /// Replaces the real KQP workload service in the actor system.
 ///
@@ -304,7 +296,7 @@ private:
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     ///
     /// Executes a query and processes all WM states up to the specified final state.
-    /// It captures session data from .sys/query_sessions by 'parking' the request 
+    /// It captures session data from .sys/query_sessions by 'parking' the request
     /// in the interceptor actor, ensuring a race-free read before actual SQL execution starts.
     ///
     TQuerySessionReader ReadQuerySessionAfterState(IWmSessionUpdater::EWmState state) {

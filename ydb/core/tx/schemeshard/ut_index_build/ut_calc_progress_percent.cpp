@@ -168,8 +168,13 @@ Y_UNIT_TEST_SUITE(CalcProgressPercent) {
         AddShard(info, 1, 4);
         MarkDone(info, 1, 1);
         MarkDone(info, 1, 2);
-        // NeedsAnotherLevel() = (1 < 1) = false, NeedsAnotherParent() = false (defaults),
-        // toUpload = 0, inProgress = 0 -> early return 100%
-        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 100.f, 1e-6f);
+        // Put remaining shards in ToUploadShards so the early-return is NOT taken,
+        // exercising the within-level progress formula instead.
+        info.ToUploadShards.push_back(MakeShardIdx(1, 3));
+        info.ToUploadShards.push_back(MakeShardIdx(1, 4));
+        // NeedsAnotherLevel() = (1 < 1) = false, but toUpload != 0 -> no early return
+        // shardProgress = 2 / 4 = 0.5f
+        // 100 * (1 - 1 + 0.5) / 1 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
     }
 }

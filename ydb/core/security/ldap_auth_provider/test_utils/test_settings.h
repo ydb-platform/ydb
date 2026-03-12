@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 
 #include <util/system/tempfile.h>
 #include <util/generic/string.h>

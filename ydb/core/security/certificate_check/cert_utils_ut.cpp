@@ -2,7 +2,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cert_auth_utils.h"
+#include "cert_auth_processor.h"
+#include "test_utils/test_cert_auth_utils.h"
 
 namespace NKikimr {
 
@@ -146,3 +147,4 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
 }
 
 } // namespace NKikimr
+

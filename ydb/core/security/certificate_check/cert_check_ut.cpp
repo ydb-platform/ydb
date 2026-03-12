@@ -1,5 +1,5 @@
 #include "cert_check.h"
-#include "cert_auth_utils.h"
+#include "test_utils/test_cert_auth_utils.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

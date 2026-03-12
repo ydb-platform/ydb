@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/testlib/default
+    ydb/core/security/certificate_check/test_utils
 )
 
 YQL_LAST_ABI_VERSION()

@@ -267,28 +267,23 @@ class TJsonNodes : public TViewerPipeClient {
             return SystemState.GetLocation().GetBridgePileName();
         }
 
-        void ApplyNodeInfoLocationFallback() {
+        void MergeInterconnectLocation() {
             std::optional<TString> dataCenter;
             std::optional<TString> rack;
             std::optional<TString> unit;
             std::optional<TString> bridgePileName;
-            bool hasLocationFallback = false;
             for (const auto& [key, value] : NodeInfo.Location.GetItems()) {
                 switch (key) {
                     case NActors::TNodeLocation::TKeys::BridgePileName:
-                        hasLocationFallback = true;
                         bridgePileName = value;
                         break;
                     case NActors::TNodeLocation::TKeys::DataCenter:
-                        hasLocationFallback = true;
                         dataCenter = value;
                         break;
                     case NActors::TNodeLocation::TKeys::Rack:
-                        hasLocationFallback = true;
                         rack = value;
                         break;
                     case NActors::TNodeLocation::TKeys::Unit:
-                        hasLocationFallback = true;
                         unit = value;
                         break;
                     default:
@@ -296,7 +291,7 @@ class TJsonNodes : public TViewerPipeClient {
                 }
             }
 
-            if (!hasLocationFallback) {
+            if (!bridgePileName && !dataCenter && !rack && !unit) {
                 return;
             }
 
@@ -1924,7 +1919,7 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
-                        node.ApplyNodeInfoLocationFallback();
+                        node.MergeInterconnectLocation();
 
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);

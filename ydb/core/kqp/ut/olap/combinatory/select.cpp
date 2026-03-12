@@ -26,9 +26,9 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
         Cerr << "COMPARE: " << Compare << Endl;
         Cerr << "OUTPUT: " << output << Endl;
         if (CompareUnordered) {
-            CompareYsonUnordered(output, Compare);
+            CompareYsonUnordered(Compare, output);
         } else {
-            CompareYson(output, Compare);
+            CompareYson(Compare, output);
         }
     } else {
         Cerr << "OUTPUT: " << output << Endl;

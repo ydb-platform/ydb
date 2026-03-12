@@ -9,7 +9,7 @@ namespace NKikimr::NDDisk {
         struct TPersistentBufferInflight {
             ui32 NodeId;
             ui32 PDiskId;
-            ui32 SlotId;
+            ui32 DDiskSlotId;
             bool Received;
             bool Replied;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
@@ -23,13 +23,13 @@ namespace NKikimr::NDDisk {
         ui32 Received = 0;
 
 
+        void PassAway() override;
         void Timeout();
         void CheckReply();
         void Reply();
         void ReplyAndDie();
         void Handle(TEvWritePersistentBufferResult::TPtr ev);
         void Handle(TEvWritePersistentBuffers::TPtr ev);
-        void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
 
     public:

@@ -1970,8 +1970,8 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
 
     for (ui32 i = 1; i < andParts.size(); ++i) {
         THashSet<const TExprNode*> found;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            found.insert(andParts[i][j].Get());
+        for (const auto& part : andParts[i]) {
+            found.insert(part.Get());
         }
 
         // remove
@@ -2001,14 +2001,14 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     }
 
     TExprNode::TListType orArgs;
-    for (ui32 i = 0; i < andParts.size(); ++i) {
+    for (auto& andPart : andParts) {
         TExprNode::TListType restAndArgs;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            if (commonParts.contains(andParts[i][j].Get())) {
+        for (const auto& part : andPart) {
+            if (commonParts.contains(part.Get())) {
                 continue;
             }
 
-            restAndArgs.push_back(andParts[i][j]);
+            restAndArgs.push_back(part);
         }
 
         if (restAndArgs.size() >= 1) {

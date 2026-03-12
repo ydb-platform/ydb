@@ -103,7 +103,7 @@ class TJsonCluster : public TViewerPipeClient {
     bool Tablets = false;
 
 public:
-    TJsonCluster(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonCluster(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {
     }
@@ -963,6 +963,8 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 

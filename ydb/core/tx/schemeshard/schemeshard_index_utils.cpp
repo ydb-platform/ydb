@@ -24,6 +24,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             res.IndexTableCount = 1;
             break;
@@ -419,11 +420,11 @@ auto CalcFulltextImplTableDescImpl(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    bool withFreq)
+    const NKikimrSchemeOp::EIndexType indexType)
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
-    if (!withFreq) {
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         indexColumns = indexDataColumns;
     }
     for (const auto & keyColumn: tableColumns.Keys) {
@@ -433,8 +434,14 @@ auto CalcFulltextImplTableDescImpl(
     TColumnTypes baseColumnTypes;
     TString error;
     Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
-    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
-    auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+    NScheme::TTypeId tokenColumnType;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) {
+        tokenColumnType = NScheme::NTypeIds::String;
+    } else {
+        Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+        tokenColumnType = textColumnInfo.GetTypeId();
+    }
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
@@ -442,13 +449,13 @@ auto CalcFulltextImplTableDescImpl(
     {
         auto tokenColumn = implTableDesc.AddColumns();
         tokenColumn->SetName(NFulltext::TokenColumn);
-        tokenColumn->SetType(NScheme::TypeName(textColumnInfo.GetTypeId()));
-        tokenColumn->SetTypeId(textColumnInfo.GetTypeId());
+        tokenColumn->SetType(NScheme::TypeName(tokenColumnType));
+        tokenColumn->SetTypeId(tokenColumnType);
         tokenColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
-    if (withFreq) {
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::FreqColumn);
         col->SetType(NFulltext::TokenCountTypeName);
@@ -689,9 +696,9 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    bool withFreq)
+    const NKikimrSchemeOp::EIndexType indexType)
 {
-    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, withFreq);
+    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
@@ -700,9 +707,9 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    bool withFreq)
+    const NKikimrSchemeOp::EIndexType indexType)
 {
-    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, withFreq);
+    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(

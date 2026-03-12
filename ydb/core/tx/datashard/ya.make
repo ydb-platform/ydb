@@ -218,6 +218,7 @@ SRCS(
     truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
+    validate_row_condition.cpp
     volatile_tx.cpp
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
@@ -355,6 +356,7 @@ RECURSE_FOR_TESTS(
     ut_truncate
     ut_upload_rows
     ut_vacuum
+    ut_validate_row_condition
     ut_volatile
     ut_write
 )

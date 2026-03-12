@@ -50,6 +50,11 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
 
             return ydb.iam.ServiceAccountCredentials.from_file(service_account_key_file)
 
+        static_login = os.getenv("YDB_USER")
+        if static_login is not None:
+            ctx.trace({"credentials.static": True})
+            return ydb.StaticCredentials.from_user_password(static_login, os.getenv("YDB_PASSWORD", ""))
+
         anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1"
         if anonymous_credetials:
             ctx.trace({"credentials.anonymous": True})

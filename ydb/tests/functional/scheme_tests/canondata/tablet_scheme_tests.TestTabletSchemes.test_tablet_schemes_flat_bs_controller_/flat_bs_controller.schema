@@ -433,6 +433,11 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 122,
+                "ColumnName": "AppliedGroupGeneration",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 6,
                 "ColumnName": "DesiredVDiskCategory",
                 "ColumnType": "Uint64"
@@ -544,6 +549,7 @@
                     4,
                     121,
                     5,
+                    122,
                     6,
                     7,
                     8,

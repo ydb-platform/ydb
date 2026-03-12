@@ -6,6 +6,7 @@ SRCS(
     blocks_info_ut.cpp
     device_handler_ut.cpp
     overlapped_requests_guard_wrapper_ut.cpp
+    split_requests_wrapper_ut.cpp
 )
 
 PEERDIR(

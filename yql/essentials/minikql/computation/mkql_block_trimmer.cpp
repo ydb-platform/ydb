@@ -16,13 +16,14 @@
 namespace NKikimr::NMiniKQL {
 
 class TBlockTrimmerBase: public IBlockTrimmer {
+public:
+    TBlockTrimmerBase() = delete;
+
 protected:
     explicit TBlockTrimmerBase(arrow::MemoryPool* pool)
         : Pool_(pool)
     {
     }
-
-    TBlockTrimmerBase() = delete;
 
     std::shared_ptr<arrow::Buffer> TrimNullBitmap(const std::shared_ptr<arrow::ArrayData>& array) {
         auto& nullBitmapBuffer = array->buffers[0];

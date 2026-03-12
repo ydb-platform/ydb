@@ -8,7 +8,7 @@
 
 namespace NYql::NFmr {
 
-TTDSBlockIterator::TTDSBlockIterator(
+TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     TString tableId,
     std::vector<TTableRange> tableRanges,
     ITableDataService::TPtr tableDataService,
@@ -36,56 +36,56 @@ TTDSBlockIterator::TTDSBlockIterator(
     }
 
     if (firstRowKeys) {
-        FirstBound_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
-        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Bound");
+        FirstBoundary_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Boundary");
         IsFirstBoundInclusive_ = *isFirstRowKeysInclusive;
     }
     if (lastRowKeys) {
-        LastBound_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
     }
 
     SetMinChunkInNewRange();
-} // namespace NYql::NFmr
+}
 
-TTDSBlockIterator::~TTDSBlockIterator() = default;
+TTableDataServiceBlockIterator::~TTableDataServiceBlockIterator() = default;
 
-void TTDSBlockIterator::SetMinChunkInNewRange() {
+void TTableDataServiceBlockIterator::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
         CurrentChunk_ = TableRanges_[CurrentRange_].MinChunk;
     }
 }
 
-bool TTDSBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
-    if (FirstBound_) {
+bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
+    if (FirstBoundary_) {
         int c = CompareKeyRowsAcrossYsonBlocks(
             blob,
             row,
-            FirstBound_->Row,
-            FirstBound_->Markup,
+            FirstBoundary_->Row,
+            FirstBoundary_->Markup,
             SortOrders_
         );
-        if (c < 0) { // if row < first bound
+        if (c < 0) { // if row < first boundary
             return false;
-        } else if (!IsFirstBoundInclusive_ && c == 0) { // if row == first bound
+        } else if (!IsFirstBoundInclusive_ && c == 0) { // if row == first boundary
             return false;
         }
     }
-    if (LastBound_) {
+    if (LastBoundary_) {
         int c = CompareKeyRowsAcrossYsonBlocks(
             blob,
             row,
-            LastBound_->Row,
-            LastBound_->Markup,
+            LastBoundary_->Row,
+            LastBoundary_->Markup,
             SortOrders_
         );
-        if (c > 0) { // if row > last bound
+        if (c > 0) { // if row > last boundary
             return false;
         }
     }
     return true;
 }
 
-bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
+bool TTableDataServiceBlockIterator::NextBlock(TIndexedBlock& out) {
     out = {};
 
     while (true) {
@@ -148,7 +148,7 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
         const auto& rows = parser.GetRows();
 
         out.Data = unionYson;
-        if (FirstBound_ || LastBound_) {
+        if (FirstBoundary_ || LastBoundary_) {
             std::vector<TRowIndexMarkup> filtered;
             filtered.reserve(rows.size());
             for (const auto& r : rows) {
@@ -165,4 +165,8 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
     }
 }
 
+std::vector<ESortOrder> TTableDataServiceBlockIterator::GetSortOrder() {
+    return SortOrders_;
 }
+
+} // namespace NYql::NFmr

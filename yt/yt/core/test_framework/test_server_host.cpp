@@ -28,7 +28,7 @@ void TTestServerHost::InitializeServer()
 
 void TTestServerHost::TearDown()
 {
-    Server_->Stop().Get().ThrowOnError();
+    Server_->Stop().BlockingGet().ThrowOnError();
     Server_.Reset();
     Port_.Reset();
 }

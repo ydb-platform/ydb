@@ -11,6 +11,8 @@
 #include <util/generic/utility.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
+#include <utility>
+
 #define EXPECT_AND_SKIP_TOKEN_IMPL(token, message, result) \
     do {                                                   \
         if (Y_LIKELY(Token_ == token)) {                   \
@@ -186,7 +188,7 @@ public:
         TPosition position, TMemoryPool& pool)
         : Str_(str)
         , Issues_(issues)
-        , Position_(position)
+        , Position_(std::move(position))
         , Index_(0)
         , Pool_(pool)
     {
@@ -1654,8 +1656,8 @@ private:
             auto srtuctType = underlyingType->Cast<TStructExprType>();
             const auto& items = srtuctType->GetItems();
             bool allVoid = true;
-            for (ui32 i = 0; i < items.size(); ++i) {
-                allVoid = allVoid && (items[i]->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
+            for (const auto* item : items) {
+                allVoid = allVoid && (item->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
             }
 
             Out_ << (allVoid ? TStringBuf("Enum<") : TStringBuf("Variant<"));

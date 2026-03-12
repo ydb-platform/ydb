@@ -884,7 +884,7 @@ private:
 
             block = loop;
 
-            const auto fetch = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, stream, codegen, block, itemPtr);
+            const auto fetch = CallBoxedValueFetch(stream, ctx, block, itemPtr);
             new StoreInst(fetch, statusPtr, block);
 
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetch, ConstantInt::get(fetch->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);

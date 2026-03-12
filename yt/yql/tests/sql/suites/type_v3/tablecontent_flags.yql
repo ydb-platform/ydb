@@ -1,0 +1,12 @@
+use plato;
+pragma AnsiInForEmptyOrNullableItemsCollections;
+pragma yt.UseNativeYtTypes;
+pragma yt.NativeYtTypeCompatibility="legacy";
+
+insert into @tmp
+select AddTimezone(CurrentUtcTimestamp(), "Europe/Moscow");
+commit;
+
+$src = select * from @tmp;
+
+select AddTimezone(CurrentUtcTimestamp(), "Europe/Moscow") in compact $src from Input;

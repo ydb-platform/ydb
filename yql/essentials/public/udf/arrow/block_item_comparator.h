@@ -191,7 +191,7 @@ class TTzDateBlockItemComparator: public TBlockItemComparatorBase<TTzDateBlockIt
     using TLayout = typename TDataType<TTzType>::TLayout;
 
 public:
-    bool DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         const auto x = lhs.Get<TLayout>();
         const auto y = rhs.Get<TLayout>();
 

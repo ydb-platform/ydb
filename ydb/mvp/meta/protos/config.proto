@@ -5,11 +5,41 @@ package NMvp.NMeta;
 import "ydb/mvp/core/protos/mvp.proto";
 
 message TMetaConfig {
+    message TGrafanaConfig {
+        // Grafana base URL used to resolve relative Grafana links.
+        optional string Endpoint = 1;
+        // Name of secret in auth token config with Grafana API token.
+        optional string SecretName = 2;
+    }
+
+    message TSupportLinksConfig {
+        message TSupportLinkEntry {
+            // Link source identifier (for example: grafana/dashboard/search).
+            optional string Source = 1;
+            // Optional display name shown in UI.
+            optional string Title = 2;
+            // Source-specific URL. Can be absolute or relative, depending on source.
+            optional string Url = 3;
+            // Grafana search tag filter (for source=grafana/dashboard/search).
+            optional string Tag = 4;
+            // Grafana folder UID filter (for source=grafana/dashboard/search).
+            optional string Folder = 5;
+        }
+        // Support links resolved for cluster entity.
+        repeated TSupportLinkEntry Cluster = 1;
+        // Support links resolved for database entity.
+        repeated TSupportLinkEntry Database = 2;
+    }
+
     optional string MetaApiEndpoint = 1;
     optional string MetaDatabase = 2;
     optional bool MetaCache = 3 [default = false];
     optional string MetaDatabaseTokenName = 4;
     optional bool DbUserTokenAccess = 5 [default = false];
+    // Grafana integration settings used by Grafana-based support link sources.
+    optional TGrafanaConfig Grafana = 6;
+    // Shared support links config reused across all clusters/databases.
+    optional TSupportLinksConfig SupportLinks = 7;
 }
 
 message TMetaAppConfig {

@@ -853,7 +853,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return GetPtr();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {

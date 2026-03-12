@@ -5,6 +5,8 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -59,11 +61,11 @@ struct TLazyVerifyDictValue;
 
 template <class TValidateErrorPolicy>
 struct TLazyVerifyListValue: public TBoxedValue {
-    TLazyVerifyListValue(const IValueBuilder* valueBuilder, const TListType* listType, IBoxedValuePtr&& orig, const TString& message)
+    TLazyVerifyListValue(const IValueBuilder* valueBuilder, const TListType* listType, IBoxedValuePtr&& orig, TString message)
         : ValueBuilder(valueBuilder)
         , ListType(listType)
         , Orig(std::move(orig))
-        , Message(message)
+        , Message(std::move(message))
     {
     }
 
@@ -203,12 +205,12 @@ struct TLazyVerifyDictValue: public TBoxedValue {
     {
     }
 
-    TLazyVerifyDictValue(const IValueBuilder* valueBuilder, const TType* keyType, const TType* payloadType, IBoxedValuePtr&& orig, const TString& message)
+    TLazyVerifyDictValue(const IValueBuilder* valueBuilder, const TType* keyType, const TType* payloadType, IBoxedValuePtr&& orig, TString message)
         : ValueBuilder(valueBuilder)
         , KeyType(keyType)
         , PayloadType(payloadType)
         , Orig(std::move(orig))
-        , Message(message)
+        , Message(std::move(message))
     {
     }
 
@@ -264,7 +266,7 @@ private:
 template <class TValidateErrorPolicy, class TValidateMode>
 class WrapCallableValue: public TBoxedValue {
 public:
-    WrapCallableValue(const TCallableType* callableType, TUnboxedValue&& callable, const TString& message);
+    WrapCallableValue(const TCallableType* callableType, TUnboxedValue&& callable, TString message);
 
 private:
     const TCallableType* const CallableType_;
@@ -276,10 +278,10 @@ private:
 
 template <class TValidateErrorPolicy, class TValidateMode>
 WrapCallableValue<TValidateErrorPolicy, TValidateMode>::WrapCallableValue(
-    const TCallableType* callableType, TUnboxedValue&& callable, const TString& message)
+    const TCallableType* callableType, TUnboxedValue&& callable, TString message)
     : CallableType_(callableType)
     , Callable_(std::move(callable))
-    , Message_(message)
+    , Message_(std::move(message))
 {
 }
 

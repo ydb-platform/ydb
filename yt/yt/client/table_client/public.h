@@ -149,12 +149,12 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EHunkValueTag, ui8,
 );
 
 // Do not change these values since they are stored in the master snapshot.
-DEFINE_ENUM(ETableSchemaMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETableSchemaMode, i8,
     ((Weak)      (0))
     ((Strong)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i8,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
@@ -372,6 +372,8 @@ DECLARE_REFCOUNTED_STRUCT(THashTableChunkIndexWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkIndexesWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlimVersionedWriterConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TCompactionHintWriterConfig);
+
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterTestingOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderConfig)
@@ -396,8 +398,6 @@ DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
-
-DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
 

@@ -8,17 +8,19 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_value.h>
 
+#include <utility>
+
 namespace {
 using namespace NYql;
 
 class TUdfResolverWithLoggerDecorator: public IUdfResolver {
 public:
     TUdfResolverWithLoggerDecorator(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                    IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
+                                    IUdfResolver::TPtr underlying, const TString& path, TString sessionId)
         : FunctionRegistry_(functionRegistry)
-        , Underlying_(underlying)
+        , Underlying_(std::move(underlying))
         , Out_(TFile(path, WrOnly | ForAppend | OpenAlways))
-        , SessionId_(sessionId)
+        , SessionId_(std::move(sessionId))
     {
     }
 

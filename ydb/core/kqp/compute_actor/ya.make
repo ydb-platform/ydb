@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
+    ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     ydb/library/formats/arrow/common
     ydb/library/yql/dq/actors/compute

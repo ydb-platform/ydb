@@ -44,8 +44,11 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     VHostStats = std::make_shared<TVHostStatsSimple>();
 
     VhostServer = NVhost::CreateServer(
-        Logging, VHostStats, NVhost::CreateVhostQueueFactory(),
-        CreateDefaultDeviceHandlerFactory(), CreateDefaultVhostServerConfig(),
+        Logging,
+        VHostStats,
+        NVhost::CreateVhostQueueFactory(),
+        CreateDefaultDeviceHandlerFactory(),
+        CreateDefaultVhostServerConfig(),
         VhostCallbacks);
 }
 

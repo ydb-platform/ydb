@@ -18,6 +18,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    nbs
     postgresql
     query_cache
     rename

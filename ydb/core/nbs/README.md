@@ -69,23 +69,311 @@ code workspace/workspace.code-workspace
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
-3) Write some data:
+3) Get load actor adapter id:
+    ```
+    cd ydb_bg/ydb/apps/dstool/
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition get-load-actor-adapter-actor-id --disk-id disk1
+    ```
+
+4) Write some data:
     ```
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --start_index 0 --type write --data "vnfjkdnsfvjdfknsjknsdkjnvnjk" --id "[1:7599782149963481987:2733]"
     ```
 
-4) Read some data:
+5) Read some data:
     ```
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --type read --blocks_count 1 --start_index 0 --id "[1:7600018021929343002:2699]"
     ```
 
-3) Grep logs:
+6) Grep logs:
     ```
     cd /home/barkovbg/ydb_bg/ydb/tests/tools/local_cluster/.ydbd_working_dir/local_cluster
     cat node_*/logfile_* | grep "NBS_PARTITION" | sort
     ```
 
-4) Run FIO from QEMU
+7) Run FIO from QEMU:
     ```
     sudo fio --name=randomreadwritetest --blocksize=4096 --rw=randrw --direct=1 --buffered=0 --ioengine=libaio --iodepth=32 --runtime=30 --time_based --filename=/dev/vdb
+
+    sudo fio --rw=randwrite --name=test --filename=/dev/vdb --direct=1 --blocksize=4096 --ioengine=libaio --iodepth=32 --runtime=30 --numjobs=1 --time_based --group_reporting --verify_fatal=1 --verify_dump=1 --verify_async=2 --do_verify=1 --verify=sha1 --verify_backlog=500
     ```
+
+## Slice deployment
+
+1) Ensure that you forward skotty default socket to your remote machine.
+In `.ssh/config`:
+```
+Host cloud
+  HostName <ipv6>
+  IdentityFile <your_key>
+  ForwardAgent ~/.skotty/sock/default.sock
+```
+
+2) Build on your remote dev machine:
+```
+ya make ydb/apps/ydbd
+```
+
+3) Build ydbd_slice on your remote dev machine:
+```
+ya make ydb/tools/ydbd_slice/bin
+```
+
+4) Create cluster config (but with your own server fqdn's)
+```
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  erasure: block-4-2
+  fail_domain_type: disk
+  self_management_config:
+    enabled: true
+  default_disk_type: SSD
+  host_configs:
+  - drive:
+    - path: /dev/disk/by-partlabel/kikimr_nvme_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/kikimr_nvme_02
+      type: SSD
+    - path: /dev/disk/by-partlabel/kikimr_nvme_03
+      type: SSD
+    - path: /dev/disk/by-partlabel/kikimr_nvme_04
+      type: SSD
+    host_config_id: 1
+  hosts:
+    - host: vla5-8268.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 1
+        data_center: 'zone-a'
+        rack: '1'
+    - host: vla5-8186.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 2
+        data_center: 'zone-a'
+        rack: '2'
+    - host: vla5-8236.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 3
+        data_center: 'zone-a'
+        rack: '3'
+    - host: vla5-8262.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 4
+        data_center: 'zone-a'
+        rack: '4'
+    - host: vla5-8226.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 5
+        data_center: 'zone-a'
+        rack: '5'
+    - host: vla5-8253.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 6
+        data_center: 'zone-a'
+        rack: '6'
+    - host: vla5-8258.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 7
+        data_center: 'zone-a'
+        rack: '7'
+    - host: vla5-8250.search.yandex.net
+      host_config_id: 1
+      location:
+        body: 8
+        data_center: 'zone-a'
+        rack: '8'
+  interconnect_config:
+    start_tcp: true
+  grpc_config:
+    services_enabled:
+    - legacy
+  nbs_config:
+    enabled: true
+    nbs_storage_config:
+      scheme_shard_dir: /Root/NBS
+      folder_id: "testFolder"
+      ssd_system_channel_pool_kind: "ssd"
+      ssd_log_channel_pool_kind: "ssd"
+      ssd_index_channel_pool_kind: "ssd"
+      pipe_client_retry_count: 3
+      pipe_client_min_retry_time: 1
+      pipe_client_max_retry_time: 10
+  log_config:
+    entry:
+      - component: NBS_PARTITION
+        level: 7
+```
+
+5) Add databases config
+```
+domains:
+   - domain_name: Root
+     dynamic_slots: 8
+     databases:
+       - name: "NBS"
+         storage_units:
+           - count: 1
+             kind: ssd
+         compute_units:
+           - count: 1
+             kind: slot
+             zone: any
+```
+
+6) Run ydbd_slice
+```
+ydb/tools/ydbd_slice/bin/ydbd_slice install <path_to_databases_config.yaml> all --yaml-config <path_to_cluster_config.yaml> --binary <path_to_ydbd_binary>
+```
+
+7) Now you can work with your own slice.
+- Monitoring is available on `<fqdn>:8765/`
+- GRPC is available on `<fqdn>:2135/`
+
+## Tracing setup
+
+1) Install unified agent
+
+2) Create unified agent config on the path `/etc/yandex/unified_agent/conf.d`:
+```
+routes:
+  - input:
+      id: kikimr-tracing-input
+      plugin: otel_traces
+      config:
+        protocol: grpc
+        uri: localhost:4316
+    channel:
+      output:
+        id: kikimr-tracing-output
+        plugin: otel_traces
+        config:
+          url: "collector.tracing.cloud-preprod.yandex.net:4317"
+          format: proto
+          batch:
+            flush_period: 5s
+          message_quota: 100000
+          set_host_label: short_host_name
+          project: "kikimr"
+          cluster: !expr "{$file('/Berkanavt/kikimr/cfg/cluster.txt')|ydb-other}"
+```
+
+3) Restart unified agent `sudo service unified-agent status`
+
+4) Add tracing config to ydb configuration:
+- `ydb/tests/library/harness/resources/default_yaml.yml` for local_cluster configuration
+- `config.yaml` for slice configuration
+```
+tracing_config:
+   backend:
+     opentelemetry:
+       collector_url: grpc://localhost:4316
+       service_name: barkovbg
+```
+
+5) View traces in Cloud Monitoring. Example URL:
+```
+https://monitoring-preprod.yandex.cloud/projects/aoedo0ji1lgce9l91har/traces?from=now-1h&to=now&refresh=60000&query=%7Bproject+%3D+%22kikimr%22%2C+service+%3D+%22barkovbg%22%7D
+```
+
+## Ya configuration
+
+Ya configuration exists on the path `~/.ya/ya.conf`
+
+1) Configuration without sanitizers
+```
+tools_cache_size = "6GiB"
+symlinks_ttl = "30d"
+cache_size = "500GiB"
+print_statistics = false
+build_cache = false
+link_threads = 4
+continue_on_fail = false
+content_uids = true
+
+[flags]
+#SANITIZER_TYPE="address"
+#SANITIZER_TYPE="thread"
+
+[[target_platform]]
+platform_name = "default-linux-x86_64"
+build_type = "relwithdebinfo"
+#build_type = "release"
+
+[target_platform.flags]
+FORCE_STATIC_LINKING="yes"
+#SKIP_JUNK="yes"
+#USE_EAT_MY_DATA="yes"
+#DEBUGINFO_LINES_ONLY="yes"
+```
+
+2) Configuration with asan
+
+```
+tools_cache_size = "6GiB"
+symlinks_ttl = "30d"
+cache_size = "500GiB"
+print_statistics = false
+build_cache = false
+link_threads = 4
+continue_on_fail = false
+content_uids = true
+
+[flags]
+SANITIZER_TYPE="address"
+#SANITIZER_TYPE="thread"
+
+[[target_platform]]
+platform_name = "default-linux-x86_64"
+build_type = "relwithdebinfo"
+#build_type = "release"
+
+[target_platform.flags]
+FORCE_STATIC_LINKING="yes"
+SKIP_JUNK="yes"
+USE_EAT_MY_DATA="yes"
+DEBUGINFO_LINES_ONLY="yes"
+```
+
+Actually you need to add environment variable to make asan output readable
+
+```
+export ASAN_SYMBOLIZER_PATH=$(ya tool llvm-symbolizer --print-path)
+```
+
+3) Configuration with tsan
+
+```
+tools_cache_size = "6GiB"
+symlinks_ttl = "30d"
+cache_size = "500GiB"
+print_statistics = false
+build_cache = false
+link_threads = 4
+continue_on_fail = false
+content_uids = true
+
+[flags]
+#SANITIZER_TYPE="address"
+SANITIZER_TYPE="thread"
+
+[[target_platform]]
+platform_name = "default-linux-x86_64"
+build_type = "relwithdebinfo"
+#build_type = "release"
+
+[target_platform.flags]
+FORCE_STATIC_LINKING="yes"
+SKIP_JUNK="yes"
+USE_EAT_MY_DATA="yes"
+DEBUGINFO_LINES_ONLY="yes"
+```

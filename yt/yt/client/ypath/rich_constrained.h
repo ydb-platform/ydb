@@ -39,9 +39,9 @@ public:
     TConstrainedRichYPath& operator=(TConstrainedRichYPath&& other) noexcept = default;
 
     template <class... TOtherValidators>
-    TConstrainedRichYPath(const TConstrainedRichYPath<TOtherValidators...>& other);
+    explicit TConstrainedRichYPath(const TConstrainedRichYPath<TOtherValidators...>& other);
     template <class... TOtherValidators>
-    TConstrainedRichYPath(TConstrainedRichYPath<TOtherValidators...>&& other);
+    explicit TConstrainedRichYPath(TConstrainedRichYPath<TOtherValidators...>&& other);
 
     template <class... TOtherValidators>
     TConstrainedRichYPath& operator=(const TConstrainedRichYPath<TOtherValidators...>& other);
@@ -205,6 +205,10 @@ public:
 
     // "input_query"
     std::optional<TString> GetInputQuery() const;
+
+    // "queue_consumer_name"
+    std::optional<std::string> GetQueueConsumerName() const;
+    void SetQueueConsumerName(const std::string& value);
 
     bool operator==(const TConstrainedRichYPath& other) const;
 

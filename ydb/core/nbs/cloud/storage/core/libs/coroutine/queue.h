@@ -91,7 +91,10 @@ public:
         TAtomicBase state;
         do {
             state = AtomicGet(State);
-        } while (!AtomicCas(&State, (state & STATE_SIGNALED) ? STATE_EMPTY : STATE_WAITING, state));
+        } while (!AtomicCas(
+            &State,
+            (state & STATE_SIGNALED) ? STATE_EMPTY : STATE_WAITING,
+            state));
 
         // use pipe only if not signaled
         if (state & STATE_SIGNALED) {
@@ -99,7 +102,8 @@ public:
         }
 
         char tmp;
-        return NCoro::ReadI(Executor->Running(), SignalRecvPipe, &tmp, 1).Status();
+        return NCoro::ReadI(Executor->Running(), SignalRecvPipe, &tmp, 1)
+            .Status();
     }
 };
 

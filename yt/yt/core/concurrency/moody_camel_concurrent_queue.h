@@ -1428,7 +1428,7 @@ private:
     struct FreeList
     {
         FreeList() : freeListHead(nullptr) { }
-        FreeList(FreeList&& other) : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
+        FreeList(FreeList&& other) noexcept : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
         void swap(FreeList& other) { details::swap_relaxed(freeListHead, other.freeListHead); }
 
         FreeList(FreeList const&) MOODYCAMEL_DELETE_FUNCTION;
@@ -2468,7 +2468,8 @@ private:
         }
 
         template <AllocationMode allocMode, typename U>
-        inline bool enqueue(U&& element)
+        // TODO(YT-27514): Describe exact reason of a false positive tsan warning.
+        MOODYCAMEL_NO_TSAN inline bool enqueue(U&& element)
         {
             index_t currentTailIndex = this->tailIndex.load(std::memory_order::relaxed);
             index_t newTailIndex = 1 + currentTailIndex;

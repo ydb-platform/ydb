@@ -172,6 +172,7 @@ namespace NKikimr::NStorage {
         struct TEvPrivate {
             enum EEv {
                 EvSendDiskMetrics = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvUpdateStats,
                 EvUpdateNodeDrives,
                 EvReadCache,
                 EvGetGroup,
@@ -182,6 +183,7 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
+            struct TEvUpdateStats : TEventLocal<TEvUpdateStats, EvUpdateStats> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
 
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
@@ -240,6 +242,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
+
+        TControlWrapper EnableChunkKeeper;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -317,7 +321,6 @@ namespace NKikimr::NStorage {
         void StopInvalidGroupProxy();
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
-        void StartStaticProxies();
         void StartRequestReportingThrottler();
 
         /**
@@ -567,6 +570,9 @@ namespace NKikimr::NStorage {
         // if needed
         TIntrusivePtr<TBlobStorageGroupInfo> NeedGroupInfo(ui32 groupId);
 
+        // check if a proxy exists for a given group
+        bool HasGroupProxy(ui32 groupId) const;
+
         // propose group key
         void ProposeKey(ui32 groupId, const TEncryptionKey& mainKey, const NKikimrBlobStorage::TGroupInfo& encryptionParams);
 
@@ -630,6 +636,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
         void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+        void Handle(TEvPrivate::TEvUpdateStats::TPtr&);
 
         void Handle(NMon::TEvHttpInfo::TPtr&);
         void RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds);

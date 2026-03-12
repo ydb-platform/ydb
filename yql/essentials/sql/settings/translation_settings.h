@@ -131,7 +131,7 @@ struct TTranslationSettings {
     TMaybe<TString> ApplicationName;
     bool PgSortNulls = false;
     NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
-    bool EmitReadsForExists = false;
+    bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
     bool IsReplay = false;
 };

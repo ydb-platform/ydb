@@ -17,6 +17,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
+#include <utility>
 #include <variant>
 
 namespace NYql::NJsonPath {
@@ -47,16 +48,16 @@ class TArraySubscript {
 public:
     TArraySubscript(i64 from, TPosition fromPos)
         : From_(from)
-        , FromPos_(fromPos)
+        , FromPos_(std::move(fromPos))
         , HasTo_(false)
     {
     }
 
     TArraySubscript(i64 from, TPosition fromPos, i64 to, TPosition toPos)
         : From_(from)
-        , FromPos_(fromPos)
+        , FromPos_(std::move(fromPos))
         , To_(to)
-        , ToPos_(toPos)
+        , ToPos_(std::move(toPos))
         , HasTo_(true)
     {
     }

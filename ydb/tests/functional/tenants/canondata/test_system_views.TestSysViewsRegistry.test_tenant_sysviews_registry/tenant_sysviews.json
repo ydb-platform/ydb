@@ -536,6 +536,22 @@
       {
         "name": "UserSID",
         "type": "Utf8?"
+      },
+      {
+        "name": "WmPoolId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmState",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmEnterTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "WmExitTime",
+        "type": "Timestamp?"
       }
     ],
     "primary_key": [

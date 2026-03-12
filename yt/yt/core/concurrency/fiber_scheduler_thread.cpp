@@ -621,7 +621,7 @@ public:
 
         ErrorSet_.Wait();
 
-        YT_ASSERT(!CancelationError_.IsOK());
+        YT_VERIFY(!CancelationError_.IsOK());
         awaitable.Cancel(CancelationError_);
     }
 
@@ -1149,7 +1149,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         // When called from a fiber-unfriendly context, we fallback to blocking wait.
         YT_VERIFY(invoker == GetCurrentInvoker());
         YT_VERIFY(invoker == GetSyncInvoker());
-        YT_VERIFY(future.Wait());
+        YT_VERIFY(future.BlockingWait());
         return;
     }
 

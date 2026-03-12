@@ -2,6 +2,8 @@
 
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -73,11 +75,11 @@ INode::TPtr TObjectProcessorImpl::BuildKeys() const {
     return keys;
 }
 
-TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context)
+TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, TString objectId, TString typeId, const TObjectOperatorContext& context)
     : TBase(pos)
     , TObjectOperatorContext(context)
-    , ObjectId_(objectId)
-    , TypeId_(typeId)
+    , ObjectId_(std::move(objectId))
+    , TypeId_(std::move(typeId))
 {
 }
 

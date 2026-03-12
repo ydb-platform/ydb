@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto badDownloadRequest = setup.CreateOperationRequest(ETaskType::Download, TDownloadOperationParams{
+        auto badDownloadRequest = setup.CreateOperationRequest(EOperationType::Download, TDownloadOperationParams{
             .Input = TYtTableRef{"BadCluster", "BadPath", "BadFilePath"},
             .Output = TFmrTableRef{{"bad_cluster", "bad_path"}}
         });

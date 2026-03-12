@@ -16,6 +16,8 @@ SRCS(
     read_session.cpp
     topic_impl.h
     topic_impl.cpp
+    producer.h
+    producer.cpp
     topic.cpp
     transaction.cpp
     write_session_impl.h

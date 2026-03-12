@@ -21,8 +21,9 @@ TString ComputeFolder(const TString& diskId)
     return "_" + IntToString<16>(hash % folders);
 }
 
-std::tuple<TString, TString> ExtractParentDirAndName(const TString& rootDir,
-                                                     const TString& volumePath)
+std::tuple<TString, TString> ExtractParentDirAndName(
+    const TString& rootDir,
+    const TString& volumePath)
 {
     TString parentDir = rootDir;
     TString volumeName = volumePath;
@@ -41,8 +42,10 @@ std::tuple<TString, TString> ExtractParentDirAndName(const TString& rootDir,
             char* end = parentDir.vend();
 
             parentDir.erase(
-                Unique(begin, end,
-                       [](auto l, auto r) { return (l == r) && (l == '/'); }),
+                Unique(
+                    begin,
+                    end,
+                    [](auto l, auto r) { return (l == r) && (l == '/'); }),
                 end);
         }
 
@@ -81,8 +84,9 @@ TString PathNameToDiskId(const TString& pathName)
     return diskId;
 }
 
-std::tuple<TString, TString> DiskIdToVolumeDirAndName(const TString& rootDir,
-                                                      const TString& diskId)
+std::tuple<TString, TString> DiskIdToVolumeDirAndName(
+    const TString& rootDir,
+    const TString& diskId)
 {
     TString path = DiskIdToPath(diskId);
     return ExtractParentDirAndName(rootDir, path);

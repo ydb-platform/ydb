@@ -32,6 +32,7 @@ END()
 
 RECURSE_FOR_TESTS(
     fulltext
+    json
     prefixed_vector
     vector
 )

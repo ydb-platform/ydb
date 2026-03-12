@@ -982,6 +982,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
 
@@ -1012,6 +1013,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
 
@@ -1279,7 +1281,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             auto schemeClient = kikimr.GetSchemeClient();
             for (const auto& user : {"user1@builtin", "user2@builtin"}) {
                 TPermissions permissions(user,
-                    {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
+                    {
+                        "ydb.database.connect",
+                        "ydb.granular.describe_schema",
+                        "ydb.granular.select_row",
+                    }
                 );
                 auto result = schemeClient.ModifyPermissions("/Root",
                     TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -1292,6 +1298,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user1@builtin");
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
@@ -1307,6 +1314,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user2@builtin");
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
@@ -1322,6 +1330,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user1@builtin");
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);

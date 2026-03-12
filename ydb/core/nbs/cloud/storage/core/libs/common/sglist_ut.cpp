@@ -70,6 +70,122 @@ Y_UNIT_TEST_SUITE(TSgListTest)
             ptr += DefaultBlockSize;
         }
     }
+
+    Y_UNIT_TEST(ShouldCreateSubSgListFromSingleBuffer)
+    {
+        TString buffer = "abcdefghijkl";
+        const TSgList src{{buffer.data(), buffer.size()}};
+
+        {
+            const TSgList fromStart = CreateSgListSubRange(src, 0, 4);
+            UNIT_ASSERT(fromStart.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("abcd", fromStart[0].AsStringBuf());
+        }
+        {
+            const TSgList fromMiddle = CreateSgListSubRange(src, 4, 4);
+            UNIT_ASSERT(fromMiddle.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("efgh", fromMiddle[0].AsStringBuf());
+        }
+        {
+            const TSgList fromEnd = CreateSgListSubRange(src, 8, 4);
+            UNIT_ASSERT(fromEnd.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("ijkl", fromEnd[0].AsStringBuf());
+        }
+        {
+            const TSgList full = CreateSgListSubRange(src, 0, 12);
+            UNIT_ASSERT(full.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("abcdefghijkl", full[0].AsStringBuf());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldCreateSubSgListFromMultipleBuffer)
+    {
+        TString buffer1 = "abcdef";
+        TString buffer2 = "ghijkl";
+        TString buffer3 = "mnopqr";
+        const TSgList src{
+            {buffer1.data(), buffer1.size()},
+            {buffer2.data(), buffer2.size()},
+            {buffer3.data(), buffer3.size()}};
+
+        {
+            const TSgList fromStart = CreateSgListSubRange(src, 0, 4);
+            UNIT_ASSERT(fromStart.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("abcd", fromStart[0].AsStringBuf());
+        }
+        {
+            const TSgList fromMiddle = CreateSgListSubRange(src, 4, 4);
+            UNIT_ASSERT(fromMiddle.size() == 2);
+            UNIT_ASSERT_VALUES_EQUAL("ef", fromMiddle[0].AsStringBuf());
+            UNIT_ASSERT_VALUES_EQUAL("gh", fromMiddle[1].AsStringBuf());
+        }
+        {
+            const TSgList fromMiddle = CreateSgListSubRange(src, 4, 10);
+            UNIT_ASSERT(fromMiddle.size() == 3);
+            UNIT_ASSERT_VALUES_EQUAL("ef", fromMiddle[0].AsStringBuf());
+            UNIT_ASSERT_VALUES_EQUAL("ghijkl", fromMiddle[1].AsStringBuf());
+            UNIT_ASSERT_VALUES_EQUAL("mn", fromMiddle[2].AsStringBuf());
+        }
+        {
+            const TSgList fromEnd = CreateSgListSubRange(src, 8, 4);
+            UNIT_ASSERT(fromEnd.size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL("ijkl", fromEnd[0].AsStringBuf());
+        }
+        {
+            const TSgList full = CreateSgListSubRange(src, 0, 18);
+            UNIT_ASSERT(full.size() == 3);
+            UNIT_ASSERT_VALUES_EQUAL("abcdef", full[0].AsStringBuf());
+            UNIT_ASSERT_VALUES_EQUAL("ghijkl", full[1].AsStringBuf());
+            UNIT_ASSERT_VALUES_EQUAL("mnopqr", full[2].AsStringBuf());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldNotCreateSubSgListWhenOutOfRange)
+    {
+        TString buffer1 = "abcdef";
+        TString buffer2 = "ghijkl";
+        const TSgList src{
+            {buffer1.data(), buffer1.size()},
+            {buffer2.data(), buffer2.size()},
+        };
+
+        const TSgList outOfRange = CreateSgListSubRange(src, 12, 4);
+        UNIT_ASSERT(outOfRange.size() == 0);
+    }
+
+    Y_UNIT_TEST(ShouldNotCreateSubSgListFromEmptySgList)
+    {
+        const TSgList src;
+
+        const TSgList outOfRange = CreateSgListSubRange(src, 12, 4);
+        UNIT_ASSERT(outOfRange.size() == 0);
+    }
+
+    Y_UNIT_TEST(ShouldNotCreateSubSgListWithZeroSize)
+    {
+        TString buffer1 = "abcdef";
+        TString buffer2 = "ghijkl";
+        const TSgList src{
+            {buffer1.data(), buffer1.size()},
+            {buffer2.data(), buffer2.size()},
+        };
+        const TSgList outOfRange = CreateSgListSubRange(src, 4, 0);
+        UNIT_ASSERT(outOfRange.size() == 0);
+    }
+
+    Y_UNIT_TEST(ShouldTruncateSubSgList)
+    {
+        TString buffer1 = "abcdef";
+        TString buffer2 = "ghijkl";
+        const TSgList src{
+            {buffer1.data(), buffer1.size()},
+            {buffer2.data(), buffer2.size()},
+        };
+        const TSgList truncated = CreateSgListSubRange(src, 4, 10);
+        UNIT_ASSERT(truncated.size() == 2);
+        UNIT_ASSERT_VALUES_EQUAL("ef", truncated[0].AsStringBuf());
+        UNIT_ASSERT_VALUES_EQUAL("ghijkl", truncated[1].AsStringBuf());
+    }
 }
 
 }   // namespace NYdb::NBS

@@ -78,10 +78,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(MissingOptionalParameter, UseSink) {
-        auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(MissingOptionalParameter) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1149,10 +1147,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST_QUAD(Decimal, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST_TWIN(Decimal, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
         auto tableClient = kikimr.GetTableClient();
         auto queryClient = kikimr.GetQueryClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();

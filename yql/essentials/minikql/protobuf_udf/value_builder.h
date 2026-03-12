@@ -10,7 +10,7 @@ namespace NYql::NUdf {
 
 class TProtobufValue: public TBoxedValue {
 public:
-    explicit TProtobufValue(const TProtoInfo& info);
+    explicit TProtobufValue(TProtoInfo info);
     ~TProtobufValue() override;
 
     TUnboxedValue Run(
@@ -25,7 +25,7 @@ protected:
 
 class TProtobufSerialize: public TBoxedValue {
 public:
-    explicit TProtobufSerialize(const TProtoInfo& info);
+    explicit TProtobufSerialize(TProtoInfo info);
     ~TProtobufSerialize() override;
 
     TUnboxedValue Run(

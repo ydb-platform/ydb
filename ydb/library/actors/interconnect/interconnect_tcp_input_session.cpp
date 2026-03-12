@@ -54,11 +54,14 @@ namespace NActors {
         }
     }
 
-    void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
+    int TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
             std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
         Y_DEBUG_ABORT_UNLESS(numBytes);
         auto it = XdcBuffers.begin() + FetchIndex;
         for (;;) {
+            if (it == XdcBuffers.end()) {
+                return -1;
+            }
             Y_DEBUG_ABORT_UNLESS(it != XdcBuffers.end());
             const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
             outQ.emplace_back(channel, span);
@@ -73,6 +76,7 @@ namespace NActors {
                 break;
             }
         }
+        return 0;
     }
 
     static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
@@ -259,7 +263,17 @@ namespace NActors {
 
     void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
-        Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+
+        // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
+        // They must be switched off together; otherwise one actor may still assume legacy liveness while the
+        // other already relies on kernel keepalive/user-timeout.
+        //
+        // UseKernelLivenessMode() intentionally mirrors the condition in TInterconnectSessionTCP.
+        if (UseKernelLivenessMode()) {
+            Become(&TThis::WorkingState);
+        } else {
+            Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+        }
         if (RdmaQp) {
             LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
@@ -764,7 +778,10 @@ namespace NActors {
                         XdcCatchStream.Markup.emplace_back(channel, apply, size);
                     } else {
                         // find buffers and acquire data buffer pointers
-                        context.FetchBuffers(channel, size, XdcInputQ);
+                        if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
+                            LOG_CRIT_IC_SESSION("ICIS28", "FetchBuffers: end of buffers");
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
                     }
 
                     ptr += cmdLen;
@@ -817,10 +834,11 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     if (Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
                     }
+
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
@@ -912,18 +930,23 @@ namespace NActors {
                 for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
-            } else if (pendingEvent.RdmaCheckSum) {
+                if (checksum != descr.Checksum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+            }
+            if (pendingEvent.RdmaCumulativeCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
-                for (const auto&& [data, size] : payload) {
-                    XXH3_64bits_update(&state, data, size);
+                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
+                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+                    if (!memRegion.Empty()) {
+                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
+                    }
                 }
                 checksum = XXH3_64bits_digest(&state);
-            }
-            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
-            if (expectedChecksum) {
-                if (checksum != expectedChecksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }

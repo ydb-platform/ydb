@@ -226,6 +226,7 @@ enum class ELockFlags : ui64 {
     WholeShard = 2,
     Persistent = 4,
     Removed = 8,
+    Pessimistic = 16,
     PersistentMask = Frozen,
 };
 
@@ -321,6 +322,7 @@ public:
     bool Empty() const {
         return !(
             IsPersistent() ||
+            IsPessimistic() ||
             !ReadTables.empty() ||
             !WriteTables.empty() ||
             IsBroken());
@@ -437,6 +439,9 @@ public:
     bool IsFrozen() const { return !!(Flags & ELockFlags::Frozen); }
     void SetFrozen(ILocksDb* db = nullptr);
 
+    bool IsPessimistic() const { return !!(Flags & ELockFlags::Pessimistic); }
+    void SetPessimistic() { Flags |= ELockFlags::Pessimistic; }
+
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
@@ -489,6 +494,7 @@ private:
     ui64 WaitPersistentCounter = 0;
 
 public:
+    TAsyncEvent OnBrokenEvent;
     TAsyncEvent OnRemovedEvent;
 };
 
@@ -591,7 +597,15 @@ public:
 
 public:
     class TRuntimeLockHolder;
-    using TRuntimeLockHolderList = TIntrusiveList<TRuntimeLockHolder>;
+    class TRuntimeLockHolderList : public TIntrusiveList<TRuntimeLockHolder> {
+        friend TTableLocks;
+
+    public:
+        ~TRuntimeLockHolderList();
+
+    private:
+        THashMap<TLockInfo::TPtr, TRuntimeLockHolder*> LockTails;
+    };
 
 private:
     class TRuntimeLockKeyComparator {
@@ -647,6 +661,9 @@ public:
             rhs.Unlink();
             rhs.Self = nullptr;
             rhs.Lock = nullptr;
+            if (Self) {
+                Self->MovedRuntimeLock(Key, this, &rhs);
+            }
         }
 
         TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
@@ -659,6 +676,9 @@ public:
                 rhs.Unlink();
                 rhs.Self = nullptr;
                 rhs.Lock = nullptr;
+                if (Self) {
+                    Self->MovedRuntimeLock(Key, this, &rhs);
+                }
             }
             return *this;
         }
@@ -712,6 +732,7 @@ public:
     TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock);
 
 private:
+    void MovedRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder, TRuntimeLockHolder* was);
     void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
 
 private:
@@ -915,7 +936,6 @@ struct TLocksUpdate {
     // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
-    bool PreserveEmptyLock = false;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
@@ -1077,7 +1097,7 @@ public:
 
     void ResetUpdate() {
         if (Y_LIKELY(Update)) {
-            if (Update->Lock && Update->Lock->Empty() && !Update->PreserveEmptyLock) {
+            if (Update->Lock && Update->Lock->Empty()) {
                 Locker.RemoveLock(Update->LockTxId, nullptr);
             }
             Update = nullptr;

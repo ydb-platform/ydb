@@ -48,7 +48,7 @@ using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf p
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionRegistry: public TThrRefBase {
 public:
-    typedef TIntrusivePtr<IFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IFunctionRegistry>;
 
     ~IFunctionRegistry() override = default;
 
@@ -86,7 +86,7 @@ public:
         bool IsTypeAwareness = false;
     };
 
-    typedef std::map<TString, TFunctionProperties> TFunctionsMap;
+    using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
 

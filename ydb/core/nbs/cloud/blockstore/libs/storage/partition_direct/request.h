@@ -3,11 +3,49 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
+
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPersistentBufferWriteMeta
+{
+    ui8 Index = 0;
+    ui64 Lsn = 0;
+};
+
+struct TSyncRequest
+{
+    ui64 StartIndex;
+    ui64 Lsn;
+};
+
+struct TRestoreMeta
+{
+    ui64 BlockIndex = 0;
+    ui64 PersistBufferIndex = 0;
+    ui64 Lsn = 0;
+};
+
+struct TDBGReadBlocksResponse
+{
+    NProto::TError Error;
+};
+
+struct TDBGWriteBlocksResponse
+{
+    TVector<TPersistentBufferWriteMeta> Meta;
+    NProto::TError Error;
+};
+
+struct TDBGSyncBlocksResponse
+{
+    NProto::TError Error;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,15 +56,11 @@ private:
     ui32 VChunkIndex;
 
 public:
-    TBaseRequestHandler(
-        NActors::TActorSystem* actorSystem,
-        ui32 vChunkIndex);
+    TBaseRequestHandler(NActors::TActorSystem* actorSystem, ui32 vChunkIndex);
 
     virtual ~TBaseRequestHandler() = default;
 
     [[nodiscard]] NActors::TActorSystem* GetActorSystem() const;
-
-    virtual bool IsCompleted(ui64 requestId) = 0;
 
     void ChildSpanEndOk(ui64 childRequestId);
 
@@ -49,27 +83,16 @@ public:
         ui32 vChunkIndex,
         TBlockRange64 range);
 
-    virtual ~TIORequestsHandler() = default;
-
     [[nodiscard]] ui64 GetStartIndex() const;
     [[nodiscard]] ui64 GetStartOffset() const;
     [[nodiscard]] ui64 GetSize() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TWriteRequestHandler: public TIORequestsHandler
 {
 public:
-    struct TPersistentBufferWriteMeta
-    {
-        ui8 Index;
-        ui64 Lsn;
-
-        TPersistentBufferWriteMeta(ui8 index, ui64 lsn)
-            : Index(index)
-            , Lsn(lsn)
-        {}
-    };
-
     TWriteRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
@@ -81,49 +104,53 @@ public:
 
     NWilson::TSpan& GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
 
-    bool IsCompleted(ui64 requestId) override;
-
     void OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
-
-    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
-
-    [[nodiscard]] NThreading::TFuture<TWriteBlocksLocalResponse>
-    GetFuture() const;
+    void OnWriteFinished(
+        ui64 requestId,
+        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult&
+            result);
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    NThreading::TFuture<TDBGWriteBlocksResponse> GetFuture();
     void SetResponse(NProto::TError error);
 
 private:
+    void SetCompleted(ui64 requestId);
+    [[nodiscard]] bool IsCompleted() const;
+    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
+
+    TSpinLock Lock;
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    NThreading::TPromise<TWriteBlocksLocalResponse> Future;
+    NThreading::TPromise<TDBGWriteBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGWriteBlocksResponse>();
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
     ui8 AcksMask = 0;
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TSyncRequestHandler: public TBaseRequestHandler
+class TSyncAndEraseRequestHandler: public TBaseRequestHandler
 {
 public:
-    struct TSyncRequest
-    {
-        ui64 StartIndex;
-        ui64 Lsn;
-    };
-
-    TSyncRequestHandler(
+    TSyncAndEraseRequestHandler(
         NActors::TActorSystem* actorSystem,
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         NWilson::TTraceId traceId,
         ui64 tabletId);
 
-    ~TSyncRequestHandler() override = default;
+    TSyncAndEraseRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        ui32 vChunkIndex,
+        ui8 persistentBufferIndex,
+        NWilson::TTraceId traceId,
+        ui64 tabletId,
+        TVector<TSyncRequest> syncRequests);
+
+    ~TSyncAndEraseRequestHandler() override = default;
 
     NWilson::TSpan& GetChildSpan(ui64 requestId);
-
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
@@ -131,36 +158,18 @@ public:
 
     [[nodiscard]] const TVector<TSyncRequest>& GetSyncRequests() const;
 
-    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
+    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector>
+    GetBlockSelectors() const;
     [[nodiscard]] TVector<ui64> GetLsns() const;
 
+    NThreading::TFuture<TDBGSyncBlocksResponse> GetFuture();
+    void SetResponse(NProto::TError error);
+
 private:
+    NThreading::TPromise<TDBGSyncBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGSyncBlocksResponse>();
     ui8 PersistentBufferIndex;
     TVector<TSyncRequest> SyncRequests;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TEraseRequestHandler: public TBaseRequestHandler
-{
-public:
-    TEraseRequestHandler(
-        NActors::TActorSystem* actorSystem,
-        std::shared_ptr<TSyncRequestHandler> syncRequestHandler);
-
-    ~TEraseRequestHandler() override = default;
-
-    NWilson::TSpan& GetChildSpan(ui64 requestId);
-
-    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
-
-    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
-
-    [[nodiscard]] TVector<NKikimr::NDDisk::TBlockSelector> GetBlockSelectors() const;
-    [[nodiscard]] TVector<ui64> GetLsns() const;
-
-private:
-    std::shared_ptr<TSyncRequestHandler> SyncRequestHandler;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -179,18 +188,15 @@ public:
 
     NWilson::TSpan& GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
 
-    bool IsCompleted(ui64 requestId) override;
-
-    [[nodiscard]] NThreading::TFuture<TReadBlocksLocalResponse>
-    GetFuture() const;
-
     [[nodiscard]] TGuardedSgList GetData();
 
+    NThreading::TFuture<TDBGReadBlocksResponse> GetFuture();
     void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;
-    NThreading::TPromise<TReadBlocksLocalResponse> Future;
+    NThreading::TPromise<TDBGReadBlocksResponse> Promise =
+        NThreading::NewPromise<TDBGReadBlocksResponse>();
 };
 
 class TOverallAckRequestHandler: public TBaseRequestHandler
@@ -209,19 +215,32 @@ public:
     NWilson::TSpan GetChildSpan(ui64 requestId, TString eventName);
 
     [[nodiscard]] bool IsCompleted() const;
-    bool IsCompleted(ui64 requestId) override;
-    void RegisterCompetedRequest() {
+
+    void RegisterCompetedRequest()
+    {
         ++AckCount;
     }
 
-    [[nodiscard]] ui8 GetRequiredAckCount() const {
+    [[nodiscard]] ui8 GetRequiredAckCount() const
+    {
         return RequiredAckCount;
+    }
+
+    [[nodiscard]] NThreading::TFuture<void> GetFuture() const
+    {
+        return Promise.GetFuture();
+    }
+
+    void SetResponse()
+    {
+        Promise.SetValue();
     }
 
 private:
     const ui8 RequiredAckCount;
     ui8 AckCount = 0;
     TString Name;
+    NThreading::TPromise<void> Promise;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

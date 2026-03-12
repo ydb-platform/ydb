@@ -22,6 +22,7 @@ RECURSE(
     testshard_workload
     topic
     topic_kafka
+    topic_sqs
     transfer
     viewer
     streaming

@@ -80,7 +80,7 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
 
         if constexpr (IsStream) {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(Type::getInt32Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueFetch(state, ctx, block, valuePtr);
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
 
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -93,7 +93,7 @@ public:
             result->addIncoming(special, block);
             BranchInst::Create(done, block);
         } else {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueNext(state, ctx, block, valuePtr);
             result->addIncoming(GetFinish(context), block);
             BranchInst::Create(good, done, status, block);
         }
@@ -373,7 +373,7 @@ public:
 
         block = main;
 
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::WideFetch>(indexType, state, ctx.Codegen, block, values, ConstantInt::get(indexType, Width));
+        const auto status = CallBoxedValueWideFetch(state, ctx, block, values, Width);
 
         const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "yield", block);

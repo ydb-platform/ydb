@@ -38,6 +38,7 @@
 #include <util/string/split.h>
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
+#include <util/thread/pool.h>
 
 #include <google/protobuf/text_format.h>
 

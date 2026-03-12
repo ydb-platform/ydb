@@ -633,6 +633,7 @@ public:
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
+        TMaybe<Table::AppliedGroupGeneration::Type> AppliedGroupGeneration;
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
@@ -709,7 +710,8 @@ public:
                     Table::BlobDepotId,
                     Table::ErrorReason,
                     Table::NeedAlter,
-                    Table::BridgeGroupInfo
+                    Table::BridgeGroupInfo,
+                    Table::AppliedGroupGeneration
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -734,7 +736,8 @@ public:
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
                     &TGroupInfo::NeedAlter,
-                    &TGroupInfo::BridgeGroupInfo
+                    &TGroupInfo::BridgeGroupInfo,
+                    &TGroupInfo::AppliedGroupGeneration
                 );
             callback(&adapter);
         }
@@ -1202,6 +1205,15 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+
+        TMaybe<TKikimrScopeId> GetScopeId() const {
+            if (SchemeshardId && PathItemId) {
+                return TKikimrScopeId(*SchemeshardId, *PathItemId);
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!SchemeshardId && !PathItemId);
+                return Nothing();
+            }
+        }
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -2575,7 +2587,7 @@ public:
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
-        const TStoragePoolInfo& poolInfo, const TMaybe<TKikimrScopeId>& scopeId);
+        const TMap<TBoxStoragePoolId, TStoragePoolInfo>& storagePools);
 
     void SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings);
 
@@ -2583,5 +2595,5 @@ public:
         const TBlobStorageGroupInfo::TGroupVDisks& failed);
 };
 
-} //NBsController
+} // NBsController
 } // NKikimr

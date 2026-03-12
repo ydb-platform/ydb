@@ -19,6 +19,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
+#include <ydb/core/util/light.h>
 #include <ydb/core/util/max_tracker.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
@@ -186,6 +187,8 @@ namespace NKikimr {
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedCount;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedBytes;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontCostProcessed;
+            TLight IdleLight;
+            ui16 IdleLightSeqNo = 0;
 
             bool CanSendToSkeleton(ui64 cost) const {
                 bool inFlightCond = InFlightCount < MaxInFlightCount;
@@ -222,6 +225,7 @@ namespace NKikimr {
                 , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
             {
                 SkeletonFrontMaxInFlightCount.Init(MakeCounter(skeletonFrontGroup, "MaxInFlightCount", false, false));
+                IdleLight.Initialize(skeletonFrontGroup, TLightCounterConfig::Create().WithGreenMs("SkeletonFront/" + Name + "/" + "BusyTimeMsPerSec"));
             }
 
             ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
@@ -244,6 +248,7 @@ namespace NKikimr {
                 if (!Queue.Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
                     ctx.Send(converted.release());
+                    IdleLight.Set(true, ++IdleLightSeqNo);
                     ++InFlightCount;
                     InFlightCost += cost;
                     InFlightBytes += recByteSize;
@@ -305,6 +310,7 @@ namespace NKikimr {
                         } else {
                             ctx.Send(rec->Ev.release());
 
+                            IdleLight.Set(true, ++IdleLightSeqNo);
                             ++InFlightCount;
                             InFlightCost += cost;
                             InFlightBytes += recByteSize;
@@ -342,6 +348,7 @@ namespace NKikimr {
                          << " Deadlines# " << Deadlines);
 
                 --InFlightCount;
+                IdleLight.Set(InFlightCount == 0, ++IdleLightSeqNo);
                 InFlightCost -= msgCtx.Cost;
                 InFlightBytes -= msgCtx.RecByteSize;
 
@@ -479,6 +486,7 @@ namespace NKikimr {
 
             // refresh statistics for window-based counters
             void UpdateCounters() {
+                IdleLight.Update();
                 SkeletonFrontMaxInFlightCount.Update();
             }
         };

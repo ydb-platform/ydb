@@ -202,9 +202,9 @@ namespace NUnifiedAgent {
                        : std::make_pair(nullptr, 0);
         }
 
-        TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr);
+        TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr) const;
 
-        TLogger* Unwrap() noexcept {
+        TLogger* Unwrap() const noexcept {
             return Logger_;
         }
 

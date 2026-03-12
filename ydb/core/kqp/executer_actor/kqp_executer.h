@@ -162,6 +162,13 @@ struct TExecuterConfig : TNonCopyable {
         , TableServiceConfig(tableServiceConfig)
         , TliConfig(tliConfig)
     {}
+
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode GetBlockTrackingMode() const {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        return NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY;
+#endif
+        return TableServiceConfig.GetBlockTrackingMode();
+    }
 };
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,

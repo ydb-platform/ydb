@@ -93,9 +93,9 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+    , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>())) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
-    SpaceWatcher = new TSpaceWatcher(this);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -194,19 +194,22 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
+NOlap::TSnapshot TColumnShard::GetMinShapshotForNewReads() const {
     ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-
-    if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
-        if (ssClean->GetPlanStep() < minReadStep) {
-            Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
-            return *ssClean;
-        }
-    }
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
+}
+
+NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
+    auto minSnapshotForNewReads = GetMinShapshotForNewReads();
+    // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
+    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
+    // so we will get a live snapshot at that moment.
+    // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
+    auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
+    return NOlap::TSnapshotHolders(minSnapshotForNewReads, std::move(inFlightTxs));
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -808,10 +811,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+    const auto snapshotHolders = GetSnapshotHolders();
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop(snapshotHolders);
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -838,8 +841,9 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
+    const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
+    for (auto&& i : TablesManager.GetPathsToDrop(snapshotHolders)) {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 
@@ -1000,12 +1004,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    if (SpaceWatcherId == TActorId{}) {
-        delete SpaceWatcher;
-        SpaceWatcher = nullptr;
-    } else {
-        Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
-    }
+    Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
         std::make_unique<NOverload::TEvOverloadColumnShardDied>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);

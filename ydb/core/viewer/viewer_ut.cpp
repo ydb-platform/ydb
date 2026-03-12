@@ -15,7 +15,6 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
-#include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -756,15 +755,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&tablets=true&enums=true&sort=&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -791,15 +783,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -829,12 +819,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&fields_required=SystemState HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -856,21 +842,48 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
+                    for (auto& nodeInfo : *nodes) {
+                        NActorsInterconnect::TNodeLocation location;
+                        location.SetBridgePileName("pile0");
+                        location.SetDataCenter("az-2");
+                        location.SetRack("eu-north1-c-13ct2");
+                        location.SetUnit("1");
+                        nodeInfo.Location = TNodeLocation(location);
+                    }
+                    auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                        new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+                    );
+                    x->Swap(newEv);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    for (auto& systemStateInfo : *(*x)->Get()->Record.MutableSystemStateInfo()) {
+                        systemStateInfo.MutableLocation()->ClearBridgePileName();
+                        systemStateInfo.MutableLocation()->ClearDataCenter();
+                        systemStateInfo.MutableLocation()->ClearRack();
+                        systemStateInfo.MutableLocation()->ClearUnit();
+                        systemStateInfo.ClearDataCenter();
+                        systemStateInfo.ClearRack();
+                    }
+                    break;
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -880,6 +893,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
         auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
         UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), exclusiveDynNodeId);
+        UNIT_ASSERT(node.contains("SystemState"));
+        const auto& systemState = node.at("SystemState").GetMap();
+        UNIT_ASSERT(systemState.contains("Location"));
+        const auto& location = systemState.at("Location").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(location.at("BridgePileName").GetStringSafe(), "pile0");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("DataCenter").GetStringSafe(), "az-2");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("Unit").GetStringSafe(), "1");
     }
 
     Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)
@@ -903,12 +924,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/shared");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/shared&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -936,15 +953,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -977,14 +992,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("path", "/Root/serverless/users");
-        httpReq.CgiParameters.emplace("direct", "1");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&path=/Root/serverless/users&tablets=true HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -1013,15 +1022,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -1731,7 +1738,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
 
-        driverCfg.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         driverCfg.SetAuthToken("root@builtin");
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 

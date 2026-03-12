@@ -16,15 +16,17 @@
 #include <util/string/escape.h>
 #include <util/string/subst.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-TTableRef::TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys)
-    : RefName(refName)
+TTableRef::TTableRef(TString refName, const TString& service, TDeferredAtom cluster, TNodePtr keys)
+    : RefName(std::move(refName))
     , Service(to_lower(service))
-    , Cluster(cluster)
-    , Keys(keys)
+    , Cluster(std::move(cluster))
+    , Keys(std::move(keys))
 {
 }
 

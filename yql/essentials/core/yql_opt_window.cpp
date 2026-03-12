@@ -11,6 +11,7 @@
 #include <yql/essentials/core/yql_window_frames_collector_params_serializer.h>
 
 #include <expected>
+#include <utility>
 
 namespace NYql {
 
@@ -1026,7 +1027,7 @@ public:
 
     TChain1MapTraitsLagLead(TStringBuf name, const TRawTrait& raw, TMaybe<TQueueParam> queueOffset)
         : TChain1MapTraits(name, raw.Pos)
-        , QueueOffset_(queueOffset)
+        , QueueOffset_(std::move(queueOffset))
         , LeadLagLambda_(raw.CalculateLambda)
     {
     }
@@ -1140,10 +1141,10 @@ public:
 
 class TChain1MapTraitsCumeDist : public TChain1MapTraits {
 public:
-    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle, const TString& partitionRowsColumn)
+    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle, TString partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn_(partitionRowsColumn)
-        , Handle_(handle)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
+        , Handle_(std::move(handle))
     {
     }
 
@@ -1211,9 +1212,9 @@ private:
 
 class TChain1MapTraitsNTile : public TChain1MapTraits {
 public:
-    TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+    TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, TString  partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn_(partitionRowsColumn)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
     {
         YQL_ENSURE(raw.Params.size() == 1);
         Param_ = raw.Params[0];
@@ -1483,9 +1484,9 @@ public:
 
 class TChain1MapTraitsPercentRank : public TChain1MapTraitsRank {
 public:
-    TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+    TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, TString partitionRowsColumn)
         : TChain1MapTraitsRank(name, raw)
-        , PartitionRowsColumn_(partitionRowsColumn)
+        , PartitionRowsColumn_(std::move(partitionRowsColumn))
     {
     }
 
@@ -1836,7 +1837,7 @@ class TChain1MapTraitsIncremental : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsIncremental(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle)
         : TChain1MapTraitsStateBase(name, raw)
-        , Handle_(handle)
+        , Handle_(std::move(handle))
         , OutputIsOptional_(raw.OutputType->IsOptionalOrNull())
     {
     }

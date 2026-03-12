@@ -78,7 +78,13 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+    explicit TRowDispatcherReadActorMetrics(
+        const TTxId& txId,
+        ui64 taskId,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const NPq::NProto::TDqPqTopicSource& sourceParams,
+        bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask = false)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -93,7 +99,11 @@ struct TRowDispatcherReadActorMetrics {
                 SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
             Source = SubGroup->GetSubgroup("tx_id", TxId);
-            task = Source->GetSubgroup("task_id", ToString(taskId));
+            if (enableCountersPerTask) {
+                task = Source->GetSubgroup("task_id", ToString(taskId));
+            } else {
+                task = Source;
+            }
         }
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -310,7 +320,7 @@ private:
         ui64 QueuedRows = 0;
     };
 
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
     // Set on Children
@@ -347,7 +357,7 @@ public:
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
@@ -361,6 +371,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
@@ -387,6 +398,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNoSession, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -415,6 +427,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNoSession, IgnoreEvent);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -534,7 +547,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
@@ -767,8 +780,10 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     Counters.GetAsyncInputData++;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
-    Metrics.InFlyAsyncInputData->Set(0);
-    InFlyAsyncInputData = false;
+    if (InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Dec();
+        InFlyAsyncInputData = false;
+    }
     buffer.clear();
     watermark = Nothing();
 
@@ -1350,8 +1365,10 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 
 void TDqPqRdReadActor::NotifyCA() {
     Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
-    Metrics.InFlyAsyncInputData->Set(1);
-    InFlyAsyncInputData = true;
+    if (!InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Inc();
+        InFlyAsyncInputData = true;
+    }
     Counters.NotifyCA++;
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
@@ -1579,6 +1596,22 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
     }
 }
 
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
+    const auto sessionIt = Sessions.find(ev->Sender);
+    if (sessionIt == Sessions.end()) {
+        return;
+    }
+    const auto& session = sessionIt->second;
+    if (ev->Cookie != session.Generation) {
+        return;
+    }
+    SRC_LOG_D("Received TEvNoSession, erase session to " << ev->Sender.ToString());
+    ReadActorByEventQueueId.erase(session.EventQueueId);
+    Sessions.erase(sessionIt);
+    ReInit("Received TEvNoSession");
+    ScheduleProcessState();
+}
+
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -1595,7 +1628,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway,
+    const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();

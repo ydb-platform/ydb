@@ -50,6 +50,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -82,6 +83,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -102,6 +104,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -124,6 +127,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -145,6 +149,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -172,6 +177,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -207,6 +213,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -228,6 +235,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -260,6 +268,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -292,6 +301,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -323,6 +333,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -362,6 +373,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -398,6 +410,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -433,6 +446,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -461,6 +475,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -484,15 +499,15 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclDml, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -515,6 +530,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto client = NYdb::NQuery::TQueryClient(driver);
@@ -608,15 +624,15 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclRevoke, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -641,6 +657,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken(UserName);
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -711,6 +728,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 )", NQuery::TTxControl::NoTx()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            env.GetClient().GrantConnect("databaseadmin");
+
         }
         NQuery::TQueryClient databaseAdmin(env.GetDriver(), NQuery::TClientSettings().CredentialsProviderFactory(
             CreateLoginCredentialsProviderFactory({
@@ -748,7 +768,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporary, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1091,7 +1110,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporaryInterruptInheritance, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1185,7 +1203,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(AclInterruptInheritance) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1215,7 +1232,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericWrite);
-        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin", 
+        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericRead);
 
         {
@@ -1276,7 +1293,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = NKqp::TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(settings);

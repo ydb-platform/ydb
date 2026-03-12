@@ -17,7 +17,6 @@ protected:
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
-    YDB_ACCESSOR(bool, DisableSinks, false);
     YDB_ACCESSOR(bool, UseRealThreads, true);
     YDB_ACCESSOR(bool, FillTables, true);
 
@@ -26,8 +25,6 @@ protected:
 public:
     void Execute() {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(UseRealThreads);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));

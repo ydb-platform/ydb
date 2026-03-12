@@ -6610,7 +6610,11 @@ template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExpr
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)
 {
-    YQL_ENSURE(input->IsCallable() || input->IsList());
+    if (!input->IsCallable() && !input->IsList()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Expected tuple or callable, but got: " << input->Type()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     YQL_ENSURE(startIndex <= input->ChildrenSize());
 
     auto children = input->ChildrenList();
@@ -7502,12 +7506,12 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 
             returnType = *inputArrayType;
         }
     } else if (returnType == NPg::AnyElementOid) {
-        for (ui32 i = 0; i < argTypes.size(); ++i) {
-            if (!argTypes[i]) {
+        for (const ui32 argType : argTypes) {
+            if (!argType) {
                 continue;
             }
 
-            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            const auto& typeDesc = NPg::LookupType(argType);
             if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
                 returnType = typeDesc.ElementTypeId;
                 return;

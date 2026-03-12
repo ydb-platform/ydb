@@ -6,12 +6,15 @@
 
 #include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_yt_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
@@ -203,7 +206,7 @@ public:
             std::vector<IBlockIterator::TPtr> blockIterators;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
-                    blockIterators.push_back(MakeIntrusive<TTDSBlockIterator>(
+                    blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,
                         TableDataService_,
@@ -220,7 +223,7 @@ public:
                 }
             }
 
-            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators, output.SortingColumns.SortOrders);
+            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
             ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
 
             tableDataServiceWriter->Flush();
@@ -251,6 +254,64 @@ public:
         return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
     // TODO - figure out how to how to use cancel flag to kill map job.
+
+
+    std::variant<TFmrError, TStatistics> LocalSort(
+        const TLocalSortTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {},
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr
+    ) override {
+        auto localSortJobFunc = [&, this, cancelFlag] () -> TStatistics {
+            const auto taskTableInputRef = params.Input;
+            const auto output = params.Output;
+
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
+
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                output.TableId,
+                output.PartId,
+                TableDataService_,
+                output.SerializedColumnGroups,
+                Settings_.FmrWriterSettings,
+                output.SortingColumns
+            );
+            TMaybe<TMutex> mutex = TMutex();
+            std::vector<IBlockIterator::TPtr> blockIterators;
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    blockIterators.emplace_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                        fmrInput->TableId,
+                        fmrInput->TableRanges,
+                        TableDataService_,
+                        output.SortingColumns.Columns,
+                        output.SortingColumns.SortOrders,
+                        fmrInput->Columns,
+                        fmrInput->SerializedColumnGroups,
+                        fmrInput->IsFirstRowInclusive,
+                        fmrInput->FirstRowKeys,
+                        fmrInput->LastRowKeys
+                    ));
+                } else {
+                    auto ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
+                    auto ytReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                    blockIterators.emplace_back(MakeIntrusive<TYtBlockIterator>(
+                        ytReaders,
+                        output.SortingColumns.Columns,
+                        TYtBlockIteratorSettings(), // TODO - support parsing TYtBlockIteratorSettings from yson file.
+                        output.SortingColumns.SortOrders
+                    ));
+                }
+            }
+
+            NYT::TRawTableReaderPtr sortingReader = MakeIntrusive<TFmrSortingBlockReader>(blockIterators);
+            ParseRecords(sortingReader, tableDataServiceWriter, parseRecordSettings.LocalSortBlockCount, parseRecordSettings.LocalSortBlockSize, cancelFlag, mutex);
+
+            tableDataServiceWriter->Flush();
+            return TStatistics({{output, tableDataServiceWriter->GetStats()}});
+        };
+        return HandleFmrJob(localSortJobFunc, ETaskType::LocalSort);
+    }
 
 private:
     std::variant<TFmrError, TStatistics> HandleFmrJob(auto fmrJobFunc, ETaskType fmrJobType) {
@@ -313,6 +374,8 @@ TJobResult RunJob(
             return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TSortedMergeTaskParams>) {
             return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TLocalSortTaskParams>) {
+            return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else {
             ythrow yexception() << "Unsupported task type";
         }

@@ -4,10 +4,14 @@
 #include <yt/yt/client/unittests/mock/client.h>
 #include <yt/yt/client/unittests/mock/connection.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/net/local_address.h>
 
 namespace NYT::NClient::NFederated {
 namespace {
+
+using namespace NConcurrency;
 
 using ::testing::_;
 using ::testing::Return;
@@ -73,11 +77,11 @@ TEST(TFederatedConnectionTest, CreateClient)
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
     EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
     auto client = connection->CreateClient(clientOptions);
-    auto nodes = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes);
 
     Sleep(TDuration::Seconds(2));
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 
@@ -141,12 +145,12 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
 
     Sleep(TDuration::Seconds(2));
 
-    auto nodes1 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes1 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonVla, nodes1);
 
     Sleep(TDuration::Seconds(6));
 
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 

@@ -16,6 +16,8 @@
 #include <ydb/library/pdisk_io/uring_router.h>
 #endif
 
+#include <ydb/library/pdisk_io/uring_operation.h>
+
 #include <atomic>
 #include <queue>
 
@@ -75,9 +77,15 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
-        std::atomic<ui32> InFlightCount{0};
-        static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
 #endif
+
+        static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
+
+        class TDirectIoOpBase;
+        class TPersistentBufferPartIoOp;
+        class TInternalSyncWriteOp;
+
+        std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
 
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
@@ -130,15 +138,13 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
                 NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+                NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
+                NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
             } DirectIO;
         };
 
         TCounters Counters;
-
-    public:
-#if defined(__linux__)
-        struct TDirectIoOp;
-#endif
 
     private:
         struct TEvPrivate {
@@ -147,6 +153,9 @@ namespace NKikimr::NDDisk {
                 EvHandleEventForChunk,
                 EvHandlePersistentBufferEventForChunk,
                 EvShortIO,
+                EvWritePersistentBufferPart,
+                EvReadPersistentBufferPart,
+                EvInternalSyncWriteResult,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -167,18 +176,71 @@ namespace NKikimr::NDDisk {
                 {}
             };
 
-#if defined(__linux__)
+            struct TEvReadPersistentBufferPart : TEventLocal<TEvReadPersistentBufferPart, EvReadPersistentBufferPart> {
+                ui64 InflightCookie;
+                ui64 PartCookie;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+                TString ErrorMessage;
+                TRope Data;
+
+                TEvReadPersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, TRope data)
+                    : InflightCookie(inflightCookie)
+                    , PartCookie(partCookie)
+                    , Status(status)
+                    , ErrorMessage(std::move(errorMessage))
+                    , Data(std::move(data))
+                {}
+            };
+
+            struct TEvWritePersistentBufferPart : TEventLocal<TEvWritePersistentBufferPart, EvWritePersistentBufferPart> {
+                ui64 InflightCookie;
+                ui64 PartCookie;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+                TString ErrorMessage;
+                bool IsErase = false;
+
+                TEvWritePersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, bool isErase = false)
+                    : InflightCookie(inflightCookie)
+                    , PartCookie(partCookie)
+                    , Status(status)
+                    , ErrorMessage(errorMessage)
+                    , IsErase(isErase)
+                {}
+            };
+
             struct TEvShortIO : TEventLocal<TEvShortIO, EvShortIO> {
-                std::unique_ptr<TDirectIoOp> Op;
-                explicit TEvShortIO(std::unique_ptr<TDirectIoOp> op);
+                std::unique_ptr<TDirectIoOpBase> Op;
+
+                explicit TEvShortIO(std::unique_ptr<TDirectIoOpBase> op);
                 ~TEvShortIO();
             };
-#endif
+
+            struct TEvInternalSyncWriteResult : TEventLocal<TEvInternalSyncWriteResult, EvInternalSyncWriteResult> {
+                ui64 SyncId = 0;
+                ui64 RequestId = 0;
+                ui64 SegmentBegin = 0;
+                ui64 SegmentEnd = 0;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN;
+                TString ErrorMessage;
+
+                TEvInternalSyncWriteResult(ui64 syncId, ui64 requestId, ui64 segmentBegin, ui64 segmentEnd,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage = {})
+                    : SyncId(syncId)
+                    , RequestId(requestId)
+                    , SegmentBegin(segmentBegin)
+                    , SegmentEnd(segmentEnd)
+                    , Status(status)
+                    , ErrorMessage(std::move(errorMessage))
+                {}
+            };
         };
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFunc);
         void PassAway() override;
@@ -250,23 +312,31 @@ namespace NKikimr::NDDisk {
         THashMap<ui64, std::function<void()>> LogCallbacks;
         ui64 NextCookie = 1;
 
-        struct TPendingWrite {
-            NWilson::TSpan Span;
-            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> Callback;
+        struct TPendingIoOp {
+            std::unique_ptr<TDirectIoOpBase> Op;
+
+            TPendingIoOp() = default;
+            explicit TPendingIoOp(std::unique_ptr<TDirectIoOpBase> op);
+            TPendingIoOp(TPendingIoOp&&) noexcept;
+
+            TPendingIoOp(const TPendingIoOp&) = delete;
+
+            TPendingIoOp& operator=(TPendingIoOp&&) noexcept;
+            TPendingIoOp& operator=(const TPendingIoOp&) = delete;
+
+            ~TPendingIoOp();
         };
 
-        using TPersistentBufferPendingWrite = std::function<void(NPDisk::TEvChunkWriteRawResult&)>;
+        THashMap<ui64, TPendingIoOp> WriteCallbacks;
+        THashMap<ui64, TPendingIoOp> ReadCallbacks;
 
-        THashMap<ui64, std::variant<TPendingWrite, TPersistentBufferPendingWrite>> WriteCallbacks;
-
+        // TODO: remove
         struct TPendingRead {
             NWilson::TSpan Span;
             std::function<void(NPDisk::TEvChunkReadRawResult&, NWilson::TSpan&&)> Callback;
         };
-
         using TPersistentBufferPendingRead = std::function<void(NPDisk::TEvChunkReadRawResult&)>;
-
-        THashMap<ui64, std::variant<TPendingRead, TPersistentBufferPendingRead>> ReadCallbacks;
+        THashMap<ui64, std::variant<TPendingRead, TPersistentBufferPendingRead>> ReadCallbacksRaw;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
@@ -368,24 +438,21 @@ namespace NKikimr::NDDisk {
         // Read/write
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        void SendInternalWrite(
-            TChunkRef& chunkRef,
-            const TBlockSelector &selector,
-            NWilson::TSpan&& span,
-            TRope &&data,
-            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
-        );
+        // PDisk read/write fallback
+        void SendPDiskWrite(std::unique_ptr<TDirectIoOpBase> op);
+        void SendPDiskRead(std::unique_ptr<TDirectIoOpBase> op);
 
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
 
-#if defined(__linux__)
-        void DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector, const TWriteInstruction& instr,
-            TChunkRef& chunkRef, NWilson::TSpan span);
-        void DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector, TChunkRef& chunkRef,
-            NWilson::TSpan span);
+        // Regular direct I/O.
+        // Note: releases the op on success (returns true).
+        bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+
+        // Do not call manually!
+        bool DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+
         void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
-#endif
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Sync
@@ -425,8 +492,9 @@ namespace NKikimr::NDDisk {
 
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
         void Handle(TEvSyncWithDDisk::TPtr ev);
-        void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
+        void Handle(TEvReadPersistentBufferResult::TPtr ev);
+        void Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev);
 
         struct TSyncWithPersistentBufferPolicy;
         struct TSyncWithDDiskPolicy;
@@ -494,18 +562,6 @@ namespace NKikimr::NDDisk {
         };
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
-        struct TPersistentBufferToDiskWriteInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId Session;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            std::set<ui64> WriteCookies;
-            std::vector<TPersistentBufferSectorInfo> Sectors;
-            TRope Data;
-            NWilson::TSpan Span;
-        };
-        std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
 
         struct TPersistentBufferDiskOperationInFlight {
             TActorId Sender;
@@ -513,9 +569,16 @@ namespace NKikimr::NDDisk {
             TActorId Session;
             NWilson::TSpan Span;
             std::set<ui64> OperationCookies;
+
+            ui64 TabletId;
+            ui64 VChunkIdx;
+            ui64 Lsn;
+            ui32 OffsetInBytes;
+            std::vector<TPersistentBufferSectorInfo> Sectors;
+            TRope Data;
         };
 
-        std::map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
+        std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
 
@@ -546,7 +609,16 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
 
+        void Handle(TEvWritePersistentBuffers::TPtr ev);
+
+        void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
+        void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
+
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
+
+        void ProcessIoSubmitQueue();
+        void ScheduleIoSubmitWakeup();
+        void HandleWakeup();
     };
 
 } // NKikimr::NDDisk

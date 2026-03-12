@@ -382,9 +382,9 @@ void TSolomonRegistry::Collect(IInvokerPtr offloadInvoker)
         offloadFutures.push_back(future);
     }
 
-    // Use blocking Get(), because we want to lock current thread while data structure is updating.
+    // Use BlockingGet(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
-        future.Get();
+        future.BlockingGet();
     }
 
     ProjectionCount_.Update(*projectionCount);

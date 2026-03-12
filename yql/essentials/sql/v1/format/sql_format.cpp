@@ -16,6 +16,8 @@
 #include <util/string/subst.h>
 #include <util/generic/hash_set.h>
 
+#include <utility>
+
 namespace NSQLFormat {
 
 namespace {
@@ -993,7 +995,10 @@ private:
 
             case TRule_named_nodes_stmt::TBlock3::kAlt2: {
                 const auto& alt = msg.GetBlock3().GetAlt2();
-                Out(" (");
+                if (OutColumn_ != 0) {
+                    Out(' ');
+                }
+                Out('(');
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);
@@ -3306,12 +3311,12 @@ TStaticData::TStaticData()
 
 class TSqlFormatter: public NSQLFormat::ISqlFormatter {
 public:
-    TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
-                  const NSQLTranslationV1::TParsers& parsers,
-                  const NSQLTranslation::TTranslationSettings& settings)
-        : Lexers_(lexers)
-        , Parsers_(parsers)
-        , Settings_(settings)
+    TSqlFormatter(NSQLTranslationV1::TLexers lexers,
+                  NSQLTranslationV1::TParsers parsers,
+                  NSQLTranslation::TTranslationSettings settings)
+        : Lexers_(std::move(lexers))
+        , Parsers_(std::move(parsers))
+        , Settings_(std::move(settings))
     {
     }
 

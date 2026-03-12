@@ -2,6 +2,7 @@
 #include "optimizer.h"
 
 #include <iostream>
+#include <utility>
 #include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -118,9 +119,9 @@ List* MakeRelOptInfoList(const IOptimizer::TInput& input) {
 }
 
 TPgOptimizer::TPgOptimizer(
-    const TInput& input,
+    TInput input,
     const std::function<void(const TString&)>& log)
-    : Input_(input)
+    : Input_(std::move(input))
     , Log_(log)
 {
     get_relation_stats_hook = RelationStatsHook;
@@ -279,7 +280,7 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
     for (const auto& eq : src) {
         YQL_ENSURE(eq.Vars.size() == 2);
         RestrictInfo* ri = makeNode(RestrictInfo);
-        ri->can_join = 1;
+        ri->can_join = true;
         ri->norm_selec = -1;
         ri->outer_selec = -1;
 
@@ -352,7 +353,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
 
     for (auto* ri : LeftRestriction_) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
-        root.hasJoinRTEs = 1;
+        root.hasJoinRTEs = true;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
@@ -362,14 +363,14 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->left_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->right_relids);
         ji->jointype = JOIN_LEFT;
-        ji->lhs_strict = 1;
+        ji->lhs_strict = true;
 
         root.join_info_list = lappend(root.join_info_list, ji);
     }
 
     for (auto* ri : RightRestriction_) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
-        root.hasJoinRTEs = 1;
+        root.hasJoinRTEs = true;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
@@ -379,7 +380,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->right_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->left_relids);
         ji->jointype = JOIN_LEFT;
-        ji->lhs_strict = 1;
+        ji->lhs_strict = true;
 
         root.join_info_list = lappend(root.join_info_list, ji);
     }
@@ -402,7 +403,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (int i = 0; i < rels->length; i++) {
         root.simple_rel_array[i + 1]->has_eclass_joins = bms_num_members(root.simple_rel_array[i + 1]->eclass_indexes) > 1;
     }
-    root.ec_merging_done = 1;
+    root.ec_merging_done = true;
 
     LogNode("Context: ", &root);
 

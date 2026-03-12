@@ -1,4 +1,43 @@
 {
+    "test_canonical_requests.Test.test_capacity_metrics": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.2"
+        },
+        0,
+        0,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.3"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.4"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.5"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.6"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.7"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.8"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.9"
+        }
+    ],
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"
@@ -104,15 +143,6 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt.1"
-        }
-    ],
-    "test_canonical_requests.Test.test_vdisk_ready_stable_period": [
-        {
-            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt"
-        },
-        null,
-        {
-            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt.0"
         }
     ]
 }

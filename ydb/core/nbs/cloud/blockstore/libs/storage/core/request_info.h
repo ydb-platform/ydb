@@ -23,8 +23,9 @@ struct TRequestInfo
     : public TAtomicRefCount<TRequestInfo>
     , public TIntrusiveListItem<TRequestInfo>
 {
-    using TCancelRoutine = void(const NActors::TActorContext& ctx,
-                                TRequestInfo& requestInfo);
+    using TCancelRoutine = void(
+        const NActors::TActorContext& ctx,
+        TRequestInfo& requestInfo);
 
     const NActors::TActorId Sender;
     const ui64 Cookie = 0;
@@ -38,8 +39,10 @@ struct TRequestInfo
 
     TRequestInfo() = default;
 
-    TRequestInfo(const NActors::TActorId& sender, ui64 cookie,
-                 NBlockStore::TCallContextPtr callContext)
+    TRequestInfo(
+        const NActors::TActorId& sender,
+        ui64 cookie,
+        NBlockStore::TCallContextPtr callContext)
         : Sender(sender)
         , Cookie(cookie)
         , CallContext(std::move(callContext))
@@ -110,14 +113,16 @@ struct TRequestScope
 ////////////////////////////////////////////////////////////////////////////////
 
 inline TRequestInfoPtr CreateRequestInfo(
-    const NActors::TActorId& sender, ui64 cookie,
+    const NActors::TActorId& sender,
+    ui64 cookie,
     NBlockStore::TCallContextPtr callContext)
 {
     return MakeIntrusive<TRequestInfo>(sender, cookie, std::move(callContext));
 }
 
 inline TRequestInfoPtr CreateRequestInfo(
-    const NActors::TActorId& sender, ui64 cookie,
+    const NActors::TActorId& sender,
+    ui64 cookie,
     NBlockStore::TCallContextPtr callContext,
     TRequestInfo::TCancelRoutine callback)
 {
@@ -131,7 +136,8 @@ inline TRequestInfoPtr CreateRequestInfo(
 
 template <typename TResponse>
 TRequestInfoPtr CreateRequestInfoWithResponse(
-    const NActors::TActorId& sender, ui64 cookie,
+    const NActors::TActorId& sender,
+    ui64 cookie,
     NBlockStore::TCallContextPtr callContext)
 {
     auto callback =
@@ -143,16 +149,23 @@ TRequestInfoPtr CreateRequestInfoWithResponse(
         NYdb::NBS::Reply(ctx, requestInfo, std::move(response));
     };
 
-    return CreateRequestInfo(sender, cookie, std::move(callContext),
-                             std::move(callback));
+    return CreateRequestInfo(
+        sender,
+        cookie,
+        std::move(callContext),
+        std::move(callback));
 }
 
 template <typename TMethod>
-TRequestInfoPtr CreateRequestInfo(const NActors::TActorId& sender, ui64 cookie,
-                                  NBlockStore::TCallContextPtr callContext)
+TRequestInfoPtr CreateRequestInfo(
+    const NActors::TActorId& sender,
+    ui64 cookie,
+    NBlockStore::TCallContextPtr callContext)
 {
     return CreateRequestInfoWithResponse<typename TMethod::TResponse>(
-        sender, cookie, std::move(callContext));
+        sender,
+        cookie,
+        std::move(callContext));
 }
 
 }   // namespace NYdb::NBS::NStorage

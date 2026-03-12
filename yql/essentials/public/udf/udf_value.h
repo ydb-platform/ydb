@@ -1098,9 +1098,9 @@ public:
     }
 
     template <typename... Args>
-    inline explicit TBoxedDynamicResource(const TString& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(TString tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
-        , Tag_(tag)
+        , Tag_(std::move(tag))
     {
     }
 
@@ -1142,6 +1142,7 @@ inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf
 #include "udf_terminator.h"
 #include <util/stream/output.h>
 #include <tuple>
+#include <utility>
 
 namespace NYql::NUdf {
 

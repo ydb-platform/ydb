@@ -1,5 +1,5 @@
 diff --git a/include/source_location b/include/source_location
-index b4777ce..4ac6363 100644
+index 41b23f7..130a27a 100644
 --- a/include/source_location
 +++ b/include/source_location
 @@ -55,12 +55,23 @@ class source_location {

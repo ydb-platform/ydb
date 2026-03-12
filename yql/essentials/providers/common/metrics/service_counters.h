@@ -14,8 +14,8 @@ struct TServiceCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr UptimePublicCounter; // yq_public/query.uptime_seconds
 
     explicit TServiceCounters(
-        const ::NMonitoring::TDynamicCounterPtr& rootCounters,
-        const ::NMonitoring::TDynamicCounterPtr& publicCounters,
+        ::NMonitoring::TDynamicCounterPtr rootCounters,
+        ::NMonitoring::TDynamicCounterPtr publicCounters,
         const TString& subsystemName = "");
 
     explicit TServiceCounters(

@@ -1,9 +1,3 @@
-====================BSD-3-Clause====================
-	* port/{getopt.c, strcasecmp.c, strtoul.c}: Update modules from
-	the NetBSD source tree (the old	4-clause BSD license changed to
-	the new 3-clause one).
-
-
 ====================BSLA====================
  * Redistribution and use in source and binary forms are permitted
  * provided that the above copyright notice and this paragraph are
@@ -18,6 +12,19 @@
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
 
+====================BSLA====================
+Redistribution and use in source and binary forms are permitted
+provided that the above copyright notice and this paragraph are
+duplicated in all such forms and that any documentation,
+advertising materials, and other materials related to such
+distribution and use acknowledge that the software was developed
+by the University of California, Berkeley.  The name of the
+University may not be used to endorse or promote products derived
+from this software without specific prior written permission.
+THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
 ====================COPYRIGHT====================
    Copyright (c) Joris Van Damme <info@awaresystems.be>
    Copyright (c) AWare Systems <http://www.awaresystems.be/>
@@ -25,11 +32,6 @@
 
 ====================COPYRIGHT====================
  *      Copyright (C) 1990, 1995  Frank D. Cringle.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 1985, 1986 The Regents of the University of California.
- * All rights reserved.
 
 
 ====================COPYRIGHT====================
@@ -99,6 +101,11 @@
 ====================COPYRIGHT====================
  * Copyright (c) 2018, Mapbox
  * Author: <norman.barker at mapbox.com>
+
+
+====================COPYRIGHT====================
+Copyright (c) 1985, 1986 The Regents of the University of California.
+All rights reserved.
 
 
 ====================COPYRIGHT====================

@@ -574,8 +574,7 @@ namespace NSchemeShardUT_Private {
     TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId);
 
     template <typename TCreateFunc>
-    void CreateWithIntermediateDirs(TCreateFunc func) {
-        TTestWithReboots t;
+    void CreateWithIntermediateDirs(TTestWithReboots& t, TCreateFunc func) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             func(runtime, ++t.TxId, "/MyRoot", false); // invalid
             func(runtime, ++t.TxId, "/MyRoot", true); // valid
@@ -592,8 +591,13 @@ namespace NSchemeShardUT_Private {
     }
 
     template <typename TCreateFunc>
-    void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
+    void CreateWithIntermediateDirs(TCreateFunc func) {
         TTestWithReboots t;
+        CreateWithIntermediateDirs<TCreateFunc>(t, func);
+    }
+
+    template <typename TCreateFunc>
+    void CreateWithIntermediateDirsForceDrop(TTestWithReboots& t, TCreateFunc func) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TLocalPathId nextPathId;
             {
@@ -611,6 +615,12 @@ namespace NSchemeShardUT_Private {
                                    {NLs::PathNotExist});
             }
         });
+    }
+
+    template <typename TCreateFunc>
+    void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
+        TTestWithReboots t;
+        CreateWithIntermediateDirsForceDrop<TCreateFunc>(t, func);
     }
 
     TRowVersion CreateVolatileSnapshot(

@@ -73,8 +73,6 @@ namespace {
 
     NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
-
-        config.SetEndpoint("localhost:" + ToString(fixture.GRpcServerPort));
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
         config.SetDatabase("/Root");
         config.SetAuthToken("root@builtin");
@@ -661,9 +659,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        if (!"X-Fail") { // TODO MLP commit idempotence
-            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        }
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {

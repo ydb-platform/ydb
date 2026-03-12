@@ -5,6 +5,8 @@
 #include <util/string/builder.h>
 #include <openssl/sha.h>
 
+#include <utility>
+
 namespace {
 
 using namespace NYql;
@@ -46,7 +48,7 @@ TVector<TUrlListEntry> DeserializeResult(const TString& inp) {
 class TQPlayerUrlListerManager: public IUrlListerManager {
 public:
     TQPlayerUrlListerManager(IUrlListerManagerPtr underlying, TQContext qContext)
-        : Underlying_(underlying)
+        : Underlying_(std::move(underlying))
         , QContext_(qContext)
     {
     }

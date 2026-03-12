@@ -509,7 +509,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1143,6 +1143,31 @@ namespace {
                     return false;
                 }
                 dstSettings.DirectoryPath = value;
+            } else if (name == "metrics_level") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
+                ui64 numericVal = 0;
+                const ui64 maxValue = static_cast<ui64>(TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed);
+                if (TryFromString<ui64>(value, numericVal) && numericVal <= maxValue) {
+                    levelSetting = static_cast<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                } else if (value == "database") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
+                } else if (value == "object") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Object;
+                } else if (value == "detailed") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " value is invalid: " << value << "."
+                            << "Expected numeric value from 0 to " << maxValue << " or one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                    ));
+                    return false;
+                }
             }
         }
 
@@ -1623,12 +1648,12 @@ public:
 };
 
 bool ParseCompressionSettings(
-    const TExprList& alterColumnList,
-    Ydb::Table::ColumnMeta* alter_columns,
+    const TExprList& columnSource,
+    Ydb::Table::ColumnMeta* columnDest,
     TExprContext& ctx) {
 
-    auto compression = alter_columns->mutable_compression();
-    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+    auto compression = columnDest->mutable_compression();
+    const auto settings = columnSource.Item(1).Cast<TExprList>();
     for (const auto setting : settings) {
         const auto sKV = setting.Cast<TExprList>();
         const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
@@ -1650,7 +1675,7 @@ bool ParseCompressionSettings(
             compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
-                << " Column: \"" << alter_columns->name()
+                << " Column: \"" << columnDest->name()
                 << "\". Setting: \"" << key
                 << "\". Only algorithm and level settings supported for column COMPRESSION"));
             return false;
@@ -1991,20 +2016,32 @@ public:
                         }
 
                         if (columnTuple.Size() > 3) {
-                            auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                            if (families.Size() > 1) {
-                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                    "Unsupported number of families"));
-                                return SyncError();
-                            }
+                            auto columnItem = columnTuple.Item(3);
+                            if (columnItem.Maybe<TExprList>()) {
 
-                            for (auto family : families) {
-                                add_column->set_family(TString(family.Value()));
-                            }
 
-                            if (columnBuild) {
-                                for (auto family : families) {
-                                    columnBuild->SetFamily(TString(family.Value()));
+                                const auto exprs = columnItem.Cast<TExprList>();
+                                if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                                    if (!ParseCompressionSettings(exprs, add_column, ctx)) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    auto families = columnItem.Cast<TCoAtomList>();
+                                    if (families.Size() > 1) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                            "Unsupported number of families"));
+                                        return SyncError();
+                                    }
+
+                                    for (auto family : families) {
+                                        add_column->set_family(TString(family.Value()));
+                                    }
+
+                                    if (columnBuild) {
+                                        for (auto family : families) {
+                                            columnBuild->SetFamily(TString(family.Value()));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2294,6 +2331,13 @@ public:
                                 }
 
                                 add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "globalJson") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "JSON index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2437,6 +2481,7 @@ public:
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                        case Ydb::Table::TableIndex::kGlobalJsonIndex:
                             // no settings validation
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {

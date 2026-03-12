@@ -11,6 +11,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -55,8 +57,8 @@ class TBaseLazyList: public NUdf::TBoxedValue {
 
     class TIterator: public NUdf::TBoxedValue {
     public:
-        TIterator(const TPyCastContext::TPtr& ctx, const NUdf::TType* type, TPyObjectPtr&& pyIter)
-            : CastCtx_(ctx)
+        TIterator(TPyCastContext::TPtr ctx, const NUdf::TType* type, TPyObjectPtr&& pyIter)
+            : CastCtx_(std::move(ctx))
             , PyIter_(std::move(pyIter))
             , ItemType_(type)
         {
@@ -109,10 +111,10 @@ class TBaseLazyList: public NUdf::TBoxedValue {
 
 public:
     TBaseLazyList(
-        const TPyCastContext::TPtr& castCtx,
+        TPyCastContext::TPtr castCtx,
         TPyObjectPtr&& pyObject,
         const NUdf::TType* type)
-        : CastCtx_(castCtx)
+        : CastCtx_(std::move(castCtx))
         , PyObject_(std::move(pyObject))
         , ItemType_(NUdf::TListTypeInspector(*CastCtx_->PyCtx->TypeInfoHelper, type).GetItemType())
     {

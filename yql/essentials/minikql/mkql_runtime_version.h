@@ -1,6 +1,10 @@
 #pragma once
 
+#include <util/generic/yexception.h>
 #include <util/system/types.h>
+#include <util/system/yassert.h>
+
+#include <compare>
 
 namespace NKikimr::NMiniKQL {
 
@@ -26,9 +30,33 @@ namespace NKikimr::NMiniKQL {
     #define MKQL_RUNTIME_VERSION 73U
 #endif
 
+class TRuntimeVersion {
+public:
+    constexpr explicit TRuntimeVersion(ui32 version)
+        : Version_(version)
+    {
+    }
+
+    constexpr ui32 Value() const {
+        return Version_;
+    }
+
+    constexpr std::strong_ordering operator<=>(ui32 other) const {
+        if (other < MinSupportedRuntimeVersion_) {
+            throw yexception() << "Runtime version must be >= " << MinSupportedRuntimeVersion_ << ", but got " << other;
+        }
+        return Version_ <=> other;
+    }
+
+private:
+    static constexpr ui32 MinSupportedRuntimeVersion_ = 47U;
+
+    ui32 Version_;
+};
+
 // History:
 // v4  is the version supported by kikimr-19-6
 // v14 is the version supported by kikimr-20-2
-constexpr ui32 RuntimeVersion = MKQL_RUNTIME_VERSION;
+inline constexpr TRuntimeVersion RuntimeVersion{MKQL_RUNTIME_VERSION};
 
 } // namespace NKikimr::NMiniKQL

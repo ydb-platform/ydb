@@ -183,7 +183,6 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-    settings.EmitReadsForExists = true;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
     if (settings.PgParser) {

@@ -63,35 +63,52 @@ struct TPartitionsInfo
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ui64 ComputeBlocksCountPerPartition(const ui64 newBlocksCountPerVolume,
-                                    const ui32 blocksPerStripe,
-                                    const ui32 partitionsCount);
+ui64 ComputeBlocksCountPerPartition(
+    const ui64 newBlocksCountPerVolume,
+    const ui32 blocksPerStripe,
+    const ui32 partitionsCount);
 
 ui64 ComputeBlocksCountPerPartition(
-    const ui64 newBlocksCountPerVolume, const ui32 bytesPerStripe,
-    const ui32 blockSize, const ui32 partitionsCount);
+    const ui64 newBlocksCountPerVolume,
+    const ui32 bytesPerStripe,
+    const ui32 blockSize,
+    const ui32 partitionsCount);
 
 TPartitionsInfo ComputePartitionsInfo(
-    const TStorageConfig& config, const TString& cloudId,
-    const TString& folderId, const TString& diskId,
-    NYdb::NBS::NProto::EStorageMediaKind mediaKind, ui64 blocksCount,
-    ui32 blockSize, bool isSystem, bool isOverlayDisk);
+    const TStorageConfig& config,
+    const TString& cloudId,
+    const TString& folderId,
+    const TString& diskId,
+    NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    ui64 blocksCount,
+    ui32 blockSize,
+    bool isSystem,
+    bool isOverlayDisk);
 
-void ResizeVolume(const NProto::TStorageServiceConfig& config,
-                  NKikimrBlockStore::TVolumeConfig& volumeConfig);
+void ResizeVolume(
+    const NProto::TStorageServiceConfig& config,
+    NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
-bool SetMissingParams(const TVolumeParams& volumeParams,
-                      const NKikimrBlockStore::TVolumeConfig& prevConfig,
-                      NKikimrBlockStore::TVolumeConfig& update);
+bool SetMissingParams(
+    const TVolumeParams& volumeParams,
+    const NKikimrBlockStore::TVolumeConfig& prevConfig,
+    NKikimrBlockStore::TVolumeConfig& update);
 
-ui64 ComputeMaxBlocks(const TStorageConfig& config,
-                      const NYdb::NBS::NProto::EStorageMediaKind mediaKind,
-                      ui32 currentPartitions);
+ui64 ComputeMaxBlocks(
+    const TStorageConfig& config,
+    const NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    ui32 currentPartitions);
 
 TVolumeParams ComputeVolumeParams(
-    const TStorageConfig& config, ui32 blockSize, ui64 blocksCount,
-    NYdb::NBS::NProto::EStorageMediaKind mediaKind, ui32 partitionsCount,
-    const TString& cloudId, const TString& folderId, const TString& diskId,
-    bool isSystem, bool isOverlayDisk);
+    const TStorageConfig& config,
+    ui32 blockSize,
+    ui64 blocksCount,
+    NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    ui32 partitionsCount,
+    const TString& cloudId,
+    const TString& folderId,
+    const TString& diskId,
+    bool isSystem,
+    bool isOverlayDisk);
 
 }   // namespace NYdb::NBS::NStorage

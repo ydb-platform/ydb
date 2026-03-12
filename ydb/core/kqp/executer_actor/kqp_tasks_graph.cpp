@@ -2023,6 +2023,11 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 unknownAffectedShardCount = true;
                 break;
             }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
+                partitionsCount = originStageInfo.Tasks.size();
+                break;
+            }
             default:
                 break;
         }
@@ -2466,9 +2471,11 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
+        TString queryPath = "default";
         if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-            task.Meta.TaskParams.emplace("query_path", GetMeta().UserRequestContext->StreamingQueryPath);
+            queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
         }
+        task.Meta.TaskParams.emplace("query_path", queryPath);
 
         tasksIds.push_back(task.Id);
     }
@@ -2990,10 +2997,11 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-
+    TString queryPath = "default";
     if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-        task.Meta.TaskParams.emplace("query_path", GetMeta().UserRequestContext->StreamingQueryPath);
+        queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
     }
+    task.Meta.TaskParams.emplace("query_path", queryPath);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;

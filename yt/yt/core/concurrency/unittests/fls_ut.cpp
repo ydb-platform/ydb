@@ -63,7 +63,7 @@ TEST_F(TFlsTest, IsInitialized)
     })
         .AsyncVia(ActionQueue->GetInvoker())
         .Run()
-        .Get();
+        .BlockingGet();
 
     EXPECT_EQ(CtorCalls, 0);
     EXPECT_EQ(DtorCalls, 0);

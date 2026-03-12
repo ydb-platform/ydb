@@ -279,8 +279,7 @@ bool ScanColumns(
             }
 
             for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
-                for (ui32 inputIndex = 0; inputIndex < inputs.size(); ++inputIndex) {
-                    auto& x = inputs[inputIndex];
+                for (auto& x : inputs) {
                     if (priority != x.Priority) {
                         continue;
                     }
@@ -2072,7 +2071,7 @@ IGraphTransformer::TStatus SqlReplaceUnknownWrapper(const TExprNode::TPtr& input
 
     const auto typeAnn = input->Head().GetTypeAnn();
 
-    if (typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
+    if (typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
         if (typeAnn->Cast<TPgExprType>()->GetId() == NPg::UnknownOid) {
             const auto* newType = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("text").TypeId);
             output = ctx.Expr.Builder(input->Pos())
@@ -2270,7 +2269,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
         bool hasUnknownsAllowed = false;
         TExprNode::TPtr groupExprs;
         TExprNode::TPtr result;
-        bool isUsing = 0;
+        bool isUsing = false;
         THashMap<TString, TString> repeatedColumnsInUsing;
         THashMap<TString, const TTypeAnnotationNode*> usingColumnsAnnotation;
         // pass 0 - from/values
@@ -2455,6 +2454,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                                 }
 
                                                 if (x.Priority == TInput::External) {
+                                                    continue;
+                                                }
+
+                                                if (isYql && !x.Order) {
                                                     continue;
                                                 }
 
@@ -3174,7 +3177,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     if (!EnsureTupleMinSize(*child, 3, ctx.Expr)) {
                                         return IGraphTransformer::TStatus::Error;
                                     }
-                                    isUsing = 1;
+                                    isUsing = true;
                                     auto columnNames = child->Child(2);
                                     needRewriteUsing = child->ChildrenSize() == 3;
                                     for (ui32 i = 0; i < columnNames->ChildrenSize(); ++i) {

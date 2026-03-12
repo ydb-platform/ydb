@@ -23,7 +23,7 @@ public:
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
-            Self->RemoveNodeFromSegments(nodeId);
+            Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());

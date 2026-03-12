@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(Light) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(LightOverflow) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 

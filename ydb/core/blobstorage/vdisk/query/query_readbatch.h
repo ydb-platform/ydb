@@ -275,14 +275,16 @@ namespace NKikimr {
         TVDiskContextPtr VCtx;
         TPDiskCtxPtr PDiskCtx;
         TEvBlobStorage::TEvVGet::TPtr OrigEv;
-
+        NMonGroup::TReplGroup& ReplMonGroup;
 
         TReadBatcherCtx(TVDiskContextPtr vctx,
                         TPDiskCtxPtr pdiskCtx,
-                        TEvBlobStorage::TEvVGet::TPtr &ev)
+                        TEvBlobStorage::TEvVGet::TPtr &ev,
+                        NMonGroup::TReplGroup& replMonGroup)
             : VCtx(std::move(vctx))
             , PDiskCtx(std::move(pdiskCtx))
             , OrigEv(ev)
+            , ReplMonGroup(replMonGroup)
         {}
     };
 

@@ -67,11 +67,11 @@ class TMemoryUsageTrackerGuard
 public:
     TMemoryUsageTrackerGuard() = default;
     TMemoryUsageTrackerGuard(const TMemoryUsageTrackerGuard& other) = delete;
-    TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other);
+    TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other) noexcept;
     ~TMemoryUsageTrackerGuard();
 
     TMemoryUsageTrackerGuard& operator=(const TMemoryUsageTrackerGuard& other) = delete;
-    TMemoryUsageTrackerGuard& operator=(TMemoryUsageTrackerGuard&& other);
+    TMemoryUsageTrackerGuard& operator=(TMemoryUsageTrackerGuard&& other) noexcept;
 
     static TMemoryUsageTrackerGuard Build(
         IMemoryUsageTrackerPtr tracker,
@@ -85,11 +85,11 @@ public:
         i64 size,
         i64 granularity = 1);
 
-    void Release();
+    void Release() noexcept;
 
     //! Releases the guard but does not return memory to the tracker.
     //! The caller should care about releasing memory itself.
-    void ReleaseNoReclaim();
+    void ReleaseNoReclaim() noexcept;
 
     explicit operator bool() const;
 
@@ -106,7 +106,7 @@ private:
     i64 AcquiredSize_ = 0;
     i64 Granularity_ = 0;
 
-    void MoveFrom(TMemoryUsageTrackerGuard&& other);
+    void MoveFrom(TMemoryUsageTrackerGuard&& other) noexcept;
     TError SetSizeImpl(i64 size, auto acquirer);
 };
 
@@ -121,11 +121,11 @@ public:
 
     TMemoryTrackedBlob() = default;
     TMemoryTrackedBlob(const TMemoryTrackedBlob& other) = delete;
-    TMemoryTrackedBlob(TMemoryTrackedBlob&& other) = default;
+    TMemoryTrackedBlob(TMemoryTrackedBlob&& other) noexcept = default;
     ~TMemoryTrackedBlob() = default;
 
     TMemoryTrackedBlob& operator=(const TMemoryTrackedBlob& other) = delete;
-    TMemoryTrackedBlob& operator=(TMemoryTrackedBlob&& other) = default;
+    TMemoryTrackedBlob& operator=(TMemoryTrackedBlob&& other) noexcept = default;
 
     void Resize(
         i64 size,

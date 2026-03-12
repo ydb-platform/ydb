@@ -7,11 +7,11 @@
 
 namespace NYql::NFmr {
 
-class TTDSBlockIterator final: public IBlockIterator {
+class TTableDataServiceBlockIterator final: public IBlockIterator {
 public:
-    using TPtr = TIntrusivePtr<TTDSBlockIterator>;
+    using TPtr = TIntrusivePtr<TTableDataServiceBlockIterator>;
 
-    TTDSBlockIterator(
+    TTableDataServiceBlockIterator(
         TString tableId,
         std::vector<TTableRange> tableRanges,
         ITableDataService::TPtr tableDataService,
@@ -25,9 +25,11 @@ public:
 
     );
 
-    ~TTDSBlockIterator() final;
+    ~TTableDataServiceBlockIterator() final;
 
     bool NextBlock(TIndexedBlock& out) final;
+
+    std::vector<ESortOrder> GetSortOrder() final;
 
 private:
     void SetMinChunkInNewRange();
@@ -45,9 +47,9 @@ private:
     ui64 CurrentRange_ = 0;
     ui64 CurrentChunk_ = 0;
 
-    TMaybe<TFmrTableKeysBoundary> FirstBound_;
-    TMaybe<TFmrTableKeysBoundary> LastBound_;
-    TMaybe<bool> IsFirstBoundInclusive_;
+    TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
+    TMaybe<TFmrTableKeysBoundary> LastBoundary_;
+    bool IsFirstBoundInclusive_ = true;
 };
 
 } // namespace NYql::NFmr

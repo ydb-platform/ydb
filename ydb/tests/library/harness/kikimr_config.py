@@ -198,8 +198,9 @@ class KikimrConfigGenerator(object):
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            http_proxy_config=None,
             enable_nbs=False,
-            nbs_database="/Root/NBS",
+            nbs_database_name="/Root/NBS",
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -463,6 +464,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
         if deduplication_grouped_memory_limiter_config:
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
+        if http_proxy_config:
+            self.yaml_config["http_proxy_config"] = http_proxy_config
 
         self.__build()
         if self.grpc_ssl_enable:
@@ -600,7 +603,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["nbs_config"] = {
                 "enabled": True,
                 "nbs_storage_config": {
-                    "scheme_shard_dir": nbs_database,
+                    "scheme_shard_dir": nbs_database_name,
                     "folder_id": "testFolder",
                     "ssd_system_channel_pool_kind": "hdd",
                     "ssd_log_channel_pool_kind": "hdd",
@@ -631,6 +634,9 @@ class KikimrConfigGenerator(object):
                 self.yaml_config["fail_domain_type"] = "rack"
 
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
+
+            if self.domain_name != "Root":
+                self.yaml_config["domain_name"] = self.domain_name
 
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
                          'channel_profile_config']:
@@ -770,6 +776,10 @@ class KikimrConfigGenerator(object):
     @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
+
+    @property
+    def http_proxy_enabled(self):
+        return self.yaml_config.get('http_proxy_config', {}).get('enabled')
 
     @property
     def working_dir(self):

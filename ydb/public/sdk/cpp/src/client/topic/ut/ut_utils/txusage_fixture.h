@@ -268,8 +268,6 @@ protected:
                         std::uint32_t partitionId,
                         const std::string& boundary);
 
-    virtual bool GetEnableOltpSink() const;
-    virtual bool GetEnableOlapSink() const;
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
 
@@ -404,8 +402,6 @@ protected:
     void CreateRowTable(const std::string& path);
     void CreateColumnTable(const std::string& tablePath);
 
-    bool GetEnableOltpSink() const override;
-    bool GetEnableOlapSink() const override;
     bool GetEnableHtapTx() const override;
     bool GetAllowOlapDataQuery() const override;
 

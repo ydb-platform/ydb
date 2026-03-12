@@ -23,29 +23,29 @@ TYtBlockIterator::TYtBlockIterator(
         sortOrders.assign(KeyColumns_.size(), ESortOrder::Ascending);
     }
     if (sortOrders.size() != KeyColumns_.size()) {
-        sortOrders.assign(KeyColumns_.size(), ESortOrder::Ascending);
+        ythrow yexception() << "SortOrders and KeyColumns sizes are different";
     }
     SortOrders_ = std::move(sortOrders);
 
     if (firstRowKeys) {
-        FirstBound_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
-        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Bound");
+        FirstBoundary_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Boundary");
         IsFirstBoundInclusive_ = *isFirstRowKeysInclusive;
     }
     if (lastRowKeys) {
-        LastBound_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
     }
 }
 
 TYtBlockIterator::~TYtBlockIterator() = default;
 
 bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
-    if (FirstBound_) {
+    if (FirstBoundary_) {
         int c = CompareKeyRowsAcrossYsonBlocks(
             blob,
             row,
-            FirstBound_->Row,
-            FirstBound_->Markup,
+            FirstBoundary_->Row,
+            FirstBoundary_->Markup,
             SortOrders_
         );
         if (c < 0) { // if row < first bound
@@ -54,12 +54,12 @@ bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup
             return false;
         }
     }
-    if (LastBound_) {
+    if (LastBoundary_) {
         int c = CompareKeyRowsAcrossYsonBlocks(
             blob,
             row,
-            LastBound_->Row,
-            LastBound_->Markup,
+            LastBoundary_->Row,
+            LastBoundary_->Markup,
             SortOrders_
         );
         if (c > 0) { // if row > last bound
@@ -70,7 +70,7 @@ bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup
 }
 
 std::vector<TRowIndexMarkup> TYtBlockIterator::FilterRowsInKeyBounds(const TString& blob, const std::vector<TRowIndexMarkup>& rows) const {
-    if (!(FirstBound_ || LastBound_)) {
+    if (!(FirstBoundary_ || LastBoundary_)) {
         return rows;
     }
     std::vector<TRowIndexMarkup> filtered;
@@ -148,6 +148,10 @@ bool TYtBlockIterator::NextBlock(TIndexedBlock& out) {
             return true;
         }
     }
+}
+
+std::vector<ESortOrder> TYtBlockIterator::GetSortOrder() {
+    return SortOrders_;
 }
 
 } // namespace NYql::NFmr

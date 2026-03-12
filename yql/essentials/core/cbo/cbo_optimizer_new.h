@@ -9,6 +9,7 @@
 #include <memory>
 #include <map>
 #include <sstream>
+#include <utility>
 
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
@@ -330,7 +331,7 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
 
     TRelOptimizerNode(TString label, TOptimizerStatistics stats)
         : IBaseOptimizerNode(RelNodeType, std::move(stats))
-        , Label(label)
+        , Label(std::move(label))
     {
     }
 

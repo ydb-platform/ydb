@@ -661,7 +661,7 @@ class LongRemoteExecution(AbstractContextManager):
         return not self._finished
 
     def terminate(self) -> None:
-        execute_command(self.host, f'start-stop-daemon --stop --pidfile {self._pid_path}', raise_on_error=False)
+        execute_command(self.host, f'pkill -f {shlex.quote(self.cmd)}', raise_on_error=False)
 
     def _get_content(self, path: str) -> Optional[str]:
         res = execute_command(self.host, f'cat {path}', raise_on_error=False)

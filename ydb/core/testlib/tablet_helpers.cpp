@@ -413,11 +413,13 @@ namespace NKikimr {
 
             HasReset0 = true;
 
-            if (ENABLE_REBOOT_DISPATCH_LOG)
-                Cerr << "!Reset pipe\n";
+            TActorId targetActorId = event->GetRecipientRewrite();
+
+            if (ENABLE_REBOOT_DISPATCH_LOG) {
+                Cerr << "!Reset pipe (actor " << targetActorId << ") on event " << event->GetTypeName() << Endl;
+            }
 
             // Replace the event with PoisonPill in order to kill PipeClient or PipeServer
-            TActorId targetActorId = event->GetRecipientRewrite();
             runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
 
             return TTestActorRuntime::EEventAction::DROP;

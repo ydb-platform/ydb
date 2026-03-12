@@ -50,6 +50,8 @@ LIBRARY()
         group_metrics_exchange.cpp
         mon_main.cpp
         mon_main.h
+        recommissioner.cpp
+        recommissioner.h
         s3.h
         space_monitor.cpp
         space_monitor.h

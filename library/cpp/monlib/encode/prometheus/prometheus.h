@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <library/cpp/monlib/encode/encoder.h>
 #include <library/cpp/monlib/encode/format.h>
 
@@ -18,6 +20,12 @@ namespace NMonitoring {
 
     struct TPrometheusDecodeSettings {
         EPrometheusDecodeMode Mode{EPrometheusDecodeMode::DEFAULT};
+        /*
+         * Mangles the label that is equal to metricNameLabel. The
+         * new name must be not equal to any already present in the
+         * metric sample.
+         */
+        std::function<TString(TStringBuf)> NameMangler{};
     };
 
     IMetricEncoderPtr EncoderPrometheus(IOutputStream* out, TStringBuf metricNameLabel = "sensor");

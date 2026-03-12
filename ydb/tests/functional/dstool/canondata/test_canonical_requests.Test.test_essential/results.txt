@@ -40,6 +40,7 @@ dstool
 │  │  └─ usage-by-tablets               Estimate groups usage by tablets
 │  ├─ state                             Change or query group state
 │  ├─ take-snapshot                     Take snapshot of groups metadata
+│  ├─ resize                            Change group size in units
 │  ├─ list                              List groups
 │  └─ virtual
 │     ├─ create                         Create virtual group backed by BlobDepot

@@ -1,0 +1,13 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+$a = (SELECT Max(key) FROM Input);
+
+$b = '1' || (SELECT Max(key) FROM Input);
+
+$c = (SELECT Max(key) FROM Input) || '1';
+
+$d = '1' || (SELECT Max(key) FROM Input) || '1';
+
+SELECT $a, $b, $c, $d;

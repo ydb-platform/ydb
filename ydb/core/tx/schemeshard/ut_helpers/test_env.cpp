@@ -1293,7 +1293,7 @@ NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::Crea
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
-    Cdbg << Endl << "=========== RUN: "<< dispatchName << " ===========" << Endl;
+    Cdbg << Endl << "======" << TInstant::Now() << "===== RUN: "<< dispatchName << " ===========" << Endl;
 
     outActiveZone = false;
 

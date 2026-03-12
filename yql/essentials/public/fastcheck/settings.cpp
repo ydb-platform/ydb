@@ -58,7 +58,6 @@ bool BuildSqlTranslationSettings(
     settings.Arena = arena;
     settings.File = request.File;
     FillClusters(request, settings);
-    settings.EmitReadsForExists = true;
     settings.Antlr4Parser = true;
     settings.AnsiLexer = request.IsAnsiLexer;
     settings.SyntaxVersion = request.SyntaxVersion;

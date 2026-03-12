@@ -86,10 +86,11 @@ protected:
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
-                if (!Iter.Next(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (!Iter.Next(fetchResult)) {
                     return false;
                 }
-
+                Item->SetValue(CompCtx, std::move(fetchResult));
                 value = NewItem->GetValue(CompCtx);
                 return true;
             }
@@ -170,11 +171,12 @@ protected:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-            const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = Stream.Fetch(fetchResult);
             if (status != NUdf::EFetchStatus::Ok) {
                 return status;
             }
-
+            Item->SetValue(CompCtx, std::move(fetchResult));
             result = NewItem->GetValue(CompCtx);
             return NUdf::EFetchStatus::Ok;
         }
@@ -230,9 +232,9 @@ protected:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
 

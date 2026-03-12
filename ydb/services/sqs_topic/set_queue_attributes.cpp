@@ -54,7 +54,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TSetQueueAttributesActor:
         public TQueueUrlHolder,
-        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>
+        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>,
+        public TCdcStreamCompatible
     {
     protected:
         using TBase = TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>;
@@ -100,11 +101,23 @@ namespace NKikimr::NSqsTopic::V1 {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
-            if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                                                std::format("The specified queue doesn't exist")));
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (ProcessCdc(response)) {
+                        return;
+                    }
+                }
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
+                                                    std::format("The specified queue doesn't exist")));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
@@ -164,7 +177,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void SendAlterTopicRequest(const TActorContext& ctx) {
             std::pair<TString, TString> pathPair;
             try {
-                pathPair = NKikimr::NGRpcService::SplitPath(TQueueUrlHolder::FullTopicPath_);
+                pathPair = NKikimr::NGRpcService::SplitPath(TBase::GetTopicPath());
             } catch (const std::exception& ex) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, ex.what()));
             }
@@ -182,6 +195,10 @@ namespace NKikimr::NSqsTopic::V1 {
             NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
             modifyScheme.SetWorkingDir(workingDir);
+
+            if (TBase::GetCdcStreamName().Defined()) {
+                modifyScheme.SetAllowAccessToPrivatePaths(true);
+            }
 
             auto* alterConfig = modifyScheme.MutableAlterPersQueueGroup();
             alterConfig->CopyFrom(PQGroup);

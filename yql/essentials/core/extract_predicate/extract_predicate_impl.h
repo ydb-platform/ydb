@@ -1,13 +1,15 @@
 #pragma once
 
+#include <utility>
+
 #include "extract_predicate.h"
 
 namespace NYql::NDetail {
 
 class TPredicateRangeExtractor: public IPredicateRangeExtractor {
 public:
-    explicit TPredicateRangeExtractor(const TPredicateExtractorSettings& settings = {})
-        : Settings_(settings)
+    explicit TPredicateRangeExtractor(TPredicateExtractorSettings settings = {})
+        : Settings_(std::move(settings))
     {
     }
 

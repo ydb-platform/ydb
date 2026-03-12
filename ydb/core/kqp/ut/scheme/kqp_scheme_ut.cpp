@@ -139,7 +139,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        
+
         auto resultSet = result.GetResultSet(0);
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
@@ -4905,8 +4905,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TTestExtEnv env(settings);
         env.CreateDatabase("Test");
 
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        TTableClient domainClient(env.GetDriver());
+        auto domainSession = domainClient.CreateSession().GetValueSync().GetSession();
 
         {
             auto createUserSql = TStringBuilder() << R"(
@@ -4914,11 +4914,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE USER superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            auto result = domainSession.ExecuteSchemeQuery(createUserSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        auto tenantClientSettings = TClientSettings().Database("/Root/Test").DiscoveryMode(EDiscoveryMode::Off);
+        TTableClient tenantClient(env.GetDriver(), tenantClientSettings);
+        auto tenantSession = tenantClient.CreateSession().GetValueSync().GetSession();
+
         {
-            auto createUserSql = TStringBuilder() << R"(
+            auto createTableSql = TStringBuilder() << R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/Test/table` (
                     k Uint64,
@@ -4927,7 +4932,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
+            auto result = tenantSession.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -4936,7 +4941,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            auto result = tenantSession.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
 
             if (EnableAlterDatabase) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -4952,11 +4957,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER DATABASE `/Root/Test` OWNER TO superuser;
             )";
 
-            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            auto result = domainSession.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
 
             if (EnableAlterDatabase) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CheckOwner(session, "/Root/Test", "superuser");
+                CheckOwner(domainSession, "/Root/Test", "superuser");
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ALTER DATABASE statement is not supported");
@@ -10177,6 +10182,80 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(TransferMetricsLevel) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic`;
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                    FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin",
+                    METRICS_LEVEL = 1
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "PAUSED"
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    METRICS_LEVEL = 3
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTransfer) {
         using namespace NReplication;
 
@@ -11975,10 +12054,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(DoubleCreateResourcePoolClassifier, UseSink) {
+    Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
-        config.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));

@@ -35,6 +35,8 @@ public:
 
     bool NextBlock(TIndexedBlock& out) final;
 
+    std::vector<ESortOrder> GetSortOrder() final;
+
 private:
     bool RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const;
     std::vector<TRowIndexMarkup> FilterRowsInKeyBounds(const TString& blob, const std::vector<TRowIndexMarkup>& rows) const;
@@ -50,9 +52,9 @@ private:
     THolder<NYql::NCommon::IBlockReader> BlockReader_;
     THolder<NYql::NCommon::TInputBuf> InputBuf_;
 
-    TMaybe<TFmrTableKeysBoundary> FirstBound_;
-    TMaybe<TFmrTableKeysBoundary> LastBound_;
-    TMaybe<bool> IsFirstBoundInclusive_;
+    TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
+    TMaybe<TFmrTableKeysBoundary> LastBoundary_;
+    bool IsFirstBoundInclusive_ = true;
 };
 
 } // namespace NYql::NFmr

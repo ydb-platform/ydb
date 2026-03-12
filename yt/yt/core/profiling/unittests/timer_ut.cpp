@@ -63,7 +63,7 @@ TEST_F(TTimerTest, CpuEmpty)
     })
         .AsyncVia(Queue_->GetInvoker())
         .Run()
-        .Get();
+        .BlockingGet();
 
     EXPECT_LT(cpu, 10'000);
 }
@@ -83,7 +83,7 @@ TEST_F(TTimerTest, CpuWallCompare)
     })
         .AsyncVia(Queue_->GetInvoker())
         .Run()
-        .Get();
+        .BlockingGet();
 
     EXPECT_LT(cpu, 10'000);
     EXPECT_GT(wall, 80'000);

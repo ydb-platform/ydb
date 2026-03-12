@@ -75,6 +75,7 @@ struct TEnvironmentSetup {
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
         const bool StartFakeWilsonCollectors = false;
+        const bool EnableChunkKeeper = true;
     };
 
     const TSettings Settings;
@@ -532,8 +533,13 @@ config:
                     auto& icbControl = icb.ICB_CONTROL_PATH;                                \
                     TControlWrapper control(defaultVal, minVal, maxVal);                    \
                     TControlBoard::RegisterSharedControl(control, icbControl);              \
-                    control = currentValue;                                                 \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
+                    TIcbControlKey key{nodeId, #ICB_CONTROL_PATH};                          \
+                    if (IcbControls.contains(key)) {                                        \
+                        control = (i64)IcbControls[key];                                    \
+                    } else {                                                                \
+                        control = currentValue;                                             \
+                    }                                                                       \
+                    IcbControls[key] = std::move(control);                                  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -565,6 +571,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
 
 #undef ADD_ICB_CONTROL
 

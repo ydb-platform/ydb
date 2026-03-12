@@ -1422,7 +1422,7 @@ public:
     };
 
     TMaybe<TDeferredAtom> Value;
-    TMaybe<TDeferredAtom> ValueParamName;
+    TMaybe<TNodePtr> ValueExpr;
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:

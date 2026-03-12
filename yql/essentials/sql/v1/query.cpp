@@ -4433,8 +4433,8 @@ private:
         if (Params_.Value) {
             options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
         }
-        if (Params_.ValueParamName) {
-            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_param_name"), Params_.ValueParamName->Build())));
+        if (Params_.ValueExpr) {
+            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_expr"), *Params_.ValueExpr)));
         }
         if (Params_.InheritPermissions) {
             if (Params_.InheritPermissions->HasNode()) {

@@ -4859,7 +4859,7 @@ Y_UNIT_TEST(CreateSecret) {
                     .IsOk());
 }
 
-Y_UNIT_TEST(CreateSecretWithDeclare) {
+Y_UNIT_TEST(CreateSecretWithOneParam) {
     const auto res = SqlToYql(R"sql(
             USE plato; declare $foo as String; CREATE SECRET `secret-name` WITH (value = $foo);
         )sql");
@@ -4870,7 +4870,8 @@ Y_UNIT_TEST(CreateSecretWithDeclare) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("value_expr"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$foo"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
@@ -4895,7 +4896,7 @@ Y_UNIT_TEST(CreateSecretCorrect) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" '"secret-value")"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("value_expr"));
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };
@@ -4946,6 +4947,32 @@ Y_UNIT_TEST(CreateSecretCorrect) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
+}
+
+Y_UNIT_TEST(CreateSecretWithManyParams) {
+    const auto res = SqlToYql(R"sql(
+            USE plato; declare $sec1 as String; declare $sec2 as String; CREATE SECRET `secret-name` WITH (value = $sec1 || $sec2);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("value_expr"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$sec1"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$sec2"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Concat"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
 Y_UNIT_TEST(CreateSecretIncorrect) {
@@ -5022,7 +5049,7 @@ Y_UNIT_TEST(AlterSecret) {
                     .IsOk());
 }
 
-Y_UNIT_TEST(AlterSecretWithDeclare) {
+Y_UNIT_TEST(AlterSecretWithOneParam) {
     const auto res = SqlToYql(R"sql(
             USE plato; declare $foo as String; ALTER SECRET `secret-name` WITH (value = $foo);
         )sql");
@@ -5033,7 +5060,8 @@ Y_UNIT_TEST(AlterSecretWithDeclare) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("value_expr"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$foo"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
@@ -5057,10 +5085,36 @@ Y_UNIT_TEST(AlterSecretCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" '"secret-value")"));
-            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("value_expr"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };
+}
+
+Y_UNIT_TEST(AlterSecretWithManyParams) {
+    const auto res = SqlToYql(R"sql(
+            USE plato; declare $sec1 as String; declare $sec2 as String; ALTER SECRET `secret-name` WITH (value = $sec1 || $sec2);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("value_expr"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$sec1"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("$sec2"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Concat"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
 Y_UNIT_TEST(AlterSecretIncorrect) {

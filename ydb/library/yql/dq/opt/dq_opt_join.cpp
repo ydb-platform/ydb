@@ -1264,8 +1264,6 @@ TCoLambda PrepareJoinSide(
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(check), [&](const TCoAtom& key) { return key.Ptr(); });
         std::for_each(remap.cbegin(), remap.cend(), [&](const TModifyKeysList::value_type& key) {
             if (useBlockJoin) {
-                // For block hash join: use SkipNullMembers for all keys to maintain block compatibility.
-                // FilterNullMembers is not block-convertible; the peephole ExpandJoinInput handles unwrapping.
                 check.emplace_back(std::get<1>(key).Ptr());
             } else {
                 (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());

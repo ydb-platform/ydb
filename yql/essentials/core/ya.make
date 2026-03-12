@@ -49,7 +49,6 @@ SRCS(
     yql_opt_utils.h
     yql_opt_window.cpp
     yql_opt_window.h
-    yql_statistics.cpp
     yql_type_annotation.cpp
     yql_type_annotation.h
     yql_type_helpers.cpp
@@ -73,6 +72,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/opt/cbo
+    yql/essentials/core/statistics
     library/cpp/enumbitset
     library/cpp/random_provider
     library/cpp/threading/future
@@ -109,14 +110,13 @@ GENERATE_ENUM_SERIALIZATION(yql_user_data.h)
 
 GENERATE_ENUM_SERIALIZATION(yql_type_annotation.h)
 
-GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
-
 YQL_LAST_ABI_VERSION()
 
 END()
 
 RECURSE(
     cbo
+    statistics
     credentials
     dq_expr_nodes
     dq_integration

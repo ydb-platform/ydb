@@ -13,7 +13,16 @@
 #include <unordered_set>
 #include <functional>
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
+
+bool operator<(const TJoinColumn& c1, const TJoinColumn& c2) {
+    if (c1.RelName < c2.RelName) {
+        return true;
+    } else if (c1.RelName == c2.RelName) {
+        return c1.AttributeName < c2.AttributeName;
+    }
+    return false;
+}
 
 bool TOrdering::operator==(const TOrdering& other) const {
     return std::tie(this->Type, this->Items, this->Directions) ==
@@ -141,7 +150,7 @@ TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TString&
     return TBaseColumn("", renamedColumn);
 }
 
-TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn) {
+TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TJoinColumn& renamedColumn) {
     return GetBaseColumnByRename(renamedColumn.RelName + "." + renamedColumn.AttributeName);
 }
 
@@ -1213,12 +1222,12 @@ TTableAliasMap::TBaseColumn& TTableAliasMap::TBaseColumn::operator=(const TBaseC
     return *this;
 }
 
-NDq::TJoinColumn TTableAliasMap::TBaseColumn::ToJoinColumn() {
-    return NDq::TJoinColumn(Relation, Column);
+TJoinColumn TTableAliasMap::TBaseColumn::ToJoinColumn() {
+    return TJoinColumn(Relation, Column);
 }
 
 TTableAliasMap::TBaseColumn::operator bool() {
     return !(Relation.empty() && Column.empty());
 }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

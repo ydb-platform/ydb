@@ -12,8 +12,6 @@
 namespace NYql {
     class IOptimizationContext;
     struct TTypeAnnotationContext;
-    struct IProviderContext;
-    struct TRelOptimizerNode;
     struct TOptimizerStatistics;
 }
 

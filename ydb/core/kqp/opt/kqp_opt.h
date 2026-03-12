@@ -32,7 +32,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     int JoinsCount{};
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
-    std::shared_ptr<NYql::TOptimizerHints> Hints{};
+    std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
     NYql::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
@@ -49,15 +49,15 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
         }
     }
 
-    NYql::TOptimizerHints GetOptimizerHints() {
+    NKikimr::NKqp::TOptimizerHints GetOptimizerHints() {
         if (Config->OptimizerHints.Get()) {
             if (!Hints) {
-                Hints = std::make_shared<NYql::TOptimizerHints>(*Config->OptimizerHints.Get());
+                Hints = std::make_shared<NKikimr::NKqp::TOptimizerHints>(*Config->OptimizerHints.Get());
             }
             return *Hints;
         }
 
-        return NYql::TOptimizerHints();
+        return NKikimr::NKqp::TOptimizerHints();
     }
 
     bool IsDataQuery() const {

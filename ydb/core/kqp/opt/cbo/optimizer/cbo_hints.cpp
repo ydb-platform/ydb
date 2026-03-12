@@ -1,10 +1,10 @@
-#include "cbo_optimizer_new.h"
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <library/cpp/iterator/zip.h>
 
-using namespace NYql;
+using namespace NKikimr::NKqp;
 
 TString ToLower(TString s) {
     for (char& c : s) {

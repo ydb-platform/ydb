@@ -1896,7 +1896,9 @@ public:
         if (Settings.Database) {
             GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.size() - 1));
         }
-        GUCSettings->Set("ydb_user", Settings.UserName.GetOrElse(""));
+        if (Settings.UserName) {
+            GUCSettings->Set("ydb_user", *Settings.UserName);
+        }
     }
 
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {

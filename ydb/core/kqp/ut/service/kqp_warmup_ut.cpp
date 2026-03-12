@@ -985,7 +985,7 @@ namespace {
             UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
                 "At least one sysview request should have been intercepted");
         }
-        Y_UNIT_TEST(WarmupPgSyntaxQueries) {
+        Y_UNIT_TEST(WarmupPgSyntaxQueriesSkipped) {
             TWarmupTestParams params;
             params.UserSids = {"user0"};
             params.FillCache = false;
@@ -1061,17 +1061,17 @@ namespace {
                 UNIT_ASSERT_C(foundYqlSyntax, "Sysview should store SYNTAX_YQL_V1 for YQL queries");
             }
 
+            // PG warmup is temporarily disabled (see kqp_warmup_compile_actor.cpp PG filter).
+            // Warmup should succeed but only compile YQL queries, skipping PG ones.
             TWarmupTestEnv env{kikimr, runtime, false, 0, params.NodeCount, params.UserSids, 0};
             TKqpWarmupConfig warmupActorConfig;
             auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
 
             UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
-                "Warmup should succeed for mixed PG/YQL queries: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded >= 3,
-                "Should load at least 3 entries (2 PG + 1 YQL). Loaded: " << warmupComplete->Get()->EntriesLoaded);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
-                "No entries should fail. Failed: " << warmupComplete->Get()->EntriesFailed);
+                "Warmup should succeed when PG queries are skipped: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded >= 1,
+                "Should load at least 1 YQL entry (PG skipped). Loaded: " << warmupComplete->Get()->EntriesLoaded);
         }
 
         Y_UNIT_TEST(WarmupMixedQueryTypes) {

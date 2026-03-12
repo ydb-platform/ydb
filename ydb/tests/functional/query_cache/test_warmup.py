@@ -2,12 +2,12 @@ import logging
 import time
 import requests
 
-logger = logging.getLogger(__name__)
-
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
+
+logger = logging.getLogger(__name__)
 
 
 WARMUP_DEADLINE_SECONDS = 30

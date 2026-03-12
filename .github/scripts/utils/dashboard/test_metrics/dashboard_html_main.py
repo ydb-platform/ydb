@@ -271,7 +271,7 @@ def build_html_dashboard(
     <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
     <div class="box">
       <ul>
-        <li><b>By suites (stacked):</b> Sum of <i>peak</i> RAM/CPU per active chunk at each time. Can exceed actual system RAM because peaks occurred at different moments.</li>
+        <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code>.</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
@@ -279,6 +279,8 @@ def build_html_dashboard(
         <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
         <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
+        <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
+        <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is read from <code>ya.make</code>. Column <code>chunks</code> is real runtime chunk count from evlog/report. Highlight means mismatch (<code>chunks != SPLIT_FACTOR</code>), which can explain differences between expected and observed parallelism.</li>
       </ul>
       <details style="margin-top:8px;">
         <summary><b>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</b></summary>

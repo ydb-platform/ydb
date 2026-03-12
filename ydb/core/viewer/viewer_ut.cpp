@@ -2214,6 +2214,7 @@ Y_UNIT_TEST_SUITE(ViewerColumnTableLocalIndex) {
 
             const auto& children = pathDescription["Children"];
             bool foundIndex = false;
+            bool foundSys = false;
             for (const auto& child : children.GetArray()) {
                 if (child["Name"].GetString() == "bloom_data") {
                     foundIndex = true;
@@ -2222,9 +2223,14 @@ Y_UNIT_TEST_SUITE(ViewerColumnTableLocalIndex) {
                         static_cast<int>(NKikimrSchemeOp::EPathType::EPathTypeTableIndex),
                         "bloom_data must be EPathTypeTableIndex");
                 }
+                if (child["Name"].GetString() == ".sys") {
+                    foundSys = true;
+                }
             }
             UNIT_ASSERT_C(foundIndex,
                 "Local bloom index 'bloom_data' not found in describe children. Response: " + describeResponse);
+            UNIT_ASSERT_C(!foundSys,
+                ".sys must not be visible under column table. Response: " + describeResponse);
         }
 
         {

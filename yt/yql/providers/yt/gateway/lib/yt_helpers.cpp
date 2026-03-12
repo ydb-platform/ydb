@@ -331,6 +331,7 @@ static bool IterateRows(NYT::ITransactionPtr tx,
     TMkqlIOCache& specsCache,
     IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
+    const bool supportRLSTables,
     const TMaybe<TSampleParams>& sampling)
 {
     const ui64 startRecordInTable = limiter.GetTableStart();
@@ -349,6 +350,11 @@ static bool IterateRows(NYT::ITransactionPtr tx,
     }
 
     NYT::TTableReaderOptions readerOptions;
+    if (supportRLSTables) {
+        // OmitInaccessibleRows is required for RLS tables
+        readerOptions.OmitInaccessibleRows(true);
+    }
+
     if (sampling) {
         NYT::TNode spec = NYT::TNode::CreateMap();
         spec["sampling_rate"] = sampling->Percentage / 100.;
@@ -397,9 +403,10 @@ bool IterateYamredRows(NYT::ITransactionPtr tx,
     TMkqlIOCache& specsCache,
     IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
+    const bool supportRLSTables,
     const TMaybe<TSampleParams>& sampling)
 {
-    return IterateRows<true>(tx, table, tableIndex, specsCache, exec, limiter, sampling);
+    return IterateRows<true>(tx, table, tableIndex, specsCache, exec, limiter, supportRLSTables, sampling);
 }
 
 bool IterateYsonRows(NYT::ITransactionPtr tx,
@@ -408,9 +415,10 @@ bool IterateYsonRows(NYT::ITransactionPtr tx,
     TMkqlIOCache& specsCache,
     IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
+    const bool supportRLSTables,
     const TMaybe<TSampleParams>& sampling)
 {
-    return IterateRows<false>(tx, table, tableIndex, specsCache, exec, limiter, sampling);
+    return IterateRows<false>(tx, table, tableIndex, specsCache, exec, limiter, supportRLSTables, sampling);
 }
 
 bool SelectRows(NYT::IClientPtr client,

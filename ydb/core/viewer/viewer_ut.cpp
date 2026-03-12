@@ -780,8 +780,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&fields_required=SystemState HTTP/1.1\r\n\r\n", endpoint, {});
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("database", "/Root/serverless");
+        httpReq.CgiParameters.emplace("direct", "1");
+        httpReq.CgiParameters.emplace("fields_required", "SystemState");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -807,12 +812,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                     auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
                     for (auto& nodeInfo : *nodes) {
-                        NActorsInterconnect::TNodeLocation location;
-                        location.SetBridgePileName("pile0");
-                        location.SetDataCenter("az-2");
-                        location.SetRack("eu-north1-c-13ct2");
-                        location.SetUnit("1");
-                        nodeInfo.Location = TNodeLocation(location);
+                        nodeInfo.Location = TNodeLocation("az-2", "", "eu-north1-c-13ct2", "1");
                     }
                     auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
                         new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
@@ -823,7 +823,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     for (auto& systemStateInfo : *(*x)->Get()->Record.MutableSystemStateInfo()) {
-                        systemStateInfo.MutableLocation()->ClearBridgePileName();
                         systemStateInfo.MutableLocation()->ClearDataCenter();
                         systemStateInfo.MutableLocation()->ClearRack();
                         systemStateInfo.MutableLocation()->ClearUnit();
@@ -860,7 +859,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& systemState = node.at("SystemState").GetMap();
         UNIT_ASSERT(systemState.contains("Location"));
         const auto& location = systemState.at("Location").GetMap();
-        UNIT_ASSERT_VALUES_EQUAL(location.at("BridgePileName").GetStringSafe(), "pile0");
         UNIT_ASSERT_VALUES_EQUAL(location.at("DataCenter").GetStringSafe(), "az-2");
         UNIT_ASSERT_VALUES_EQUAL(location.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
         UNIT_ASSERT_VALUES_EQUAL(location.at("Unit").GetStringSafe(), "1");

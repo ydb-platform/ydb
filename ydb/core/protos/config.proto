@@ -1987,6 +1987,15 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TBootstrapperControls {
+        optional uint64 DisableLocalBootstrappers = 1 [(ControlOptions) = {
+            Description: "Disable tablet bootstrappers on this node (stops tablets bootstrapped on this node)",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+    }
+
     message TGRpcControls {
         message TRequestConfig {
             optional uint64 MaxInFlight = 1 [(ControlOptions) = {
@@ -2207,6 +2216,7 @@ message TImmediateControlsConfig {
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
+    optional TBootstrapperControls BootstrapperControls = 20;
 };
 
 message TMeteringConfig {

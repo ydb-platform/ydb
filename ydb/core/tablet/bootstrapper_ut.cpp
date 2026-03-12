@@ -439,6 +439,82 @@ void SendConfigUpdate(TTestBasicRuntime& runtime,
     }
 }
 
+constexpr ui64 BootstrapperTestTabletId0 = 72075186232723360ULL;
+constexpr ui64 BootstrapperTestTabletId1 = 72075186232723361ULL;
+constexpr ui32 BootstrapperControlsWakeupIntervalSeconds = 5;
+constexpr ui32 BootstrapperControlsWaitTimeoutSeconds = 7;
+
+void AddDummyTablet(
+        NKikimrConfig::TBootstrap& bootstrapConfig,
+        TTestBasicRuntime& runtime,
+        ui64 tabletId,
+        std::initializer_list<ui32> nodeIdxs)
+{
+    auto* tablet = bootstrapConfig.AddTablet();
+    tablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+    tablet->MutableInfo()->SetTabletID(tabletId);
+    tablet->SetAllowDynamicConfiguration(true);
+    for (ui32 nodeIdx : nodeIdxs) {
+        tablet->AddNode(runtime.GetNodeId(nodeIdx));
+    }
+    FillDummyTabletChannels(tablet->MutableInfo());
+}
+
+TActorId StartConfiguredBootstrapper(
+        TTestBasicRuntime& runtime,
+        const NKikimrConfig::TBootstrap& bootstrapConfig,
+        ui32 nodeIdx)
+{
+    auto configuredBootstrapper = runtime.Register(CreateConfiguredTabletBootstrapper(bootstrapConfig), nodeIdx);
+    runtime.EnableScheduleForActor(configuredBootstrapper);
+    return configuredBootstrapper;
+}
+
+TVector<TActorId> StartConfiguredBootstrappers(
+        TTestBasicRuntime& runtime,
+        const NKikimrConfig::TBootstrap& bootstrapConfig,
+        std::initializer_list<ui32> nodeIdxs)
+{
+    TVector<TActorId> configuredBootstrappers;
+    configuredBootstrappers.reserve(nodeIdxs.size());
+    for (ui32 nodeIdx : nodeIdxs) {
+        configuredBootstrappers.push_back(StartConfiguredBootstrapper(runtime, bootstrapConfig, nodeIdx));
+    }
+    return configuredBootstrappers;
+}
+
+TString GetDisableBootstrapperControlName(ui64 tabletId)
+{
+    return "DisableBootstrapper_" + ToString(tabletId);
+}
+
+void ConnectAndExpectStatus(
+        TTestBasicRuntime& runtime,
+        ui64 tabletId,
+        const TActorId& observer,
+        ui32 nodeIdx,
+        const NTabletPipe::TClientRetryPolicy& retryPolicy,
+        NKikimrProto::EReplyStatus expectedStatus)
+{
+    auto pipe = runtime.ConnectToPipe(tabletId, observer, nodeIdx, retryPolicy);
+    Y_UNUSED(pipe);
+    auto connectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer);
+    UNIT_ASSERT_VALUES_EQUAL(connectEvent->Get()->Status, expectedStatus);
+}
+
+void ConnectAndExpectOk(TTestBasicRuntime& runtime, ui64 tabletId, const TActorId& observer, ui32 nodeIdx)
+{
+    ConnectAndExpectStatus(runtime, tabletId, observer, nodeIdx, NTabletPipe::TClientRetryPolicy::WithRetries(), NKikimrProto::OK);
+}
+
+void ConnectAndExpectNotOk(TTestBasicRuntime& runtime, ui64 tabletId, const TActorId& observer, ui32 nodeIdx)
+{
+    auto pipe = runtime.ConnectToPipe(tabletId, observer, nodeIdx, NTabletPipe::TClientRetryPolicy::WithoutRetries());
+    Y_UNUSED(pipe);
+    auto connectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer);
+    UNIT_ASSERT_VALUES_UNEQUAL(connectEvent->Get()->Status, NKikimrProto::OK);
+}
+
 Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
 
     Y_UNIT_TEST(BasicInitialization) {
@@ -541,11 +617,10 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         FillDummyTabletChannels(tablet->MutableInfo());
 
         // create configured bootstrappers on all nodes
-        [[maybe_unused]] auto configuredBootstrapper0 = runtime.Register(
-            CreateConfiguredTabletBootstrapper(initialConfig), 0);
-        [[maybe_unused]] auto configuredBootstrapper1 = runtime.Register(
-            CreateConfiguredTabletBootstrapper(initialConfig), 1);
-
+        auto configuredBootstrapper0 = runtime.Register(CreateConfiguredTabletBootstrapper(initialConfig), 0);
+        Y_UNUSED(configuredBootstrapper0);
+        auto configuredBootstrapper1 = runtime.Register(CreateConfiguredTabletBootstrapper(initialConfig), 1);
+        Y_UNUSED(configuredBootstrapper1);
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
         // verify tablet is available on node 0
@@ -626,14 +701,18 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         FillDummyTabletChannels(tablet->MutableInfo());
 
         // create configured bootstrappers on all nodes
-        [[maybe_unused]] auto configuredBootstrapper0 = runtime.Register(
+        auto configuredBootstrapper0 = runtime.Register(
             CreateConfiguredTabletBootstrapper(initialConfig), 0);
-        [[maybe_unused]] auto configuredBootstrapper1 = runtime.Register(
+        auto configuredBootstrapper1 = runtime.Register(
             CreateConfiguredTabletBootstrapper(initialConfig), 1);
-        [[maybe_unused]] auto configuredBootstrapper2 = runtime.Register(
+        auto configuredBootstrapper2 = runtime.Register(
             CreateConfiguredTabletBootstrapper(initialConfig), 2);
-        [[maybe_unused]] auto configuredBootstrapper3 = runtime.Register(
+        auto configuredBootstrapper3 = runtime.Register(
             CreateConfiguredTabletBootstrapper(initialConfig), 3);
+        Y_UNUSED(configuredBootstrapper0);
+        Y_UNUSED(configuredBootstrapper1);
+        Y_UNUSED(configuredBootstrapper2);
+        Y_UNUSED(configuredBootstrapper3);
 
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
@@ -713,5 +792,268 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
     }
 
 } // Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest)
+
+Y_UNIT_TEST_SUITE(BootstrapperControlsTest) {
+
+    Y_UNIT_TEST(IcbDisableLocalBootstrappers) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        bool gotClientDestroyed0 = false;
+        bool gotClientConnected0 = false;
+        bool watchReconnect0 = false;
+
+        // tablet 0 lives on node 0, tablet 1 on node 1
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId0, {0});
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId1, {1});
+        auto configuredBootstrappers = StartConfiguredBootstrappers(runtime, bootstrapConfig, {0, 1});
+        Y_UNUSED(configuredBootstrappers);
+
+        auto clientDestroyedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientDestroyed>([&](TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0) {
+                gotClientDestroyed0 = true;
+            }
+        });
+        Y_UNUSED(clientDestroyedObserver);
+
+        auto clientConnectedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+            if (watchReconnect0 && ev->Get()->TabletId == BootstrapperTestTabletId0 && ev->Get()->Status == NKikimrProto::OK) {
+                gotClientConnected0 = true;
+            }
+        });
+        Y_UNUSED(clientConnectedObserver);
+
+        Cerr << "Waiting for bootstrapper to start" << Endl;
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto observer0 = runtime.AllocateEdgeActor(0);
+        Cerr << "Connecting to tablet 0" << Endl;
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer0, 0);
+
+        Cerr << "Connecting to tablet 1" << Endl;
+        auto observer1 = runtime.AllocateEdgeActor(1);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer1, 1);
+
+        // disable local bootstrappers on node 0
+        auto& icb0 = runtime.GetAppData(0).Icb;
+        TControlBoard::SetValue(true, icb0->BootstrapperControls.DisableLocalBootstrappers);
+
+        runtime.WaitFor("tablet 0 pipe to disconnect after ICB disable", [&] {
+            return gotClientDestroyed0;
+        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
+
+        UNIT_ASSERT_C(gotClientDestroyed0, "Tablet 0 pipe did not disconnect after ICB disable");
+
+        auto destroyedEvent0 = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(observer0);
+        Y_UNUSED(destroyedEvent0);
+        Cerr << "Receive client destroyed" << Endl;
+
+        auto observer1Check = runtime.AllocateEdgeActor(1);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer1Check, 1);
+
+        // enable them back and wait for restart
+        TControlBoard::SetValue(false, icb0->BootstrapperControls.DisableLocalBootstrappers);
+        watchReconnect0 = true;
+        gotClientConnected0 = false;
+
+        auto pipe0New = runtime.ConnectToPipe(BootstrapperTestTabletId0, observer0, 0, NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(pipe0New);
+
+        runtime.WaitFor("tablet 0 to restart after ICB re-enable", [&] {
+            return gotClientConnected0;
+        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
+
+        auto connectEvent0New = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer0);
+        UNIT_ASSERT_VALUES_EQUAL(connectEvent0New->Get()->Status, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(DcbDisableSpecificTablet) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        bool gotDestroyed0 = false;
+        bool gotReconnect0 = false;
+
+        // both tablets are local to node 0
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId0, {0});
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId1, {0});
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, bootstrapConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        auto clientDestroyedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientDestroyed>([&](TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0) {
+                gotDestroyed0 = true;
+            }
+        });
+        Y_UNUSED(clientDestroyedObserver);
+
+        auto clientConnectedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0 && ev->Get()->Status == NKikimrProto::OK) {
+                gotReconnect0 = true;
+            }
+        });
+        Y_UNUSED(clientConnectedObserver);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto observer1 = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer1, 0);
+
+        auto observer2 = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer2, 0);
+
+        // disable only tablet 0 via dcb
+        auto& dcb = runtime.GetAppData(0).Dcb;
+        TString controlName = GetDisableBootstrapperControlName(BootstrapperTestTabletId0);
+        TAtomic prevValue;
+        dcb->SetValue(controlName, static_cast<TAtomic>(1), prevValue);
+
+        runtime.WaitFor("tablet 0 pipe disconnect after DCB disable", [&] {
+            return gotDestroyed0;
+        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
+
+        auto destroyedEvent1 = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(observer1);
+        Y_UNUSED(destroyedEvent1);
+
+        auto observer2Check = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer2Check, 0);
+
+        // re-enable tablet 0 and wait for reconnect
+        gotReconnect0 = false;
+        dcb->SetValue(controlName, static_cast<TAtomic>(0), prevValue);
+
+        auto pipe1New = runtime.ConnectToPipe(BootstrapperTestTabletId0, observer1, 0, NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(pipe1New);
+        runtime.WaitFor("tablet 0 reconnect after DCB enable", [&] {
+            return gotReconnect0;
+        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
+
+        auto connectEvent1New = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer1);
+        UNIT_ASSERT_VALUES_EQUAL(connectEvent1New->Get()->Status, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(DcbControlPriority) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        bool gotDestroyed = false;
+
+        // single local tablet controlled by both dcb and icb
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId0, {0});
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, bootstrapConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        auto clientDestroyedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientDestroyed>([&](TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0) {
+                gotDestroyed = true;
+            }
+        });
+        Y_UNUSED(clientDestroyedObserver);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto observer = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer, 0);
+
+        auto& dcb = runtime.GetAppData(0).Dcb;
+        TString controlName = GetDisableBootstrapperControlName(BootstrapperTestTabletId0);
+        TAtomic prevValue;
+        dcb->SetValue(controlName, static_cast<TAtomic>(1), prevValue);
+
+        runtime.WaitFor("tablet disconnect after DCB disable in priority test", [&] {
+            return gotDestroyed;
+        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
+
+        auto destroyedEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(observer);
+        Y_UNUSED(destroyedEvent);
+
+        // icb should keep tablet disabled after dcb is cleared
+        auto& icb = runtime.GetAppData(0).Icb;
+        TControlBoard::SetValue(true, icb->BootstrapperControls.DisableLocalBootstrappers);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        dcb->SetValue(controlName, static_cast<TAtomic>(0), prevValue);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        auto observerCheck = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectNotOk(runtime, BootstrapperTestTabletId0, observerCheck, 0);
+
+        // once icb is cleared the tablet may start again
+        TControlBoard::SetValue(false, icb->BootstrapperControls.DisableLocalBootstrappers);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        auto pipeNew = runtime.ConnectToPipe(BootstrapperTestTabletId0, observer, 0, NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(pipeNew);
+        auto connectEventNew = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer);
+        UNIT_ASSERT_VALUES_EQUAL(connectEventNew->Get()->Status, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(IcbDisabledBeforeBootstrapperStart) {
+        TTestBasicRuntime runtime(1);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        // icb is set before bootstrapper startup
+        auto& icb = runtime.GetAppData(0).Icb;
+        TControlBoard::SetValue(true, icb->BootstrapperControls.DisableLocalBootstrappers);
+
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId0, {0});
+
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, bootstrapConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        auto observer = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectNotOk(runtime, BootstrapperTestTabletId0, observer, 0);
+
+        // clearing icb should allow startup
+        TControlBoard::SetValue(false, icb->BootstrapperControls.DisableLocalBootstrappers);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer, 0);
+    }
+
+    Y_UNIT_TEST(DcbDisabledBeforeBootstrapperStart) {
+        TTestBasicRuntime runtime(1);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        // dcb is preconfigured before bootstrapper startup
+        auto& dcb = runtime.GetAppData(0).Dcb;
+        TString controlName = GetDisableBootstrapperControlName(BootstrapperTestTabletId0);
+        TControlWrapper preconfiguredControl(1);
+        UNIT_ASSERT(dcb->RegisterLocalControl(preconfiguredControl, controlName));
+
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        AddDummyTablet(bootstrapConfig, runtime, BootstrapperTestTabletId0, {0});
+
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, bootstrapConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        auto observer = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectNotOk(runtime, BootstrapperTestTabletId0, observer, 0);
+
+        // clearing dcb should allow startup
+        TAtomic prevValue;
+        dcb->SetValue(controlName, static_cast<TAtomic>(0), prevValue);
+
+        runtime.SimulateSleep(TDuration::Seconds(BootstrapperControlsWakeupIntervalSeconds + 1));
+
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer, 0);
+    }
+
+} // Y_UNIT_TEST_SUITE(BootstrapperControlsTest)
 
 } // namespace NKikimr

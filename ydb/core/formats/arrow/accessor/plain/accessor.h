@@ -39,7 +39,6 @@ protected:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
 
 public:
-
     virtual void Reallocate() override;
 
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
@@ -54,7 +53,8 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
@@ -67,7 +67,8 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
-        , Array(BuildArrayFromScalar(scalar)) {
+        , Array(BuildArrayFromScalar(scalar))
+    {
     }
 
     template <class TArrowDataType = arrow::StringType>
@@ -159,7 +160,8 @@ protected:
 public:
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 };
 

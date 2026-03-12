@@ -64,7 +64,8 @@ public:
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,
         const std::shared_ptr<arrow::DataType>& type)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray, type)
-        , Chunks(std::move(chunks)) {
+        , Chunks(std::move(chunks))
+    {
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
@@ -95,7 +96,8 @@ public:
 
     public:
         TIterator(const std::shared_ptr<TCompositeChunkedArray>& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             if (Owner->GetRecordsCount()) {
                 CurrentChunk = Owner->GetArray(CurrentChunk, RecordIndex, Owner);
             }
@@ -137,7 +139,8 @@ public:
 
     public:
         TBuilder(const std::shared_ptr<arrow::DataType>& type)
-            : Type(type) {
+            : Type(type)
+        {
             AFL_VERIFY(Type);
         }
 

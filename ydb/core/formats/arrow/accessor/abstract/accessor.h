@@ -14,7 +14,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NScheme {
-    class TTypeInfo;
+class TTypeInfo;
 }
 
 namespace NKikimr::NArrow::NSerialization {
@@ -47,8 +47,8 @@ struct TMinMax {
 
 class IChunkedArray {
 public:
-// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
-    enum class EType : ui8 {
+    // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
+    enum class EType: ui8 {
         Undefined = 0,
         Array = 1,
         ChunkedArray = 2,
@@ -87,7 +87,8 @@ public:
         TCommonChunkAddress(const ui64 start, const ui64 finish, const ui64 index)
             : StartPosition(start)
             , FinishPosition(finish)
-            , ChunkIndex(index) {
+            , ChunkIndex(index)
+        {
             AFL_VERIFY(FinishPosition > StartPosition);
         }
     };
@@ -155,7 +156,8 @@ public:
     public:
         TFullChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, TAddressChain&& address)
             : Array(arr)
-            , Address(std::move(address)) {
+            , Address(std::move(address))
+        {
             AFL_VERIFY(Address.GetSize());
             AFL_VERIFY(Array);
             AFL_VERIFY(Array->GetRecordsCount());
@@ -174,14 +176,16 @@ public:
 
         TLocalChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const TCommonChunkAddress& address)
             : Array(arr)
-            , Address(address) {
+            , Address(address)
+        {
             AFL_VERIFY(arr);
             AFL_VERIFY(address.GetLength() == (ui32)arr->GetRecordsCount());
         }
 
         TLocalChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const ui32 start, const ui32 chunkIdx)
             : Array(arr)
-            , Address(TCommonChunkAddress(start, start + TValidator::CheckNotNull(arr)->GetRecordsCount(), chunkIdx)) {
+            , Address(TCommonChunkAddress(start, start + TValidator::CheckNotNull(arr)->GetRecordsCount(), chunkIdx))
+        {
         }
     };
 
@@ -199,7 +203,8 @@ public:
 
         TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
             : Array(arr)
-            , Address(std::move(address)) {
+            , Address(std::move(address))
+        {
             AFL_VERIFY(Array);
             AFL_VERIFY(Address.GetSize());
         }
@@ -219,12 +224,14 @@ public:
 
         TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const ui32 start, const ui32 chunkIdx)
             : Array(arr)
-            , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx) {
+            , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx)
+        {
         }
 
         TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const TCommonChunkAddress& address)
             : Array(arr)
-            , Address(address) {
+            , Address(address)
+        {
             AFL_VERIFY(address.GetLength() == (ui32)arr->length());
         }
     };
@@ -245,7 +252,8 @@ public:
 
         TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
             : Array(arr)
-            , Position(position) {
+            , Position(position)
+        {
             AFL_VERIFY(!!Array);
             AFL_VERIFY(position < (ui32)Array->length());
         }
@@ -415,7 +423,8 @@ public:
 
     public:
         TReader(const std::shared_ptr<IChunkedArray>& data)
-            : ChunkedArray(data) {
+            : ChunkedArray(data)
+        {
             AFL_VERIFY(ChunkedArray);
         }
 
@@ -454,7 +463,7 @@ public:
         AFL_VERIFY(GetRecordsCount());
         return DoGetMaxScalar();
     }
-    
+
     TMinMax GetMinMaxScalars() const {
         AFL_VERIFY(GetRecordsCount());
         return DoGetMinMaxScalars();
@@ -533,7 +542,8 @@ public:
     IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)
         : DataType(dataType)
         , RecordsCount(recordsCount)
-        , Type(type) {
+        , Type(type)
+    {
     }
 };
 

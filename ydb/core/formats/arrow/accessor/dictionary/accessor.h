@@ -69,7 +69,8 @@ public:
     TDictionaryArray(const std::shared_ptr<arrow::Array>& variants, const std::shared_ptr<arrow::Array>& records)
         : TBase(TValidator::CheckNotNull(records)->length(), EType::Dictionary, variants->type())
         , ArrayVariants(variants)
-        , ArrayRecords(records) {
+        , ArrayRecords(records)
+    {
     }
 };
 

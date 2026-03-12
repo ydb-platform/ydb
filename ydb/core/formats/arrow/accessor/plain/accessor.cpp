@@ -66,7 +66,8 @@ private:
 public:
     TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
-        , Result(&result) {
+        , Result(&result)
+    {
     }
     ui64 GetChunksCount() const {
         return (ui64)ChunkedArray->num_chunks();
@@ -111,11 +112,10 @@ TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
         if (!result.Max || ScalarCompare(result.Max, scalarMax) < 0) {
             result.Max = scalarMax;
         }
-        
+
         if (!result.Min || ScalarCompare(result.Min, scalarMin) > 0) {
             result.Min = scalarMin;
         }
-        
     }
 
     return result;

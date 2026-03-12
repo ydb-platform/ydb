@@ -59,7 +59,7 @@ public:
 
 class TIndexCheckOperation {
 public:
-    enum class EOperation : ui32 {
+    enum class EOperation: ui32 {
         Equals,
         StartsWith,
         EndsWith,
@@ -89,7 +89,8 @@ public:
 
     TIndexCheckOperation(const EOperation op, const bool caseSensitive)
         : Operation(op)
-        , CaseSensitive(caseSensitive) {
+        , CaseSensitive(caseSensitive)
+    {
     }
 
     explicit operator size_t() const {
@@ -117,7 +118,8 @@ private:
     explicit TColumnInfo(const ui32 columnId, const std::string& columnName, const bool generated)
         : GeneratedFlag(generated)
         , ColumnName(columnName)
-        , ColumnId(columnId) {
+        , ColumnId(columnId)
+    {
     }
 
 public:
@@ -203,7 +205,8 @@ public:
         return TColumnInfo::Generated(0, "");
     }
     TSchemaColumnResolver(const std::shared_ptr<arrow::Schema>& schema)
-        : Schema(schema) {
+        : Schema(schema)
+    {
     }
 };
 
@@ -243,7 +246,8 @@ public:
     }
 
     TColumnChainInfo(const ui32 columnId)
-        : ColumnId(columnId) {
+        : ColumnId(columnId)
+    {
     }
 
     bool operator==(const TColumnChainInfo& item) const {
@@ -318,7 +322,8 @@ private:
 
 public:
     TCompositeResourcesAggregator(const std::vector<std::shared_ptr<IResourcesAggregator>>& aggregators)
-        : Aggregators(aggregators) {
+        : Aggregators(aggregators)
+    {
         AFL_VERIFY(Aggregators.size());
     }
 };
@@ -436,7 +441,8 @@ public:
     IResourceProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output, const EProcessorType type)
         : Input(std::move(input))
         , Output(std::move(output))
-        , ProcessorType(type) {
+        , ProcessorType(type)
+    {
     }
 
     [[nodiscard]] TConclusion<EExecutionResult> Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
@@ -468,7 +474,8 @@ public:
         : ColumnsToFetch(std::move(toFetch))
         , OriginalColumnsToUse(std::move(originalToUse))
         , ColumnsToDrop(std::move(toDrop))
-        , Processor(std::move(processor)) {
+        , Processor(std::move(processor))
+    {
         AFL_VERIFY(Processor);
     }
 

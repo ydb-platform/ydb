@@ -141,7 +141,8 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , CaseSensitive(caseSensitive) {
+        , CaseSensitive(caseSensitive)
+    {
     }
 
     template <class TAction>
@@ -207,7 +208,8 @@ public:
     }
 
     TVectorInserter(const ui32 bitsSize)
-        : Size(bitsSize) {
+        : Size(bitsSize)
+    {
         AFL_VERIFY(bitsSize);
         Values.Reserve(bitsSize);
     }
@@ -246,7 +248,8 @@ private:
 public:
     TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
         : Meta(meta)
-        , ExtSize(size) {
+        , ExtSize(size)
+    {
         AFL_VERIFY(ExtSize <= Size);
     }
 
@@ -290,7 +293,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             recordsCountBase *= 2;
         }
     } else {
-        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1)  / RecordsCount));
+        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1) / RecordsCount));
     }
     size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {

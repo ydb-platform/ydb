@@ -130,7 +130,8 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records, const std::shared_ptr<arrow::Scalar>& defaultValue)
     : RecordsCount(recordsCount)
     , Records(records)
-    , DefaultValue(defaultValue) {
+    , DefaultValue(defaultValue)
+{
     AFL_VERIFY(Records);
     AFL_VERIFY(records->num_columns() == 2);
     ColIndex = Records->GetColumnByName("index");
@@ -204,14 +205,14 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 }
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
-    TMinMax result{DefaultValue, DefaultValue};
+    TMinMax result{ DefaultValue, DefaultValue };
     if (!ColValue->length()) {
         return result;
     }
     auto minMax = NArrow::FindMinMaxPosition(ColValue);
     auto minScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.first));
     auto maxScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.second));
-    
+
     if (!DefaultValue || ScalarLess(minScalar, result.Min)) {
         result.Min = minScalar;
     }
@@ -219,7 +220,6 @@ TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
     if (!DefaultValue || ScalarLess(result.Max, maxScalar)) {
         result.Max = maxScalar;
     }
-
 
     return result;
 }
@@ -329,8 +329,7 @@ void TSparsedArray::TBuilder::AddChunk(
         auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
-    Chunks.emplace_back(
-        recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
+    Chunks.emplace_back(recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;
     AFL_VERIFY(Chunks.size() == 1);
 }

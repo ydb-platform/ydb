@@ -1,8 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
-
-
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 class TIndexMeta: public TSkipIndex {
@@ -22,12 +20,12 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
-    
-    bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) const;
+
+    bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
+        const NArrow::NSSA::TIndexCheckOperation& op) const;
 
     virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
-        const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op,
-        const TIndexInfo& info) const override;
+        const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;
 

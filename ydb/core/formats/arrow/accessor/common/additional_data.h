@@ -15,7 +15,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 struct IAdditionalAccessorData {
     virtual ~IAdditionalAccessorData() = default;
-    virtual bool HasDataToSerialize() const { return true; }
+    virtual bool HasDataToSerialize() const = 0;
     virtual void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const = 0;
 
     virtual NJson::TJsonValue DebugJson() const {

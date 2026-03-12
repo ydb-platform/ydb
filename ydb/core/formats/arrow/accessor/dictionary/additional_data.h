@@ -17,6 +17,10 @@ struct TDictionaryAccessorData : IAdditionalAccessorData {
         , PositionsBlobSize(positionsBlobSize) {
     }
 
+    bool HasDataToSerialize() const override {
+        return true;
+    };
+
     void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const override;
 
     NJson::TJsonValue DebugJson() const override;

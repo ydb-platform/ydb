@@ -71,8 +71,9 @@ private:
     void DoOnDataCollected(TFetchingResultContext& context) override {
         NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
         for (auto&& i : ColumnChunks) {
-            AFL_VERIFY(i.GetDictionaryArray());
-            compositeBuilder.AddChunk(std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetDictionaryArray()));
+            const auto& dictArray = i.GetDictionaryArray();
+            AFL_VERIFY(dictArray);
+            compositeBuilder.AddChunk(std::make_shared<NArrow::NAccessor::TTrivialArray>(dictArray));
         }
         context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
     }

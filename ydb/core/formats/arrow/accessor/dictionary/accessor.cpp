@@ -27,7 +27,12 @@ IChunkedArray::TLocalDataAddress TDictionaryArray::DoGetLocalData(
                         if (arrPositionsImpl->IsNull(i)) {
                             TStatusValidator::Validate(builder->AppendNull());
                         } else {
-                            TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrDictionaryImpl, arrPositionsImpl->Value(i))));
+                            const ui32 dictIdx = arrPositionsImpl->Value(i);
+                            if (arrDictionaryImpl->IsNull(dictIdx)) {
+                                TStatusValidator::Validate(builder->AppendNull());
+                            } else {
+                                TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrDictionaryImpl, dictIdx)));
+                            }
                         }
                     }
                     return true;

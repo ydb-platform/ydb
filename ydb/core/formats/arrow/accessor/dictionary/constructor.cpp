@@ -204,8 +204,8 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
     }
     // Use only the dictionary prefix; blob may be full (dictionary + positions) when e.g. cached or read for other purposes.
     TStringBuf dictionaryPrefix(dictionaryBlob.data(), dictData->DictionaryBlobSize);
-    auto schemaDictionary = std::make_shared<arrow::Schema>(
-        arrow::FieldVector({std::make_shared<arrow::Field>("val", externalInfo.GetColumnType())}));
+    auto schemaDictionary = std::make_shared<arrow::Schema>(arrow::FieldVector(
+        {std::make_shared<arrow::Field>("val", externalInfo.GetColumnType(), true)}));
     auto result = externalInfo.GetDefaultSerializer()->Deserialize(TString(dictionaryPrefix), schemaDictionary);
     if (!result.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}

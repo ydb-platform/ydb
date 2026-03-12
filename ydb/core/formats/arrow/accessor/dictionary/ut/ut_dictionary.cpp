@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         Cerr << PrepareToCompare(dictParsed->GetDictionary()->ToString()) << Endl;
         AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,"",null]])");
         AFL_VERIFY(PrepareToCompare(dictParsed->GetPositions()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetDictionary()->ToString()) == R"(["","ab","abc","abcd"])");
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetDictionary()->ToString()) == R"(["","ab","abc","abcd",null])");
     }
 
     Y_UNIT_TEST(BuildDictionaryOnlyReader) {

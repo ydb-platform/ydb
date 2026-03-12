@@ -981,9 +981,7 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
     max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
     cpu_total_cores: list[float] = []
-    cpu_ya_cores: list[float] = []
     ram_gb: list[float] = []
-    ram_ya_gb: list[float] = []
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
     for r in records:
@@ -993,9 +991,7 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
             continue
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
-        cpu_ya_cores.append(float(r.get("cpu_ya_pct", 0) or 0) / 100.0 * cpu_cores)
         ram_gb.append(float(r.get("ram_used_kb", 0) or 0) / (1024 * 1024))
-        ram_ya_gb.append(float(r.get("ram_ya_kb", 0) or 0) / (1024 * 1024))
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
         disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
@@ -1004,9 +1000,7 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
-        "cpu_ya_cores": cpu_ya_cores,
         "ram_gb": ram_gb,
-        "ram_ya_gb": ram_ya_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
         "evlog_range_sec": [min_evlog, max_evlog],

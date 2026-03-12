@@ -48,6 +48,9 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
         return nullptr;
     }
+    virtual TMinMax DoGetMinMaxScalars() const override {
+        return {};
+    }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override {

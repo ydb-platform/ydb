@@ -18,6 +18,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/formats/arrow/switch
     yql/essentials/core
     ydb/core/protos

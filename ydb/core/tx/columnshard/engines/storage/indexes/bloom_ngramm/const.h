@@ -1,5 +1,7 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
+
+#include <ydb/library/conclusion/status.h>
+
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TConstants {
@@ -33,6 +35,19 @@ public:
     static TString GetFilterSizeBytesIntervalString();
     static TString GetNGrammSizeIntervalString();
     static TString GetRecordsCountIntervalString();
+
+    static TConclusionStatus ValidateParams(double falsePositiveProbability, ui32 nGrammSize, ui32 hashesCount) {
+        if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
+            return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
+        }
+        if (!CheckNGrammSize(nGrammSize)) {
+            return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + GetNGrammSizeIntervalString());
+        }
+        if (!CheckHashesCount(hashesCount)) {
+            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + GetHashesCountIntervalString());
+        }
+        return TConclusionStatus::Success();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

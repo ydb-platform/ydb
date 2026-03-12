@@ -541,6 +541,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
 
+                bloom->SetCaseSensitive(settings.CaseSensitive);
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -566,9 +567,8 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize);
                 ngram->SetHashesCount(settings.HashesCount);
-                ngram->SetFilterSizeBytes(settings.FilterSizeBytes);
-                ngram->SetRecordsCount(settings.RecordsCount);
                 ngram->SetCaseSensitive(settings.CaseSensitive);
+                ngram->SetFalsePositiveProbability(settings.FalsePositiveProbability);
                 break;
             }
             default:

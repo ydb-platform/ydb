@@ -32,6 +32,7 @@ protected:
         return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(GetIndexImpl(index)));
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
         return ArrayPositions->null_count();
@@ -68,10 +69,17 @@ public:
         return ArrayPositions;
     }
 
+<<<<<<< HEAD
     TDictionaryArray(const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions)
         : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, dictionary->type())
         , ArrayDictionary(dictionary)
         , ArrayPositions(positions)
+=======
+    TDictionaryArray(const std::shared_ptr<arrow::Array>& variants, const std::shared_ptr<arrow::Array>& records)
+        : TBase(TValidator::CheckNotNull(records)->length(), EType::Dictionary, variants->type())
+        , ArrayVariants(variants)
+        , ArrayRecords(records)
+>>>>>>> 3f71dee488c (minmax index mvp (#33650))
     {
     }
 };

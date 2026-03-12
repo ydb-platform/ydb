@@ -36,7 +36,8 @@ protected:
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
-    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+    virtual TLocalDataAddress DoGetLocalData(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         AFL_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
     }
@@ -52,6 +53,10 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
+    virtual TMinMax DoGetMinMaxScalars() const override {
+        AFL_VERIFY(false);
+        return {};
+    }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {
             AFL_VERIFY(false);
@@ -62,12 +67,13 @@ protected:
     }
 
 public:
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
-        const bool forLazyInitialization = false)
+    TDeserializeChunkedArray(
+        const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data, const bool forLazyInitialization = false)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Data(data)
-        , ForLazyInitialization(forLazyInitialization) {
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 
@@ -89,7 +95,8 @@ public:
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , DataBuffer(data)
-        , ForLazyInitialization(forLazyInitialization) {
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 
@@ -98,7 +105,8 @@ public:
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , PredefinedArray(data)
-        , ForLazyInitialization(forLazyInitialization) {
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 };

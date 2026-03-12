@@ -256,23 +256,14 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDataCenter() const {
-            if (NodeInfo.Location.GetDataCenterId()) {
-                return NodeInfo.Location.GetDataCenterId();
-            }
             return SystemState.GetLocation().GetDataCenter();
         }
 
         TString GetRack() const {
-            if (NodeInfo.Location.GetRackId()) {
-                return NodeInfo.Location.GetRackId();
-            }
             return SystemState.GetLocation().GetRack();
         }
 
         TString GetPileName() const {
-            if (NodeInfo.Location.GetBridgePileName()) {
-                return NodeInfo.Location.GetBridgePileName().value_or("");
-            }
             return SystemState.GetLocation().GetBridgePileName();
         }
 
@@ -280,15 +271,24 @@ class TJsonNodes : public TViewerPipeClient {
             std::optional<TString> dataCenter;
             std::optional<TString> rack;
             std::optional<TString> unit;
+            std::optional<TString> bridgePileName;
+            bool hasLocationFallback = false;
             for (const auto& [key, value] : NodeInfo.Location.GetItems()) {
                 switch (key) {
+                    case NActors::TNodeLocation::TKeys::BridgePileName:
+                        hasLocationFallback = true;
+                        bridgePileName = value;
+                        break;
                     case NActors::TNodeLocation::TKeys::DataCenter:
+                        hasLocationFallback = true;
                         dataCenter = value;
                         break;
                     case NActors::TNodeLocation::TKeys::Rack:
+                        hasLocationFallback = true;
                         rack = value;
                         break;
                     case NActors::TNodeLocation::TKeys::Unit:
+                        hasLocationFallback = true;
                         unit = value;
                         break;
                     default:
@@ -296,11 +296,14 @@ class TJsonNodes : public TViewerPipeClient {
                 }
             }
 
-            if (!dataCenter.has_value() && !rack.has_value() && !unit.has_value()) {
+            if (!hasLocationFallback) {
                 return;
             }
 
             auto* location = SystemState.MutableLocation();
+            if (!location->HasBridgePileName() && bridgePileName.has_value()) {
+                location->SetBridgePileName(*bridgePileName);
+            }
             if (!location->HasDataCenter() && dataCenter.has_value()) {
                 location->SetDataCenter(*dataCenter);
             }

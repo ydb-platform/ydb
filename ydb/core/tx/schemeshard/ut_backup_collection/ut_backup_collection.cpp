@@ -3128,13 +3128,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             TableDescription {
                 Name: "TableWithVector"
                 Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "category" Type: "Utf8" }
                 Columns { Name: "embedding" Type: "String" }
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: ["id"]
             }
             IndexDescription {
                 Name: "VectorIndex"
-                KeyColumnNames: ["id", "embedding"]
+                KeyColumnNames: ["category", "embedding"]
                 DataColumnNames: ["data"]
                 Type: EIndexTypeGlobalVectorKmeansTree
                 VectorIndexKmeansTreeDescription: {
@@ -3145,7 +3146,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                             vector_dimension: 1024
                         },
                         clusters: 4,
-                        levels: 5
+                        levels: 2
                     }
                 }
             }
@@ -3256,13 +3257,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             TableDescription {
                 Name: "TableWithVector"
                 Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "category" Type: "Utf8" }
                 Columns { Name: "embedding" Type: "String" }
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: ["id"]
             }
             IndexDescription {
                 Name: "VectorIndex"
-                KeyColumnNames: ["id", "embedding"]
+                KeyColumnNames: ["category", "embedding"]
                 DataColumnNames: ["data"]
                 Type: EIndexTypeGlobalVectorKmeansTree
                 VectorIndexKmeansTreeDescription: {
@@ -3273,7 +3275,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                             vector_dimension: 1024
                         },
                         clusters: 4,
-                        levels: 5
+                        levels: 2
                     }
                 }
             }
@@ -3326,7 +3328,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::PathExist,
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            NLs::IndexKeys({"id", "embedding"}),
+            NLs::IndexKeys({"category", "embedding"}),
             NLs::IndexDataColumns({"data"})
         });
 
@@ -3352,7 +3354,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getmetric(), Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getvector_dimension(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getclusters(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getlevels(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getlevels(), 2);
     }
 
     Y_UNIT_TEST(InitCopyTableSourceDroppedSurvives) {

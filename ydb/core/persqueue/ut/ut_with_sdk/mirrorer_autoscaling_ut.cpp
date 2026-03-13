@@ -303,7 +303,6 @@ namespace NKikimr::NPersQueueTests {
                     pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
                     NKikimrConfig::TFeatureFlags ff;
-                    ff.SetEnableTopicAutopartitioningForCDC(true);
                     ff.SetEnableTopicAutopartitioningForReplication(true);
                     ff.SetEnableMirroredTopicSplitMerge(true);
                     pqSettings.SetFeatureFlags(ff);

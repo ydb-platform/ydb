@@ -171,7 +171,7 @@ message TFeatureFlags {
     optional bool EnableParameterizedDecimal = 145 [default = true];
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true, deprecated = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
-    optional bool EnableTopicAutopartitioningForCDC = 148 [default = true];// TODO deprecated: always true
+    optional bool EnableTopicAutopartitioningForCDC = 148 [default = true]; // deprecated: always true
     optional bool EnableWritePortionsOnInsert = 149 [default = true, deprecated = true];
     optional bool EnableFollowerStats = 150 [default = true];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = true];

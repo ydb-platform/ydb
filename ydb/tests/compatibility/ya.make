@@ -33,7 +33,7 @@ TEST_SRCS(
     test_infer_pdisk_expected_slot_count.py
     test_show_create_table.py
     test_viewer_monitoring_proxy.py
-    test_viewer_monitoring_proxy_all_endpoints.py
+    test_viewer_monitoring_proxy_endpoints.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py

@@ -117,7 +117,7 @@ TEST(TSchemaSerializationTest, Deleted)
         "Stable name should be set for deleted column");
 }
 
-TEST(TConstrainedSchemaSerialization, YsonDeserializeAndSerialize)
+TEST(TSchemaSerializationTest, YsonDeserializeAndSerializeConstrainedSchema)
 {
     std::string schemaString = "<"
             "strict=%true;"

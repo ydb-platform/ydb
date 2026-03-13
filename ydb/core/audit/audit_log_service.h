@@ -21,7 +21,7 @@ inline NActors::TActorId MakeAuditServiceID() {
 }
 
 inline NActors::TActorId MakeTopicCloudEventsAuditServiceID() {
-    return NActors::TActorId(0, TStringBuf("YDB_TOPIC_CLOUD_EVENTS_AUDIT"));
+    return NActors::TActorId(0, TStringBuf("YDB_TCE_AUD"));  // Topic Cloud Events Audit; MaxServiceIDLength=12
 }
 
 using TAuditLogBackends = TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>>;

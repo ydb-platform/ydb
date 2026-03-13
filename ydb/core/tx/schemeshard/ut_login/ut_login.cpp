@@ -15,8 +15,8 @@
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
 
-using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NKikimr::NSchemeShard;
+using namespace NKikimr::NCertTestUtils;
 using namespace NSchemeShardUT_Private;
 
 using namespace NKikimr::Tests;

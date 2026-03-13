@@ -6,7 +6,7 @@
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 TTempFile SaveToTempFile(const std::string& content, const char* prefix = "cert") {
     TTempFile file = MakeTempName(nullptr, prefix);
@@ -279,4 +279,4 @@ Y_UNIT_TEST_SUITE(TCertificateCheckerTest) {
     }
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NCertTestUtils

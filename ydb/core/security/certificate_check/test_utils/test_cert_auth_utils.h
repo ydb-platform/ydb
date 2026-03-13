@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
     struct TCertAndKey {
         std::string Certificate;
@@ -43,4 +43,4 @@ namespace NKikimr {
     TCertAndKey GenerateSignedCert(const TCertAndKey& ca, const TProps& props);
     void VerifyCert(const std::string& cert, const std::string& caCert);
 
-} // namespace NKikimr
+} // namespace NKikimr::NCertTestUtils

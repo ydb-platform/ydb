@@ -119,6 +119,10 @@ private:
 
 } // namespace
 
+} // namespace NKikimr
+
+namespace NKikimr::NCertTestUtils {
+
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(LoginGood) {
@@ -2745,4 +2749,4 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
 
 } // Test suite AuthorizeRequestToAccessService
 
-}
+} // Nkikimr::NTesting

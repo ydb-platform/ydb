@@ -17,6 +17,7 @@
 #include <functional>
 
 using namespace NKikimr;
+using namespace NKikimr::NCertTestUtils;
 namespace NYdb {
 
 using namespace Tests;

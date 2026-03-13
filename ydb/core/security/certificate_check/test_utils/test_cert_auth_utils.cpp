@@ -1,3 +1,5 @@
+#include "test_cert_auth_utils.h"
+
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -12,9 +14,9 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
-#include "test_cert_auth_utils.h"
 
-namespace NKikimr {
+
+namespace NKikimr::NCertTestUtils {
 
     namespace {
 
@@ -513,4 +515,4 @@ namespace NKikimr {
         return *this;
     }
 
-} // namespace NKikimr
+} // namespace NKikimr::NCertTestUtils

@@ -1,11 +1,13 @@
+#include "cert_auth_processor.h"
+
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <unordered_map>
 #include <vector>
 
-#include "cert_auth_processor.h"
-#include "test_utils/test_cert_auth_utils.h"
-
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
     Y_UNIT_TEST(GenerateAndVerifyCertificates) {

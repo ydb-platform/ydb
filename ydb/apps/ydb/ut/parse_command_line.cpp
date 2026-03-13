@@ -245,7 +245,7 @@ public:
             return;
         }
 
-        using namespace NKikimr;
+        using namespace NKikimr::NCertTestUtils;
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
         const TCertAndKey clientCert = GenerateSignedCert(ca, TProps::AsClient());

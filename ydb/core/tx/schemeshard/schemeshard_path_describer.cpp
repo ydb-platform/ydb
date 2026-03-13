@@ -296,6 +296,7 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
                 continue;
             }
             if (pathEl->IsColumnTable() && !childEl->IsTableIndex()) {
+                // .sys directory is not included in the children listing
                 continue;
             }
             auto entry = pathDescription->AddChildren();
@@ -631,7 +632,6 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
 
     description->SetIsRestore(tableInfo->IsRestore);
 
-    pathEl->PreSerializedChildrenListing.clear();
     DescribeChildren(TPath::Init(pathId, Self));
 }
 

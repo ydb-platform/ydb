@@ -1247,12 +1247,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
 
-    auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
-    if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
-        CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(
                 TStringBuilder() << "Message level metadata size is limited to " << MAX_METADATA_SIZE_PER_MESSAGE

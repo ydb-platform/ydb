@@ -123,7 +123,7 @@ message TFeatureFlags {
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = true, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = true]; // TODO deprecated: always true
+    optional bool EnableTopicMessageMeta = 100 [default = true]; // deprecated: always true
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];

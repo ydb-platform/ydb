@@ -147,7 +147,10 @@ class YdbTopicWorkload(WorkloadBase):
         self._executor.run(cmd)
 
     def cmd_run_with_monitoring(self, cmd):
-        self._executor.run_with_monitoring(cmd)
+        executor = CommandExecutor();
+        executor.set_monitor(hang_timeout=self.config.STATS_HANG_TIMEOUT, window_interval=self.stats_window)
+
+        executor.run_with_monitoring(cmd)
 
     def __one_tablet_but_a_distributed_transaction(self):
         self.run_topic_write_with_tx(TestConfig(
@@ -161,8 +164,8 @@ class YdbTopicWorkload(WorkloadBase):
 
     def __two_tablets_distributed_transaction(self):
         self.run_topic_write_with_tx(TestConfig(
-            partitions=5,
-            partitions_per_tablet=10,
+            partitions=10,
+            partitions_per_tablet=5,
             producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
@@ -173,7 +176,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_with_tx(TestConfig(
             partitions=200,
             partitions_per_tablet=10,
-            producers=int(self.producers),
+            producers=10,
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE
@@ -183,7 +186,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_with_tx(TestConfig(
             partitions=200,
             partitions_per_tablet=1,
-            producers=int(self.producers),
+            producers=10,
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE
@@ -203,7 +206,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_without_tx(TestConfig(
             partitions=200,
             partitions_per_tablet=10,
-            producers=int(self.producers),
+            producers=10,
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE
@@ -301,12 +304,22 @@ class YdbTopicWorkload(WorkloadBase):
         # Удаляем тестовый топик
         self._cleanup_test_topic(topic_name)
 
+    def __all_tests(self):
+        self.__loop()
+        self.__one_tablet_but_a_distributed_transaction()
+        self.__two_tablets_distributed_transaction()
+        self.__a_wide_transaction_with_multiple_partitions_in_one_tablet()
+        self.__wide_transaction_one_tablet_contains_one_partition()
+        self.__immediate_transaction()
+        self.__non_transactional_workload()
+
     def get_workload_thread_funcs(self):
         return [
+            #self.__all_tests
             #self.__loop,
-            self.__one_tablet_but_a_distributed_transaction,
+            #self.__one_tablet_but_a_distributed_transaction,
             self.__two_tablets_distributed_transaction,
-            self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
+            #self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
             self.__wide_transaction_one_tablet_contains_one_partition,
             self.__immediate_transaction,
             self.__non_transactional_workload,

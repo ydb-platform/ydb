@@ -1,12 +1,22 @@
 #include "ut_common.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/sys_view/show_create/create_view_formatter.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -25,7 +35,7 @@ void FillRootTable(TTestEnv& env, ui16 tableNum = 0) {
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
     NKqp::AssertSuccessResult(session.ExecuteDataQuery(Sprintf(R"(
-        REPLACE INTO `/Root/Table%u` (Key, Value) VALUES
+        REPLACE INTO `Root/Table%u` (Key, Value) VALUES
             (0u, "X"),
             (1u, "Y"),
             (2u, "Z");
@@ -148,6 +158,289 @@ void WaitForStats(TTableClient& client, const TString& tableName, const TString&
     }
     UNIT_ASSERT_GE(rowCount, 0);
 }
+
+NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const std::string& query) {
+    auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return result;
+}
+
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path) {
+    if (!IsStartWithSlash(path)) {
+        path = CanonizePath(JoinPath({"/Root", path}));
+    }
+    auto sender = runtime.AllocateEdgeActor();
+    TAutoPtr<IEventHandle> handle;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnSetVal(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    return runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle)->GetRecord().GetPathDescription();
+}
+
+class TShowCreateChecker {
+public:
+
+    explicit TShowCreateChecker(TTestEnv& env)
+        : Env(env)
+        , Runtime(*Env.GetServer().GetRuntime())
+        , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
+        , Session(QueryClient.GetSession().GetValueSync().GetSession())
+    {
+        CreateTier("tier1");
+        CreateTier("tier2");
+    }
+
+    void WaitForCdcStreamReady(const std::string& streamPath) {
+        for (int i = 0; i < 60; ++i) {
+            auto pathDesc = DescribePath(Runtime, TString(streamPath));
+            if (pathDesc.HasCdcStreamDescription()
+                && pathDesc.GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady)
+            {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_FAIL("Timed out waiting for CDC stream to become ready: " << streamPath);
+    }
+
+    std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
+        return ShowCreate(session, "TABLE", tableName);
+    }
+
+    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
+        auto session = QueryClient.GetSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, query);
+        auto showCreateTableQuery = ShowCreateTable(session, tableName);
+
+        if (formatQuery) {
+            UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
+        }
+
+        if (initialScan) {
+            return;
+        }
+
+        std::optional<TString> tempDir = std::nullopt;
+        if (temporary) {
+            auto res = Env.GetClient().Ls("/Root/.tmp/sessions");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(res->Record.HasPathDescription());
+            UNIT_ASSERT(res->Record.GetPathDescription().ChildrenSize() == 1);
+            tempDir = res->Record.GetPathDescription().GetChildren(0).GetName();
+        }
+
+        auto describeResultOrig = DescribeTable(tableName, tempDir);
+
+        DropTable(session, tableName);
+
+        ExecuteQuery(session, showCreateTableQuery);
+        auto describeResultNew = DescribeTable(tableName, tempDir);
+
+        DropTable(session, tableName);
+
+        CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
+    }
+
+    // Checks that the view created from the description provided by the `SHOW CREATE VIEW` statement
+    // can be used to create a view with a description equal to the original.
+    void CheckShowCreateView(const std::string& query, const std::string& viewName, const std::string& expectedResult = "") {
+        ExecuteQuery(Session, query);
+        auto showCreateViewResult = ShowCreateView(Session, viewName);
+
+        if (!expectedResult.empty()) {
+            UNIT_ASSERT_STRINGS_EQUAL(UnescapeC(showCreateViewResult), UnescapeC(expectedResult));
+        }
+
+        const auto originalDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        DropView(Session, viewName);
+        ExecuteQuery(Session, showCreateViewResult);
+
+        const auto newDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        CompareDescriptions(originalDescription, newDescription, showCreateViewResult);
+        DropView(Session, viewName);
+    }
+
+private:
+
+    void CreateTier(const std::string& tierName) {
+        ExecuteQuery(Session, std::format(R"(
+            UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+            UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+            CREATE EXTERNAL DATA SOURCE `{}` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://fake.fake/olap-{}",
+                AUTH_METHOD = "AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME = "accessKey",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME = "secretKey",
+                AWS_REGION = "ru-central1"
+            );
+        )", tierName, tierName));
+    }
+
+    Ydb::Table::DescribeTableResult DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
+
+        auto describeTable = [this](TString&& path) {
+            auto pathDescription = DescribePath(Runtime, std::move(path));
+
+            if (pathDescription.HasColumnTableDescription()) {
+                const auto& tableDescription = pathDescription.GetColumnTableDescription();
+                return *GetScheme(tableDescription);
+            }
+
+            if (!pathDescription.HasTable()) {
+                UNIT_FAIL("Invalid path type: " << pathDescription.GetSelf().GetPathType());
+            }
+
+            const auto& tableDescription = pathDescription.GetTable();
+            return *GetScheme(tableDescription);
+        };
+
+        auto tablePath = TString(tableName);
+        if (!IsStartWithSlash(tablePath)) {
+            tablePath = CanonizePath(JoinPath({"/Root", tablePath}));
+        }
+        if (sessionId.has_value()) {
+            tablePath = NKqp::GetTempTablePath("Root", sessionId.value(), tablePath);
+        }
+        auto tableDesc = describeTable(std::move(tablePath));
+
+        return tableDesc;
+    }
+
+    NKikimrSchemeOp::TViewDescription DescribeView(const std::string& viewName) {
+        auto pathDescription = DescribePath(Runtime, TString(viewName));
+        UNIT_ASSERT_C(pathDescription.HasViewDescription(), pathDescription.DebugString());
+        return pathDescription.GetViewDescription();
+    }
+
+    NKikimrSchemeOp::TViewDescription CanonizeViewDescription(NKikimrSchemeOp::TViewDescription&& description) {
+        description.ClearVersion();
+        description.ClearPathId();
+
+        TString queryText;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NDump::Format(description.GetQueryText(), queryText, issues), issues.ToString());
+        *description.MutableQueryText() = queryText;
+
+        return description;
+    }
+
+    std::string ShowCreate(NQuery::TSession& session, std::string_view type, const std::string& path) {
+        const auto result = ExecuteQuery(session, std::format("SHOW CREATE {} `{}`;", type, path));
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto resultSet = result.GetResultSet(0);
+        auto columnsMeta = resultSet.GetColumnsMeta();
+        UNIT_ASSERT_VALUES_EQUAL(columnsMeta.size(), 3);
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+
+        TString createQuery = "";
+
+        for (const auto& column : columnsMeta) {
+            TValueParser parserValue(parser.GetValue(column.Name));
+            parserValue.OpenOptional();
+            const auto& value = parserValue.GetUtf8();
+
+            if (column.Name == "Path") {
+                UNIT_ASSERT_VALUES_EQUAL(value, path);
+            } else if (column.Name == "PathType") {
+                auto actualType = to_upper(TString(value));
+                UNIT_ASSERT_VALUES_EQUAL(actualType, type);
+            } else if (column.Name == "CreateQuery") {
+                createQuery = value;
+            } else {
+                UNIT_FAIL("Invalid column name: " << column.Name);
+            }
+        }
+        UNIT_ASSERT(createQuery);
+
+        return createQuery;
+    }
+
+    std::string ShowCreateView(NQuery::TSession& session, const std::string& viewName) {
+        return ShowCreate(session, "VIEW", viewName);
+    }
+
+    void DropTable(NQuery::TSession& session, const std::string& tableName) {
+        ExecuteQuery(session, std::format("DROP TABLE `{}`;", tableName));
+    }
+
+    void DropView(NQuery::TSession& session, const std::string& viewName) {
+        ExecuteQuery(session, std::format("DROP VIEW `{}`;", viewName));
+    }
+
+    template <typename TProtobufDescription>
+    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
+        TString first;
+        ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
+        TString second;
+        ::google::protobuf::TextFormat::PrintToString(describeResultNew, &second);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
+    }
+
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
+
+        NKikimrMiniKQL::TType mkqlKeyType;
+
+        try {
+            FillColumnDescription(scheme, mkqlKeyType, tableDesc);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+
+        scheme.mutable_primary_key()->CopyFrom(tableDesc.GetKeyColumnNames());
+
+        try {
+            FillTableBoundary(scheme, tableDesc, mkqlKeyType);
+            FillIndexDescription(scheme, tableDesc);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+
+        FillChangefeedDescription(scheme, tableDesc);
+
+        FillStorageSettings(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
+        FillPartitioningSettings(scheme, tableDesc);
+        FillKeyBloomFilter(scheme, tableDesc);
+        FillReadReplicasSettings(scheme, tableDesc);
+
+        TString error;
+        Ydb::StatusIds::StatusCode status;
+        if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
+            return Nothing();
+        }
+
+        return scheme;
+    }
+
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
+
+        FillColumnDescription(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
+
+        return scheme;
+    }
+
+private:
+    TTestEnv& Env;
+    TTestActorRuntime& Runtime;
+    NQuery::TQueryClient QueryClient;
+    NQuery::TSession Session;
+};
+
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -270,24 +563,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
     Y_UNIT_TEST(PartitionStatsOneSchemeShard) {
         TTestEnv env;
         CreateTenantsAndTables(env, true);
-        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
         const auto table0PathId = describeResult.GetPathId();
 
-        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1/Table1");
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant1/Table1");
         const auto table1PathId = describeResult.GetPathId();
 
-        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Table2");
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant2/Table2");
         const auto table2PathId = describeResult.GetPathId();
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off);
-        auto driver = TDriver(driverConfig);
-
+        TTableClient client(env.GetDriver());
         {
-            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -297,9 +585,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])", table0PathId), NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/Tenant1/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/Tenant1/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -309,9 +596,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])", table1PathId), NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/Tenant2/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/Tenant2/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -325,28 +611,22 @@ Y_UNIT_TEST_SUITE(SystemView) {
     Y_UNIT_TEST(PartitionStatsOneSchemeShardDataQuery) {
         TTestEnv env;
         CreateTenantsAndTables(env, true);
-        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
         const auto table0PathId = describeResult.GetPathId();
 
-        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1/Table1");
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant1/Table1");
         const auto table1PathId = describeResult.GetPathId();
 
-        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Table2");
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant2/Table2");
         const auto table2PathId = describeResult.GetPathId();
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off);
-        auto driver = TDriver(driverConfig);
-
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            TTableClient client(driver, TClientSettings().Database("/Root"));
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -355,11 +635,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])", table0PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/Tenant1/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/Tenant1/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
@@ -368,11 +645,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])", table1PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `/Root/Tenant2/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `Root/Tenant2/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
@@ -396,7 +670,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `/Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
+                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -732,7 +1006,7 @@ WITH (
     }
 
     Y_UNIT_TEST(ShowCreateTableColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -744,9 +1018,9 @@ WITH (
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
                 Key1 Uint64 NOT NULL,
-                Key2 Utf8 NOT NULL COMPRESSION () LOWCARDINALITY,
+                Key2 Utf8 NOT NULL COMPRESSION (),
                 Key3 Int32 NOT NULL COMPRESSION (algorithm = off),
-                Value1 Utf8 COMPRESSION (algorithm = lz4) LOWCARDINALITY,
+                Value1 Utf8 COMPRESSION (algorithm = lz4),
                 Value2 Int16 COMPRESSION (algorithm = zstd),
                 Value3 String COMPRESSION (algorithm = zstd, level = 10),
                 PRIMARY KEY (Key1, Key2, Key3),
@@ -763,9 +1037,9 @@ WITH (
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Key1` Uint64 NOT NULL,
-    `Key2` Utf8 NOT NULL LOWCARDINALITY,
+    `Key2` Utf8 NOT NULL,
     `Key3` Int32 NOT NULL COMPRESSION (algorithm = off),
-    `Value1` Utf8 COMPRESSION (algorithm = lz4) LOWCARDINALITY,
+    `Value1` Utf8 COMPRESSION (algorithm = lz4),
     `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
     `Value3` String COMPRESSION (algorithm = zstd, level = 10),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
@@ -779,10 +1053,6 @@ WITH (
         INTERVAL('PT1H') DELETE
     ON Key1 AS SECONDS
 );
-
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Key2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
-
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Value1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
 )"
         );
     }
@@ -1742,7 +2012,7 @@ ALTER TABLE `test_show_create`
     }
 
     Y_UNIT_TEST(ShowCreateTableColumnAlterColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1761,12 +2031,12 @@ ALTER TABLE `test_show_create`
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER TABLE `/Root/test_show_create` ALTER COLUMN `Col1` SET LOWCARDINALITY;
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-    `Col1` Uint64 NOT NULL LOWCARDINALITY,
+    `Col1` Uint64 NOT NULL,
     `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
     `Col3` Uint32,
     PRIMARY KEY (`Col1`)
@@ -1777,9 +2047,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
 );
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
-
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
 )"
@@ -1879,7 +2147,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
     }
 
     Y_UNIT_TEST(ShowCreateTableColumnAlterObject) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLowCardinality = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1912,13 +2180,13 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
                     `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER TABLE `/Root/test_show_create` ALTER COLUMN `Col3` SET LOWCARDINALITY;
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
     `Col2` Uint32 NOT NULL,
-    `Col3` JsonDocument LOWCARDINALITY,
+    `Col3` JsonDocument,
     PRIMARY KEY (`Col1`)
 )
 PARTITION BY HASH (`Col1`)
@@ -1929,7 +2197,7 @@ WITH (
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `DICTIONARY`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
 
@@ -2153,17 +2421,11 @@ R"(CREATE TABLE `test_show_create` (
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
-
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off);
-        auto driver = TDriver(driverConfig);
-
+        TTableClient client(env.GetDriver());
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `/Root/Tenant1/.sys/nodes`;
+                FROM `Root/Tenant1/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2177,10 +2439,9 @@ R"(CREATE TABLE `test_show_create` (
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `/Root/Tenant2/.sys/nodes`;
+                FROM `Root/Tenant2/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2194,10 +2455,9 @@ R"(CREATE TABLE `test_show_create` (
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `/Root/.sys/nodes`;
+                FROM `Root/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2264,16 +2524,11 @@ R"(CREATE TABLE `test_show_create` (
 
         makeQueryEvent(staticNode, buckets[0], "g", 700);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off);
-        auto driver = TDriver(driverConfig);
-
+        TTableClient client(env.GetDriver());
         {
-            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2285,10 +2540,9 @@ R"(CREATE TABLE `test_show_create` (
             NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2304,10 +2558,9 @@ R"(CREATE TABLE `test_show_create` (
             NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
         }
         {
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2321,11 +2574,10 @@ R"(CREATE TABLE `test_show_create` (
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd >= CAST(" << buckets[1] << "ul as Timestamp) ";
             query << "AND IntervalEnd < CAST(" << buckets[3] << "ul as Timestamp);";
 
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2342,11 +2594,10 @@ R"(CREATE TABLE `test_show_create` (
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd > CAST(" << buckets[1] << "ul as Timestamp) ";
             query << "AND IntervalEnd <= CAST(" << buckets[3] << "ul as Timestamp);";
 
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2363,11 +2614,10 @@ R"(CREATE TABLE `test_show_create` (
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd = CAST(" << buckets[2] << "ul as Timestamp) ";
             query << "AND Rank >= 1u AND Rank < 3u";
 
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2382,11 +2632,10 @@ R"(CREATE TABLE `test_show_create` (
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd = CAST(" << buckets[2] << "ul as Timestamp) ";
             query << "AND Rank > 1u AND Rank <= 3u";
 
-            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2406,7 +2655,7 @@ R"(CREATE TABLE `test_show_create` (
 
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TString queryText("SELECT * FROM `/Root/Table0`");
+        TString queryText("SELECT * FROM `Root/Table0`");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -2445,7 +2694,7 @@ R"(CREATE TABLE `test_show_create` (
                 UpdateBytes,
                 UpdateRows,
                 UserSID
-            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
+            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2503,14 +2752,14 @@ R"(CREATE TABLE `test_show_create` (
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "REPLACE INTO `/Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));",
+            "REPLACE INTO `Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));",
             TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
         // wait for conditional erase
         for (size_t iter = 0; iter < 70; ++iter) {
             auto result = session.ExecuteDataQuery(
-                "SELECT * FROM `/Root/Table0`;", TTxControl::BeginTx().CommitTx()
+                "SELECT * FROM `Root/Table0`;", TTxControl::BeginTx().CommitTx()
             ).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2553,7 +2802,7 @@ R"(CREATE TABLE `test_show_create` (
 
         auto session = client.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteSchemeQuery(R"(
-            DROP TABLE `/Root/Table0`;
+            DROP TABLE `Root/Table0`;
         )").GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -2603,7 +2852,7 @@ R"(CREATE TABLE `test_show_create` (
         WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
 
         auto result = session.ExecuteSchemeQuery(R"(
-            ALTER TABLE `/Root/Table0` RENAME TO `/Root/Table1`;
+            ALTER TABLE `Root/Table0` RENAME TO `Root/Table1`;
         )").GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -2623,13 +2872,13 @@ R"(CREATE TABLE `test_show_create` (
 
         TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env);
-        const auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        const auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
         const auto tablePathId = describeResult.GetPathId();
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "REPLACE INTO `/Root/Table0` (Key, Value) VALUES (0u, \"A\");",
+            "REPLACE INTO `Root/Table0` (Key, Value) VALUES (0u, \"A\");",
             TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
@@ -2723,7 +2972,7 @@ R"(CREATE TABLE `test_show_create` (
             TTableClient client(env.GetDriver());
             auto session = client.CreateSession().GetValueSync().GetSession();
             NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-                "SELECT * FROM `/Root/Table0`", TTxControl::BeginTx().CommitTx()
+                "SELECT * FROM `Root/Table0`", TTxControl::BeginTx().CommitTx()
             ).GetValueSync());
 
             auto it = client.StreamExecuteScanQuery(queryText).GetValueSync();
@@ -2733,14 +2982,14 @@ R"(CREATE TABLE `test_show_create` (
             ])", NKqp::StreamResultToYson(it));
         };
 
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_read_bytes_one_hour`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_duration_one_minute`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_duration_one_hour`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_cpu_time_one_minute`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_cpu_time_one_hour`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_request_units_one_minute`");
-        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_request_units_one_hour`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_read_bytes_one_minute`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_read_bytes_one_hour`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_duration_one_minute`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_duration_one_hour`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_cpu_time_one_minute`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_cpu_time_one_hour`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_minute`");
+        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_hour`");
     }
 
     Y_UNIT_TEST(SysViewScanBackPressure) {
@@ -2802,7 +3051,7 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env;
         CreateRootTable(env);
 
-        TString queryText("SELECT * FROM `/Root/Table0`");
+        TString queryText("SELECT * FROM `Root/Table0`");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -2816,7 +3065,7 @@ R"(CREATE TABLE `test_show_create` (
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT
                 ReadBytes
-            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
+            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2835,7 +3084,7 @@ R"(CREATE TABLE `test_show_create` (
             auto future0 = client.StreamExecuteScanQuery(R"(
                 SELECT
                     ReadBytes
-                FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
             )");
             futures.push_back(future0);
         }
@@ -3172,13 +3421,7 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
+        TTableClient client(env.GetDriver());
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -3228,13 +3471,7 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
+        TTableClient client(env.GetDriver());
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -3262,13 +3499,7 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
+        TTableClient client(env.GetDriver());
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -3355,17 +3586,10 @@ R"(CREATE TABLE `test_show_create` (
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
 
-        CreateTenant(env, "Tenant1", true);
-
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
+        TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
 
+        CreateTenant(env, "Tenant1", true);
         auto desc = TTableBuilder()
             .AddNullableColumn("Key", EPrimitiveType::Uint64)
             .SetPrimaryKeyColumn("Key")
@@ -3380,13 +3604,13 @@ R"(CREATE TABLE `test_show_create` (
 
         Cerr << "... UPSERT" << Endl;
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/Tenant1/Table1` (Key) VALUES (1u), (2u), (3u);
+            UPSERT INTO `Root/Tenant1/Table1` (Key) VALUES (1u), (2u), (3u);
         )", TTxControl::BeginTx().CommitTx()).GetValueSync());
 
         Cerr << "... SELECT from leader" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1;
+                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             NKqp::AssertSuccessResult(result);
 
@@ -3399,7 +3623,7 @@ R"(CREATE TABLE `test_show_create` (
         Cerr << "... SELECT from follower" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2;
+                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
 
@@ -3529,13 +3753,7 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
+        TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
 
         const TString tableName = "/Root/Tenant1/Table1";
@@ -3581,29 +3799,53 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(0); // IndexSize
     }
 
-    Y_UNIT_TEST(Describe) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(Describe, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (EnableRealSystemViewPaths) {
+                auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            const auto& systemView = result.GetSystemViewDescription();
+                const auto& systemView = result.GetSystemViewDescription();
 
-            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
+                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
-            const auto& columns = systemView.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
-            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-            UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+                const auto& columns = systemView.GetTableColumns();
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
+                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-            const auto& keyColumns = systemView.GetPrimaryKeyColumns();
-            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-            UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+                const auto& keyColumns = systemView.GetPrimaryKeyColumns();
+                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+            } else {
+                auto settings = TDescribeTableSettings()
+                    .WithKeyShardBoundary(true)
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true);
+
+                auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                const auto& table = result.GetTableDescription();
+                const auto& columns = table.GetTableColumns();
+                const auto& keyColumns = table.GetPrimaryKeyColumns();
+
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
+                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+
+                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+
+                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
+            }
         }
 
         TSchemeClient schemeClient(env.GetDriver());
@@ -3613,7 +3855,12 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            }
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys/partition_stats").GetValueSync();
@@ -3621,12 +3868,16 @@ R"(CREATE TABLE `test_show_create` (
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            }
         }
     }
 
-    Y_UNIT_TEST(SystemViewFailOps) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(SystemViewFailOps, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
         // Make AdministrationAllowedSIDs non-empty to deny any user cluster admin privilege.
@@ -3637,6 +3888,9 @@ R"(CREATE TABLE `test_show_create` (
         TTableClient adminClient(env.GetDriver(), TClientSettings().AuthToken("root@builtin"));
         auto adminSession = adminClient.CreateSession().GetValueSync().GetSession();
 
+        TTableClient userClient(env.GetDriver(), TClientSettings().AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
@@ -3645,10 +3899,6 @@ R"(CREATE TABLE `test_show_create` (
             auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-
-        TTableClient userClient(env.GetDriver(), TClientSettings().AuthToken("user@builtin"));
-        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
-
         {
             auto desc = TTableBuilder()
                 .AddNullableColumn("Column1", EPrimitiveType::Uint64)
@@ -3706,8 +3956,13 @@ R"(CREATE TABLE `test_show_create` (
         auto userSchemeClient = TSchemeClient(driver);
         {
             auto result = userSchemeClient.MakeDirectory("/Root/.sys").GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path exist", result.GetIssues().ToString());
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "path exist", result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -3722,28 +3977,31 @@ R"(CREATE TABLE `test_show_create` (
         }
         {
             auto result = userSchemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
             auto result = userSchemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
     }
 
-    Y_UNIT_TEST(DescribeSystemFolder) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(DescribeSystemFolder, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         CreateTenantsAndTables(env, true);
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off);
-        auto driver = TDriver(driverConfig);
-
+        TSchemeClient schemeClient(env.GetDriver());
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
             auto result = schemeClient.ListDirectory("/Root").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -3761,7 +4019,6 @@ R"(CREATE TABLE `test_show_create` (
             UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, "Tenant2");
         }
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -3771,13 +4028,11 @@ R"(CREATE TABLE `test_show_create` (
 
             auto children = result.GetChildren();
             SortBy(children, [](const auto& entry) { return entry.Name; });
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
-            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, ".sys");
-            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Table1");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table1");
         }
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
             auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -3791,12 +4046,15 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                if (EnableRealSystemViewPaths) {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                }
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -3811,12 +4069,15 @@ R"(CREATE TABLE `test_show_create` (
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                if (EnableRealSystemViewPaths) {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                }
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1/Table1/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
@@ -3829,49 +4090,39 @@ R"(CREATE TABLE `test_show_create` (
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
 
+        TSchemeClient schemeClient(driver);
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
-
-            {
-                auto result = schemeClient.ListDirectory("/Root").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
-
-            {
-                auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
-
-            {
-                auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
+            auto result = schemeClient.ListDirectory("/Root").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
         }
         {
-            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
-
-            {
-                auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
-            {
-                auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
-            {
-                auto result = schemeClient.DescribePath("/Root/Tenant1/.sys/partition_stats").GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-                result.GetIssues().PrintTo(Cerr);
-            }
+            auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
+        }
+        {
+            auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
+        }
+        {
+            auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
+        }
+        {
+            auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
+        }
+        {
+            auto result = schemeClient.DescribePath("/Root/Tenant1/.sys/partition_stats").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            result.GetIssues().PrintTo(Cerr);
         }
     }
 
@@ -4104,13 +4355,13 @@ R"(CREATE TABLE `test_show_create` (
         TTestEnv env(1, 0);
         CreateRootTable(env, 1, /* fillTable */ true);
 
-        TString query("SELECT * FROM `/Root/Table0`");
+        TString query("SELECT * FROM `Root/Table0`");
         execQuery(env, query);
 
         TTableClient client(env.GetDriver());
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT QueryText, Type, ReadRows
-            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`
+            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`
             ORDER BY ReadRows DESC
             LIMIT 1
             ;
@@ -4205,6 +4456,190 @@ R"(CREATE TABLE `test_show_create` (
         ])", ysonString);
     }
 }
+
+Y_UNIT_TEST_SUITE(ShowCreateView) {
+
+Y_UNIT_TEST(Basic) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS SELECT 1;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    1
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(FromTable) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE t (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            -- the case of the pragma identifier does not matter, but is preserved
+            pragma tabLEpathPRefix = '/Root/a/b';
+            CREATE VIEW `../../test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM `c/t`;
+        )",
+        "test_view",
+R"(-- the case of the pragma identifier does not matter, but is preserved
+PRAGMA tabLEpathPRefix = '/Root/a/b';
+
+CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    `c/t`
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithPairedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix ("db", "/Root/a/b/c");
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix('db', '/Root/a/b/c');
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTwoTablePathPrefixes) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `some/other/folder/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            PRAGMA TablePathPrefix = "/Root/some/other/folder";
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "some/other/folder/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+PRAGMA TablePathPrefix = '/Root/some/other/folder';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+}
+
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {
 
 Y_UNIT_TEST(Basic) {

@@ -142,6 +142,17 @@ private:
             RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
         }
 
+        ~TCheckpointCoordinatorMetrics() {
+            // Reset in the case of aggregated metrics (for non-aggregated - label "path" will be deleted).
+            InProgress->Set(0);
+            Pending->Set(0);
+            PendingCommit->Set(0);
+            LastCheckpointBarrierDeliveryTimeMillis->Set(0);
+            LastCheckpointDurationMillis->Set(0);
+            LastCheckpointSizeBytes->Set(0);
+            // SkippedDueToInFlightLimit resets in PassAway
+        }
+
         ::NMonitoring::TDynamicCounters::TCounterPtr InProgress;
         ::NMonitoring::TDynamicCounters::TCounterPtr Pending;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingCommit;

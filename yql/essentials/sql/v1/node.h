@@ -777,8 +777,7 @@ struct TColumnSchema {
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
     bool Serial = false;
-    TMaybe<TVector<TEncoding>> ColumnEncoding;  // for create/add column
-    TVector<TEncoding> EncodingConfig;          // for SetEncoding alter only
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {

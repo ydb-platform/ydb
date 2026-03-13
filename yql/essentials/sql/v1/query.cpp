@@ -1757,13 +1757,15 @@ public:
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
                         auto encodingsList = Y();
-                        for (const auto& enc : col.EncodingConfig) {
-                            auto encodingParamsList = Y();
-                            encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
-                            for (const auto& [key, value] : enc.Entries) {
-                                encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
+                        if (col.ColumnEncoding) {
+                            for (const auto& enc : *col.ColumnEncoding) {
+                                auto encodingParamsList = Y();
+                                encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
+                                for (const auto& [key, value] : enc.Entries) {
+                                    encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
+                                }
+                                encodingsList = L(encodingsList, Q(encodingParamsList));
                             }
-                            encodingsList = L(encodingsList, Q(encodingParamsList));
                         }
                         columnDesc = L(columnDesc, Q(Y(Q("changeEncoding"), Q(encodingsList))));
                         columns = L(columns, Q(columnDesc));

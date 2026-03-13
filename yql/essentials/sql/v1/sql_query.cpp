@@ -3110,7 +3110,7 @@ bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_c
         .Pos = pos,
         .Name = name,
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
-        .EncodingConfig = std::move(*encoding),
+        .ColumnEncoding = std::move(encoding),
     });
     return true;
 }

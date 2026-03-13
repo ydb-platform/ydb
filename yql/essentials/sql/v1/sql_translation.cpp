@@ -1745,7 +1745,7 @@ TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslati
             configs.push_back(std::move(enc));
         }
     }
-    return TMaybe<TVector<TEncoding>>(std::move(configs));
+    return configs;
 }
 
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx) {
@@ -1892,12 +1892,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     }
 
                     usedOptions.push_back(EOption::Encoding);
-
-                    auto enc = ColumnEncoding(opt, ctx);
-                    if (!enc) {
-                        return {};
-                    }
-                    columnEncoding = std::move(enc);
+                    columnEncoding = ColumnEncoding(opt, ctx);
 
                     break;
                 }

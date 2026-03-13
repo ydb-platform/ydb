@@ -37,12 +37,17 @@ namespace NLongTxService {
         }
 
         ~TLockHandle() noexcept {
-            Reset();
+            if (LockId) {
+                Unregister(LockId, ActorSystem);
+                LockId = 0;
+            }
         }
 
         TLockHandle& operator=(TLockHandle&& rhs) noexcept {
             if (Y_LIKELY(this != &rhs)) {
-                Reset();
+                if (LockId) {
+                    Unregister(LockId, ActorSystem);
+                }
                 LockId = rhs.LockId;
                 ActorSystem = rhs.ActorSystem;
                 rhs.LockId = 0;
@@ -55,24 +60,11 @@ namespace NLongTxService {
             return bool(LockId);
         }
 
-        void Reset() noexcept {
-            if (LockId) {
-                Unregister(LockId, ActorSystem);
-                LockId = 0;
-                ActorSystem = nullptr;
-            }
-        }
-
         ui64 GetLockId() const noexcept {
             return LockId;
         }
 
-        ui32 GetLockNodeId() const noexcept {
-            return ActorSystem ? GetNodeId(ActorSystem) : 0;
-        }
-
     private:
-        static ui32 GetNodeId(NActors::TActorSystem* as) noexcept;
         static void Register(ui64 lockId, NActors::TActorSystem* as) noexcept;
         static void Unregister(ui64 lockId, NActors::TActorSystem* as) noexcept;
 

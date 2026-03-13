@@ -3579,7 +3579,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         bool BuildIndexEventIsIntercepted = false;
     };
 
-    void BuildingUniqIndexDeniesTableModifications(bool sqlInterface) {
+    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface) {
         TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */);
         kikimr.RunCall([&]
         {
@@ -3662,13 +3662,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const TString& query : modificationQueries) {
                 Cerr << "Running query:\n" << query << Endl;
                 auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                if (result.GetStatus() != EStatus::BAD_REQUEST
-                    || result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") == TString::npos)
-                {
-                    Cerr << "Execute query issues. Query: " << query << Endl;
-                    Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
-                    ythrow yexception() << "Unexpected status of modification query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
-                }
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
 
             auto checkBulkUpsert = [&]{
@@ -3727,12 +3721,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         });
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
-        BuildingUniqIndexDeniesTableModifications(false);
+    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsPublicApi) {
+        BuildingUniqIndexAllowsTableModifications(false);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
-        BuildingUniqIndexDeniesTableModifications(true);
+    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsSql) {
+        BuildingUniqIndexAllowsTableModifications(true);
     }
 
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {

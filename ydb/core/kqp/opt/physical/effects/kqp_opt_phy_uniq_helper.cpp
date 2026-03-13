@@ -258,8 +258,6 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
 
     // make uniq check for each uniq constraint
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
-        if (table.Metadata->Indexes[i].State != TIndexDescription::EIndexState::Ready)
-            continue;
         if (table.Metadata->Indexes[i].Type != TIndexDescription::EType::GlobalSyncUnique)
             continue;
         if (usedIndexes && !usedIndexes->contains(table.Metadata->Indexes[i].Name))

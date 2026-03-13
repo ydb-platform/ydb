@@ -17,47 +17,6 @@ namespace {
 
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
-// Custom controller to track chunk fetching
-class TStreamingTestController : public TDefaultTestsController {
-private:
-    std::atomic<ui32> ChunksFetchedCount{0};
-    std::atomic<ui32> TotalChunksCount{0};
-    mutable TMutex Mutex;
-    std::vector<std::pair<ui32, ui32>> FetchedChunkRanges;
-
-public:
-    void OnChunkFetched(ui32 chunkStart, ui32 chunkEnd) {
-        TGuard<TMutex> guard(Mutex);
-        ChunksFetchedCount++;
-        FetchedChunkRanges.emplace_back(chunkStart, chunkEnd);
-    }
-
-    void SetTotalChunks(ui32 total) {
-        TotalChunksCount = total;
-    }
-
-    ui32 GetChunksFetched() const {
-        return ChunksFetchedCount.load();
-    }
-
-    ui32 GetTotalChunks() const {
-        return TotalChunksCount.load();
-    }
-
-    bool VerifyPartialFetch() const {
-        ui32 fetched = ChunksFetchedCount.load();
-        ui32 total = TotalChunksCount.load();
-        return total > 0 && fetched > 0 && fetched < total;
-    }
-
-    void Reset() {
-        ChunksFetchedCount = 0;
-        TotalChunksCount = 0;
-        TGuard<TMutex> guard(Mutex);
-        FetchedChunkRanges.clear();
-    }
-};
-
 void TestStreamingReadWithLargePortion() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -65,7 +24,7 @@ void TestStreamingReadWithLargePortion() {
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
     
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TStreamingTestController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     
     TActorId sender = runtime.AllocateEdgeActor();
@@ -149,20 +108,19 @@ void TestStreamingReadWithSmallPortion() {
     PlanCommit(runtime, sender, planStep, txId);
 
     // Read without streaming (small portion)
-    {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
-        
-        auto rb = reader.ReadAll();
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb);
-        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
-        
-        // With small portion, streaming should not be used
-        // So we should have fewer iterations
-        const ui32 iterationsCount = reader.GetIterationsCount();
-        Cerr << "Iterations count (small): " << iterationsCount << Endl;
-    }
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    // With small portion, streaming should not be used
+    // Expect a single iteration (no paging/streaming over multiple chunks)
+    const ui32 iterationsCount = reader.GetIterationsCount();
+    Cerr << "Iterations count (small): " << iterationsCount << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(iterationsCount, 1u);
 }
 
 void TestStreamingReadMultiplePortions() {
@@ -455,6 +413,68 @@ void TestPartialResultEmission() {
 
 } // namespace
 
+void TestStreamingWithFilterSkip() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write a large portion that will be read
+    const ui32 numRecordsToRead = 80000;
+    std::pair<ui64, ui64> portionToRead = {0, numRecordsToRead};
+    TString dataToRead = MakeTestBlob(portionToRead, table.Schema);
+    std::vector<ui64> writeIds1;
+    UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, dataToRead, table.Schema, true, &writeIds1));
+    planStep = ProposeCommit(runtime, sender, txId++, writeIds1);
+    PlanCommit(runtime, sender, planStep, txId - 1);
+
+    // Write a second portion that will be filtered out by the read's key range
+    const ui32 numRecordsToSkip = 10000;
+    std::pair<ui64, ui64> portionToSkip = {numRecordsToRead, numRecordsToRead + numRecordsToSkip};
+    TString dataToSkip = MakeTestBlob(portionToSkip, table.Schema);
+    std::vector<ui64> writeIds2;
+    UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, dataToSkip, table.Schema, true, &writeIds2));
+    planStep = ProposeCommit(runtime, sender, txId++, writeIds2);
+    PlanCommit(runtime, sender, planStep, txId - 1);
+
+    // Read data with a range filter that only includes the first portion
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId - 1));
+        reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+        
+        // Add a range that covers only the first portion (0 to numRecordsToRead - 1)
+        reader.AddRange(MakeTestRange({0, numRecordsToRead - 1}, true, true, table.Pk));
+        
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecordsToRead);
+
+        // Verify that streaming was used
+        const ui32 iterationsCount = reader.GetIterationsCount();
+        Cerr << "Iterations count (with filter skip): " << iterationsCount << Endl;
+        UNIT_ASSERT_GT(iterationsCount, 1);
+    }
+}
+
 Y_UNIT_TEST_SUITE(StreamingRead) {
     Y_UNIT_TEST(StreamingWithLargePortion) {
         TestStreamingReadWithLargePortion();
@@ -478,6 +498,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(PartialResultEmission) {
         TestPartialResultEmission();
+    }
+
+    Y_UNIT_TEST(StreamingWithFilterSkip) {
+        TestStreamingWithFilterSkip();
     }
 }
 

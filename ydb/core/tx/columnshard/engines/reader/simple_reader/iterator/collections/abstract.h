@@ -21,7 +21,7 @@ private:
     TPositiveControlInteger SourcesInFlightCount;
     TPositiveControlInteger PagesInFlightCount;
     YDB_READONLY(ui64, MaxInFlight, 1024);
-    YDB_READONLY(ui64, MaxPagesInFlight, 0);  // 0 means use MaxInFlight
+    YDB_ACCESSOR(ui64, MaxPagesInFlight, 8);
 
     virtual TString DoDebugString() const {
         return "";

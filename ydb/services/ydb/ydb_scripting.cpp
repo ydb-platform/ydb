@@ -32,7 +32,9 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
         GRpcRequestProxyId_,                                  \
         CQ_,                                                  \
         nullptr,                                              \
-        nullptr)
+        nullptr,                                              \
+        isRlAllowed = IsRlAllowed()                           \
+    )
 
     SETUP_SCRIPTING_METHOD(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, DoExecuteYqlScript, RLSWITCH(Ru), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestOperationCall);
     SETUP_SCRIPTING_METHOD(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, DoStreamExecuteYqlScript, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestNoOperationCall);

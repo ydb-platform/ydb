@@ -31,7 +31,7 @@ void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         GRpcRequestProxyId_,                                    \
         CQ_,                                                    \
         nullptr,                                                \
-        nullptr)
+        nullptr, isRlAllowed = IsRlAllowed())
 
     SETUP_MAINTENANCE_METHOD(ListClusterNodes, ListClusterNodesRequest, ListClusterNodesResponse, DoListClusterNodes, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_MAINTENANCE_METHOD(CreateMaintenanceTask, CreateMaintenanceTaskRequest, MaintenanceTaskResponse, DoCreateMaintenanceTask, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

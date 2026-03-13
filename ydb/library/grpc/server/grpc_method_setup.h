@@ -22,7 +22,7 @@
 #define STREAMING_REQUEST_CLASS(inputType, outputType) ::NKikimr::NGRpcServer::TGRpcStreamingRequest<inputType, outputType, std::remove_reference_t<decltype(*this)>, ::NKikimrServices::GRPC_SERVER>
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback,...) \
     MakeIntrusive<::NKikimr::NGRpcService::TGRpcRequest<                                                  \
         inputType,                                                                                        \
         outputType,                                                                                       \
@@ -31,12 +31,12 @@
         this,                                                                                             \
         &Service_,                                                                                        \
         cq,                                                                                               \
-        [this, proxyId = grpcProxyId](::NYdbGrpc::IRequestContextBase* reqCtx) {                          \
+        [actorSystem = ActorSystem_, proxyId = grpcProxyId, reportSdkBuildInfo = GetReportSdkBuildInfo(), ## __VA_ARGS__](::NYdbGrpc::IRequestContextBase* reqCtx) {                          \
             ::NKikimr::NGRpcService::ReportGrpcReqToMon(                                                  \
-                *ActorSystem_,                                                                            \
+                *actorSystem,                                                                            \
                 reqCtx->GetPeer(),                                                                        \
-                GetSdkBuildInfoIfNeeded(reqCtx));                                                         \
-            ActorSystem_->Send(proxyId, new operationCallClass<                                           \
+                GetSdkBuildInfoIfNeeded(reqCtx, reportSdkBuildInfo));                                                         \
+            actorSystem->Send(proxyId, new operationCallClass<                                           \
                 inputType,                                                                                \
                 outputType,                                                                               \
                 ::NKikimr::NGRpcService::NRuntimeEvents::EType::runtimeEventType>(reqCtx, methodCallback, \
@@ -55,16 +55,16 @@
     )->Run()
 
 // Setup for bidirectional streaming
-#define SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName, inputType, outputType, rlMode, requestType, counterBlock, auditMode, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
+#define SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName, inputType, outputType, rlMode, requestType, counterBlock, auditMode, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback,...) \
     STREAMING_REQUEST_CLASS(inputType, outputType)::Start(this,                                                         \
         &Service_,                                                                                                      \
         cq,                                                                                                             \
         &TGrpcAsyncService::Y_CAT(Request, methodName),                                                                 \
-        [this, proxyId = grpcProxyId](TIntrusivePtr<STREAMING_REQUEST_CLASS(inputType, outputType)::IContext> reqCtx) { \
+        [actorSystem = ActorSystem_, proxyId = grpcProxyId,## __VA_ARGS__](TIntrusivePtr<STREAMING_REQUEST_CLASS(inputType, outputType)::IContext> reqCtx) { \
             ::NKikimr::NGRpcService::ReportGrpcReqToMon(                                                                \
-                *ActorSystem_,                                                                                          \
+                *actorSystem,                                                                                          \
                 reqCtx->GetPeerName());                                                                                 \
-            ActorSystem_->Send(proxyId,                                                                                 \
+            actorSystem->Send(proxyId,                                                                                 \
                 new operationCallClass(reqCtx,                                                                          \
                     ::NKikimr::NGRpcService::TRequestAuxSettings {                                                      \
                         .RlMode = rlMode,                                                                               \
@@ -83,7 +83,7 @@
 
 // Common macro for gRPC methods setup
 // Use RLSWITCH or RLMODE macro for rlMode
-#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)             \
+#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode,...)             \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
         YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
         YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                        \
@@ -97,7 +97,8 @@
         GRpcRequestProxyId_,                                                                              \
         CQ_,                                                                                              \
         nullptr,                                                                                          \
-        nullptr                                                                                           \
+        nullptr,                                                                                          \
+        ## __VA_ARGS__ \
     )
 
 #endif // GRPC_METHOD_SETUP_H

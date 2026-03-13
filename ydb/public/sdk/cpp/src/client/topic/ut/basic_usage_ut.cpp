@@ -73,12 +73,14 @@ std::string Serialize(const TExample& value) {
 void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
                                          const std::string& topicPath,
                                          const std::string& consumerName,
+                                         const std::string& expectedPayload,
                                          size_t expectedCount,
                                          TDuration timeout = TDuration::Seconds(30)) {
     struct TMessageInfo {
         ui64 PartitionId;
-        TString ProducerId;
+        std::string ProducerId;
         ui64 SeqNo;
+        std::string Data;
     };
     std::vector<TMessageInfo> messages;
     messages.reserve(expectedCount);
@@ -98,6 +100,7 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
                 msg.GetPartitionSession()->GetPartitionId(),
                 TString(msg.GetProducerId()),
                 msg.GetSeqNo(),
+                TString(msg.GetData()),
             });
         }
         if (messages.size() >= expectedCount) {
@@ -115,8 +118,9 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
 
     // SeqNo ordering is guaranteed within one producer stream.
     // Multiple producers can write into the same partition with independent seqNo sequences.
-    std::map<std::pair<ui64, TString>, std::vector<ui64>> byPartitionAndProducer;
+    std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
     for (const auto& m : messages) {
+        UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
         byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
     }
     for (const auto& [key, seqNos] : byPartitionAndProducer) {
@@ -1324,11 +1328,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.MaxBlock(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
+        std::string payload = "data";
 
         const ui64 count = 3000;
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
-            std::string payload = "data";
             TWriteMessage msg(payload);
             msg.SeqNo(i);
             msg.Key(key);
@@ -1338,7 +1342,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
 
-        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), count);
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count);
     }
 
     Y_UNIT_TEST(Producer_AutoSeqNo) {
@@ -1372,9 +1376,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
 
         auto producer2 = client.CreateProducer(writeSettings);
+        std::string payload = "data";
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
-            std::string payload = "data";
             TWriteMessage msg(payload);
             msg.Key(key);
             UNIT_ASSERT_C(producer2->Write(std::move(msg)).IsSuccess(), "Failed to write message");
@@ -1382,7 +1386,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
 
-        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), count * 2);
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count * 2);
     }
 
     Y_UNIT_TEST(Producer_WriteToClosedProducer) {
@@ -1721,7 +1725,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer3->Close(TDuration::Seconds(30)).IsSuccess());
 
-        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), 14);
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 14);
     }
 
     Y_UNIT_TEST(AutoPartitioning_Producer_SmallMessages) {
@@ -1799,7 +1803,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
 
-        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), totalMessages);
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, totalMessages);
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {
@@ -1837,7 +1841,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
 
-        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), 100);
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 100);
     }
 
     Y_UNIT_TEST(TypedProducer_BasicWrite) {

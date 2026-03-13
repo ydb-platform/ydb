@@ -19,8 +19,10 @@
   - GLES/glext.h
   - GLES2/gl2.h
   - GLES2/gl2ext.h
+  - GLES3/gl3.h
   - GLES3/gl31.h
   - GLES3/gl32.h
+  - GLES3/gl3ext.h
   - SLES/OpenSLES.h
   - SLES/OpenSLES_Android.h
   - SLES/OpenSLES_AndroidConfiguration.h

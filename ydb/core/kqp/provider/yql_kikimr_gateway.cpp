@@ -12,7 +12,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -22,7 +21,6 @@ namespace NYql {
 using namespace NThreading;
 using namespace NKikimr::NMiniKQL;
 using namespace NUdf;
-namespace NJsonKeys = NKikimr::NOlap::NIndexes::NJsonKeys;
 
 static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
     TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)
@@ -464,7 +462,7 @@ TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr)
 
 void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
     const TString& name, const TString& value, TString& error) {
-    if (name == NJsonKeys::FalsePositiveProbability) {
+    if (name == "false_positive_probability") {
         double fpp = 0.0;
         if (!TryFromString<double>(value, fpp)) {
             error = TStringBuilder() << "Invalid false_positive_probability value: " << value;
@@ -475,7 +473,7 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
         return;
     }
 
-    if (name == NJsonKeys::CaseSensitive) {
+    if (name == "case_sensitive") {
         bool boolValue = true;
         if (!TryFromString<bool>(value, boolValue)) {
             error = TStringBuilder() << "Invalid case_sensitive value: " << value;
@@ -503,7 +501,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
-    if (name == NJsonKeys::FalsePositiveProbability) {
+    if (name == "false_positive_probability") {
         double fpValue = 0;
         if (!TryFromString<double>(value, fpValue)) {
             error = TStringBuilder() << "Invalid false_positive_probability value: " << value;
@@ -514,7 +512,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
-    if (name == NJsonKeys::HashesCount) {
+    if (name == "hashes_count") {
         ui32 uiValue = 0;
         if (!TryFromString<ui32>(value, uiValue)) {
             error = TStringBuilder() << "Invalid hashes_count value: " << value;
@@ -525,7 +523,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
-    if (name == NJsonKeys::CaseSensitive) {
+    if (name == "case_sensitive") {
         bool boolValue = true;
         if (!TryFromString<bool>(value, boolValue)) {
             error = TStringBuilder() << "Invalid case_sensitive value: " << value;

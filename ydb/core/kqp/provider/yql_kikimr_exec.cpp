@@ -20,7 +20,6 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -2348,7 +2347,7 @@ public:
                                 }
 
                                 auto* bloomIndex = add_index->mutable_local_bloom_filter_index();
-                                bloomIndex->set_case_sensitive(NDefaults::CaseSensitive);
+                                bloomIndex->set_case_sensitive(true);
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2357,7 +2356,7 @@ public:
                                 }
 
                                 auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
-                                ngramIndex->set_case_sensitive(NDefaults::CaseSensitive);
+                                ngramIndex->set_case_sensitive(true);
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));

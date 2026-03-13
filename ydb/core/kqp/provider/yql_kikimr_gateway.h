@@ -17,7 +17,6 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -71,14 +70,14 @@ struct TKikimrQueryLimits {
 struct TIndexDescription {
     struct TLocalBloomFilterDescription {
         std::optional<double> FalsePositiveProbability;
-        bool CaseSensitive = NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive;
+        bool CaseSensitive = true;
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = NKikimr::NOlap::NIndexes::NDefaults::NGrammSize;
-        ui32 HashesCount = NKikimr::NOlap::NIndexes::NDefaults::HashesCount;
-        double FalsePositiveProbability = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-        bool CaseSensitive = NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive;
+        ui32 NgramSize = 3;
+        ui32 HashesCount = 2;
+        double FalsePositiveProbability = 0.1;
+        bool CaseSensitive = true;
     };
 
     enum class EType : ui32 {

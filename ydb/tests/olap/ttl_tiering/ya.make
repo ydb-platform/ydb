@@ -16,7 +16,17 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+<<<<<<< HEAD
 SIZE(MEDIUM)
+=======
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+>>>>>>> 7bf789f021c (Main: Optimisation for medium and small tests cpu requirments (without split and fork) (#35835))
 
 PEERDIR(
     ydb/tests/library

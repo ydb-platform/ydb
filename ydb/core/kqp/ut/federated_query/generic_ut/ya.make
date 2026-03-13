@@ -1,5 +1,15 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+<<<<<<< HEAD
+=======
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    REQUIREMENTS(cpu:2)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
+
+>>>>>>> 7bf789f021c (Main: Optimisation for medium and small tests cpu requirments (without split and fork) (#35835))
 FORK_SUBTESTS()
 
 SRCS(

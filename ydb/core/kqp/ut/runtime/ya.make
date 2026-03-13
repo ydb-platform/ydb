@@ -2,7 +2,17 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
+<<<<<<< HEAD
 SIZE(MEDIUM)
+=======
+REQUIREMENTS(cpu:2)
+IF (WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+>>>>>>> 7bf789f021c (Main: Optimisation for medium and small tests cpu requirments (without split and fork) (#35835))
 
 SRCS(
     kqp_hash_shuffle_ut.cpp

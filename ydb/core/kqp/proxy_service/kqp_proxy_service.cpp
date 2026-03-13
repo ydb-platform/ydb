@@ -562,8 +562,7 @@ public:
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
             if (sessionInfo.AttachedRpcId) {
                 Send(sessionInfo.AttachedRpcId,
-                    CreateEvCloseSessionResponse(sessionInfo.SessionId,
-                        NKikimrKqp::TCloseSessionResponse::NODE).release());
+                    CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId).release());
             }
         }
     }
@@ -1131,8 +1130,7 @@ public:
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         if (sessionInfo->AttachedRpcId) {
             Send(sessionInfo->AttachedRpcId,
-                CreateEvCloseSessionResponse(sessionInfo->SessionId,
-                    NKikimrKqp::TCloseSessionResponse::SESSION).release());
+                CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId).release());
         }
     }
 
@@ -1979,14 +1977,28 @@ private:
     TDatabasesCache DatabasesCache;
 
     std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(
-        const TString& sessionId,
-        NKikimrKqp::TCloseSessionResponse::EShutdownHint hint = NKikimrKqp::TCloseSessionResponse::UNSPECIFIED)
+        const TString& sessionId)
     {
         auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
         closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         closeEv->Record.MutableResponse()->SetSessionId(sessionId);
         closeEv->Record.MutableResponse()->SetClosed(true);
-        closeEv->Record.MutableResponse()->SetShutdownHint(hint);
+        return closeEv;
+    }
+
+    std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponseWithNodeShutdown(
+        const TString& sessionId)
+    {
+        auto closeEv = CreateEvCloseSessionResponse(sessionId);
+        *closeEv->Record.MutableResponse()->MutableNodeShutdown() = {};
+        return closeEv;
+    }
+
+    std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponseWithSessionShutdown(
+        const TString& sessionId)
+    {
+        auto closeEv = CreateEvCloseSessionResponse(sessionId);
+        *closeEv->Record.MutableResponse()->MutableSessionShutdown() = {};
         return closeEv;
     }
 };

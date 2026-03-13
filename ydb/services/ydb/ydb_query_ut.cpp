@@ -15,6 +15,34 @@ using namespace NYdb;
 using namespace NYdbGrpc;
 using namespace NTestHelpers;
 
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestCreateAndAttachSession) {
         TKikimrWithGrpcAndRootSchema server;
@@ -233,25 +261,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
         UNIT_ASSERT(allDoneOk);
 
-        struct TForceShutdownRequest : NMonitoring::IMonHttpRequest {
-            TCgiParameters Params_;
-            TForceShutdownRequest() { Params_.Scan("force_shutdown=1"); }
-            const TCgiParameters& GetParams() const override { return Params_; }
-            IOutputStream& Output() override { Y_ABORT("Not implemented"); }
-            HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
-            const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
-            const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
-            TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
-            TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
-            TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
-            NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
-            NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
-        } monReq;
+        TMockMonHttpRequest monReq("force_shutdown=1");
 
         auto edgeActor = runtime->AllocateEdgeActor();
         auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));

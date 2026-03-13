@@ -49,7 +49,6 @@ message SessionShutdownHint {
 }
 
 message NodeShutdownHint {
-    uint64 grace_period_seconds = 1;
 }
 
 message SessionState {

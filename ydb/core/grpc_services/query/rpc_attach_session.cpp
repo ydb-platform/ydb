@@ -93,18 +93,23 @@ private:
         ReplyFinishStream(Ydb::StatusIds::SUCCESS);
     }
 
-    void SendShutdownHint(NKikimrKqp::TCloseSessionResponse::EShutdownHint internal) {
+    void SendSessionHint(const NKikimrKqp::TCloseSessionResponse& response) {
         Ydb::Query::SessionState resp;
         resp.set_status(Ydb::StatusIds::SUCCESS);
-        switch (internal) {
-            case NKikimrKqp::TCloseSessionResponse::SESSION:
+
+        switch (response.StateHint_case()) {
+            case NKikimrKqp::TCloseSessionResponse::kSessionShutdown:
                 *resp.mutable_session_shutdown() = {};
                 break;
-            case NKikimrKqp::TCloseSessionResponse::NODE:
+            case NKikimrKqp::TCloseSessionResponse::kNodeShutdown:
                 *resp.mutable_node_shutdown() = {};
                 break;
-            case NKikimrKqp::TCloseSessionResponse::UNSPECIFIED:
-                Y_ABORT("SendShutdownHint called with UNSPECIFIED hint");
+            case NKikimrKqp::TCloseSessionResponse::STATEHINT_NOT_SET:
+                return;
+            default:
+                Y_DEBUG_ABORT("SendSessionHint called with unexpected hint value: %d",
+                    static_cast<int>(response.StateHint_case()));
+                return;
         }
 
         TString out;
@@ -119,10 +124,7 @@ private:
             event.GetResponse().GetClosed() &&
             event.GetStatus() == Ydb::StatusIds::SUCCESS)
         {
-            const auto internalHint = event.GetResponse().GetShutdownHint();
-            if (internalHint != NKikimrKqp::TCloseSessionResponse::UNSPECIFIED) {
-                SendShutdownHint(internalHint);
-            }
+            SendSessionHint(event.GetResponse());
             ReplyFinishStream(Ydb::StatusIds::SUCCESS);
         } else {
             InternalError("unexpected TEvCloseSessionResponse response");

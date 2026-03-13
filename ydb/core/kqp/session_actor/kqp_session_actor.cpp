@@ -2047,7 +2047,9 @@ public:
 
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request)
     {
-        AFL_ENSURE(txCtx->DeferredEffects.Empty());
+        if (!txCtx->DeferredEffects.Empty()) {
+            request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
+        }
 
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
@@ -3213,7 +3215,6 @@ public:
     void ResetTxState() {
         if (QueryState->TxCtx) {
             QueryState->TxCtx->ClearDeferredEffects();
-            QueryState->TxCtx->TxManager.reset();
             QueryState->TxCtx->LockHandle = NLongTxService::TLockHandle();
             QueryState->TxCtx->Finish();
         }

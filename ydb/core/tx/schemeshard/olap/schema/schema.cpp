@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/minmax/meta.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -81,6 +82,31 @@ bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& op
     }
 
     return true;
+}
+
+bool TOlapSchema::AddDefaultMinMaxIndexes(IErrorCollector& errors) {
+    NKikimrSchemeOp::TAlterColumnTableSchema alterSchema;
+    for (auto& [id, col] : Columns.GetColumns()) {
+        if (!NOlap::NIndexes::NMinMax::TIndexMeta::IsAvailableType(col.GetType())) {
+            continue;
+        }
+        const TString indexName = "__minmax_" + col.GetName();
+        if (Indexes.GetByName(indexName)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_default_minmax_index")("index_name", indexName)("reason", "index with " +indexName+ " already exists");
+            continue;
+        }
+        auto* upsertIndex = alterSchema.AddUpsertIndexes();
+        upsertIndex->SetName(indexName);
+        upsertIndex->MutableMinMaxIndex()->SetColumnName(col.GetName());
+    }
+    if (alterSchema.UpsertIndexesSize() == 0) {
+        return true;
+    }
+    TOlapIndexesUpdate indexUpdate;
+    if (!indexUpdate.Parse(alterSchema, errors)) {
+        return false;
+    }
+    return Indexes.ApplyUpdate(*this, indexUpdate, errors, NextColumnId);
 }
 
 void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {

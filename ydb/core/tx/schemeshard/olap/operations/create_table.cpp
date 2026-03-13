@@ -193,6 +193,12 @@ private:
         }
 
         TableSchema.ParseIndexesFromFullSchema(description.GetSchema());
+
+        if (AppData()->FeatureFlags.GetEnableDefaultMinMaxIndexForColumnTables()) {
+            if (!TableSchema.AddDefaultMinMaxIndexes(errors)) {
+                return false;
+            }
+        }
         return true;
     }
 

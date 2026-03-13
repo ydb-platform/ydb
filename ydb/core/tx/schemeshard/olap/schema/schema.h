@@ -30,6 +30,7 @@ namespace NKikimr::NSchemeShard {
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
         bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, const TOperationContext& context, IErrorCollector& errors) const;
+        bool AddDefaultMinMaxIndexes(IErrorCollector& errors);
     };
 
     class TOlapStoreSchemaPreset: public TOlapSchema {

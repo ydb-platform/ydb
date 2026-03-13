@@ -35,6 +35,9 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
     const auto source = input->Child(0);
     auto& partitionKeySelector = input->ChildRef(1);
     const auto partitionColumns = input->Child(2);
+    if (!EnsureTuple(*partitionColumns, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
     const auto sortTraits = input->Child(3);
     const auto params = input->Child(4);
     Y_UNUSED(sortTraits);
@@ -52,6 +55,9 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
     auto partitionKeySelectorItemTypes = partitionKeySelectorType->Cast<TTupleExprType>()->GetItems();
 
     //merge measure columns, came from params, with partition columns to form output row type
+    if (!EnsureStructType(*params, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
     auto outputTableColumns = params->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
     if (const auto rowsPerMatch = params->Child(1);
         "RowsPerMatch_OneRow" == rowsPerMatch->Content()) {

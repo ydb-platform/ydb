@@ -20,6 +20,18 @@ namespace {
 
 constexpr bool PrintCallableTimes = false;
 
+constexpr ui32 MaxChildrenForFuzzing = 100;
+
+THashSet<TStringBuf> FuzzUntypedExcludes = {
+    "S3ReadObject!",
+    "S3ParseSettings",
+    "DqCnMerge",
+    "DqJoin",
+    "DqPhyMapJoin",
+    "DqPhyCrossJoin",
+    "DqPhyJoinDict",
+};
+
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
     TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
@@ -590,14 +602,16 @@ private:
         }
     }
 
-    static constexpr ui32 MaxChildrenForFuzzing = 100;
-
     void FuzzCallableWithUntypedLambdas(const TExprNode::TPtr& originalInput, TExprContext& ctx) {
         if (originalInput->ChildrenSize() == 0) {
             return;
         }
 
         if (originalInput->ChildrenSize() > MaxChildrenForFuzzing) {
+            return;
+        }
+
+        if (FuzzUntypedExcludes.contains(originalInput->Content())) {
             return;
         }
 
@@ -620,8 +634,13 @@ private:
             fuzzInput->ChildRef(i) = FuzzLambdaNode_;
 
             TExprNode::TPtr fuzzOutput;
-            auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
-            Y_UNUSED(fuzzStatus);
+            try {
+                auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
+                Y_UNUSED(fuzzStatus);
+            } catch (...) {
+                ythrow yexception() << "Fuzz untyped lambda failed for callable " << originalInput->Content()
+                    << ", mutated input #" << i << ", reason: " << CurrentExceptionMessage();
+            }
         }
     }
 

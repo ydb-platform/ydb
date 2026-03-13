@@ -442,8 +442,7 @@ public:
         Y_ENSURE(MarkTokenStack_.empty());
 
         for (; LastComment_ < Comments_.size(); ++LastComment_) {
-            const auto text = Comments_[LastComment_].Content;
-            AddComment(text);
+            AddLastComment(/*nextTokenIndex=*/ParsedTokens_.size());
         }
 
         ui32 lines = OutLine_ - (OutColumn_ == 0 ? 1 : 0);
@@ -494,7 +493,7 @@ private:
 
     void NewLine() {
         if (TokenIndex_ >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_].Line > LastLine_) {
-            WriteComments(true);
+            WriteComments(true, /*nextTokenIndex=*/TokenIndex_);
         }
 
         if (OutColumn_) {
@@ -502,7 +501,9 @@ private:
         }
     }
 
-    void AddComment(TStringBuf text) {
+    void AddLastComment(size_t nextTokenIndex) {
+        const TStringBuf text = Comments_[LastComment_].Content;
+
         if (!AfterComment_ && OutLine_ > BlockFirstLine_ && OutColumn_ == 0) {
             Out('\n');
         }
@@ -527,8 +528,8 @@ private:
         }
 
         if (!text.StartsWith("--") &&
-            TokenIndex_ < ParsedTokens_.size() &&
-            Comments_[LastComment_].Line < ParsedTokens_[TokenIndex_].Line &&
+            nextTokenIndex < ParsedTokens_.size() &&
+            Comments_[LastComment_].Line < ParsedTokens_[nextTokenIndex].Line &&
             (LastComment_ + 1 >= Comments_.size() || Comments_[LastComment_].Line < Comments_[LastComment_ + 1].Line)) {
             Out('\n');
         }
@@ -1760,14 +1761,14 @@ private:
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
 
-    void WriteComments(bool completeLine) {
+    void WriteComments(bool completeLine, size_t nextTokenIndex) {
         while (LastComment_ < Comments_.size()) {
             const auto& c = Comments_[LastComment_];
             if (c.Line > LastLine_ || !completeLine && c.Line == LastLine_ && c.LinePos > LastColumn_) {
                 break;
             }
 
-            AddComment(c.Content);
+            AddLastComment(nextTokenIndex);
             ++LastComment_;
         }
     }
@@ -1775,7 +1776,7 @@ private:
     void PosFromToken(const TToken& token) {
         LastLine_ = token.GetLine();
         LastColumn_ = token.GetColumn();
-        WriteComments(false);
+        WriteComments(false, /*nextTokenIndex=*/TokenIndex_);
     }
 
     void VisitToken(const TToken& token) {
@@ -1874,7 +1875,7 @@ private:
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
-            WriteComments(true);
+            WriteComments(true, /*nextTokenIndex=*/TokenIndex_ + 1);
         }
 
         if (str == ";") {

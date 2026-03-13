@@ -638,7 +638,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
@@ -648,11 +647,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
-    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableReplication(opts.EnableReplication_);
-    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);

@@ -52,7 +52,6 @@ private:
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);

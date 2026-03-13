@@ -189,7 +189,7 @@ namespace NKikimr::NStorage {
         std::unique_ptr<IActor> actor;
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, AppData()->Counters));
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {}, AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;

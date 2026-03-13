@@ -17,7 +17,6 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
         Y_ABORT_UNLESS(msg.DiskFormat);
-        Y_ABORT_UNLESS(msg.PersistentBufferFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
         DiskFormat = std::move(msg.DiskFormat);
@@ -29,7 +28,7 @@ namespace NKikimr::NDDisk {
                 (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         }
 
-        InitPersistentBuffer(std::move(msg.PersistentBufferFormat));
+        InitPersistentBuffer();
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;

@@ -158,6 +158,14 @@ namespace NKikimr::NDDisk {
         }
     };
 
+struct TPersistentBufferFormat {
+    ui32 MaxChunks = 256;
+    ui32 InitChunks = 4;
+    ui32 MaxInMemoryCache = 128_MB;
+    ui32 MaxChunkRestoreInflight = 8;
+    ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
+};
+
 #define DECLARE_DDISK_EVENT(NAME) \
     struct TEv##NAME : TEventPB<TEv##NAME, NKikimrBlobStorage::NDDisk::TEv##NAME, TEv::Ev##NAME>
 
@@ -297,12 +305,13 @@ namespace NKikimr::NDDisk {
         TEvWritePersistentBufferResult() = default;
 
         TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1, double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
     };
 
@@ -404,12 +413,14 @@ namespace NKikimr::NDDisk {
         TEvErasePersistentBufferResult() = default;
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1,
+                double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
     };
 
@@ -529,6 +540,6 @@ namespace NKikimr::NDDisk {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr::NDDisk

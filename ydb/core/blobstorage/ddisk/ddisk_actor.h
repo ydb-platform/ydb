@@ -237,9 +237,14 @@ namespace NKikimr::NDDisk {
             };
         };
 
+        enum EWakeupTag {
+            WakeupIoSubmitQueue = 1,
+            WakeupUpdateFreeSpaceInfo = 2,
+        };
+
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFunc);
@@ -541,10 +546,9 @@ namespace NKikimr::NDDisk {
         ui32 SectorSize;
         ui32 SectorInChunk;
         ui32 ChunkSize;
-        ui32 MaxChunks;
-        ui32 PersistentBufferInitChunks;
-        ui32 MaxPersistentBufferInMemoryCache;
-        ui32 MaxPersistentBufferChunkRestoreInflight;
+        TPersistentBufferFormat PersistentBufferFormat;
+
+        double NormalizedOccupancy = -1;
 
         struct TPersistentBufferHeader {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
@@ -590,9 +594,9 @@ namespace NKikimr::NDDisk {
 
         std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
-        std::unordered_set<ui32> PersistentBufferRestoredChunks;
+        std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
-        void InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format);
+        void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
@@ -618,7 +622,9 @@ namespace NKikimr::NDDisk {
 
         void ProcessIoSubmitQueue();
         void ScheduleIoSubmitWakeup();
-        void HandleWakeup();
+        void HandleWakeup(TEvents::TEvWakeup::TPtr &ev);
+        void Handle(NPDisk::TEvCheckSpaceResult::TPtr ev);
+        void UpdateFreeSpaceInfo();
     };
 
 } // NKikimr::NDDisk

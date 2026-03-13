@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_value.h>
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -150,6 +152,44 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     return info;
 }
 
+static NJson::TJsonValue ParseAuditLogJson(const TString& log) {
+    size_t jsonStart = log.find(": ");
+    UNIT_ASSERT_C(jsonStart != TString::npos, "Log must contain timestamp prefix: " << log);
+    TStringBuf jsonPart(log.data() + jsonStart + 2, log.size() - jsonStart - 2);
+    NJson::TJsonValue root;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(jsonPart, &root), "Failed to parse audit log JSON: " << log);
+    return root;
+}
+
+static NJson::TJsonValue ParseCloudEventFromAuditLog(const TString& log) {
+    NJson::TJsonValue root = ParseAuditLogJson(log);
+    const auto* cloudEventJson = root.GetValueByPath("cloud_event_json");
+    UNIT_ASSERT_C(cloudEventJson != nullptr, "Missing cloud_event_json in audit log");
+    TString innerJson = cloudEventJson->GetString();
+    NJson::TJsonValue cloudEvent;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(innerJson, &cloudEvent), "Failed to parse cloud_event_json: " << innerJson);
+    return cloudEvent;
+}
+
+static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, const TString& expectedEventType, const TString& expectedPath) {
+    const auto* eventMetadata = cloudEvent.GetValueByPath("event_metadata");
+    UNIT_ASSERT_C(eventMetadata != nullptr, "Missing event_metadata");
+    UNIT_ASSERT_STRINGS_EQUAL((*eventMetadata)["event_type"].GetString(), expectedEventType);
+
+    const auto* details = cloudEvent.GetValueByPath("details");
+    UNIT_ASSERT_C(details != nullptr, "Missing details");
+    UNIT_ASSERT_STRINGS_EQUAL((*details)["path"].GetString(), expectedPath);
+
+    const auto* auth = cloudEvent.GetValueByPath("authentication");
+    UNIT_ASSERT_C(auth != nullptr, "Missing authentication");
+    UNIT_ASSERT_STRINGS_EQUAL((*auth)["subject_id"].GetString(), "user@iam");
+
+    const auto* evMetadata = cloudEvent.GetValueByPath("event_metadata");
+    UNIT_ASSERT_C(evMetadata != nullptr, "Missing event_metadata");
+    UNIT_ASSERT(evMetadata->GetMap().find("cloud_id") != evMetadata->GetMap().end());
+    UNIT_ASSERT(evMetadata->GetMap().find("folder_id") != evMetadata->GetMap().end());
+}
+
 static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/root/db/topic1") {
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
@@ -180,10 +220,8 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         test.GetRuntime().DispatchEvents();
 
         TString log = test.WaitAuditLog();
-        UNIT_ASSERT_STRING_CONTAINS(log, "cloud_event_json");
-        UNIT_ASSERT_STRING_CONTAINS(log, "CreateTopic");
-        UNIT_ASSERT_STRING_CONTAINS(log, "/root/my/topic");
-        UNIT_ASSERT_STRING_CONTAINS(log, "yandex.cloud.events.ydb.topics.CreateTopic");
+        NJson::TJsonValue cloudEvent = ParseCloudEventFromAuditLog(log);
+        AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/my/topic");
     }
 
     Y_UNIT_TEST(DeleteTopicEventAudit) {
@@ -211,9 +249,15 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         test.GetRuntime().DispatchEvents();
 
         TString log = test.WaitAuditLog();
-        UNIT_ASSERT_STRING_CONTAINS(log, "cloud_event_json");
-        UNIT_ASSERT_STRING_CONTAINS(log, "yandex.cloud.events.ydb.topics.CreateTopic");
-        UNIT_ASSERT_STRING_CONTAINS(log, "/root/db/topic1");
+        NJson::TJsonValue cloudEvent = ParseCloudEventFromAuditLog(log);
+        AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/db/topic1");
+
+        const auto* requestParams = cloudEvent.GetValueByPath("request_parameters");
+        UNIT_ASSERT_C(requestParams != nullptr, "Missing request_parameters");
+        UNIT_ASSERT_STRINGS_EQUAL((*requestParams)["path"].GetString(), "/root/db/topic1");
+
+        UNIT_ASSERT(cloudEvent.GetMap().find("event_status") != cloudEvent.GetMap().end());
+        UNIT_ASSERT_STRINGS_EQUAL(cloudEvent["event_status"].GetString(), "DONE");
     }
 }
 

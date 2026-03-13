@@ -6,6 +6,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/library/actors/testlib
+    library/cpp/json
     library/cpp/logger
     library/cpp/testing/unittest
 )

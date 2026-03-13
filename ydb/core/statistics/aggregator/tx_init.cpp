@@ -279,7 +279,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
         Self->SubscribeForConfigChanges(ctx);
 
-        Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 
         if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());

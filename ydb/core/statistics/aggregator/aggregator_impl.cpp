@@ -46,10 +46,6 @@ void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
     Y_ABORT_UNLESS(appData);
     StatisticsConfig = appData->StatisticsConfig;
 
-    // Start with the dedicated interval, switch to the serverless one if needed.
-    PropagateInterval = TDuration::Seconds(
-        StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
-
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 }
@@ -242,17 +238,11 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
-    if (BaseStatistics.size() > 1) {
-        // We are in a shared database, switch to a bigger propagation interval.
-        PropagateInterval = TDuration::Seconds(
-            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
-    }
-
     if (EnableStatistics) {
         PropagateStatistics();
     }
 
-    Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
+    Schedule(GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
@@ -367,7 +357,7 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    auto timeout = PropagateInterval * 3 / 5;
+    auto timeout = GetPropagateInterval() * 3 / 5;
     Schedule(timeout, new TEvPrivate::TEvPropagateTimeout);
 
     ++CurPropagationSeq;
@@ -434,6 +424,18 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
     Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release(), 0, cookie);
 
     return index;
+}
+
+TDuration TStatisticsAggregator::GetPropagateInterval() {
+    if (BaseStatistics.size() > 1) {
+        // We are in a shared database, switch to a bigger propagation interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    } else {
+        // Otherwise use the dedicated interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
+    }
 }
 
 void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

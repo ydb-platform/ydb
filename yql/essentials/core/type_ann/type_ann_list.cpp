@@ -3575,7 +3575,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureListType(input->Child(1)->Pos(), *input->Child(1)->GetTypeAnn(), ctx.Expr)) {
+        if (!EnsureListType(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(0), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3587,6 +3591,10 @@ namespace {
         }
 
         const TTypeAnnotationNode* itemType = input->Child(1)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (!EnsureComputable(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!IsSameAnnotation(*itemType, *input->Child(2)->GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Mismatch list items and new item types, "
                 << *itemType << " != " << *input->Child(2)->GetTypeAnn()));
@@ -7513,6 +7521,12 @@ namespace {
 
         auto checkWindowParam = [&] (TExprNode::TPtr& param) -> IGraphTransformer::TStatus {
             auto type = param->GetTypeAnn();
+            if (!type) {
+                YQL_ENSURE(param->Type() == TExprNode::Lambda);
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(param->Pos()), "Lambda should not be used as hopping window parameter value"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
             if (type->GetKind() == ETypeAnnotationKind::Optional) {
                 if (param->IsCallable("Nothing")) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(param->Pos()), "Hopping window parameter value cannot be evaluated"));
@@ -7547,6 +7561,12 @@ namespace {
         }
 
         const auto& dataWatermarksNodePtr = input->ChildRef(5);
+        if (!dataWatermarksNodePtr->GetTypeAnn()) {
+            YQL_ENSURE(dataWatermarksNodePtr->Type() == TExprNode::Lambda);
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder()
+                << "Expected unit type, but got lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
         if (dataWatermarksNodePtr->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder()
                 << "Expected unit type, but got: "

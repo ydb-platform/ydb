@@ -124,6 +124,7 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -170,6 +171,7 @@ public:
     NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
     NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
+    NCommon::TConfSetting<bool, Static> OmitInaccessibleRows;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

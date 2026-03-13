@@ -1,0 +1,8 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+
+select *
+from plato.Input
+where key > 2;

@@ -19,6 +19,7 @@ TInputInfo::TInputInfo(const TString& name, const NYT::TRichYPath& path, bool te
     , Cluster(info.Cluster)
     , Temp(temp)
     , Dynamic(info.Meta->IsDynamic)
+    , RLS(info.Meta->HasRLS)
     , Strict(strict)
     , Records(info.Stat->RecordsCount)
     , DataSize(info.Stat->DataSize)

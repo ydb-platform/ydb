@@ -807,6 +807,10 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureComputable(*input->Child(3), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         auto arg = input->Child(3)->GetTypeAnn();
         if (arg->IsOptionalOrNull()) {
             input->SetTypeAnn(arg);
@@ -817,6 +821,10 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         if (input->ChildrenSize() != 4) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Expected one argument in function" << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(3), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -833,6 +841,10 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureComputable(*input->Child(4), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
             auto name = input->Child(4)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
             if (name != "int4") {
@@ -843,6 +855,10 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
                 "Expected pg type, but got: " << input->Child(4)->GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(3), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -872,6 +888,10 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         if (input->ChildrenSize() != 4) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Expected exactly one argument in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(3), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

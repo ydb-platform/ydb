@@ -452,6 +452,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
+    REGISTER_SETTING(*this, OmitInaccessibleRows);
+    REGISTER_SETTING(*this, _EnableRLSTablesSupport);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _BinaryCacheFolder);

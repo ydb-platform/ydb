@@ -116,11 +116,11 @@ void TestStreamingReadWithSmallPortion() {
     UNIT_ASSERT(rb);
     UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
 
-    // With small portion, streaming should not be used
-    // Expect a single iteration (no paging/streaming over multiple chunks)
+    // With small portion, we expect minimal iterations
+    // The protocol requires at least 2 Acks: one to start, one after receiving data
     const ui32 iterationsCount = reader.GetIterationsCount();
     Cerr << "Iterations count (small): " << iterationsCount << Endl;
-    UNIT_ASSERT_VALUES_EQUAL(iterationsCount, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(iterationsCount, 2u);
 }
 
 void TestStreamingReadMultiplePortions() {

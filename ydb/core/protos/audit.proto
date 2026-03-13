@@ -1,0 +1,81 @@
+import "ydb/core/protos/ua_config.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TAuditConfig {
+    // For each new format, we need to register the audit event conversion function
+    // See  ydb/core/audit/audit_log_impl.cpp for details
+    enum EFormat {
+        JSON = 1;                       // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        TXT = 2;                        // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        JSON_LOG_COMPATIBLE = 3;        // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
+        FORMAT_4 = 4;                   // Reserved
+    }
+
+    message TStderrBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string LogJsonEnvelope = 2; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+    }
+
+    message TFileBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string FilePath = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+    }
+
+    message TUnifiedAgentBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string LogName = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+        optional NKikimrConfig.TUAClientConfig UAClientConfig = 4; // If not specified, the configuration is taken from common TLogConfig section
+    }
+
+    message TLogClassConfig {
+        enum ELogClass {
+            ClusterAdmin = 1;
+            DatabaseAdmin = 2;
+            Login = 3;
+            NodeRegistration = 4;
+            Ddl = 5;
+            Dml = 6;
+            Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
+            ExportImport = 8;
+            Acl = 9;
+            AuditHeartbeat = 10;
+            Default = 1000; // For default settings for all other nonconfigured log classes
+        }
+
+        enum EAccountType {
+            Anonymous = 1;
+            User = 2;
+            Service = 3;
+            ServiceImpersonatedFromUser = 4;
+        }
+
+        enum ELogPhase {
+            Received = 1;  // A request is received and the initial checks and authentication are made // "status" field of audit log record is equal to "IN-PROCESS"
+            Completed = 2; // A request is completely finished and has final status // "status"/"detailed_status" fields of audit log record are equal to request's final status
+        }
+
+        optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
+        optional bool EnableLogging = 2; // Enables audit logging for specified log class
+        repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+        repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
+    }
+
+    // Settings for heartbeat audit messages
+    // Heartbeat messages are messages that are written in
+    // a time interval that is set up in this config.
+    // Audit messages are written from AuditHeartbeat log class
+    // and Anonymous account type and also can be set up using its setting
+    message THeartbeatSettings {
+        optional uint32 IntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
+    }
+
+    optional TStderrBackend StderrBackend = 1;
+    optional TFileBackend FileBackend = 2;
+    optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    repeated TLogClassConfig LogClassConfig = 4;
+    optional THeartbeatSettings Heartbeat = 5;
+};

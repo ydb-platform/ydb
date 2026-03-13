@@ -148,6 +148,7 @@ message TConfigItem {
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
         BlockstoreConfigItem = 93;
+        TopicCloudEventsAuditConfigItem = 94;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

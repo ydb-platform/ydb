@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/protos/ua_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/unified_agent_client/backend.h>

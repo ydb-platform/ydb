@@ -1,4 +1,7 @@
 #include "log_backend_build.h"
+
+#include <ydb/core/protos/ua_config.pb.h>
+
 #include <util/system/getpid.h>
 #include <ydb/library/actors/core/log.h>
 

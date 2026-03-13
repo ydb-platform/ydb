@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/protos/audit.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/protos/aclib.pb.h>
 

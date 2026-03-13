@@ -4,9 +4,26 @@
 #include <util/generic/guid.h>
 #include <ydb/core/audit/audit_log.h>
 #include <google/protobuf/util/time_util.h>
+#include <ydb/core/audit/audit_log_impl.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
+
+namespace NKikimr::NAudit {
+ 
+NActors::TActorId MakeTopicCloudEventsAuditServiceID() {
+    return NActors::TActorId(0, TStringBuf("YDB_TOPIC_CLOUD_EVENTS_AUDIT"));
+}
+
+void SendTopicCloudEventAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
+{
+    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
+    sys->Send(MakeTopicCloudEventsAuditServiceID(), request.Release());
+}
+
+} // namespace NKikimr::NAudit
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -321,9 +338,9 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
         json = SerializeEvent(proto);
     }
 
-    AUDIT_LOG(
-        AUDIT_PART("cloud_event_json", json)
-    );
+    NKikimr::NAudit::TAuditLogParts parts;
+    parts.emplace_back("cloud_event_json", json);
+    NKikimr::NAudit::SendTopicCloudEventAuditLog(NActors::TActivationContext::ActorSystem(), std::move(parts));
 }
 
 } // namespace NKikimr::NPQ::NCloudEvents

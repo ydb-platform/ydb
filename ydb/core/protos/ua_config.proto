@@ -1,0 +1,17 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
+message TUAClientConfig {
+    optional string Uri = 1;
+    optional string SharedSecretKey = 2 [(Ydb.sensitive) = true];
+    optional uint64 MaxInflightBytes = 3 [default = 100000000];
+    optional uint64 GrpcReconnectDelayMs = 4;
+    optional uint64 GrpcSendDelayMs = 5;
+    optional uint64 GrpcMaxMessageSize = 6;
+    optional string ClientLogFile = 7;
+    optional uint32 ClientLogPriority = 8;
+    optional string LogName = 9;
+}
+

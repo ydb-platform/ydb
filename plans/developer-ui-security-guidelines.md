@@ -35,8 +35,6 @@ void RenderState(IOutputStream& str, THttpInfo& httpInfo) {
 }
 ```
 
-The nonce value is obtained from the HTTP request context (`httpInfo.Nonce`) and must be placed in every `<script>` tag. You do not need to generate the nonce or set headers — just use `httpInfo.Nonce`.
-
 ### Rule: NEVER weaken the CSP
 
 Do not add `'unsafe-inline'`, `'unsafe-eval'`, or external domains to `script-src` or `style-src`. If a script doesn't work without `'unsafe-inline'`, rewrite it to use a nonce.

@@ -37,7 +37,6 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 using namespace NThreading;
-namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
 
 namespace {
     NThreading::TFuture<IKikimrGateway::TGenericResult> CreateDummySuccess() {

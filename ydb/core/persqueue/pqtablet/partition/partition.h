@@ -754,7 +754,7 @@ private:
 
 private:
     ui32 TabletGeneration;
-    TPartitionId Partition;
+    const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
@@ -762,8 +762,8 @@ private:
 
     std::shared_ptr<TTabletCountersBase> Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
-    bool IsLocalDC;
-    TString DCId;
+    const bool IsLocalDC;
+    const TString DCId;
 
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
@@ -824,7 +824,7 @@ private:
     TString CloudId;
     TString DbId;
     TString DbPath;
-    bool IsServerless;
+    const bool IsServerless;
     TString FolderId;
     TString MonitoringProjectId;
 
@@ -1015,7 +1015,7 @@ private:
     ui64 HasDataReqNum;
 
     TActorId ReadQuotaTrackerActor;
-    TActorId WriteQuotaTrackerActor;
+    const TActorId WriteQuotaTrackerActor;
     THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 

@@ -42,7 +42,6 @@ public:
 
         if (autopartitioningEnabled) {
             appConfig.MutableFeatureFlags()->SetEnableTopicSplitMerge(true);
-            appConfig.MutableFeatureFlags()->SetEnableTopicServiceTx(true);
         }
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);

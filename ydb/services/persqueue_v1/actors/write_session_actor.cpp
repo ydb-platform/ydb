@@ -1168,14 +1168,6 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
 
-    if constexpr (!UseMigrationProtocol) {
-        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-            CloseSession("Disabled transaction support for TopicService.",
-                         PersQueue::ErrorCode::ERROR, ctx);
-            return;
-        }
-    }
-
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (!UseMigrationProtocol) {

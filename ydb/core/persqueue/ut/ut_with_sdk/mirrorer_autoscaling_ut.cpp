@@ -304,7 +304,6 @@ namespace NKikimr::NPersQueueTests {
 
                     NKikimrConfig::TFeatureFlags ff;
                     ff.SetEnableTopicSplitMerge(true);
-                    ff.SetEnableTopicServiceTx(true);
                     ff.SetEnableTopicAutopartitioningForCDC(true);
                     ff.SetEnableTopicAutopartitioningForReplication(true);
                     ff.SetEnableMirroredTopicSplitMerge(true);

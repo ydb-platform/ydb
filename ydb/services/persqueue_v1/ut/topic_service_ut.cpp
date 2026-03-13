@@ -137,7 +137,6 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override {
         server = NPersQueue::TTestServer(false);
         server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
-        server->ServerSettings.SetEnableTopicServiceTx(true);
         server->StartServer();
         server->EnableLogs({NKikimrServices::PQ_WRITE_PROXY
                            , NKikimrServices::PQ_READ_PROXY

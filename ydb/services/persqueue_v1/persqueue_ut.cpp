@@ -8392,7 +8392,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
         settings.PQConfig.SetRoot("/Root");
         settings.PQConfig.SetDatabase("/Root");
-        settings.SetEnableTopicServiceTx(true);
         NPersQueue::TTestServer server{settings, true};
 
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);

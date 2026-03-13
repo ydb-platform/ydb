@@ -104,7 +104,6 @@ TWriteMessage Msg(const TString& data, ui64 seqNo) {
 TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
-    ff.SetEnableTopicServiceTx(true);
     ff.SetEnableTopicAutopartitioningForCDC(true);
     ff.SetEnableTopicAutopartitioningForReplication(true);
 

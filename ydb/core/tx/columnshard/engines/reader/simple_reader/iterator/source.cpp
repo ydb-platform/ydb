@@ -196,7 +196,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             // Current page index is out of range for the available pages.
             // Treat this as "no more data" for this source in streaming mode
             // to avoid falling back to fetching the entire portion.
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_index_out_of_range")(
+            AFL_VERIFY(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_index_out_of_range")(
                 "page_index", *currentPageIdx)("pages_count", pages.size());
             return;
         }
@@ -223,22 +223,30 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 chunkNeeded = (chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow);
             }
             // If not in streaming mode or page range is not set, fetch all chunks (chunkNeeded stays true)
-
-            if (chunkNeeded && !itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
-                auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
-                reading->SetIsBackgroundProcess(false);
-                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
-                ++fetchedChunks;
-                
-                // Log chunk fetch for streaming verification
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunk_fetched")(
-                    "chunk_start", chunkStart)("chunk_end", chunkEnd)(
-                    "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
+            if (chunkNeeded) {
+                if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
+                    auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
+                    reading->SetIsBackgroundProcess(false);
+                    reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
+                    ++fetchedChunks;
+                    // Log chunk fetch for streaming verification
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunk_fetched")(
+                        "chunk_start", chunkStart)("chunk_end", chunkEnd)(
+                        "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
+                } else {
+                    // Chunk is within the current page but skipped by filter: use default values
+                    defaultBlocks.emplace(
+                        c->GetAddress(),
+                        TPortionDataAccessor::TAssembleBlobInfo(
+                            c->GetMeta().GetRecordsCount(),
+                            Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
+                    ++nullChunks;
+                }
             } else {
-                defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                           Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
-                ++nullChunks;
+                // Chunk is outside the current streaming page: do not fetch and do not create defaults here.
+                // Future pages may need to fetch the real data for this chunk.
             }
+
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
             currentRowOffset = chunkEnd;
         }

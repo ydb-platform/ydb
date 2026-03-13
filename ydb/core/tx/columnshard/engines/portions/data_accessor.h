@@ -573,8 +573,8 @@ public:
     };
 
     // Build pages based on memory limit. Currently only uses memoryLimit to determine
-    // page boundaries. Future enhancement: honor row/byte-based page size targets from
-    // TStreamingConfig (PageSizeRows, PageSizeBytes).
+    // page boundaries. Future enhancement: honor streaming paging settings from
+    // TStreamingConfig (e.g. MinRecordsForPaging, Strategy, MaxPagesInFlight).
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
 
     ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {

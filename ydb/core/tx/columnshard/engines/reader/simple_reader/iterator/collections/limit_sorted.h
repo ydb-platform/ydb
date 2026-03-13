@@ -89,8 +89,7 @@ private:
         if (GetSourcesInFlightCount() >= InFlightLimit) {
             return false;
         }
-        // If MaxPagesInFlight is set (non-zero), also check pages limit
-        if (GetMaxPagesInFlight() > 0 && GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
+        if (GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
             return false;
         }
         return true;

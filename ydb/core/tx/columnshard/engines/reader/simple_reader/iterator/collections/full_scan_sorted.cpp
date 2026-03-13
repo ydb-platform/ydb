@@ -7,8 +7,7 @@ bool TSortedFullScanCollection::DoCheckInFlightLimits() const {
     if (GetSourcesInFlightCount() >= GetMaxInFlight()) {
         return false;
     }
-    // If MaxPagesInFlight is set (non-zero), also check pages limit
-    if (GetMaxPagesInFlight() > 0 && GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
+    if (GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
         return false;
     }
     return true;

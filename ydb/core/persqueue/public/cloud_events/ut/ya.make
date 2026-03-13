@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/logger
     library/cpp/testing/unittest
+    library/cpp/threading/blocking_queue
 )
 
 SRCS(

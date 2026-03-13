@@ -16,47 +16,14 @@
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
 #include <util/generic/string.h>
 
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-
 namespace NKikimr::NPQ::NCloudEvents {
 
-template <typename T>
-class TWaitableQueue {
-public:
-    void Push(const T& value) {
-        {
-            std::lock_guard<std::mutex> lock(Mutex);
-            Queue.push(value);
-        }
-        CondVar.notify_one();
-    }
-
-    T Pop() {
-        std::unique_lock<std::mutex> lock(Mutex);
-        CondVar.wait(lock, [this] { return !Queue.empty(); });
-        T value = Queue.front();
-        Queue.pop();
-        return value;
-    }
-
-    bool Empty() const {
-        std::lock_guard<std::mutex> lock(Mutex);
-        return Queue.empty();
-    }
-
-private:
-    mutable std::mutex Mutex;
-    std::condition_variable CondVar;
-    std::queue<T> Queue;
-};
-
-using TLogQueue = TWaitableQueue<TString>;
-using TLogQueuePtr = std::shared_ptr<TWaitableQueue<TString>>;
+using TLogQueue = NThreading::TBlockingQueue<TString>;
+using TLogQueuePtr = std::shared_ptr<TLogQueue>;
 
 class TTestLogBackend : public TLogBackend {
 public:
@@ -121,7 +88,9 @@ public:
     }
 
     TString WaitAuditLog() {
-        return LogQueue->Pop();
+        auto log = LogQueue->Pop();
+        UNIT_ASSERT_C(log.Defined(), "Expected audit log");
+        return std::move(*log);
     }
 
     NActors::TTestActorRuntimeBase& GetRuntime() {
@@ -129,7 +98,7 @@ public:
     }
 
 private:
-    TLogQueuePtr LogQueue = std::make_shared<TLogQueue>();
+    TLogQueuePtr LogQueue = std::make_shared<TLogQueue>(0);
     TTestCloudEventsActorSystem Runtime;
 };
 

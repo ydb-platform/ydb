@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_auditsettings
+    ut_topic_cloud_events
     ut_background_cleaning
     ut_backup
     ut_backup_collection

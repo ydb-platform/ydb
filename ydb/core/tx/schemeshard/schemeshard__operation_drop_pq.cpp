@@ -445,10 +445,6 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
         }
 
-        // Activate main tx state machine
-        SetState(NextState());
-        context.OnComplete.ActivateTx(OperationId);
-
         // Emit topic CloudEvent after successful drop
         SendTopicCloudEvent(
             Transaction,
@@ -459,6 +455,10 @@ public:
             context.UserToken ? context.UserToken->GetUserSID() : TString(),
             TString() /* maskedToken */,
             ui64(OperationId.GetTxId()));
+
+        // Activate main tx state machine
+        SetState(NextState());
+        context.OnComplete.ActivateTx(OperationId);
 
         return result;
     }

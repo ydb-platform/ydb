@@ -1,12 +1,10 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT
     c_custkey,
     c_name,
-    Sum(l_extendedprice * (1 - l_discount)) AS revenue,
+    Sum(l_extendedprice * ($to_decimal(1) - l_discount)) AS revenue,
     c_acctbal,
     n_name,
     c_address,

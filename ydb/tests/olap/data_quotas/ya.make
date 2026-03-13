@@ -9,6 +9,8 @@ TEST_SRCS(
     test_quota_exhaustion.py
 )
 
+REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

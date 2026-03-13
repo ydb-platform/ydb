@@ -1,13 +1,12 @@
 #include "meta.h"
 
-#include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr::NOlap::NIndexes {
@@ -30,6 +29,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     TDynBitMap filterBits;
     filterBits.Reserve(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
     const ui64 bitsCount = filterBits.Size();
+    TCaseAwareHashCalcer hashCalcer(CaseSensitive);
 
     const auto predNoBase = [&](const ui64 hash, const ui32 /*idx*/) {
         filterBits.Set(hash % bitsCount);
@@ -44,9 +44,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
                             filterBits.Set(CombineHashes(hashBase, hash) % bitsCount);
                         };
-                        NArrow::NHash::TXX64::CalcForAll(arr, i, predWithBase);
+                        hashCalcer.CalcForAll(arr, i, predWithBase);
                     } else {
-                        NArrow::NHash::TXX64::CalcForAll(arr, i, predNoBase);
+                        hashCalcer.CalcForAll(arr, i, predNoBase);
                     }
                 }
             },
@@ -56,7 +56,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
                     return;
                 }
                 for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(view.value(), i);
+                    const ui64 hash = hashCalcer.CalcJsonScalar(view.value(), i);
                     if (hashBase) {
                         filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
                     } else {
@@ -74,17 +74,19 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::opti
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
+    AFL_VERIFY(!CaseSensitive || op.GetCaseSensitive());
     const ui32 bitsCount = data.GetBitsCount();
+    TCaseAwareHashCalcer hashCalcer(CaseSensitive);
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            const ui64 hash = hashCalcer.CalcScalar(value, hashSeed);
             if (!data.Get(CombineHashes(*category, hash) % bitsCount)) {
                 return false;
             }
         }
     } else {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            const ui64 hash = hashCalcer.CalcScalar(value, hashSeed);
             if (!data.Get(hash % bitsCount)) {
                 return false;
             }
@@ -126,6 +128,10 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
         }
     }
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    if (bFilter.HasCaseSensitive()) {
+        CaseSensitive = bFilter.GetCaseSensitive();
+    }
+
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }
@@ -140,6 +146,7 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    filterProto->SetCaseSensitive(CaseSensitive);
     for (auto&& i : GetColumnIds()) {
         filterProto->AddColumnIds(i);
     }

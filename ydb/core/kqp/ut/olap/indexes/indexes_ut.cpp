@@ -1,3 +1,5 @@
+#include "indexes_test_enums.h"
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
@@ -170,7 +172,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (resource_id)
-                WITH (false_positive_probability = 0.01);
+                WITH (false_positive_probability = 0.01, case_sensitive = false);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -178,7 +180,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
                 ON (resource_id)
-                WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
+                WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -192,7 +194,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
     }
 
-    Y_UNIT_TEST_DUO(AddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(AddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -205,7 +208,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (uid)
-                WITH (false_positive_probability = 0.01);
+                WITH (false_positive_probability = 0.01, case_sensitive = false);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -213,14 +216,15 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
                 ON (resource_id)
-                WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
+                WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST_DUO(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -244,7 +248,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
     }
 
-    Y_UNIT_TEST_DUO(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -260,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -268,7 +273,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST_DUO(LocalBloomNgramIndexDefaultCaseSensitivePersisted, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -284,7 +290,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -305,7 +311,46 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
     }
 
-    Y_UNIT_TEST_DUO(LocalIndexCannotBeUsedInTableView, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexCaseSensitiveFalsePersisted, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomCaseInsensitive`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01, case_sensitive = false)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto showResult = session.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/olapTableBloomCaseInsensitive`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+        UNIT_ASSERT(!showResult.GetResultSets().empty());
+        NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+        TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+        bool hasCaseSensitiveFalse = createText.Contains("case_sensitive=false") ||
+            createText.Contains("\"case_sensitive\":false") ||
+            createText.Contains("\\\"case_sensitive\\\":false");
+        UNIT_ASSERT_C(hasCaseSensitiveFalse, "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalIndexCannotBeUsedInTableView, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -320,7 +365,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 uid Utf8 NOT NULL,
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -332,26 +377,18 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT(!result.IsSuccess());
     }
 
-    Y_UNIT_TEST(TablesInStore) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TablesInStore, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
-        auto tableClient = kikimr.GetTableClient();
-        {
-            auto alterQuery =
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-        {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-            auto query = TStringBuilder() << R"(
+        ExecSchemeQuery(kikimr, UseQueryService,
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01}`);
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService, TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapStore/olapTableTest`
             (
@@ -364,13 +401,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid)
             )
             PARTITION BY HASH(timestamp, uid)
-            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
     }
 
-    Y_UNIT_TEST(IndexesActualization) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesActualization, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -401,43 +436,18 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-
-
-        }
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-        {
-            auto alterQuery =
-                TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery =
-                TStringBuilder()
-                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
@@ -462,7 +472,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
-    Y_UNIT_TEST(CountMinSketchIndex) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CountMinSketchIndex, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
@@ -482,55 +493,26 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             .SetPriority(NActors::NLog::PRI_DEBUG)
             .Initialize();
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ["timestamp"]}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['resource_id']}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['uid']}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['level']}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['message']}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+                )");
 
         WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 40000);
         WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 40000);
@@ -603,7 +585,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SchemeActualizationOnceOnStart) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(SchemeActualizationOnceOnStart, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -636,12 +619,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         AFL_VERIFY(initCount == 3)("started_value", initCount);
 
         for (ui32 i = 0; i < 10; ++i) {
-            auto alterQuery =
-                TStringBuilder()
-                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            ExecSchemeQuery(kikimr, UseQueryService,
+                TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         }
         const ui64 updatesCount = csController->GetActualizationRefreshSchemeCount().Val();
         AFL_VERIFY(updatesCount == 30 + initCount)("after_modification", updatesCount);
@@ -742,7 +721,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 auto alterQuery = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01}`);
                 )";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -798,8 +777,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             csController->WaitCompactions(TDuration::Seconds(5));
-            // important checker for control compactions (<=21) and control indexes constructed (>=21)
-            AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 3)("count", csController->GetCompactionStartedCounter().Val());
+            // The dynamic ngram filter sizing may shift one extra control compaction depending on storage layout
+            AFL_VERIFY(3 <= csController->GetCompactionStartedCounter().Val() &&
+                csController->GetCompactionStartedCounter().Val() <= 4)("count", csController->GetCompactionStartedCounter().Val());
 
             {
                 ExecuteSQL(R"(
@@ -949,8 +929,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     ALTER OBJECT `/Root/olapTable`
                     (TYPE TABLE)
                     SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_checkIndexesColumn, TYPE=BLOOM_NGRAMM_FILTER,
-                        FEATURES=`{"column_name" : "checkIndexesColumn", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512,
-                                    "records_count" : 3000, "case_sensitive" : false,
+                        FEATURES=`{"column_name" : "checkIndexesColumn", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                                    "case_sensitive" : false,
                                     "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
                     )";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -1186,22 +1166,27 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     };
 
-    Y_UNIT_TEST(IndexesInBS) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesInBS, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST(IndexesInLocalMetadata) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesInLocalMetadata, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST(CheckCompactionFailingOnIndexes) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckCompactionFailingOnIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteAddColumnWithIndexesScenario();
     }
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
-        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$5|8$$,
-                   "filter_size_bytes" : $$128|129|131|255|257$$,
-                   "records_count" : $$331|1879$$, "case_sensitive": $$false|true$$,
+        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
+                   "case_sensitive": $$false|true$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";
 
@@ -1213,9 +1198,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     TString scriptDifferentIndexesConfigIlike = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
-        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$,
-                   "filter_size_bytes" : $$128|129|131|255|257$$,
-                   "records_count" : $$331|1879$$, "case_sensitive": $$false$$,
+        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
+                   "case_sensitive": $$false$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";
 
@@ -1226,63 +1210,58 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteDifferentConfigurationScenarios(__SCRIPT_CONTENT, "ILIKE");
     }
 
-    Y_UNIT_TEST(IndexesModificationError) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesModificationError, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        auto tableClient = kikimr.GetTableClient();
-
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.05}`);
+                )");
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0}`);
                 )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            }
         }
 
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0}`);
                 )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            }
         }
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.005}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        {
-            auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+                )");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);");
     }
 }
 

@@ -1,5 +1,77 @@
 #pragma once
 
+#include <functional>
+#include <tuple>
+#include <utility>
+
+// Helpers for parametrized tests over Cartesian product of enum values
+// Requires GetEnumAllValues<T>() for each enum type (e.g. via GENERATE_ENUM_SERIALIZATION)
+
+template <class... Es>
+static inline TString BuildParamTestName(const char* base, const Es&... es) {
+    TString s = base;
+    ((s += "-", s += ToString(es)), ...);
+    return s;
+}
+
+template <class F>
+static inline void ForEachProductRanges(F&& f) {
+    std::invoke(std::forward<F>(f));
+}
+
+template <class F, class FirstRange, class... RestRanges>
+static inline void ForEachProductRanges(F&& f, const FirstRange& first, const RestRanges&... rest) {
+    for (auto&& x : first) {
+        auto bound = std::bind_front(std::forward<F>(f), x);
+        ForEachProductRanges(std::move(bound), rest...);
+    }
+}
+
+template <class... Enums, class F>
+static inline void ForEachEnums(F&& f) {
+    ForEachProductRanges(std::forward<F>(f), GetEnumAllValues<Enums>()...);
+}
+
+template <class Tuple, size_t... I>
+static inline TString BuildParamTestNameFromTupleImpl(const char* base, const Tuple& t, std::index_sequence<I...>) {
+    return BuildParamTestName(base, std::get<I>(t)...);
+}
+
+template <class Tuple>
+static inline TString BuildParamTestNameFromTuple(const char* base, const Tuple& t) {
+    return BuildParamTestNameFromTupleImpl(base, t, std::make_index_sequence<std::tuple_size<Tuple>::value>{});
+}
+
+#define Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(N, ...) \
+    struct TTestCase##N: public TCurrentTestCase { \
+        using Types = std::tuple<__VA_ARGS__>; \
+        Types Args; \
+        TString ParametrizedTestName; \
+        explicit TTestCase##N(Types args) \
+            : Args(std::move(args)) \
+            , ParametrizedTestName(BuildParamTestNameFromTuple(#N, Args)) { \
+            Name_ = ParametrizedTestName.c_str(); \
+        } \
+        static THolder<NUnitTest::TBaseTestCase> Create(Types args) { \
+            return ::MakeHolder<TTestCase##N>(std::move(args)); \
+        } \
+        void Execute_(NUnitTest::TTestContext&) override; \
+        template <size_t I> \
+        decltype(auto) Arg() const { \
+            return std::get<I>(Args); \
+        } \
+    }; \
+    struct TTestRegistration##N { \
+        TTestRegistration##N() { \
+            ForEachEnums<__VA_ARGS__>([&](auto... items) { \
+                TCurrentTest::AddTest([=] { \
+                    return TTestCase##N::Create(typename TTestCase##N::Types(items...)); \
+                }); \
+            }); \
+        } \
+    }; \
+    static TTestRegistration##N testRegistration##N; \
+    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 #define Y_UNIT_TEST_COMBINATOR_1(BaseName, Flag1)                                                                                  \
     template<bool> void BaseName(NUnitTest::TTestContext&);                                                                        \

@@ -20,6 +20,7 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -37,6 +38,7 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 using namespace NThreading;
+namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
 
 namespace {
     NThreading::TFuture<IKikimrGateway::TGenericResult> CreateDummySuccess() {
@@ -2345,7 +2347,8 @@ public:
                                     return SyncError();
                                 }
 
-                                add_index->mutable_local_bloom_filter_index();
+                                auto* bloomIndex = add_index->mutable_local_bloom_filter_index();
+                                bloomIndex->set_case_sensitive(NDefaults::CaseSensitive);
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2354,7 +2357,7 @@ public:
                                 }
 
                                 auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
-                                ngramIndex->set_case_sensitive(true);
+                                ngramIndex->set_case_sensitive(NDefaults::CaseSensitive);
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2450,17 +2453,21 @@ public:
                                 }
                             }
 
-                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex && localBloomFilterDesc.FalsePositiveProbability) {
-                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_filter_index();
+                                if (localBloomFilterDesc.FalsePositiveProbability) {
+                                    proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                                }
+
+                                proto->set_case_sensitive(localBloomFilterDesc.CaseSensitive);
                             }
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                                 proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
                                 proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
-                                proto->set_filter_size_bytes(localBloomNgramFilterDesc.FilterSizeBytes);
-                                proto->set_records_count(localBloomNgramFilterDesc.RecordsCount);
                                 proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
+                                proto->set_false_positive_probability(localBloomNgramFilterDesc.FalsePositiveProbability);
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
@@ -2518,15 +2525,6 @@ public:
                         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
                             if (table.Metadata->StoreType != EStoreType::Column) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
-                                return SyncError();
-                            }
-
-                            if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
-                                !add_index->local_bloom_ngram_filter_index().hashes_count() ||
-                                !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
-                                !add_index->local_bloom_ngram_filter_index().records_count()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                                    "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
                                 return SyncError();
                             }
 

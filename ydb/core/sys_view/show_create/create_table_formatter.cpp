@@ -2,6 +2,8 @@
 #include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -22,6 +24,8 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
+namespace NJsonKeys = NKikimr::NOlap::NIndexes::NJsonKeys;
+namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -714,19 +718,26 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         Stream << ")";
     }
 
-    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
-        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
+    if (isLocalBloomFilter) {
+        const auto& settings = index.local_bloom_filter_index();
+        const double falsePositiveProbability = settings.has_false_positive_probability()
+            ? settings.false_positive_probability()
+            : NDefaults::FalsePositiveProbability;
+        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : NDefaults::CaseSensitive;
+        Stream << " WITH ("
+               << NJsonKeys::FalsePositiveProbability << "=" << falsePositiveProbability
+               << ", " << NJsonKeys::CaseSensitive << "=" << (caseSensitive ? "true" : "false")
+               << ")";
     }
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
-        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
+        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : NDefaults::CaseSensitive;
         Stream << " WITH ("
-               << "ngram_size=" << settings.ngram_size()
-               << ", hashes_count=" << settings.hashes_count()
-               << ", filter_size_bytes=" << settings.filter_size_bytes()
-               << ", records_count=" << settings.records_count()
-               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
+               << NJsonKeys::NGrammSize << "=" << settings.ngram_size()
+               << ", " << NJsonKeys::HashesCount << "=" << settings.hashes_count()
+               << ", " << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
+               << ", " << NJsonKeys::CaseSensitive << "=" << (caseSensitive ? "true" : "false")
                << ")";
     }
 }
@@ -1743,7 +1754,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
             }
             const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
-            json["column_name"] = columnName;
+            json[NJsonKeys::ColumnName] = columnName;
 
             if (bloomFilter.HasDataExtractor()) {
                 const auto& dataExtractor = bloomFilter.GetDataExtractor();
@@ -1766,7 +1777,11 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             }
 
             if (bloomFilter.HasFalsePositiveProbability()) {
-                json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
+                json[NJsonKeys::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
+            }
+
+            if (bloomFilter.HasCaseSensitive()) {
+                json[NJsonKeys::CaseSensitive] = bloomFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
@@ -1780,7 +1795,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (maxIndex.HasColumnId()) {
                 const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NJsonKeys::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in MAX index description");
@@ -1812,7 +1827,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomNGrammFilter.HasColumnId()) {
                 const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NJsonKeys::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
@@ -1837,20 +1852,21 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     json["bits_storage_type"] = bitsStorage.GetClassName();
                 }
             }
-            if (bloomNGrammFilter.HasRecordsCount()) {
-                json["records_count"] = bloomNGrammFilter.GetRecordsCount();
-            }
+
             if (bloomNGrammFilter.HasNGrammSize()) {
-                json["ngramm_size"] = bloomNGrammFilter.GetNGrammSize();
+                json[NJsonKeys::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
             }
-            if (bloomNGrammFilter.HasFilterSizeBytes()) {
-                json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
-            }
+
             if (bloomNGrammFilter.HasHashesCount()) {
-                json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
+                json[NJsonKeys::HashesCount] = bloomNGrammFilter.GetHashesCount();
             }
+
+            if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+                json[NJsonKeys::FalsePositiveProbability] = bloomNGrammFilter.GetFalsePositiveProbability();
+            }
+
             if (bloomNGrammFilter.HasCaseSensitive()) {
-                json["case_sensitive"] = bloomNGrammFilter.GetCaseSensitive();
+                json[NJsonKeys::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

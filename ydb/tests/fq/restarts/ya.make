@@ -26,6 +26,7 @@ PY_SRCS(
     conftest.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)

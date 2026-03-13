@@ -2,12 +2,12 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(6)
+SPLIT_FACTOR(10)
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -15,18 +15,17 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
-    library/cpp/svnversion
+    ydb/core/cms
     ydb/core/testlib/default
     ydb/core/tx
-    ydb/core/tx/columnshard
     ydb/core/tx/schemeshard/ut_helpers
-    yql/essentials/public/udf/service/exception_policy
+    ydb/core/wrappers/ut_helpers
+)
+
+SRCS(
+    ut_compaction_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()
-
-SRCS(
-    ut_sequence_reboots.cpp
-)
 
 END()

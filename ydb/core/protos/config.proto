@@ -2970,6 +2970,9 @@ message TStatisticsConfig {
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
 
     optional bool EnableBackgroundColumnStatsCollection = 5 [default = false];
+
+    optional uint32 AnalyzeMaxTotalScanActorsInFlight = 6 [default = 100];
+    optional uint32 AnalyzeMaxPerNodeScanActorsInFlight = 7 [default = 1];
 };
 
 message TSystemTabletBackupConfig {

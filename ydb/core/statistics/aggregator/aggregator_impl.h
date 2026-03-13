@@ -249,13 +249,12 @@ private:
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
-    bool EnableBackgroundColumnStatsCollection = false;
+
+    NKikimrConfig::TStatisticsConfig StatisticsConfig;
 
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
 
-    TDuration PropagateIntervalDedicated;
-    TDuration PropagateIntervalServerless;
     TDuration PropagateInterval = TDuration::Seconds(5);
 
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);

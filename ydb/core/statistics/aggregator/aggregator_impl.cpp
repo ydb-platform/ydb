@@ -44,12 +44,11 @@ void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
 
     auto appData = AppData(ctx);
     Y_ABORT_UNLESS(appData);
-    PropagateIntervalDedicated = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
-    PropagateIntervalServerless = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    StatisticsConfig = appData->StatisticsConfig;
+
     // Start with the dedicated interval, switch to the serverless one if needed.
-    PropagateInterval = PropagateIntervalDedicated;
+    PropagateInterval = TDuration::Seconds(
+        StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -60,9 +59,11 @@ void TStatisticsAggregator::DefaultSignalTabletActive(const TActorContext& ctx) 
 }
 
 void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) {
-    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+            (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
+        }));
 }
 
 void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -81,11 +82,10 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
         }
-
-        const auto& statsConfig = config.GetStatisticsConfig();
-        EnableBackgroundColumnStatsCollection =
-            statsConfig.GetEnableBackgroundColumnStatsCollection();
     }
+
+    StatisticsConfig = config.GetStatisticsConfig();
+
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
@@ -244,7 +244,8 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
 
     if (BaseStatistics.size() > 1) {
         // We are in a shared database, switch to a bigger propagation interval.
-        PropagateInterval = PropagateIntervalServerless;
+        PropagateInterval = TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
     }
 
     if (EnableStatistics) {
@@ -772,9 +773,13 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
                 // operation.Types field is not used, TAnalyzeActor will determine suitable
                 // statistic types itself.
+                auto analyzeActorConfig = TAnalyzeActor::TConfig{
+                    .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+                    .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+                };
                 AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                    operationTable.ColumnTags));
+                    operationTable.ColumnTags, analyzeActorConfig));
                 SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
                     << "operationId: " << operation.OperationId.Quote()
                     << ", started analyzing table: " << operationTable.PathId

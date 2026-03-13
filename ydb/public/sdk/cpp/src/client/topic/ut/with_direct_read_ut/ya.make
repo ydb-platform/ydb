@@ -2,9 +2,11 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
+    REQUIREMENTS(cpu:4)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 FORK_SUBTESTS()

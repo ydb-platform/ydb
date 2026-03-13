@@ -12,6 +12,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     )
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 SRCS(

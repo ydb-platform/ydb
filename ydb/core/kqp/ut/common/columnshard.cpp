@@ -186,7 +186,7 @@ namespace NKqp {
             }
             str << ")";
         }
-        if (LowCardinalityFlag) {
+        if (DictionaryEncodingFlag) {
             str << " ENCODING(dict)";
         }
         return str;

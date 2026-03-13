@@ -363,8 +363,8 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             return false;
         }
 
-        if (columnIt->second.LowCardinality) {
-            error = "Low Cardinality is not supported in row tables";
+        if (columnIt->second.DictionaryEncoding) {
+            error = "Dictionary encoding is not supported in row tables";
             return false;
         }
     }
@@ -491,7 +491,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
 
-        if (columnIt->second.LowCardinality) {
+        if (columnIt->second.DictionaryEncoding) {
             columnDesc.MutableDictionaryEncoding()->SetEnabled(true);
         }
 

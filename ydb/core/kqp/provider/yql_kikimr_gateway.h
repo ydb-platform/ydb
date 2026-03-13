@@ -471,7 +471,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
-    bool LowCardinality = false;
+    bool DictionaryEncoding = false;
 
     TKikimrColumnMetadata() = default;
 
@@ -519,8 +519,8 @@ struct TKikimrColumnMetadata {
             }
         }
 
-        if (message->HasLowCardinality() && message->GetLowCardinality()) {
-            LowCardinality = true;
+        if (message->HasDictionaryEncoding() && message->GetDictionaryEncoding()) {
+            DictionaryEncoding = true;
         }
     }
 
@@ -572,8 +572,8 @@ struct TKikimrColumnMetadata {
             }
         }
 
-        if (LowCardinality) {
-            message->SetLowCardinality(true);
+        if (DictionaryEncoding) {
+            message->SetDictionaryEncoding(true);
         }
     }
 

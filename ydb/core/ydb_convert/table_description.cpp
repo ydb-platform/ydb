@@ -635,6 +635,14 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         if (column.HasColumnFamilyName()) {
             newColumn->set_family(column.GetColumnFamilyName());
         }
+
+        if (column.HasDictionaryEncoding() && column.GetDictionaryEncoding().HasEnabled()) {
+            if (column.GetDictionaryEncoding().GetEnabled()) {
+                newColumn->add_encoding()->mutable_dictionary();
+            } else {
+                newColumn->add_encoding()->mutable_off();
+            }
+        }
     }
 
     for (auto& name : schema.GetKeyColumnNames()) {
@@ -885,8 +893,16 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             return false;
         }
 
-        if (column.Haslowcardinality()) {
-            columnDesc->MutableDictionaryEncoding()->SetEnabled(column.Getlowcardinality());
+        if (column.encoding_size() > 0) {
+            bool hasDictionary = false;
+            for (int i = 0; i < column.encoding_size(); ++i) {
+                const auto& e = column.encoding(i);
+                if (e.has_dictionary()) {
+                    hasDictionary = true;
+                }
+            }
+            // OFF → PLAIN (Enabled false), Dictionary → Enabled true
+            columnDesc->MutableDictionaryEncoding()->SetEnabled(hasDictionary);
         }
     }
 
@@ -996,8 +1012,14 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 }
             }
 
-            if (alter.Haslowcardinality()) {
-                alterColumn->MutableDictionaryEncoding()->SetEnabled(alter.Getlowcardinality());
+            if (alter.encoding_size() > 0) {
+                bool hasDictionary = false;
+                for (int i = 0; i < alter.encoding_size(); ++i) {
+                    if (alter.encoding(i).has_dictionary()) {
+                        hasDictionary = true;
+                    }
+                }
+                alterColumn->MutableDictionaryEncoding()->SetEnabled(hasDictionary);
             }
         }
 

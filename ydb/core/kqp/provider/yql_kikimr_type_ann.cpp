@@ -596,7 +596,7 @@ namespace {
                     if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
                         TString encName = TString(pair.Item(1).Cast<TCoAtom>().Value());
                         if (to_lower(encName) == "dict") {
-                            columnMeta.LowCardinality = true;
+                            columnMeta.DictionaryEncoding = true;
                         }
                         break;
                     }
@@ -1142,6 +1142,30 @@ private:
             if (columnTuple.Size() > 3) {
                 if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                     return TStatus::Error;
+                }
+                // columnEncoding may appear as a separate tuple in column desc (query.cpp), not inside columnConstrains
+                for (size_t idx = 3; idx < columnTuple.Size(); ++idx) {
+                    auto extra = columnTuple.Item(idx);
+                    if (auto maybeTuple = extra.Maybe<TCoNameValueTuple>()) {
+                        auto nameValue = maybeTuple.Cast();
+                        if (nameValue.Name().Value() == "columnEncoding") {
+                            auto encodingList = nameValue.Value().Cast<TExprList>();
+                            for (size_t i = 0; i < encodingList.Size(); ++i) {
+                                auto config = encodingList.Item(i).Cast<TExprList>();
+                                for (size_t j = 0; j < config.Size(); ++j) {
+                                    auto pair = config.Item(j).Cast<TExprList>();
+                                    if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
+                                        TString encName = TString(pair.Item(1).Cast<TCoAtom>().Value());
+                                        if (to_lower(encName) == "dict") {
+                                            columnMeta.DictionaryEncoding = true;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
                 }
             }
 

@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk_int Uint64 NOT NULL,
-            data Utf8 ENCODING(dict),
+            data Utf8 ENCODING(DICT),
             PRIMARY KEY (pk_int)
         )
         PARTITION BY HASH(pk_int)
@@ -83,8 +83,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     TString scriptEmptyStringVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL ENCODING(dict),
-            Col2 Utf8 ENCODING(dict),
+            Col1 Uint64 NOT NULL ENCODING(DICT),
+            Col2 Utf8 ENCODING(DICT),
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -109,8 +109,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL ENCODING(dict),
-            Col2 Utf8 ENCODING(dict),
+            Col1 Uint64 NOT NULL ENCODING(DICT),
+            Col2 Utf8 ENCODING(DICT),
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -149,9 +149,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
-    Y_UNIT_TEST(CreateWithLowCardinality) {
+    Y_UNIT_TEST(CreateWithEncodingDictionary) {
         auto settings = TKikimrSettings()
-            .SetEnableCsLowCardinality(true)
+            .SetEnableCsDictionaryEncoding(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -159,23 +159,23 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             .SetName("key")
             .SetType(NScheme::NTypeIds::Uint64)
             .SetNullable(false)
-            .SetLowCardinality(true)
+            .SetDictionaryEncoding(true)
         };
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        standaloneTable.SetName("/Root/EncodingDictionaryTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
 
         testHelper.ReadDataExecQuery(R"(
-            SELECT COUNT(*) > 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+            SELECT COUNT(*) > 0 FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
                 WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
                         ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
             )", "[[%true]]");
     }
 
-    Y_UNIT_TEST(CreateWithoutLowCardinality) {
+    Y_UNIT_TEST(CreateWithoutEncodingDictionary) {
         auto settings = TKikimrSettings()
-            .SetEnableCsLowCardinality(true)
+            .SetEnableCsDictionaryEncoding(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -183,23 +183,23 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             .SetName("key")
             .SetType(NScheme::NTypeIds::Uint64)
             .SetNullable(false)
-            .SetLowCardinality(false)
+            .SetDictionaryEncoding(false)
         };
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        standaloneTable.SetName("/Root/EncodingDictionaryTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
 
         testHelper.ReadDataExecQuery(R"(
-            SELECT COUNT(*) == 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+            SELECT COUNT(*) == 0 FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
                 WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
                         ILIKE "%DICTIONARY%";
             )", "[[%true]]");
     }
 
-    Y_UNIT_TEST(AlterAddLowCardinality) {
+    Y_UNIT_TEST(AlterAddEncodingDictionary) {
         auto settings = TKikimrSettings()
-            .SetEnableCsLowCardinality(true)
+            .SetEnableCsDictionaryEncoding(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -207,24 +207,24 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             .SetName("key")
             .SetType(NScheme::NTypeIds::Uint64)
             .SetNullable(false)
-            .SetLowCardinality(false)
+            .SetDictionaryEncoding(false)
         };
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        standaloneTable.SetName("/Root/EncodingDictionaryTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
-        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET ENCODING(dict);");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/EncodingDictionaryTable` ALTER COLUMN `key` SET ENCODING(DICT);");
 
         testHelper.ReadDataExecQuery(R"(
-            SELECT COUNT(*) > 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+            SELECT COUNT(*) > 0 FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
                 WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
                         ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
             )", "[[%true]]");
     }
 
-    Y_UNIT_TEST(AlterDropLowCardinality) {
+    Y_UNIT_TEST(AlterDropEncodingDictionary) {
         auto settings = TKikimrSettings()
-            .SetEnableCsLowCardinality(true)
+            .SetEnableCsDictionaryEncoding(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -232,20 +232,20 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             .SetName("key")
             .SetType(NScheme::NTypeIds::Uint64)
             .SetNullable(false)
-            .SetLowCardinality(true)
+            .SetDictionaryEncoding(true)
         };
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        standaloneTable.SetName("/Root/EncodingDictionaryTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
-        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET ENCODING(off);");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/EncodingDictionaryTable` ALTER COLUMN `key` SET ENCODING(OFF);");
 
         testHelper.ReadDataExecQuery(R"(
-            $V1 = SELECT max(SchemaVersion) FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+            $V1 = SELECT max(SchemaVersion) FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
                 WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
                         ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
 
-            $V2 = SELECT max(SchemaVersion) FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
+            $V2 = SELECT max(SchemaVersion) FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
                 WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
                         ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:PLAIN%";
 

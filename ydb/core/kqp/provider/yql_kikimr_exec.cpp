@@ -2005,29 +2005,29 @@ public:
                                     hasNotNull = true;
                                 } else if (constraint.Name().Value() == "columnEncoding") {
                                     auto encodingList = constraint.Value().Cast<TExprList>();
-                                    bool hasDict = false;
                                     for (size_t i = 0; i < encodingList.Size(); ++i) {
                                         auto config = encodingList.Item(i).Cast<TExprList>();
+                                        TString name;
                                         for (size_t j = 0; j < config.Size(); ++j) {
                                             auto pair = config.Item(j).Cast<TExprList>();
                                             if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
-                                                if (to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value())) == "dict") {
-                                                    hasDict = true;
-                                                }
+                                                name = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
                                                 break;
                                             }
                                         }
-                                    }
-                                    if (hasDict) {
-                                        if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
-                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "ENCODING(DICT) is disabled."));
-                                            return SyncError();
+                                        if (name == "dict") {
+                                            if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "ENCODING(DICT) is disabled."));
+                                                return SyncError();
+                                            }
+                                            if (table.Metadata->Kind != EKikimrTableKind::Olap) {
+                                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "ENCODING(DICT) is supported only in column tables"));
+                                                return SyncError();
+                                            }
+                                            add_column->add_encoding()->mutable_dictionary();
+                                        } else if (name == "off") {
+                                            add_column->add_encoding()->mutable_off();
                                         }
-                                        if (table.Metadata->Kind != EKikimrTableKind::Olap) {
-                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "ENCODING(DICT) is supported only in column tables"));
-                                            return SyncError();
-                                        }
-                                        add_column->set_lowcardinality(true);
                                     }
                                 }
                             }
@@ -3839,31 +3839,30 @@ private:
         EKikimrTableKind tableKind)
     {
         auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
-        bool hasDict = false;
+        alter_columns->clear_encoding();
         for (size_t i = 0; i < encodingList.Size(); ++i) {
             auto config = encodingList.Item(i).Cast<TExprList>();
+            TString name;
             for (size_t j = 0; j < config.Size(); ++j) {
                 auto pair = config.Item(j).Cast<TExprList>();
                 if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
-                    if (to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value())) == "dict") {
-                        hasDict = true;
-                    }
+                    name = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
                     break;
                 }
             }
-        }
-        if (hasDict) {
-            if (tableKind != EKikimrTableKind::Olap) {
-                // TODO: tableKind == EKikimrTableKind::Unspecified for ALTER TABLE ... SET ENCODING(DICT)
+            if (name == "dict") {
+                if (tableKind != EKikimrTableKind::Olap) {
+                    // TODO: tableKind == EKikimrTableKind::Unspecified for ALTER TABLE ... SET ENCODING(DICT)
+                }
+                if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                        << "ENCODING(DICT) is disabled."));
+                    return false;
+                }
+                alter_columns->add_encoding()->mutable_dictionary();
+            } else if (name == "off") {
+                alter_columns->add_encoding()->mutable_off();
             }
-            if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
-                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
-                    << "ENCODING(DICT) is disabled."));
-                return false;
-            }
-            alter_columns->set_lowcardinality(true);
-        } else {
-            alter_columns->set_lowcardinality(false);
         }
         return true;
     }

@@ -452,7 +452,7 @@ namespace NKikimr::NDDisk {
 
         // Regular direct I/O.
         // Note: releases the op on success (returns true).
-        bool DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+        void DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
 
         // Do not call manually!
         bool DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
@@ -580,6 +580,9 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             std::vector<TPersistentBufferSectorInfo> Sectors;
             TRope Data;
+
+            NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            std::optional<TString> ErrorMessage = std::nullopt;
         };
 
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;

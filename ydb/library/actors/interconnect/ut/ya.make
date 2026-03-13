@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)

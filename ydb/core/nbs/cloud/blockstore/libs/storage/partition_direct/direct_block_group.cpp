@@ -430,7 +430,10 @@ void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result)
 {
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
+        result.GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED)
+    {
         requestHandler->ChildSpanEndOk(storageRequestId);
 
         ErasePersistentBuffer(std::move(requestHandler));

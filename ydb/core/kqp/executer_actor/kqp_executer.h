@@ -48,8 +48,6 @@ struct TEvKqpExecuter {
         };
         TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
 
-        THashSet<ui32> ParticipantNodes;
-
         // For BATCH operations only
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
         TVector<ui32> BatchOperationKeyIds;

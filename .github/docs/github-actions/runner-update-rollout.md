@@ -20,6 +20,8 @@ Why this matters:
   - runner mirror update,
   - VM image rebuild,
   - new VMs provisioned from the updated image.
+- While the fleet is mixed (some runners `< 2.327.1`, some `>= 2.327.1`), any job that lands on an outdated long‑lived/self‑hosted runner will fail once the workflow uses `actions/checkout@v5`.
+- To avoid this window of CI breakage, schedule a short pre‑merge or immediate post‑merge maintenance to drain or upgrade non‑ephemeral runner groups (or temporarily disable scheduled workflows targeting those runners) until the majority of capacity is on runners `>= 2.327.1`.
 
 ## Safe rollout plan
 

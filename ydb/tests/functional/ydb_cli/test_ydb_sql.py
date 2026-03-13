@@ -65,10 +65,18 @@ class BaseTestSql(object):
 
 class BaseTestSqlWithDatabase(BaseTestSql):
     @classmethod
+    def get_cluster_configurator(cls):
+        """Override in subclasses to use a custom cluster config (e.g. extra feature flags)."""
+        return None
+
+    @classmethod
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = KiKiMR()
+        configurator = cls.get_cluster_configurator()
+        if configurator is None:
+            configurator = KikimrConfigGenerator()
+        cls.cluster = KiKiMR(configurator)
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -79,7 +87,10 @@ class BaseTestSqlWithDatabase(BaseTestSql):
 
     @classmethod
     def teardown_class(cls):
-        cls.cluster.stop()
+        if hasattr(cls, 'driver') and cls.driver is not None:
+            cls.driver.stop()
+        if hasattr(cls, 'cluster') and cls.cluster is not None:
+            cls.cluster.stop()
 
     @classmethod
     def execute_ydb_cli_command_with_db(cls, args, stdin=None, env=None):
@@ -1027,17 +1038,12 @@ class TestExecuteSqlFromStdinWithWideOutput(BaseTestSqlWithDatabase):
 
 class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
     @classmethod
-    def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_pg_syntax"])
 
-        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_pg_syntax"]))
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
+    @classmethod
+    def setup_class(cls):
+        BaseTestSqlWithDatabase.setup_class()
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')

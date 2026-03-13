@@ -16,6 +16,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const ui32 Generation;
     const TInstant Deadline;
     const ui64 IssuerGuid;
+    const TWriteSource WriteSource;
     bool SeenAlready = false;
 
     TGroupQuorumTracker QuorumTracker;
@@ -110,13 +111,14 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
             << " vdiskId# " << vdiskId
             << " node# " << Info->GetActorId(vdiskId).NodeId());
 
-        auto msg = std::make_unique<TEvBlobStorage::TEvVBlock>(TabletId, Generation, vdiskId, Deadline, IssuerGuid);
+        auto msg = std::make_unique<TEvBlobStorage::TEvVBlock>(TabletId, Generation, vdiskId, Deadline, IssuerGuid,
+            WriteSource);
         SendToQueue(std::move(msg), cookie);
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartBlock;
-        auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid);
+        auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid, WriteSource);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -137,6 +139,7 @@ public:
         , Generation(params.Common.Event->Generation)
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
+        , WriteSource(params.Common.Event->WriteSource)
         , QuorumTracker(Info.Get())
     {}
 

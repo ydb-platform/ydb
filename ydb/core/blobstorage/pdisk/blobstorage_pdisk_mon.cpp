@@ -3,7 +3,94 @@
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <array>
+
 namespace NKikimr {
+
+namespace {
+
+// Order is not important here. Just make sure that all values are unique and Unknown is at index 0.
+#define PDISK_WRITE_SOURCE_OPS(XX) \
+    XX(0, Unknown) \
+    XX(1, WriteLogEntry) \
+    XX(2, WriteLogReference) \
+    XX(3, BlockBlobStorage) \
+    XX(4, GcLogChannel) \
+    XX(5, DeleteHardBarrier) \
+    XX(6, FlatCompactionPut) \
+    XX(7, FlatCollectGarbage) \
+    XX(8, SkeletonHandoffDelLogoBlob) \
+    XX(9, SkeletonAddBulkSst) \
+    XX(10, SkeletonLocalSyncData) \
+    XX(11, SkeletonAnubisOsirisPut) \
+    XX(12, SkeletonPhantomBlobs) \
+    XX(13, SyncLogCommitterWrite) \
+    XX(14, SyncLogCommitterCommit) \
+    XX(15, HugeKeeperAllocChunk) \
+    XX(16, HugeKeeperFreeChunk) \
+    XX(17, HugeKeeperEntryPoint) \
+    XX(18, HullDbCommit) \
+    XX(19, HullCompactWorkerWrite) \
+    XX(20, HullWriteSst) \
+    XX(21, ChunkKeeperCommit) \
+    XX(22, MetadataCommit) \
+    XX(23, ScrubWrite) \
+    XX(24, ScrubCommit) \
+    XX(25, LogCutterCutLog) \
+    XX(26, SyncerCommit) \
+    XX(27, RecoveredHugeBlob) \
+    XX(28, GroupWriteLoadActor)
+
+constexpr size_t UnknownWriteSourceOpIndex = 0;
+
+constexpr auto WriteSourceOpNames = std::array{
+#define YDB_PDISK_WRITE_SOURCE_NAME(_, op) #op,
+    PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_NAME)
+#undef YDB_PDISK_WRITE_SOURCE_NAME
+};
+
+constexpr size_t GetWriteSourceIndex(TWriteSource op) {
+    switch (op) {
+#define YDB_PDISK_WRITE_SOURCE_CASE(index, op) case TWriteSource::op: return index;
+        PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_CASE)
+#undef YDB_PDISK_WRITE_SOURCE_CASE
+    }
+    return UnknownWriteSourceOpIndex;
+}
+
+constexpr bool ValidateWriteSourceOps() {
+    constexpr auto writeSourceOps = std::array{
+    #define YDB_PDISK_WRITE_SOURCE_VALUE(_, op) TWriteSource::op,
+        PDISK_WRITE_SOURCE_OPS(YDB_PDISK_WRITE_SOURCE_VALUE)
+    #undef YDB_PDISK_WRITE_SOURCE_VALUE
+    };
+
+    static_assert(writeSourceOps.size() == WriteSourceOpNames.size());
+
+    if (writeSourceOps[UnknownWriteSourceOpIndex] != TWriteSource::Unknown) {
+        return false;
+    }
+
+    for (size_t i = 0; i < writeSourceOps.size(); ++i) {
+        if (!IsKnownWriteSource(writeSourceOps[i])) {
+            return false;
+        }
+        for (size_t j = i + 1; j < writeSourceOps.size(); ++j) {
+            if (static_cast<ui32>(writeSourceOps[i]) == static_cast<ui32>(writeSourceOps[j])) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+static_assert(ValidateWriteSourceOps(),
+    "WriteSource op table must contain unique, known values and Unknown at index 0");
+
+#undef PDISK_WRITE_SOURCE_OPS
+
+} // namespace
 
 TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
         TPDiskConfig *cfg)
@@ -272,6 +359,13 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
 
+    LogWriteOpCounters.resize(WriteSourceOpNames.size());
+    ChunkWriteOpCounters.resize(WriteSourceOpNames.size());
+    for (size_t i = 0; i < WriteSourceOpNames.size(); ++i) {
+        LogWriteOpCounters[i].Setup(true, PDiskGroup, TString(WriteSourceOpNames[i]), EVisibility::Public);
+        ChunkWriteOpCounters[i].Setup(false, PDiskGroup, TString(WriteSourceOpNames[i]), EVisibility::Public);
+    }
+
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
     COUNTER_INIT(PDiskGroup, SubmitThreadCPU, true);
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
@@ -472,6 +566,18 @@ void TPDiskMon::UpdateStats() {
 
     *FreeSpacePerMile = freePerMile;
     *UsedSpacePerMile = usedPerMile;
+}
+
+void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t index = GetWriteSourceIndex(source);
+    Y_ABORT_UNLESS(index < LogWriteOpCounters.size());
+    LogWriteOpCounters[index].CountRequest(size);
+}
+
+void TPDiskMon::CountChunkWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t index = GetWriteSourceIndex(source);
+    Y_ABORT_UNLESS(index < ChunkWriteOpCounters.size());
+    ChunkWriteOpCounters[index].CountRequest(size);
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {

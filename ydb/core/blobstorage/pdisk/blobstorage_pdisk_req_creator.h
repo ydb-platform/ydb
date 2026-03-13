@@ -241,6 +241,7 @@ public:
         Mon->QueueRequests->Inc();
         *Mon->QueueBytes += ev.Data.size();
         Mon->WriteLog.CountRequest(ev.Data.size());
+        Mon->CountLogWriteOpRequest(ev.WriteSource, ev.Data.size());
         if (ev.Data.size() > (1 << 20)) {
             Mon->WriteHugeLog.CountRequest();
         }
@@ -287,6 +288,7 @@ public:
         ev.Validate();
         *Mon->QueueBytes += size;
         Mon->GetWriteCounter(ev.PriorityClass)->CountRequest(size);
+        Mon->CountChunkWriteOpRequest(ev.WriteSource, size);
         return NewRequest(new TChunkWrite(ev, sender, reqId, std::move(span)), &burstMs);
     }
 

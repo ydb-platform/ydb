@@ -58,13 +58,14 @@ private:
         bool IssueKeepFlag = false;
         bool IgnoreBlock = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
+        TWriteSource WriteSource;
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
                 NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock,
-                std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single,
+                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource, bool single,
                 std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
             : BlobId(id)
             , Buffer(std::move(buffer))
@@ -75,6 +76,7 @@ private:
             , IssueKeepFlag(issueKeepFlag)
             , IgnoreBlock(ignoreBlock)
             , ExtraBlockChecks(std::move(extraBlockChecks))
+            , WriteSource(writeSource)
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(executionRelay))
             , Deadline(deadline)
@@ -129,7 +131,8 @@ public:
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            ev->IssueKeepFlag, ev->IgnoreBlock, std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay),
+            ev->IssueKeepFlag, ev->IgnoreBlock, std::move(ev->ExtraBlockChecks), ev->WriteSource, true,
+            std::move(ev->ExecutionRelay),
             ev->Deadline);
 
         auto& blob = Blobs.back();
@@ -161,7 +164,8 @@ public:
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
             Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, std::move(msg.ExtraBlockChecks), false,
+                std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, std::move(msg.ExtraBlockChecks),
+                msg.WriteSource, false,
                 std::move(msg.ExecutionRelay), msg.Deadline);
 
             auto& blob = Blobs.back();
@@ -245,7 +249,7 @@ public:
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
-                    blob.Deadline, Blackboard.PutHandleClass, checksumming);
+                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -283,7 +287,7 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming);
+                        &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming, blob.WriteSource);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

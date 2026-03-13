@@ -754,6 +754,7 @@ public:
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         PDisk->Mon.WriteLog.CountRequest(0);
+        PDisk->Mon.CountLogWriteOpRequest(evLog.WriteSource, evLog.Data.size());
         Send(ev->Sender, result.Release());
         PDisk->Mon.WriteLog.CountResponse();
     }
@@ -778,6 +779,7 @@ public:
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
+            PDisk->Mon.CountLogWriteOpRequest(log->WriteSource, log->Data.size());
         }
         PDisk->Mon.WriteLog.CountRequest(0);
         Send(ev->Sender, result.Release());
@@ -813,7 +815,9 @@ public:
 
     void ErrorHandle(NPDisk::TEvChunkWrite::TPtr &ev) {
         const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
+        const ui32 size = evChunkWrite.PartsPtr ? evChunkWrite.PartsPtr->ByteSize() : 0;
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountRequest(0);
+        PDisk->Mon.CountChunkWriteOpRequest(evChunkWrite.WriteSource, size);
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountResponse();
         auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::CORRUPTED,
             evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason);

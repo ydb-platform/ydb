@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
@@ -12,6 +13,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+#include <util/generic/vector.h>
 
 
 namespace NKikimr {
@@ -476,6 +478,23 @@ struct TPDiskMon {
         }
     };
 
+    struct TOpCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+
+        void Setup(const bool isLog, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name,
+                NMonitoring::TCountableBase::EVisibility vis) {
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("op", name);
+            Requests = subgroup->GetCounter(isLog ? "LogRequestsByOp" : "ChunkRequestsByOp", true, vis);
+            Bytes = subgroup->GetCounter(isLog? "LogBytesByOp" : "ChunkBytesByOp", true, vis);
+        }
+
+        void CountRequest(ui32 size) {
+            Requests->Inc();
+            *Bytes += size;
+        }
+    };
+
     // yard subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskGroup;
     TReqCounters YardInit;
@@ -514,7 +533,11 @@ struct TPDiskMon {
     TReqCounters WriteHugeLog;
     TIoCounters LogRead;
 
+private:
+    TVector<TOpCounters> LogWriteOpCounters;
+    TVector<TOpCounters> ChunkWriteOpCounters;
 
+public:
     // Halter
     i64 LastHaltDeviceTakeoffs = 0;
     i64 LastHaltDeviceLandings = 0;
@@ -541,6 +564,8 @@ struct TPDiskMon {
     void UpdateLights();
     bool UpdateDeviceHaltCounters();
     void UpdateStats();
+    void CountLogWriteOpRequest(const TWriteSource& source, ui32 size);
+    void CountChunkWriteOpRequest(const TWriteSource& source, ui32 size);
     TIoCounters *GetWriteCounter(ui8 priority);
     TIoCounters *GetReadCounter(ui8 priority);
 };

@@ -40,7 +40,9 @@ namespace NKikimr {
             MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(data), alignedSize),
             nullptr,
             true,
-            NPriWrite::HullComp);
+            NPriWrite::HullComp,
+            true,
+            TWriteSource::ScrubWrite);
         ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "writing index to " << part.ToString();

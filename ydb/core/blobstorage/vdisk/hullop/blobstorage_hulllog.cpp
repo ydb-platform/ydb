@@ -49,7 +49,8 @@ namespace NKikimr {
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
-                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice)
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice,
+                                             TWriteSource writeSource)
     {
         auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
               hullLogCtx->SyncLogId, hullLogCtx->HugeKeeperId, std::move(syncLogMsg),
@@ -61,7 +62,8 @@ namespace NKikimr {
                                   TRcBuf(data), //FIXME(innokentii) wrapping
                                   seg,
                                   cookie,
-                                  std::move(callback));
+                                  std::move(callback),
+                                  writeSource);
     }
 
 
@@ -71,7 +73,8 @@ namespace NKikimr {
                                              const TString &data,
                                              TLsnSeg seg,
                                              void *cookie,
-                                             std::unique_ptr<IEventBase> syncLogMsg)
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             TWriteSource writeSource)
     {
         auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
               hullLogCtx->SyncLogId, TActorId(), std::move(syncLogMsg), nullptr);
@@ -83,7 +86,8 @@ namespace NKikimr {
                                   TRcBuf(data), //FIXME(innokentii) wrapping
                                   seg,
                                   cookie,
-                                  std::move(callback));
+                                  std::move(callback),
+                                  writeSource);
     }
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
@@ -91,7 +95,8 @@ namespace NKikimr {
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
-                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice)
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice,
+                                             TWriteSource writeSource)
     {
         auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
               hullLogCtx->SyncLogId, hullLogCtx->HugeKeeperId, std::move(syncLogMsg),
@@ -103,7 +108,8 @@ namespace NKikimr {
                                   data,
                                   seg,
                                   cookie,
-                                  std::move(callback));
+                                  std::move(callback),
+                                  writeSource);
     }
 
 
@@ -113,7 +119,8 @@ namespace NKikimr {
                                              const TRcBuf &data,
                                              TLsnSeg seg,
                                              void *cookie,
-                                             std::unique_ptr<IEventBase> syncLogMsg)
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             TWriteSource writeSource)
     {
         auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
               hullLogCtx->SyncLogId, TActorId(), std::move(syncLogMsg), nullptr);
@@ -125,7 +132,8 @@ namespace NKikimr {
                                   data,
                                   seg,
                                   cookie,
-                                  std::move(callback));
+                                  std::move(callback),
+                                  writeSource);
     }
 
 } // NKikimr

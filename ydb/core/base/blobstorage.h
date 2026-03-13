@@ -835,6 +835,20 @@ struct TEvBlobStorage {
         EvCommitVDiskMetadata,
         EvCommitVDiskMetadataDone,
         EvChangeExpectedSlotCountResult,
+        EvChunkReadRawResult,
+        EvChunkWriteRawResult,
+        EvChunkKeeperAllocate,
+        EvChunkKeeperAllocateResult,
+        EvChunkKeeperDiscover,                                  /// 268 636 732
+        EvChunkKeeperDiscoverResult,
+        EvChunkKeeperFree,
+        EvChunkKeeperFreeResult,
+        EvChunkKeeperGetOwnedChunks,
+        EvGetSkeletonState,         // for test purposes
+        EvGetSkeletonStateResult,   // for test purposes
+        EvCompactionTokenRequest,
+        EvCompactionTokenResult,
+        EvReleaseCompactionToken,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

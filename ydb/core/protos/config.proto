@@ -1962,9 +1962,9 @@ message TImmediateControlsConfig {
             DefaultValue: 70 }];
         optional uint64 MaxActiveCompactionsPerPDisk = 7 [(ControlOptions) = {
             Description: "Max active compactions per disk",
-            MinValue: 1,
+            MinValue: 0,
             MaxValue: 1000000,
-            DefaultValue: 1 }];
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {

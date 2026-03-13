@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+REQUIREMENTS(cpu:2)
 IF (WITH_VALGRIND OR SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

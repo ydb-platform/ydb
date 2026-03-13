@@ -6,7 +6,12 @@ IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
 ENDIF()
 
+<<<<<<< HEAD
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+=======
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+>>>>>>> 7bf789f021c (Main: Optimisation for medium and small tests cpu requirments (without split and fork) (#35835))
     SPLIT_FACTOR(20)
     SIZE(LARGE)
     TAG(ya:fat)

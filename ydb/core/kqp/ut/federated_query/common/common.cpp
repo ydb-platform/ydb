@@ -109,7 +109,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (initializeHttpGateway) {
             httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
         }
-        auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+        auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
         const auto& s3Config = queryServiceConfig.GetS3();
         const auto& solomonConfig = queryServiceConfig.GetSolomon();

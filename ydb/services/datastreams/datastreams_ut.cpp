@@ -37,12 +37,8 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
-    TDatastreamsTestServer(bool autopartitioningEnabled = false) {
+    TDatastreamsTestServer() {
         NKikimrConfig::TAppConfig appConfig;
-
-        if (autopartitioningEnabled) {
-            appConfig.MutableFeatureFlags()->SetEnableTopicSplitMerge(true);
-        }
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
@@ -2798,7 +2794,7 @@ waitForNavCache:
     }
 
     Y_UNIT_TEST(Test_AutoPartitioning_Describe) {
-        TInsecureDatastreamsTestServer testServer(true);
+        TInsecureDatastreamsTestServer testServer;
         SET_YDS_LOCALS;
 
         TString streamName = "test-topic";
@@ -3146,7 +3142,7 @@ waitForNavCache:
     }
 
     Y_UNIT_TEST(Test_Crreate_AutoPartitioning_Disabled) {
-        TInsecureDatastreamsTestServer testServer(true);
+        TInsecureDatastreamsTestServer testServer;
         SET_YDS_LOCALS;
 
         {

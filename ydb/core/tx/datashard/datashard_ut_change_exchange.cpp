@@ -847,7 +847,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
-                .SetEnableTopicSplitMerge(true)
                 .SetEnableTopicAutopartitioningForCDC(true);
 
             Server = new TServer(settings);
@@ -3084,7 +3083,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnableTopicSplitMerge(topicAutoPartitioning)
             .SetEnableTopicAutopartitioningForCDC(true)
         );
 

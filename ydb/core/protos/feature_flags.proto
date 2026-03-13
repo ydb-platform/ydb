@@ -109,7 +109,7 @@ message TFeatureFlags {
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
-    reserved 86; // EnableTopicServiceTx
+    optional bool EnableTopicServiceTx = 86 [default = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
@@ -118,12 +118,12 @@ message TFeatureFlags {
     optional bool EnableScriptExecutionOperations = 92 [default = true];
     reserved 93; // EnableImplicitQueryParameterTypes
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
-    optional bool EnableTopicSplitMerge = 95 [default = true]; // TODO deprecated: always true
+    optional bool EnableTopicSplitMerge = 95 [default = true]; // deprecated: always true
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = true, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = true];  // TODO deprecated: always true
+    optional bool EnableTopicMessageMeta = 100 [default = true]; // TODO deprecated: always true
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];

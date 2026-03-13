@@ -110,7 +110,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     const auto &config = inDesc.GetPQTabletConfig();
-    if (AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
+    if (NPQ::SplitMergeEnabled(config)) {
         out.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
     } else {
         out.mutable_partitioning_settings()->set_min_active_partitions(inDesc.GetTotalGroupCount());

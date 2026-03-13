@@ -586,8 +586,22 @@ namespace {
             columnMeta.NotNull = true;
         } else if (constraint.Name().Value() == "not_null") {
             columnMeta.NotNull = true;
-        } else if (constraint.Name().Value() == "lowcardinality") {
-            columnMeta.LowCardinality = true;
+        } else if (constraint.Name().Value() == "columnEncoding") {
+            // Value is list of encoding configs; each config is list of (key, value) with "name" = encoding name
+            auto encodingList = constraint.Value().Cast<TExprList>();
+            for (size_t i = 0; i < encodingList.Size(); ++i) {
+                auto config = encodingList.Item(i).Cast<TExprList>();
+                for (size_t j = 0; j < config.Size(); ++j) {
+                    auto pair = config.Item(j).Cast<TExprList>();
+                    if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
+                        TString encName = TString(pair.Item(1).Cast<TCoAtom>().Value());
+                        if (to_lower(encName) == "dict") {
+                            columnMeta.LowCardinality = true;
+                        }
+                        break;
+                    }
+                }
+            }
         }
 
         return true;
@@ -1922,26 +1936,10 @@ private:
                                 return TStatus::Error;
                             }
                         }
-                    } else if (alterColumnAction == "changeLowCardinality") {
-                        auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
-
-                        if (constraintsList.Size() != 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name
-                                << "\". Several column constrains for a single column are not yet supported"));
-                            return TStatus::Error;
-                        }
-
-                        auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
-
-                        if (constraint.Size() != 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name
-                                << "changeLowCardinality can get exactly one token \\in {\"set_lowcardinality\", \"drop_lowcardinality\"}"));
-                            return TStatus::Error;
-                        }
+                    } else if (alterColumnAction == "changeEncoding") {
+                        // encodingList = list of encoding configs, e.g. [["DICT"]] or [["OFF"]] or []
+                        auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+                        (void)encodingList;  // validated at execution
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                                 TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));

@@ -1442,7 +1442,7 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     if (olapColumnDesc.HasDictionaryEncoding()
         && olapColumnDesc.GetDictionaryEncoding().HasEnabled()
         && olapColumnDesc.GetDictionaryEncoding().GetEnabled()) {
-        Stream << " LOWCARDINALITY";
+        Stream << " ENCODING(dict)";
     }
 }
 

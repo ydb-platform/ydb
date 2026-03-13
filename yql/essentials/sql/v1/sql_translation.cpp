@@ -1663,12 +1663,97 @@ TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslati
     return compression;
 }
 
+static bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation& ctx, TEncoding& encoding) {
+    const auto id = to_lower(Id(node.GetRule_an_id1(), ctx));
+    const auto& value = node.GetRule_encoding_setting_value3();
+    if (encoding.Entries.contains(id)) {
+        ctx.Context().Error() << "'" << id << "' encoding setting can be specified only once";
+        return false;
+    }
+    switch (value.Alt_case()) {
+        case TRule_encoding_setting_value::kAltEncodingSettingValue1: {
+            const auto result = ParseInteger(ctx.Context(), value.GetAlt_encoding_setting_value1().GetRule_integer1());
+            if (!result) {
+                return false;
+            }
+            encoding.Entries[id] = MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Context().Pos(), "Uint64", ToString(*result));
+            break;
+        }
+        case TRule_encoding_setting_value::kAltEncodingSettingValue2: {
+            const auto result = Id(value.GetAlt_encoding_setting_value2().GetRule_id1(), ctx);
+            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), result);
+            break;
+        }
+        case TRule_encoding_setting_value::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+    return true;
+}
+
+static TString EncodingConfigName(const TRule_encoding_config_name& node, TTranslation& ctx) {
+    switch (node.Alt_case()) {
+        case TRule_encoding_config_name::kAltEncodingConfigName1:
+            return Id(node.GetAlt_encoding_config_name1().GetRule_an_id1(), ctx);
+        case TRule_encoding_config_name::kAltEncodingConfigName2:
+            return "DICT";
+        case TRule_encoding_config_name::kAltEncodingConfigName3:
+            return "OFF";
+        case TRule_encoding_config_name::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+}
+
+static bool ParseEncodingConfig(const TRule_encoding_config& node, TTranslation& ctx, TEncoding& encoding) {
+    encoding.Name = EncodingConfigName(node.GetRule_encoding_config_name1(), ctx);
+    if (!node.HasBlock2()) {
+        return true;
+    }
+    // Block2 = ( LPAREN (encoding_setting_entry (COMMA encoding_setting_entry)*)? COMMA? RPAREN )
+    const auto& block = node.GetBlock2();
+    if (!block.HasBlock2()) {
+        return true;
+    }
+    // block.GetBlock2() = (encoding_setting_entry (COMMA encoding_setting_entry)*)
+    const auto& inner = block.GetBlock2();
+    if (!EncodingSettingEntry(inner.GetRule_encoding_setting_entry1(), ctx, encoding)) {
+        return false;
+    }
+    for (int i = 0; i < inner.block2_size(); ++i) {
+        if (!EncodingSettingEntry(inner.GetBlock2(i).GetRule_encoding_setting_entry2(), ctx, encoding)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx) {
+    // encoding: ENCODING LPAREN (encoding_config (COMMA encoding_config)*)? COMMA? RPAREN;
+    // When option is present we return Just(...); ENCODING() => Just(empty vector)
+    TVector<TEncoding> configs;
+    if (node.HasBlock3()) {
+        const auto& block = node.GetBlock3();
+        TEncoding first;
+        if (!ParseEncodingConfig(block.GetRule_encoding_config1(), ctx, first)) {
+            return Nothing();
+        }
+        configs.push_back(std::move(first));
+        for (const auto& block2 : block.GetBlock2()) {
+            TEncoding enc;
+            if (!ParseEncodingConfig(block2.GetRule_encoding_config2(), ctx, enc)) {
+                return Nothing();
+            }
+            configs.push_back(std::move(enc));
+        }
+    }
+    return TMaybe<TVector<TEncoding>>(std::move(configs));
+}
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx) {
     TNodePtr defaultExpr;
     TVector<TIdentifier> families;
     TMaybe<TCompression> compression;
     bool nullable = true;
-    bool lowCardinality = false;
+    TMaybe<TVector<TEncoding>> columnEncoding;
 
     const auto& optionsList = node.GetRule_column_option_list3();
 
@@ -1677,10 +1762,10 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         NotNull,
         DefaultValue,
         Compression,
-        LowCardinality,
+        Encoding,
     };
 
-    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::LowCardinality) + 1));
+    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Encoding) + 1));
 
     {
         switch (optionsList.Alt_case()) {
@@ -1798,17 +1883,22 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     compression = ColumnCompression(opt, ctx);
                     break;
                 }
-                case TRule_column_option::kAltColumnOption5: { // lowcardinality
-                    const auto opt = rule.GetAlt_column_option5().GetRule_lowcardinality1();
-                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::LowCardinality) != usedOptions.end()) {
+                case TRule_column_option::kAltColumnOption5: { // encoding
+                    const auto opt = rule.GetAlt_column_option5().GetRule_encoding1();
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Encoding) != usedOptions.end()) {
                         TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
-                        ctx.Context().Error(pos) << "'LOWCARDINALITY' option can be specified only once";
+                        ctx.Context().Error(pos) << "'ENCODING' option can be specified only once";
                         return {};
                     }
 
-                    usedOptions.push_back(EOption::LowCardinality);
+                    usedOptions.push_back(EOption::Encoding);
 
-                    lowCardinality = true;
+                    auto enc = ColumnEncoding(opt, ctx);
+                    if (!enc) {
+                        return {};
+                    }
+                    columnEncoding = std::move(enc);
+
                     break;
                 }
                 case TRule_column_option::ALT_NOT_SET:
@@ -1822,7 +1912,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         .Families = std::move(families),
         .Compression = std::move(compression),
         .Nullable = nullable,
-        .LowCardinality = lowCardinality,
+        .ColumnEncoding = std::move(columnEncoding),
     };
 }
 
@@ -1837,7 +1927,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    const auto [defaultExpr, families, compression, nullable, lowCardinality] = columnOptions.GetRef();
+    const auto& opts = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1851,12 +1941,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Pos = std::move(pos),
         .Name = std::move(name),
         .Type = std::move(type),
-        .Families = std::move(families),
-        .DefaultExpr = std::move(defaultExpr),
-        .Compression = compression,
-        .Nullable = nullable,
+        .Families = opts.Families,
+        .DefaultExpr = opts.DefaultExpr,
+        .Compression = opts.Compression,
+        .Nullable = opts.Nullable,
         .Serial = serial,
-        .LowCardinality = lowCardinality,
+        .ColumnEncoding = opts.ColumnEncoding,
     };
 }
 

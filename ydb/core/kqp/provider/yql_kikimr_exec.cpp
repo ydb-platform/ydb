@@ -2003,17 +2003,32 @@ public:
 
                                     columnBuild->SetNotNull(true);
                                     hasNotNull = true;
-                                } else if (constraint.Name().Value() == "lowcardinality") {
-                                    if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Low cardinality is disabled."));
-                                        return SyncError();
+                                } else if (constraint.Name().Value() == "columnEncoding") {
+                                    auto encodingList = constraint.Value().Cast<TExprList>();
+                                    bool hasDict = false;
+                                    for (size_t i = 0; i < encodingList.Size(); ++i) {
+                                        auto config = encodingList.Item(i).Cast<TExprList>();
+                                        for (size_t j = 0; j < config.Size(); ++j) {
+                                            auto pair = config.Item(j).Cast<TExprList>();
+                                            if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
+                                                if (to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value())) == "dict") {
+                                                    hasDict = true;
+                                                }
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (table.Metadata->Kind != EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "Low cardinality is supported only in column tables"));
-                                        return SyncError();
+                                    if (hasDict) {
+                                        if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "ENCODING(DICT) is disabled."));
+                                            return SyncError();
+                                        }
+                                        if (table.Metadata->Kind != EKikimrTableKind::Olap) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "ENCODING(DICT) is supported only in column tables"));
+                                            return SyncError();
+                                        }
+                                        add_column->set_lowcardinality(true);
                                     }
-
-                                    add_column->set_lowcardinality(true);
                                 }
                             }
                         }
@@ -2180,8 +2195,8 @@ public:
                             if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
                                 return SyncError();
                             }
-                        } else if (alterColumnAction == "changeLowCardinality") {
-                            if (!ParseLowCardinalitySettings(alterColumnList, alter_columns, ctx, table.Metadata->Kind)) {
+                        } else if (alterColumnAction == "changeEncoding") {
+                            if (!ParseEncodingSettings(alterColumnList, alter_columns, ctx, table.Metadata->Kind)) {
                                 return SyncError();
                             }
                         } else {
@@ -3817,50 +3832,39 @@ private:
         return success;
     }
 
-    bool ParseLowCardinalitySettings(
+    bool ParseEncodingSettings(
         const TExprList& alterColumnList,
         Ydb::Table::ColumnMeta* alter_columns,
         TExprContext& ctx,
         EKikimrTableKind tableKind)
     {
-        auto changeLowCardinalityList = alterColumnList.Item(1).Cast<TExprList>();
-
-        if (changeLowCardinalityList.Size() != 1) {
-            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
-                << "\". Several encodings for a single column are not yet supported"));
-            return false;
+        auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+        bool hasDict = false;
+        for (size_t i = 0; i < encodingList.Size(); ++i) {
+            auto config = encodingList.Item(i).Cast<TExprList>();
+            for (size_t j = 0; j < config.Size(); ++j) {
+                auto pair = config.Item(j).Cast<TExprList>();
+                if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
+                    if (to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value())) == "dict") {
+                        hasDict = true;
+                    }
+                    break;
+                }
+            }
         }
-
-        auto changeLowCardinality = changeLowCardinalityList.Item(0).Cast<TCoAtomList>();
-        if (changeLowCardinality.Size() != 1) {
-            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinality.Pos()), TStringBuilder()
-                << "changeLowCardinality can get exactly one token \\in {\"drop_lowcardinality\", \"set_lowcardinality\"}"));
-            return false;
-        }
-
-        auto value = changeLowCardinality.Item(0).Cast<TCoAtom>();
-        if (value == "drop_lowcardinality") {
-            alter_columns->set_lowcardinality(false);
-        } else if (value == "set_lowcardinality") {
+        if (hasDict) {
             if (tableKind != EKikimrTableKind::Olap) {
-                // TODO: tableKind == EKikimrTableKind::Unspecified here for ALTER TABLE ... ALTER COLUMN ... SET LOWCARDINALITY
-                // It is needed to get somehow what table is altered
-                // ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()), "Low cardinality is supported only in column tables"));
-                // return false;
+                // TODO: tableKind == EKikimrTableKind::Unspecified for ALTER TABLE ... SET ENCODING(DICT)
             }
             if (!SessionCtx->Config().FeatureFlags.GetEnableCsLowCardinality()) {
-                ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
-                    << "SET LOWCARDINALITY is disabled."));
+                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                    << "ENCODING(DICT) is disabled."));
                 return false;
-            } else {
-                alter_columns->set_lowcardinality(true);
             }
+            alter_columns->set_lowcardinality(true);
         } else {
-            ctx.AddError(TIssue(ctx.GetPosition(changeLowCardinalityList.Pos()), TStringBuilder()
-                << "Unknown operation in changeLowCardinality: " << static_cast<TStringBuf>(value)));
-            return false;
+            alter_columns->set_lowcardinality(false);
         }
-
         return true;
     }
 

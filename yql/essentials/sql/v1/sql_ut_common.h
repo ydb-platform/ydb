@@ -4100,62 +4100,167 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
 }
 
-Y_UNIT_TEST(AlterTableAlterColumnLowCardinalityAstCorrect) {
-    auto reqDropLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingOffAstCorrect) {
+    auto reqSetEncodingOff = SqlToYql(R"sql(
             USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val DROP LOWCARDINALITY;
+            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(OFF);
         )sql");
 
-    UNIT_ASSERT_C(reqDropLowCardinality.IsOk(), reqDropLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('changeLowCardinality '('('drop_lowcardinality)))"), line);
-    };
+    UNIT_ASSERT_C(reqSetEncodingOff.IsOk(), reqSetEncodingOff.Issues.ToOneLineString());
 
     TWordCountHive elementStat({TString("\'mode \'alter")});
-    VerifyProgram(reqDropLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqSetEncodingOff, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    const TString expectedStructure = "'('changeEncoding '('('('name 'off))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
 }
 
-Y_UNIT_TEST(AlterTableAlterColumnSetLowCardinalityAstCorrect) {
-    auto reqSetLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictAstCorrect) {
+    auto reqSetEncodingDict = SqlToYql(R"sql(
             USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val SET LOWCARDINALITY;
+            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT);
         )sql");
 
-    UNIT_ASSERT_C(reqSetLowCardinality.IsOk(), reqSetLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('changeLowCardinality '('('set_lowcardinality)))"), line);
-    };
+    UNIT_ASSERT_C(reqSetEncodingDict.IsOk(), reqSetEncodingDict.Issues.ToOneLineString());
 
     TWordCountHive elementStat({TString("\'mode \'alter")});
-    VerifyProgram(reqSetLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqSetEncodingDict, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    const TString expectedStructure = "'('changeEncoding '('('('name 'dict))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
 }
 
-Y_UNIT_TEST(CreateTableSetLowCardinalityAstCorrect) {
-    auto reqCreateLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingEmptyAstCorrect) {
+    auto reqSetEncodingEmpty = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ALTER COLUMN val SET ENCODING();
+        )sql");
+
+    UNIT_ASSERT_C(reqSetEncodingEmpty.IsOk(), reqSetEncodingEmpty.Issues.ToOneLineString());
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    TString program = VerifyProgram(reqSetEncodingEmpty, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    const TString expectedStructure = "'('changeEncoding '())";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding() must pass empty list. Expected structure: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictWithParamsAstCorrect) {
+    auto reqSetEncodingDictParams = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100));
+        )sql");
+
+    UNIT_ASSERT_C(reqSetEncodingDictParams.IsOk(), reqSetEncodingDictParams.Issues.ToOneLineString());
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    TString program = VerifyProgram(reqSetEncodingDictParams, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    const TString expectedStructure = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase, with params). Expected structure: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictAstCorrect) {
+    auto reqCreateEncodingDict = SqlToYql(R"sql(
             USE ydb;
             CREATE TABLE tableName (
-                id Uint32 LOWCARDINALITY,
+                id Uint32 ENCODING(DICT),
                 PRIMARY KEY (id)
             );
         )sql");
 
-    UNIT_ASSERT_C(reqCreateLowCardinality.IsOk(), reqCreateLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
-    };
+    UNIT_ASSERT_C(reqCreateEncodingDict.IsOk(), reqCreateEncodingDict.Issues.ToOneLineString());
 
     TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(reqCreateLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqCreateEncodingDict, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    const TString expectedStructure = "'('columnEncoding '('('('name 'dict))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
 }
 
-Y_UNIT_TEST(CreateTableNotSetLowCardinalityAstCorrect) {
-    auto reqCreateLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(CreateTableSetEncodingEmptyAstCorrect) {
+    auto reqCreateEncodingEmpty = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32 ENCODING(),
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateEncodingEmpty.IsOk(), reqCreateEncodingEmpty.Issues.ToOneLineString());
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TString program = VerifyProgram(reqCreateEncodingEmpty, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    const TString expectedStructure = "'('columnEncoding '())";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "ENCODING() must pass empty list. Expected structure: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingOffAstCorrect) {
+    auto reqCreateEncodingOff = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32 ENCODING(OFF),
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateEncodingOff.IsOk(), reqCreateEncodingOff.Issues.ToOneLineString());
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TString program = VerifyProgram(reqCreateEncodingOff, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    const TString expectedStructure = "'('columnEncoding '('('('name 'off))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictWithParamsAstCorrect) {
+    auto reqCreateEncodingDictParams = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32 ENCODING(DICT(max_size=100)),
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateEncodingDictParams.IsOk(), reqCreateEncodingDictParams.Issues.ToOneLineString());
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TString program = VerifyProgram(reqCreateEncodingDictParams, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    const TString expectedStructure = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase, with params). Expected structure: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictAndOffOrderAndParamsAstCorrect) {
+    auto reqCreateEncodingDictAndOff = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32 ENCODING(DICT(max_size=100), OFF),
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateEncodingDictAndOff.IsOk(), reqCreateEncodingDictAndOff.Issues.ToOneLineString());
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TString program = VerifyProgram(reqCreateEncodingDictAndOff, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    const TString expectedStructure = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (order: dict with params, then off; lowercase). Expected to find: " << expectedStructure << ", got: " << program);
+}
+
+Y_UNIT_TEST(CreateTableNotSetEncodingAstCorrect) {
+    auto reqCreateNoEncoding = SqlToYql(R"sql(
             USE ydb;
             CREATE TABLE tableName (
                 id Uint32,
@@ -4163,49 +4268,44 @@ Y_UNIT_TEST(CreateTableNotSetLowCardinalityAstCorrect) {
             );
         )sql");
 
-    UNIT_ASSERT_C(reqCreateLowCardinality.IsOk(), reqCreateLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_EQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
-    };
+    UNIT_ASSERT_C(reqCreateNoEncoding.IsOk(), reqCreateNoEncoding.Issues.ToOneLineString());
 
     TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(reqCreateLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqCreateNoEncoding, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+
+    UNIT_ASSERT_C(!program.Contains("columnEncoding"), "no encoding must be passed when ENCODING is not specified. Got: " << program);
 }
 
-Y_UNIT_TEST(AlterTableAddColumnSetLowCardinalityAstCorrect) {
-    auto reqDropLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(AlterTableAddColumnSetEncodingDictAstCorrect) {
+    auto reqAddColumnEncodingDict = SqlToYql(R"sql(
             USE ydb;
-            ALTER TABLE tableName ADD COLUMN val Uint32 LOWCARDINALITY;
+            ALTER TABLE tableName ADD COLUMN val Uint32 ENCODING(DICT);
         )sql");
 
-    UNIT_ASSERT_C(reqDropLowCardinality.IsOk(), reqDropLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
-    };
+    UNIT_ASSERT_C(reqAddColumnEncodingDict.IsOk(), reqAddColumnEncodingDict.Issues.ToOneLineString());
 
     TWordCountHive elementStat({TString("\'mode \'alter")});
-    VerifyProgram(reqDropLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqAddColumnEncodingDict, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    const TString expectedStructure = "'('columnEncoding '('('('name 'dict))))";
+    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected to find: " << expectedStructure << ", got: " << program);
 }
 
-Y_UNIT_TEST(AlterTableAddColumnNotSetLowCardinalityAstCorrect) {
-    auto reqSetLowCardinality = SqlToYql(R"sql(
+Y_UNIT_TEST(AlterTableAddColumnNotSetEncodingAstCorrect) {
+    auto reqAddColumnNoEncoding = SqlToYql(R"sql(
             USE ydb;
             ALTER TABLE tableName ADD COLUMN val Uint32;
         )sql");
 
-    UNIT_ASSERT_C(reqSetLowCardinality.IsOk(), reqSetLowCardinality.Issues.ToOneLineString());
-
-    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
-        UNIT_ASSERT_VALUES_EQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
-    };
+    UNIT_ASSERT_C(reqAddColumnNoEncoding.IsOk(), reqAddColumnNoEncoding.Issues.ToOneLineString());
 
     TWordCountHive elementStat({TString("\'mode \'alter")});
-    VerifyProgram(reqSetLowCardinality, elementStat, verifyLine);
+    TString program = VerifyProgram(reqAddColumnNoEncoding, elementStat);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+
+    UNIT_ASSERT_C(!program.Contains("columnEncoding"), "no encoding must be passed when ENCODING is not specified on ADD COLUMN. Got: " << program);
 }
 
 Y_UNIT_TEST(AlterTableYtNotSupported) {

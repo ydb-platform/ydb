@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk_int Uint64 NOT NULL,
-            data Utf8 LOWCARDINALITY,
+            data Utf8 ENCODING(dict),
             PRIMARY KEY (pk_int)
         )
         PARTITION BY HASH(pk_int)
@@ -83,8 +83,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     TString scriptEmptyStringVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL LOWCARDINALITY,
-            Col2 Utf8 LOWCARDINALITY,
+            Col1 Uint64 NOT NULL ENCODING(dict),
+            Col2 Utf8 ENCODING(dict),
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -109,8 +109,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL LOWCARDINALITY,
-            Col2 Utf8 LOWCARDINALITY,
+            Col1 Uint64 NOT NULL ENCODING(dict),
+            Col2 Utf8 ENCODING(dict),
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
-        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET LOWCARDINALITY;");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET ENCODING(dict);");
 
         testHelper.ReadDataExecQuery(R"(
             SELECT COUNT(*) > 0 FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/LowCardinalityTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTableQuery(standaloneTable);
-        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` DROP LOWCARDINALITY;");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/LowCardinalityTable` ALTER COLUMN `key` SET ENCODING(off);");
 
         testHelper.ReadDataExecQuery(R"(
             $V1 = SELECT max(SchemaVersion) FROM `/Root/LowCardinalityTable/.sys/primary_index_schema_stats`

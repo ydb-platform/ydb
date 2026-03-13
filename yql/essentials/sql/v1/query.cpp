@@ -9,6 +9,7 @@
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <util/generic/string.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <utility>
@@ -1282,10 +1283,6 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
-                if (col.LowCardinality) {
-                    columnConstraints = L(columnConstraints, Q(Y(Q("lowcardinality"))));
-                }
-
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
                 if (col.Compression) {
@@ -1309,6 +1306,19 @@ public:
                 }
 
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                if (col.ColumnEncoding) {
+                    auto encodingsList = Y();
+                    for (const auto& enc : *col.ColumnEncoding) {
+                        auto encodingParamsList = Y();
+                        encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
+                        for (const auto& [key, value] : enc.Entries) {
+                            encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
+                        }
+                        encodingsList = L(encodingsList, Q(encodingParamsList));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(encodingsList))));
+                }
             }
 
             columns = L(columns, Q(columnDesc));
@@ -1635,10 +1645,6 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
-                if (col.LowCardinality) {
-                    columnConstraints = L(columnConstraints, Q(Y(Q("lowcardinality"))));
-                }
-
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
                 auto familiesDesc = Y();
@@ -1646,6 +1652,19 @@ public:
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                if (col.ColumnEncoding) {
+                    auto encodingsList = Y();
+                    for (const auto& enc : *col.ColumnEncoding) {
+                        auto encodingParamsList = Y();
+                        encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
+                        for (const auto& [key, value] : enc.Entries) {
+                            encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
+                        }
+                        encodingsList = L(encodingsList, Q(encodingParamsList));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(encodingsList))));
+                }
 
                 columns = L(columns, Q(columnDesc));
             }
@@ -1733,13 +1752,20 @@ public:
 
                         break;
                     }
-                    case TColumnSchema::ETypeOfChange::SetLowCardinality:
-                    case TColumnSchema::ETypeOfChange::DropLowCardinality: {
+                    case TColumnSchema::ETypeOfChange::SetEncoding: {
                         auto columnDesc = Y();
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                        TString columnEncoding = col.TypeOfChange == TColumnSchema::ETypeOfChange::SetLowCardinality ? "set_lowcardinality" : "drop_lowcardinality";
-                        columnDesc = L(columnDesc, Q(Y(Q("changeLowCardinality"), Q(Y(Q(Y(Q(columnEncoding))))))));
+                        auto encodingsList = Y();
+                        for (const auto& enc : col.EncodingConfig) {
+                            auto encodingParamsList = Y();
+                            encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
+                            for (const auto& [key, value] : enc.Entries) {
+                                encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
+                            }
+                            encodingsList = L(encodingsList, Q(encodingParamsList));
+                        }
+                        columnDesc = L(columnDesc, Q(Y(Q("changeEncoding"), Q(encodingsList))));
                         columns = L(columns, Q(columnDesc));
 
                         break;

@@ -2685,20 +2685,10 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction23: {
-            // ALTER COLUMN id SET LOWCARDINALITY
-            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_lowcardinality1();
+            // ALTER COLUMN id SET ENCODING(...)
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_encoding1();
 
-            if (!AlterTableAlterColumnSetLowCardinality(alterRule, params)) {
-                return false;
-            }
-
-            break;
-        }
-        case TRule_alter_table_action::kAltAlterTableAction24: {
-            // ALTER COLUMN id DROP LOWCARDINALITY
-            const auto& alterRule = node.GetAlt_alter_table_action24().GetRule_alter_table_alter_column_drop_lowcardinality1();
-
-            if (!AlterTableAlterColumnDropLowCardinality(alterRule, params)) {
+            if (!AlterTableAlterColumnSetEncoding(alterRule, params)) {
                 return false;
             }
 
@@ -3109,24 +3099,18 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
     return true;
 }
 
-bool TSqlQuery::AlterTableAlterColumnSetLowCardinality(const TRule_alter_table_alter_column_set_lowcardinality& node, TAlterTableParameters& params) {
+bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params) {
     const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
+    auto encoding = ColumnEncoding(node.GetRule_encoding5(), *this);
+    if (!encoding) {
+        return false;
+    }
     params.AlterColumns.push_back({
-        .Pos = std::move(pos),
-        .Name = std::move(name),
-        .TypeOfChange = TColumnSchema::ETypeOfChange::SetLowCardinality,
-    });
-    return true;
-}
-
-bool TSqlQuery::AlterTableAlterColumnDropLowCardinality(const TRule_alter_table_alter_column_drop_lowcardinality& node, TAlterTableParameters& params) {
-    const TString name = Id(node.GetRule_an_id3(), *this);
-    const TPosition pos(Context().Pos());
-    params.AlterColumns.push_back({
-        .Pos = std::move(pos),
-        .Name = std::move(name),
-        .TypeOfChange = TColumnSchema::ETypeOfChange::DropLowCardinality,
+        .Pos = pos,
+        .Name = name,
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
+        .EncodingConfig = std::move(*encoding),
     });
     return true;
 }

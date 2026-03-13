@@ -89,6 +89,7 @@ public:
 
     enum MtlsAuthStages { NO_CERT_YET, PROCESSING_CERT, AUTH_SUCCESSFUL, AUTH_FAILED };
     MtlsAuthStages MtlsAuthStage;
+    std::optional<std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds>> ServerCreds = std::nullopt;
 
     enum SslHandshakeErrors {ERROR_NONE = 1, ERROR_WANT_READ = -1, ERROR_WANT_WRITE = -2};
 
@@ -97,7 +98,8 @@ public:
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
-                     const NKikimrConfig::TKafkaProxyConfig& config)
+                     const NKikimrConfig::TKafkaProxyConfig& config,
+                     std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
@@ -107,6 +109,7 @@ public:
         , InflightSize(0)
         , Context(std::make_shared<TContext>(config))
     {
+        ServerCreds = serverCreds;
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
     }
@@ -721,38 +724,38 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            std::optional<TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::nullopt;
-            if (NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
-                auto readFile = [](std::optional<TString> path) {
-                    if (path) {
-                        try {
-                            return TFileInput(*path).ReadAll();
-                        } catch (const std::exception& ex) {
-                            return TString();
-                        }
-                    }
-                    return TString();
-                };
+            // std::optional<TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::nullopt;
+            // if (NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+            //     auto readFile = [](std::optional<TString> path) {
+            //         if (path) {
+            //             try {
+            //                 return TFileInput(*path).ReadAll();
+            //             } catch (const std::exception& ex) {
+            //                 return TString();
+            //             }
+            //         }
+            //         return TString();
+            //     };
 
-                TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
-                TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
-                TString kafkaCAFilePath = AppData()->KafkaProxyConfig.GetCA();
+            //     TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
+            //     TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
+            //     TString kafkaCAFilePath = AppData()->KafkaProxyConfig.GetCA();
 
-                TString serverCert = readFile(kafkaServerCertPath);
-                if (!serverCert) {
-                    KAFKA_LOG_ERROR("Incorrect server certificate file path or empty contents.");
-                    PassAway();
-                    return false;
-                }
-                TString serverKey = readFile(kafkaServerPrivateKeyPath);
-                if (!serverKey) {
-                    KAFKA_LOG_ERROR("Incorrect server key file path or empty contents.");
-                    PassAway();
-                    return false;
-                }
-                serverCreds = TInet64SecureStreamSocket::TServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
-            }
-            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, serverCreds);
+            //     TString serverCert = readFile(kafkaServerCertPath);
+            //     if (!serverCert) {
+            //         KAFKA_LOG_ERROR("Incorrect server certificate file path or empty contents.");
+            //         PassAway();
+            //         return false;
+            //     }
+            //     TString serverKey = readFile(kafkaServerPrivateKeyPath);
+            //     if (!serverKey) {
+            //         KAFKA_LOG_ERROR("Incorrect server key file path or empty contents.");
+            //         PassAway();
+            //         return false;
+            //     }
+            //     serverCreds = TInet64SecureStreamSocket::TServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
+            // }
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
             if (res < 0) {
                 KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
                 PassAway();
@@ -1035,8 +1038,9 @@ protected:
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
+                                       const NKikimrConfig::TKafkaProxyConfig& config,
+                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, serverCreds);
 }
 
 } // namespace NKafka

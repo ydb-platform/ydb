@@ -145,7 +145,7 @@ protected:
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
 public:
     struct TServerMtlsCreds {
-        TString ServerCert;
+        TSslHolder<X509> ServerCert;
         TString ServerPrivateKey;
         TString CAFilePath;
     };
@@ -155,14 +155,14 @@ public:
     {}
 
     TInet64SecureStreamSocket(TInet64StreamSocket&& socket, NKikimrServices::EServiceKikimr service,
-                const std::optional<TServerMtlsCreds>& serverCreds = std::nullopt)
+                const std::optional<std::shared_ptr<TServerMtlsCreds>>& serverCreds = std::nullopt)
         : TInet64StreamSocket(std::move(socket))
     {
         Service = service;
-        if (serverCreds) {
+        // if (serverCreds) {
             ServerCreds = *serverCreds;
-            UseMtlsAuth = true;
-        }
+        //     UseMtlsAuth = true;
+        // }
     }
 
 private:
@@ -171,7 +171,7 @@ private:
 
     TSslHolder<BIO> Bio;
     TSslHolder<SSL> Ssl;
-    TServerMtlsCreds ServerCreds;
+    std::shared_ptr<TServerMtlsCreds> ServerCreds;
     bool UseMtlsAuth = false;
     NKikimrServices::EServiceKikimr Service;
 
@@ -184,18 +184,18 @@ public:
         if (UseMtlsAuth) {
             SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
 
-            TSslHolder<X509> serverCert = GetServerCert(ServerCreds.ServerCert);
-            if (!serverCert) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server certificate, it might be incorrect.");
-                return false;
-            }
-            int retServerCert = SSL_CTX_use_certificate(ctx, serverCert.get());
+            // TSslHolder<X509> serverCert = GetServerCert(ServerCreds.ServerCert);
+            // if (!serverCert) {
+            //     LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server certificate, it might be incorrect.");
+            //     return false;
+            // }
+            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
             }
 
-            TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(ServerCreds.ServerPrivateKey);
+            TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(ServerCreds->ServerPrivateKey);
             if (!privateKey) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
@@ -206,7 +206,7 @@ public:
                 return false;
             }
 
-            int retCA = SSL_CTX_load_verify_locations(ctx, ServerCreds.CAFilePath.data(), nullptr);
+            int retCA = SSL_CTX_load_verify_locations(ctx, ServerCreds->CAFilePath.data(), nullptr);
             if (retCA != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
                 return false;

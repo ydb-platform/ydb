@@ -123,6 +123,9 @@
 
 #include <ydb/core/quoter/quoter_service.h>
 
+#include <ydb/core/raw_socket/sock_ssl.h>
+#include <ydb/core/raw_socket/sock64.h>
+
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/core/security/ticket_parser.h>
@@ -3065,6 +3068,31 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
         settings.TcpNotDelay = true;
 
+        std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::make_shared<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>();
+
+        auto readFile = [](std::optional<TString> path) {
+            if (path) {
+                try {
+                    return TFileInput(*path).ReadAll();
+                } catch (const std::exception& ex) {
+                    return TString();
+                }
+            }
+            return TString();
+        };
+
+        TString cert = readFile(settings.CertificateFile);
+        // serverCreds.ServerPrivateKey = readFile(settings.PrivateKeyFile);
+        // serverCreds.CAFilePath = Config.GetKafkaProxyConfig().GetCA();
+
+
+        TSslHolder<BIO> bio(BIO_new_mem_buf(cert.data(), cert.size()));
+        if (bio) {
+            serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+        // //     // return cert;
+        }
+        // TSslHolder<X509>();
+
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
@@ -3084,7 +3112,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), serverCreds),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

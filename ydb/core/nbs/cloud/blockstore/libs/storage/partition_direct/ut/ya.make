@@ -14,11 +14,15 @@ ENDIF()
 
 SRCS(
     partition_direct_ut.cpp
+    vchunk_ut.cpp
 )
 
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/ut_blobstorage/lib
+    ydb/core/mind/bscontroller
+    ydb/core/nbs/cloud/storage/core/libs/common
+    ydb/core/nbs/cloud/storage/core/libs/coroutine
     ydb/core/protos
     ydb/core/testlib
 )

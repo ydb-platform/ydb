@@ -92,13 +92,7 @@ namespace NKikimr::NDDisk {
         op->SetSpan(std::move(span));
         op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
-        const bool submitted = DirectUringOp(op);
-        if (!submitted) {
-            op->GetSpan().End();
-            Counters.Interface.Write.Reply(false);
-            SendReply(*ev, std::make_unique<TEvWriteResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
-        }
+        DirectUringOp(op);
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
@@ -171,13 +165,7 @@ namespace NKikimr::NDDisk {
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
-        const bool submitted = DirectUringOp(op);
-        if (!submitted) {
-            op->GetSpan().End();
-            Counters.Interface.Read.Reply(false);
-            SendReply(*ev, std::make_unique<TEvReadResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
-        }
+        DirectUringOp(op);
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
@@ -252,7 +240,7 @@ namespace NKikimr::NDDisk {
         return false;
     }
 
-    bool TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
+    void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
 #if defined(__linux__)
         if (Y_LIKELY(UringRouter)) {
             bool submitted = DirectUringOpImpl(op, flush);
@@ -261,7 +249,7 @@ namespace NKikimr::NDDisk {
                 ScheduleIoSubmitWakeup();
             }
 
-            return true;
+            return;
         }
 #endif
 
@@ -271,10 +259,10 @@ namespace NKikimr::NDDisk {
         switch (op->GetOperationType()) {
         case NPDisk::TUringOperationBase::EREAD:
             SendPDiskRead(std::move(op));
-            return true;
+            return;
         case NPDisk::TUringOperationBase::EWRITE:
             SendPDiskWrite(std::move(op));
-            return true;
+            return;
         default:
             Y_ABORT("Unknown OperationType");
         }
@@ -289,10 +277,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
         std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
 
-        bool submitted = DirectUringOp(op);
-        if (!submitted) {
-            op->Reply(TActivationContext::ActorSystem(), NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
-        }
+        DirectUringOp(op);
     }
 
     void TDDiskActor::ScheduleIoSubmitWakeup() {

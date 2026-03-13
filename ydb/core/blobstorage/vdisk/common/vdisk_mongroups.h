@@ -79,6 +79,8 @@ public:                                                                         
                 COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
+                COUNTER_INIT(LsmCompactionWaitingTimeSeconds, false);
+                COUNTER_INIT(LsmCompactionWorkingTimeSeconds, false);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
@@ -87,6 +89,8 @@ public:                                                                         
             COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
+            COUNTER_DEF(LsmCompactionWaitingTimeSeconds)
+            COUNTER_DEF(LsmCompactionWorkingTimeSeconds)
         };
 
 

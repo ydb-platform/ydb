@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/hulldb/compstrat
     ydb/core/blobstorage/vdisk/hullop/hullcompdelete
     ydb/core/blobstorage/vdisk/synclog
+    ydb/core/control
     ydb/core/protos
 )
 
@@ -20,6 +21,8 @@ SRCS(
     blobstorage_hullactor.h
     blobstorage_hullactor.cpp
     blobstorage_hullcommit.h
+    blobstorage_hullcompactbroker.h
+    blobstorage_hullcompactbroker.cpp
     blobstorage_hullcompactdeferredqueue.h
     blobstorage_hullcompact.h
     blobstorage_hullcompactworker.h

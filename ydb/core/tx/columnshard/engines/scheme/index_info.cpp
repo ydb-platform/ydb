@@ -170,12 +170,17 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "incorrect_column_id");
         return nullptr;
     }
+
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
 }
 
-std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
+std::optional<std::shared_ptr<arrow::Field>> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
-    AFL_VERIFY(!!result)("column_id", columnId);
+    if (!result) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "column_not_found");
+        return std::nullopt;
+    }
+
     return result;
 }
 
@@ -183,8 +188,15 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
     AFL_VERIFY(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
-        fields.emplace_back(GetColumnFieldVerified(i));
+        auto field = GetColumnFieldVerified(i);
+        if (!field) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("column_id", i)("event", "failed_to_get_column_field");
+            return nullptr;
+        }
+
+        fields.emplace_back(*field);
     }
+
     return std::make_shared<arrow::Schema>(fields);
 }
 
@@ -523,19 +535,31 @@ std::vector<ui32> TIndexInfo::GetEntityIds() const {
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
     AFL_VERIFY(!IsSpecialColumn(column.Id));
-    return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
+    auto field = GetColumnFieldVerified(column.Id);
+    if (!field) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("column_id", column.Id)("event", "failed_to_get_column_field_for_features");
+        return nullptr;
+    }
+
+    return std::make_shared<TColumnFeatures>(column.Id, *field, DefaultSerializer, operators->GetDefaultOperator(),
         NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder());
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
+    auto field = GetColumnFieldVerified(columnId);
+    if (!field) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "failed_to_get_column_field_for_features");
+        return nullptr;
+    }
+
     if (IsSpecialColumn(columnId)) {
-        return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
+        return std::make_shared<TColumnFeatures>(columnId, *field, DefaultSerializer, operators->GetDefaultOperator(),
             false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
     } else {
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());
-        return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
+        return std::make_shared<TColumnFeatures>(columnId, *field, DefaultSerializer, operators->GetDefaultOperator(),
             NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder());
     }
 }

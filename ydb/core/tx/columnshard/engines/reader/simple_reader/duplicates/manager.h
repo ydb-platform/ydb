@@ -185,10 +185,15 @@ private:
             for (const auto& columnId : PKColumns->GetColumnIds()) {
                 fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
             }
+
             for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
+                auto field = IIndexInfo::GetColumnFieldVerified(columnId);
+                if (field) {
+                    fieldsByColumn.emplace(columnId, *field);
+                }
             }
         }
+
         return fieldsByColumn;
     }
 

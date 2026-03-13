@@ -141,20 +141,10 @@ TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui
     auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.1, fnValueLess);
     auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.9, fnValueLess);
 
-    // compare histogram entries by key prefixes
+
+    // compare given length prefixes of histogram entries
     auto comparePrefix = [&keyColumnTypes] (const auto& entry1, const auto& entry2, const size_t prefixSize) {
-        const auto& key1cells = entry1.first.GetCells();
-        const auto clampedSize1 = std::min(key1cells.size(), prefixSize);
-
-        const auto& key2cells = entry2.first.GetCells();
-        const auto clampedSize2 = std::min(key2cells.size(), prefixSize);
-
-        int cmp = CompareTypedCellVectors(key1cells.data(), key2cells.data(), keyColumnTypes.data(), std::min(clampedSize1, clampedSize2));
-        if (cmp == 0 && clampedSize1 != clampedSize2) {
-            // smaller key prefix is filled with +inf => always bigger
-            cmp = (clampedSize1 < clampedSize2) ? +1 : -1;
-        }
-        return cmp;
+        return CompareKeysPrefix(entry1.first.GetCells(), entry2.first.GetCells(), keyColumnTypes, prefixSize);
     };
 
     // Check if half key is no equal to low and high keys
@@ -183,20 +173,10 @@ TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram
         keysHist.emplace_back(std::make_pair(TSerializedCellVec(bucket.GetKey()), bucket.GetValue()));
     }
 
-    // compare histogram entries by keys
-    auto fnCmp = [&keyColumnTypes] (const auto& entry1, const auto& entry2) {
-        const auto& key1cells = entry1.first.GetCells();
-        const auto& key2cells = entry2.first.GetCells();
-        const auto minKeySize = std::min(key1cells.size(), key2cells.size());
-        int cmp = CompareTypedCellVectors(key1cells.data(), key2cells.data(), keyColumnTypes.data(), minKeySize);
-        if (cmp == 0 && key1cells.size() != key2cells.size()) {
-            // smaller key is filled with +inf => always bigger
-            cmp = (key1cells.size() < key2cells.size()) ? +1 : -1;
-        }
-        return cmp;
-    };
 
-    Sort(keysHist, [&fnCmp] (const auto& key1, const auto& key2) { return fnCmp(key1, key2) < 0; });
+    Sort(keysHist, [&keyColumnTypes] (const auto& entry1, const auto& entry2) {
+        return CompareKeys(entry1.first.GetCells(), entry2.first.GetCells(), keyColumnTypes) < 0;
+    });
 
     // The keys are now sorted. Next we convert the stats into a histogram by accumulating
     // stats for all previous keys at each key.
@@ -205,7 +185,7 @@ TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram
         // Accumulate stats
         keysHist[i].second += keysHist[i-1].second;
 
-        if (fnCmp(keysHist[i], keysHist[last]) == 0) {
+        if (CompareKeys(keysHist[i].first.GetCells(), keysHist[last].first.GetCells(), keyColumnTypes) == 0) {
             // Merge equal keys
             keysHist[last].second = keysHist[i].second;
         } else {
@@ -523,10 +503,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
         // Split key must not be less than the first key
         TSerializedCellVec lowestKey(histogram.GetBuckets(0).GetKey());
-        if (0 < CompareTypedCellVectors(lowestKey.GetCells().data(), splitKey.GetCells().data(),
-                                    keyColumnTypes.data(),
-                                    lowestKey.GetCells().size(), splitKey.GetCells().size()))
-        {
+        if (0 < CompareKeys(lowestKey.GetCells(), splitKey.GetCells(), keyColumnTypes)) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxPartitionHistogram Failed to find proper split key (less than first) for"
                 << " " << ToString(splitReason) << ": " << splitReasonMsg

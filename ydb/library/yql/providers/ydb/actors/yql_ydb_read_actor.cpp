@@ -64,7 +64,7 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
         return false;
 
     const NKikimr::TSerializedCellVec last(lastReadKey), end(endKey);
-    return NKikimr::CompareTypedCellVectors(last.GetCells().data(), end.GetCells().data(), keyColumnTypes.data(), last.GetCells().size(), end.GetCells().size()) >= 0;
+    return NKikimr::CompareKeys(last.GetCells(), end.GetCells(), keyColumnTypes) >= 0;
 }
 
 } // namespace
@@ -113,7 +113,7 @@ private:
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
     void LoadState(const TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
-    
+
     ui64 GetInputIndex() const final {
         return InputIndex;
     }

@@ -6,6 +6,8 @@ SRCS(
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(cpu:2)
+
 PEERDIR(
     ydb/apps/version
     ydb/library/actors/interconnect/mock

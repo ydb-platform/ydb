@@ -134,6 +134,7 @@ public:
                 .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+                .NodeCount = NodeCount,
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
@@ -224,6 +225,7 @@ public:
     std::shared_ptr<TDriver> GetExternalDriver() {
         if (!ExternalDriver) {
             ExternalDriver = std::make_shared<TDriver>(TDriverConfig()
+                .SetDiscoveryMode(EDiscoveryMode::Async)
                 .SetEndpoint(YDB_ENDPOINT)
                 .SetDatabase(YDB_DATABASE));
         }
@@ -849,6 +851,7 @@ private:
     }
 
 protected:
+    ui32 NodeCount = 1;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
@@ -1081,6 +1084,32 @@ private:
     const NThreading::TFuture<void> Feature;
     const TString Message;
     const TInstant Timeout = TInstant::Now() + TDuration::Seconds(60);
+};
+
+class TTabletKiller : public TActorBootstrapped<TTabletKiller> {
+public:
+    TTabletKiller(ui64 tabletId, TDuration killerInterval)
+        : TabletId(tabletId)
+        , KillerInterval(killerInterval)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        sFunc(TEvents::TEvWakeup, KillTablet)
+    )
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Schedule(KillerInterval, new TEvents::TEvWakeup());
+    }
+
+private:
+    void KillTablet() const {
+        RestartTablet(*ActorContext().ActorSystem(), TabletId);
+        Schedule(KillerInterval, new TEvents::TEvWakeup());
+    }
+
+    const ui64 TabletId;
+    const TDuration KillerInterval;
 };
 
 } // anonymous namespace
@@ -4911,6 +4940,63 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryDdlRetriesUnderSchemeShardRestarts, TStreamingWithSchemaSecretsTestFixture) {
+        NodeCount = 5;
+        LogSettings.Freeze = true;
+
+        constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
+        constexpr char pqSourceName[] = "sourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        GetRuntime().Register(new TTabletKiller(Tests::SchemeRoot, TDuration::MilliSeconds(500)));
+
+        constexpr ui64 queriesCount = 1000;
+        constexpr ui64 inflightLimit = 250;
+
+        std::vector<TAsyncExecuteQueryResult> results;
+        std::vector<NThreading::TFuture<void>> futures;
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            results.emplace_back(GetQueryClient()->ExecuteQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `query_{i}` WITH (RUN = FALSE) AS
+                DO BEGIN
+                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
+                END DO;
+
+                ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);
+
+                DROP STREAMING QUERY IF EXISTS `query_{i}`;)",
+                "i"_a = i,
+                "source"_a = pqSourceName,
+                "output_topic"_a = outputTopicName,
+                "input_topic"_a = inputTopicName
+            ), TTxControl::NoTx()));
+
+            futures.emplace_back(results.back().IgnoreResult());
+
+            if (futures.size() >= inflightLimit) {
+                NThreading::WaitAny(futures).Wait(TDuration::Seconds(10));
+
+                // O(queriesCount * inflightLimit) but ok for test
+                std::vector<NThreading::TFuture<void>> newFutures;
+                newFutures.reserve(futures.size());
+                for (const auto& future : futures) {
+                    if (!future.HasValue()) {
+                        newFutures.emplace_back(future);
+                    }
+                }
+                futures = std::move(newFutures);
+            }
+        }
+
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            const auto result = results[i].ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
     }
 }
 

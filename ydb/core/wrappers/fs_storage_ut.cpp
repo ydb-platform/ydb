@@ -503,7 +503,7 @@ public:
         TString uploadId2;
         {
             auto result = CreateMultipartUpload(key);
-            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
             uploadId2 = result.GetResult().GetUploadId();
             UNIT_ASSERT(!uploadId2.empty());
         }

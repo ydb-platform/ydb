@@ -68,7 +68,6 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
         OPTION(std::optional<bool>, EnableReplication, std::nullopt);
-        OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
         OPTION(bool, EnableStrictAclCheck, false);
         OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);

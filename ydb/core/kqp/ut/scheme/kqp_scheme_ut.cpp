@@ -9577,7 +9577,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTransfer) {
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -9865,7 +9864,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTransfer_QueryService) {
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();
@@ -10184,7 +10182,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(TransferMetricsLevel) {
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();
@@ -10260,7 +10257,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -10632,7 +10628,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -11030,7 +11025,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DropTransfer) {
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -11100,7 +11094,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DropTransfer_QueryService) {
         TKikimrSettings serverSettings;
-        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();

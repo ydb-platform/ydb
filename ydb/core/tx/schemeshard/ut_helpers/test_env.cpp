@@ -651,7 +651,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableReplication(opts.EnableReplication_);
-    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);

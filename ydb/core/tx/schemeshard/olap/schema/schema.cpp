@@ -97,6 +97,7 @@ bool TOlapSchema::AddDefaultMinMaxIndexes(IErrorCollector& errors) {
         }
         auto* upsertIndex = alterSchema.AddUpsertIndexes();
         upsertIndex->SetName(indexName);
+        upsertIndex->SetClassName(NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
         upsertIndex->MutableMinMaxIndex()->SetColumnName(col.GetName());
     }
     if (alterSchema.UpsertIndexesSize() == 0) {

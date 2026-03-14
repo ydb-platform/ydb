@@ -1138,7 +1138,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const NACLib::TUserContext::TPtr userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, NACLib::TUserContext::TPtr userCtx = nullptr)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -1225,7 +1225,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const NACLib::TUserContext::TPtr userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, NACLib::TUserContext::TPtr userCtx = nullptr)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -1396,7 +1396,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
-                const NACLib::TUserContext::TPtr userCtx = nullptr)
+                NACLib::TUserContext::TPtr userCtx = nullptr)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1432,7 +1432,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
-                const NACLib::TUserContext::TPtr userCtx = nullptr)
+                NACLib::TUserContext::TPtr userCtx = nullptr)
         {
             Y_UNUSED(checkKey);
 
@@ -1467,7 +1467,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, const NACLib::TUserContext::TPtr userCtx = nullptr) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, NACLib::TUserContext::TPtr userCtx = nullptr) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();

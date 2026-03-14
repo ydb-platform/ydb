@@ -140,7 +140,6 @@ public:
                 .WithLockOffset(lockOffset);
         }
 
-        Y_UNUSED(userCtx);
         auto recordPtr = builder
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)

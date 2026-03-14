@@ -1,13 +1,13 @@
 #pragma once
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 /*
  * This header contains an algorithm for resolving join conflicts with TConflictRulesCollector class
  * and ConvertConflictRulesIntoTES function, which are used to construct the hypergraph.
  */
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
 
 bool OperatorIsCommutative(EJoinKind);
 
@@ -196,4 +196,4 @@ TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<
     }
 }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

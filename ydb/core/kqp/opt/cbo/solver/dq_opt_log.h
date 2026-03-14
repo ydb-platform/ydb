@@ -5,14 +5,14 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 #include <functional>
 
 namespace NYql {
     class IOptimizationContext;
     struct TTypeAnnotationContext;
-    struct TOptimizerStatistics;
+    struct TOptimizerStatistics;  // NYql forward decl
 }
 
 namespace NYql::NDq {

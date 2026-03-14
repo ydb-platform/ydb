@@ -173,8 +173,8 @@ double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftSta
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
-    const TVector<NDq::TJoinColumn>& leftJoinKeys,
-    const TVector<NDq::TJoinColumn>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind,
     TCardinalityHints::TCardinalityHint* maybeHint,
@@ -194,8 +194,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV2(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
-    const TVector<NDq::TJoinColumn>& leftJoinKeys,
-    const TVector<NDq::TJoinColumn>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind,
     TCardinalityHints::TCardinalityHint* maybeHint,

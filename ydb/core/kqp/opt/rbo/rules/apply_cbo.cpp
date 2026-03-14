@@ -4,7 +4,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
 #include <typeinfo>
 

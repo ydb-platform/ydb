@@ -26,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
 )
 
 YQL_LAST_ABI_VERSION()

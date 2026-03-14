@@ -2205,7 +2205,13 @@ void TTcpConnection::TryEstablishSslSession()
     // FIXME(khlebnikov): Stop constructing SSL context from scratch for each connection.
     auto sslContext = New<TSslContext>();
 
-    sslContext->ApplyConfig(Config_, pathResolver);
+    try {
+        sslContext->ApplyConfig(Config_, pathResolver);
+    } catch (const std::exception& ex) {
+        Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
+            << TError(ex));
+        return;
+    }
 
     if (Config_->CipherList) {
         sslContext->SetCipherList(*Config_->CipherList);

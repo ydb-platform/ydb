@@ -524,7 +524,7 @@ namespace NKikimr::NDDisk {
                 ui32 OffsetInBytes;
                 ui32 Size;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
-                std::map<ui32, TRope> DataParts;
+                std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
 
                 TRope JoinData(ui32 sectorSize);
@@ -604,7 +604,7 @@ namespace NKikimr::NDDisk {
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer(ui32 pos = 0);
-        void GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, ui64 tabletId, ui64 vchunkIdx, ui64 lsn, std::function<void(TRope data)> callback);
+        void ReplyReadPersistentBuffer(ui64 operationCookie, TRope&& data);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
 

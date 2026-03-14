@@ -509,7 +509,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1143,6 +1143,31 @@ namespace {
                     return false;
                 }
                 dstSettings.DirectoryPath = value;
+            } else if (name == "metrics_level") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
+                ui64 numericVal = 0;
+                const ui64 maxValue = static_cast<ui64>(TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed);
+                if (TryFromString<ui64>(value, numericVal) && numericVal <= maxValue) {
+                    levelSetting = static_cast<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                } else if (value == "database") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
+                } else if (value == "object") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Object;
+                } else if (value == "detailed") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " value is invalid: " << value << "."
+                            << "Expected numeric value from 0 to " << maxValue << " or one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                    ));
+                    return false;
+                }
             }
         }
 
@@ -2306,6 +2331,13 @@ public:
                                 }
 
                                 add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "globalJson") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "JSON index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2449,6 +2481,7 @@ public:
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                        case Ydb::Table::TableIndex::kGlobalJsonIndex:
                             // no settings validation
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {

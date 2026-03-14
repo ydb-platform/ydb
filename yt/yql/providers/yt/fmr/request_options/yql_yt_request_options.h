@@ -7,10 +7,9 @@
 #include <util/string/builder.h>
 #include <vector>
 
-#include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/distributed_session.h>
 #include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
-#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 
@@ -91,12 +90,6 @@ public:
 };
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
-
-struct TSortingColumns {
-    std::vector<TString> Columns;
-    std::vector<ESortOrder> SortOrders;
-    bool operator==(const TSortingColumns&) const = default;
-};
 
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;

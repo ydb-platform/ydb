@@ -68,6 +68,72 @@ std::string Serialize(const TExample& value) {
     return value.Payload;
 }
 
+// Reads exactly expectedCount messages from the topic and asserts that within each partition
+// messages are ordered by seqNo (strictly increasing). Uses provided client, topic path and consumer.
+void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
+                                         const std::string& topicPath,
+                                         const std::string& consumerName,
+                                         const std::string& expectedPayload,
+                                         size_t expectedCount,
+                                         TDuration timeout = TDuration::Seconds(30)) {
+    struct TMessageInfo {
+        ui64 PartitionId;
+        std::string ProducerId;
+        ui64 SeqNo;
+        std::string Data;
+    };
+    std::vector<TMessageInfo> messages;
+    messages.reserve(expectedCount);
+    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+
+    TTopicReadSettings topicSettings(topicPath);
+    topicSettings.ReadFromTimestamp(TInstant::Zero());
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(consumerName)
+        .AutoPartitioningSupport(true)
+        .AppendTopics(topicSettings);
+
+    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+        for (auto& msg : ev.GetMessages()) {
+            messages.push_back(TMessageInfo{
+                msg.GetPartitionSession()->GetPartitionId(),
+                TString(msg.GetProducerId()),
+                msg.GetSeqNo(),
+                TString(msg.GetData()),
+            });
+        }
+        if (messages.size() >= expectedCount) {
+            donePromise.SetValue();
+        }
+    }, true);
+
+    auto readSession = client.CreateReadSession(readSettings);
+    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    readSession->Close(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
+        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
+
+    // SeqNo ordering is guaranteed within one producer stream.
+    // Multiple producers can write into the same partition with independent seqNo sequences.
+    std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
+    for (const auto& m : messages) {
+        UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
+        byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
+    }
+    for (const auto& [key, seqNos] : byPartitionAndProducer) {
+        const auto& [partitionId, producerId] = key;
+        for (size_t i = 1; i < seqNos.size(); ++i) {
+            UNIT_ASSERT_C(seqNos[i] > seqNos[i - 1],
+                "Partition " << partitionId << ", producerId " << producerId
+                << ": expected seqNo strictly increasing, got "
+                << seqNos[i - 1] << " then " << seqNos[i] << " at index " << i);
+        }
+    }
+}
+
 // Write a message with binary (non-UTF8) producer ID using direct tablet communication
 // This bypasses gRPC string validation by sending directly to the PQ tablet
 // The SourceId field in TCmdWrite is defined as 'bytes' in protobuf, so it supports binary data
@@ -164,6 +230,9 @@ static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
 void CreateTopicWithAutoPartitioning(TTopicClient& client) {
     TCreateTopicSettings createSettings;
         createSettings
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER)
+            .EndAddConsumer()
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(2)
             .MaxActivePartitions(100)
@@ -1047,6 +1116,26 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateProducer(writeSettings), TContractViolation);
     }
 
+    Y_UNIT_TEST(Producer_IsNotSupportedForFederation) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        auto config = setup.MakeDriverConfig();
+        config.SetEndpoint("logbroker.yandex.net:2135");
+
+        TDriver driver(config);
+        TTopicClient federatedLikeClient(driver);
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        UNIT_ASSERT_EXCEPTION(federatedLikeClient.CreateProducer(writeSettings), TContractViolation);
+    }
+
     Y_UNIT_TEST(Producer_SessionClosedDueToUserError) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
@@ -1223,7 +1312,40 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     }
 
-    Y_UNIT_TEST(Producer_EventLoop_Acks) {
+    Y_UNIT_TEST(Producer_WriteManyMessages) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        auto client = setup.MakeClient();
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.MaxBlock(TDuration::Seconds(30));
+
+        auto producer = client.CreateProducer(writeSettings);
+        std::string payload = "data";
+
+        const ui64 count = 3000;
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            TWriteMessage msg(payload);
+            msg.SeqNo(i);
+            msg.Key(key);
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        }
+
+        UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count);
+    }
+
+    Y_UNIT_TEST(Producer_AutoSeqNo) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
 
@@ -1252,6 +1374,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        auto producer2 = client.CreateProducer(writeSettings);
+        std::string payload = "data";
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            TWriteMessage msg(payload);
+            msg.Key(key);
+            UNIT_ASSERT_C(producer2->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        }
+        UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count * 2);
     }
 
     Y_UNIT_TEST(Producer_WriteToClosedProducer) {
@@ -1589,6 +1724,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer3->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 14);
     }
 
     Y_UNIT_TEST(AutoPartitioning_Producer_SmallMessages) {
@@ -1665,6 +1802,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, totalMessages);
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {
@@ -1701,6 +1840,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 100);
     }
 
     Y_UNIT_TEST(TypedProducer_BasicWrite) {
@@ -1787,20 +1928,27 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto producer = client.CreateProducer(writeSettings);
         auto producerRaw = dynamic_cast<TProducer*>(producer.get());
         auto msgData = TString(10_KB, 'a');
-
-        for (ui64 i = 0; i < 3; ++i) {
-            for (const auto& partition : partitions) {
-                for (ui64 i = 0; i < 10; ++i) {
-                    TWriteMessage msg(msgData);
-                    msg.Partition(partition.GetPartitionId());
-                    UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
-                }
-                UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());    
-                UNIT_ASSERT((producerRaw->GetIdleSessionsCount() == 1 && producerRaw->GetSessionsCount() == 1) ||
-                    (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0));
-                Sleep(TDuration::Seconds(1));
+        for (const auto& partition : partitions) {
+            for (ui64 i = 0; i < 10; ++i) {
+                TWriteMessage msg(msgData);
+                msg.Partition(partition.GetPartitionId());
+                UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
             }
         }
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        size_t idleSessionsCount = 0;
+        size_t sessionsCount = 0;
+        for (int i = 0; i < 5; ++i) {
+            idleSessionsCount = producerRaw->GetIdleSessionsCount();
+            sessionsCount = producerRaw->GetSessionsCount();
+            if (idleSessionsCount == 0 && sessionsCount == 0) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(idleSessionsCount == 0 && sessionsCount == 0, "Idle session count: " << idleSessionsCount << ", sessions count: " << sessionsCount);
 
         {
             auto describeResult = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
@@ -1810,7 +1958,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 UNIT_ASSERT(stats);
                 messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
             }
-            UNIT_ASSERT_EQUAL(messagesWritten, 150);
+            UNIT_ASSERT_EQUAL(messagesWritten, 50);
         }
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }

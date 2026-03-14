@@ -33,6 +33,8 @@ namespace NKikimr::NDDisk {
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
+            EvWritePersistentBuffers,
+            EvWritePersistentBuffersResult,
         };
     };
 
@@ -156,6 +158,14 @@ namespace NKikimr::NDDisk {
         }
     };
 
+struct TPersistentBufferFormat {
+    ui32 MaxChunks = 256;
+    ui32 InitChunks = 4;
+    ui32 MaxInMemoryCache = 128_MB;
+    ui32 MaxChunkRestoreInflight = 8;
+    ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
+};
+
 #define DECLARE_DDISK_EVENT(NAME) \
     struct TEv##NAME : TEventPB<TEv##NAME, NKikimrBlobStorage::NDDisk::TEv##NAME, TEv::Ev##NAME>
 
@@ -173,6 +183,8 @@ namespace NKikimr::NDDisk {
     struct TEvSyncWithDDiskResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
+    struct TEvWritePersistentBuffers;
+    struct TEvWritePersistentBuffersResult;
     struct TEvReadPersistentBuffer;
     struct TEvReadPersistentBufferResult;
     struct TEvErasePersistentBuffer;
@@ -293,12 +305,40 @@ namespace NKikimr::NDDisk {
         TEvWritePersistentBufferResult() = default;
 
         TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1, double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
+        }
+    };
+
+    DECLARE_DDISK_EVENT(WritePersistentBuffersResult) {
+        TEvWritePersistentBuffersResult() {
+        }
+    };
+
+    DECLARE_DDISK_EVENT(WritePersistentBuffers) {
+        using TResult = TEvWritePersistentBuffersResult;
+
+        TEvWritePersistentBuffers() = default;
+
+        TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
+                const TWriteInstruction& instruction, const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
+                ui32 replyTimeoutMicroseconds) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+            Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
+            instruction.Serialize(Record.MutableInstruction());
+            for (auto id : persistentBufferIds) {
+                auto* pbId = Record.AddPersistentBufferIds();
+                pbId->SetNodeId(std::get<0>(id));
+                pbId->SetPDiskId(std::get<1>(id));
+                pbId->SetDDiskSlotId(std::get<2>(id));
+            }
         }
     };
 
@@ -373,12 +413,14 @@ namespace NKikimr::NDDisk {
         TEvErasePersistentBufferResult() = default;
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1,
+                double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
     };
 
@@ -498,6 +540,6 @@ namespace NKikimr::NDDisk {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr::NDDisk

@@ -7,141 +7,6 @@ namespace NKqp {
 
 using namespace NYql;
 
-namespace {
-
-void AppendQuerySpanIdInfo(TStringBuilder& message, TMaybe<ui64> victimQuerySpanId) {
-    if (victimQuerySpanId && *victimQuerySpanId != 0) {
-        message << " VictimQuerySpanId: " << *victimQuerySpanId << ".";
-    }
-}
-
-} // anonymous namespace
-
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId,
-    TMaybe<ui64> victimQuerySpanId)
-{
-    TStringBuilder message;
-    message << "Transaction locks invalidated.";
-
-    if (pathId.OwnerId() != 0) {
-        auto table = txCtx.TableByIdMap.FindPtr(pathId);
-        if (!table) {
-            message << " Unknown table, pathId: " << pathId.ToString() << ".";
-            AppendQuerySpanIdInfo(message, victimQuerySpanId);
-            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-        }
-        message << " Table: `" << *table << "`.";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    } else {
-        // Olap tables don't return SchemeShard in locks, thus we use tableId here.
-        for (const auto& [candidatePathId, table] : txCtx.TableByIdMap) {
-            if (candidatePathId.TableId() == pathId.TableId()) {
-                message << " Table: `" << table << "`.";
-                AppendQuerySpanIdInfo(message, victimQuerySpanId);
-                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-            }
-        }
-        message << " Unknown table, pathId: " << pathId.ToString() << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    }
-}
-
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
-    TMaybe<ui64> victimQuerySpanId)
-{
-    TStringBuilder message;
-    message << "Transaction locks invalidated.";
-
-    if (auto tableInfoPtr = shardIdToTableInfo.GetPtr(shardId); tableInfoPtr) {
-        message << " Tables: ";
-        bool first = true;
-        for (const auto& path : tableInfoPtr->Pathes) {
-            if (!first) {
-                message << ", ";
-                first = false;
-            }
-            message << "`" << path << "`";
-        }
-        message << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    } else {
-        message << " Unknown table, tabletId: " << shardId << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-    }
-    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-}
-
-// Non-TxManager (obsolete) path: no QuerySpanId tracking
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    return GetLocksInvalidatedIssue(
-        txCtx,
-        TKikimrPathId(
-            invalidatedLock.GetSchemeShard(),
-            invalidatedLock.GetPathId()));
-}
-
-// Non-TxManager (obsolete) lock merge path: no QuerySpanId tracking
-std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-    TKqpTransactionContext& txCtx)
-{
-    std::pair<bool, std::vector<TIssue>> res;
-    auto& locks = txCtx.Locks;
-
-    YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::List);
-    auto locksListType = type.GetList();
-
-    if (!locks.HasLocks()) {
-        locks.LockType = locksListType.GetItem();
-        locks.LocksListType = locksListType;
-    }
-
-    YQL_ENSURE(locksListType.GetItem().GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-    auto lockType = locksListType.GetItem().GetStruct();
-    YQL_ENSURE(lockType.MemberSize() == 7);
-    YQL_ENSURE(lockType.GetMember(0).GetName() == "Counter");
-    YQL_ENSURE(lockType.GetMember(1).GetName() == "DataShard");
-    YQL_ENSURE(lockType.GetMember(2).GetName() == "Generation");
-    YQL_ENSURE(lockType.GetMember(3).GetName() == "LockId");
-    YQL_ENSURE(lockType.GetMember(4).GetName() == "PathId");
-    YQL_ENSURE(lockType.GetMember(5).GetName() == "SchemeShard");
-    YQL_ENSURE(lockType.GetMember(6).GetName() == "HasWrites");
-
-    res.first = true;
-    for (auto& lockValue : value.GetList()) {
-        TKqpTxLock txLock(lockValue);
-        if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
-            switch (counter) {
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken:
-                    res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                    break;
-                default:
-                    res.second.emplace_back(YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE));
-                    break;
-            }
-            res.first = false;
-
-        } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
-            if (txLock.HasWrites()) {
-                curTxLock->SetHasWrites();
-            }
-
-            if (curTxLock->Invalidated(txLock)) {
-                res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                res.first = false;
-            }
-        } else {
-            // despite there were some errors we need to proceed merge to erase remaining locks properly
-            locks.LocksMap.insert(std::make_pair(txLock.GetKey(), txLock));
-        }
-    }
-
-    return res;
-}
-
 TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     TKqpTransactionInfo txInfo;
 
@@ -336,9 +201,9 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         return true;
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                        break;
                     case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                     case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                        break;
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }
@@ -354,7 +219,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
                     || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                    return true;
+                    AFL_ENSURE(false);
                 }
             }
 
@@ -396,10 +261,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                         break;
                     }
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                         modifiedTables.insert(getTable(tableOp.GetTable()));
                         break;
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }

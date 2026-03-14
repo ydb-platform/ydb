@@ -6,6 +6,8 @@
 
 #include <util/string/join.h>
 
+#include <ranges>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -571,6 +573,10 @@ std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
+bool TStorage::DLQEmpty() const {
+    return DLQQueue.empty();
+}
+
 std::deque<TDLQMessage> TStorage::GetDLQMessages() {
     static constexpr size_t MaxBatchSize = 1000;
 
@@ -660,9 +666,9 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
     return deadlineDelta;
 }
 
-ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
+ui64 TStorage::DoLock(ui64 offset, TMessage& message, const TInstant deadline) {
     auto now = TimeProvider->Now();
-    
+
     AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
@@ -999,9 +1005,9 @@ TString TStorage::DebugString() const {
         dump(FirstOffset + i, Messages[i], 'f');
     }
 
-    sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end()) << "]";
-    sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
-    sb << " DLQMessages [" << JoinRange(", ", DLQMessages.begin(), DLQMessages.end()) << "]";
+    sb << "] LockedGroups [" << JoinSeq(", ", LockedMessageGroupsId) << "]";
+    sb << " DLQQueue [" << JoinSeq(", ", DLQQueue) << "]";
+    sb << " DLQMessages [" << JoinSeq(", ", DLQMessages | std::views::transform(AsTDLQMessage)) << "]";
     sb << " Metrics {"
         << "Inflight: " << Metrics.InflightMessageCount << ", "
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "

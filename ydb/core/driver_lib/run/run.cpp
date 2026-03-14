@@ -84,6 +84,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/security/sasl/static_credentials_provider.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -634,6 +635,8 @@ TKikimrRunner::~TKikimrRunner() {
         ActorSystem->Stop();
         ActorSystem.Destroy();
     }
+
+    NSasl::TStaticCredentialsProvider::GetInstance().Clear();
 }
 
 void TKikimrRunner::AddGlobalObject(std::shared_ptr<void> object) {

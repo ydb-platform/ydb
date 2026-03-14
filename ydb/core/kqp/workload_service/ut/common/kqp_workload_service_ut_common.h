@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -104,6 +105,9 @@ class IYdbSetup : public TThrRefBase {
 public:
     // Cluster helpers
     virtual void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) = 0;
+
+    virtual NYdb::NTable::TTableClient GetTableClient(
+        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const = 0;
 
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;

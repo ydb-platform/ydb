@@ -147,9 +147,16 @@ namespace NTypeAnnImpl {
     bool EnsureNoItemTypeConflicts(
         TStringBuf name,
         const TExprNode::TPtr& container,
-        TExprContext& ctx)
+        TExprContext& ctx,
+        bool& isUniversal)
     {
+        isUniversal = false;
         YQL_ENSURE(container->ChildrenSize() != 0);
+        for (const auto& child : container->Children()) {
+            if (!EnsureComputable(*child, ctx)) {
+                return false;
+            }
+        }
 
         size_t lhsIndex = 0;
         const TTypeAnnotationNode* lhsType = container->Child(lhsIndex)->GetTypeAnn();
@@ -160,6 +167,10 @@ namespace NTypeAnnImpl {
         for (; rhsIndex < container->ChildrenSize(); ++rhsIndex) {
             rhsType = container->Child(rhsIndex)->GetTypeAnn();
             if (lhsType != rhsType) {
+                if (lhsType->HasUniversal() || rhsType->HasUniversal()) {
+                    isUniversal = true;
+                    return true;
+                }
                 break;
             }
         }
@@ -1057,6 +1068,10 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         input->SetTypeAnn(ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             input->Head().GetTypeAnn(),
             input->Tail().GetTypeAnn()
@@ -1208,6 +1223,10 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (!EnsureComputable(*arg, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const TTypeAnnotationNode* item = arg->GetTypeAnn();
         if (item->GetKind() == ETypeAnnotationKind::Optional) {
             item = item->Cast<TOptionalExprType>()->GetItemType();
@@ -1269,8 +1288,9 @@ namespace NTypeAnnImpl {
 
         bool isOptionalStruct = false;
         const TStructExprType* structType = nullptr;
-        if (rowNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
-            rowNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+        if (rowNode->GetTypeAnn() && (
+            rowNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+            rowNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct)) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -2483,6 +2503,14 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!(Order ? EnsureComparableType : EnsureEquatableType)(input->Pos(), *input->Head().GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2507,6 +2535,14 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus AggrMinMaxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3576,6 +3612,10 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (!EnsureDataOrOptionalOfData(input->Tail(), isOptional, data, ctx.Expr, isUniversal)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (input->Head().GetTypeAnn()->HasUniversal() || input->Tail().GetTypeAnn()->HasUniversal()) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
@@ -3604,7 +3644,7 @@ namespace NTypeAnnImpl {
         }
 
         TExprNode::TPtr positionalArguments = input;
-        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
             if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -3619,6 +3659,14 @@ namespace NTypeAnnImpl {
         }
 
         {
+            if (!EnsureComputable(positionalArguments->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureComputable(*positionalArguments->Child(1), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
             const TTypeAnnotationNode* type = positionalArguments->Head().GetTypeAnn();
             YQL_ENSURE(type);
             if (type->GetKind() == ETypeAnnotationKind::Optional) {
@@ -3631,8 +3679,8 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!EnsureStringOrUtf8Type(positionalArguments->ChildRef(1)->Pos(), *positionalArguments->ChildRef(1)->GetTypeAnn(), ctx.Expr)) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->ChildRef(1)->Pos()), TStringBuilder() << "Search string must be String or Utf8"));
+            if (!EnsureStringOrUtf8Type(positionalArguments->Child(1)->Pos(), *positionalArguments->Child(1)->GetTypeAnn(), ctx.Expr)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->Child(1)->Pos()), TStringBuilder() << "Search string must be String or Utf8"));
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -3798,7 +3846,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!input->Head().GetTypeAnn()) {
-            YQL_ENSURE(input->Type() == TExprNode::Lambda);
+            YQL_ENSURE(input->Head().Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
                 << "Expected (optional) String, but got lambda"));
             return IGraphTransformer::TStatus::Error;
@@ -3824,6 +3872,10 @@ namespace NTypeAnnImpl {
         }
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
+        if (!EnsureComputable(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (const auto kind = input->Child(2)->GetTypeAnn()->GetKind(); kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null) {
             expectedType = ctx.Expr.MakeType<TOptionalExprType>(expectedType);
         }
@@ -3901,7 +3953,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!input->Head().GetTypeAnn()) {
-            YQL_ENSURE(input->Type() == TExprNode::Lambda);
+            YQL_ENSURE(input->Head().Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
                 << "Expected (optional) String, but got lambda"));
             return IGraphTransformer::TStatus::Error;
@@ -3981,7 +4033,8 @@ namespace NTypeAnnImpl {
         }
 
         if constexpr (IsStrict) {
-            if (!EnsureNoItemTypeConflicts("List", input, ctx.Expr)) {
+            bool isUniversal;
+            if (!EnsureNoItemTypeConflicts("List", input, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -5918,8 +5971,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             if (ctx.Types.StrictTableProps &&
+                (!depOn->GetTypeAnn() ||
                 depOn->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Universal &&
-                depOn->GetTypeAnn()->GetKind() != ETypeAnnotationKind::UniversalStruct &&
+                depOn->GetTypeAnn()->GetKind() != ETypeAnnotationKind::UniversalStruct) &&
                 !EnsureStructType(*depOn, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -6130,8 +6184,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!input->Tail().GetTypeAnn() || !IsSameAnnotation(*type->Cast<TOptionalExprType>()->GetItemType(),
-            *input->Tail().GetTypeAnn())) {
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!IsSameAnnotation(*type->Cast<TOptionalExprType>()->GetItemType(), *input->Tail().GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Mismatch item type, expected: " <<
                 *type->Cast<TOptionalExprType>()->GetItemType() << " but got: " << *input->Tail().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
@@ -6779,7 +6836,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if constexpr (IsStrict) {
-            if (!EnsureNoItemTypeConflicts("Dict", input, ctx.Expr)) {
+            bool isUniversal;
+            if (!EnsureNoItemTypeConflicts("Dict", input, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -7113,10 +7171,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
-            left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct ||
+        if (left->GetTypeAnn() && (
+            left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+            left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) ||
+            right->GetTypeAnn() && (
             right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
-            right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct)) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -10224,6 +10284,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureType(*input->Child(2), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -11285,6 +11350,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return status;
         }
 
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
             input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
@@ -11564,6 +11632,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
         if (input->ChildrenSize() == 4) {
+            if (!input->Child(3)->GetTypeAnn()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), "Lambda is not expected here"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
             TExprNode::TPtr normalized;
             auto status = NormalizeKeyValueTuples(input->ChildPtr(3), 0, normalized, ctx.Expr);
             if (status.Level == IGraphTransformer::TStatus::Repeat) {
@@ -12916,6 +12989,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus MuxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

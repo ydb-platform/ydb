@@ -1972,9 +1972,6 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
         delete ptr;
     });
-    result->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
-        delete ptr;
-    });
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
     }
@@ -2144,9 +2141,6 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
-    result->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
         delete ptr;
     });
     if (evYardInit.GetDiskFd) {
@@ -2803,6 +2797,12 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestConfigureScheduler: {
                 const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
                 SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
+                Cfg->SchedulerCfg = cfgReq.SchedulerCfg;
+                if (cfgReq.Sender) {
+                    Mon.YardConfigureScheduler.CountResponse();
+                    PCtx->ActorSystem->Send(cfgReq.Sender,
+                        new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::OK, TString()));
+                }
                 break;
             }
             case ERequestType::RequestWhiteboartReport:

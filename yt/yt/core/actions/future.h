@@ -235,12 +235,14 @@ public:
     /*!
      *  \deprecated Use #BlockingWait instead.
      */
+    [[deprecated("Use BlockingWait() instead")]]
     bool Wait(TDuration timeout = TDuration::Max()) const;
 
     //! The same as #BlockingWait.
     /*!
      *  \deprecated Use #BlockingWait instead.
      */
+    [[deprecated("Use BlockingWait() instead")]]
     bool Wait(TInstant deadline) const;
 
     //! Gets the value; returns null if the value is not set yet.
@@ -712,10 +714,10 @@ public:
     ~TFutureHolder();
 
     TFutureHolder(const TFutureHolder<T>& other) = delete;
-    TFutureHolder(TFutureHolder<T>&& other) = default;
+    TFutureHolder(TFutureHolder<T>&& other) noexcept = default;
 
     TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator=(TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) noexcept = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;

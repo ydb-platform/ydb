@@ -84,12 +84,16 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
-    def _canonize_table_output(self, rows):
+    def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
                 row['Guid'] = '<Guid>'
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
+            if canonize_columns:
+                for column in canonize_columns:
+                    if column in row:
+                        row[column] = f'<{column}>'
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -104,7 +108,7 @@ class TestBase:
         for vslot in base_config.VSlot:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False):
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None):
         common.cache.clear()
         common.name_cache.clear()
         results = []
@@ -135,7 +139,7 @@ class TestBase:
         original_table_dump = table.TableOutput.dump
 
         def mock_table_dump(table_self, rows, args):
-            self._canonize_table_output(rows)
+            self._canonize_table_output(rows, canonize_columns=canonize_columns)
             return original_table_dump(table_self, rows, args)
 
         exit_status = 0
@@ -174,7 +178,7 @@ class Test(TestBase):
             self._trace('--help'),
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
-            self._trace('vdisk', 'list', '-AH'),
+            self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
@@ -254,9 +258,55 @@ class Test(TestBase):
             'CapacityAlert',
         ]
 
+        ydb_cli = [yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")), "--endpoint", self.endpoint, "--database=/Root"]
+        group_id = 2181038080
+
+        initial_total_size = None
+
+        def check_vdisks_allocated_size_updated():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
+            assert len(vslots) == 8
+            for vslot in vslots[0:6]:
+                used_size = vslot.VDiskMetrics.AllocatedSize
+                assert used_size > 0
+                assert used_size == vslots[0].VDiskMetrics.AllocatedSize
+
+            nonlocal initial_total_size
+            initial_total_size = vslots[0].VDiskMetrics.AllocatedSize + vslots[0].VDiskMetrics.AvailableSize
+
+        def check_vdisks_total_size_doubled():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
+            assert len(vslots) == 8
+            for vslot in vslots[0:6]:
+                total_size = vslot.VDiskMetrics.AllocatedSize + vslot.VDiskMetrics.AvailableSize
+                assert total_size == 2 * initial_total_size
+
+        def wait_vdisks_total_size_doubled():
+            try:
+                retry_assertions(check_vdisks_total_size_doubled)
+            except AssertionError:
+                pass
+
         return [
+            self._trace('pdisk', 'stop', '--node-id', '7', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
+            self._trace('pdisk', 'stop', '--node-id', '8', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '-H', '--columns', *group_columns),
+            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'init', '-w', '1'], wait=True).returncode,
+            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'import', '-w', '1'], wait=True).returncode,
+            retry_assertions(check_vdisks_allocated_size_updated),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '--columns', *group_columns),
+            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
+            wait_vdisks_total_size_doubled(),
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '--columns', *group_columns),
+
+            # Errors:
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id), '--format', 'json'),
         ]
 
     def test_infer_pdisk_slot_count(self):

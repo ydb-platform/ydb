@@ -1572,6 +1572,12 @@ void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const 
 void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        PQ_LOG_D("Received TEvReadingPartitionStartedRequest from unknown pipe " << pipeClient);
+        return;
+    }
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
@@ -1584,6 +1590,12 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
 
 void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        PQ_LOG_D("Received TEvReadingPartitionFinishedRequest from unknown pipe " << pipeClient);
+        return;
+    }
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {

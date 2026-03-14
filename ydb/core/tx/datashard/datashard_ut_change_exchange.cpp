@@ -840,15 +840,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetGrpcPort(PortManager.GetPort(2135))
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
-                .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true)
-                .SetEnableTopicSplitMerge(true)
-                .SetEnableTopicAutopartitioningForCDC(true);
+                .SetEnablePgSyntax(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -866,7 +863,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             WaitTxNotification(Server, EdgeActor, AsyncAlterAddStream(Server, database, tableName, streamDesc));
 
             if (useRealThreads) {
-                Client = TDerived::MakeClient(Server->GetDriver(), database);
+                TString endpoint = "localhost:" + ToString(settings.GrpcPort);
+                auto driverConfig = NYdb::TDriverConfig()
+                    .SetEndpoint(endpoint)
+                    .SetDatabase("/" + settings.DomainName);
+                auto driver = NYdb::TDriver(driverConfig);
+                Client = TDerived::MakeClient(driver, database);
             }
         }
 
@@ -1429,7 +1431,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true, 
+                const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
                 const NACLib::TUserContext::TPtr userCtx = nullptr)
         {
             Y_UNUSED(checkKey);
@@ -2692,7 +2694,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     }
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
-            
+
             case NKikimr::NEvents::TDataEvents::EvWriteResult:
                 if (auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()) {
                     if (msg->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
@@ -3138,8 +3140,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnableTopicSplitMerge(topicAutoPartitioning)
-            .SetEnableTopicAutopartitioningForCDC(true)
         );
 
         auto& runtime = *server->GetRuntime();

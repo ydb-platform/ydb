@@ -109,7 +109,7 @@ message TFeatureFlags {
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
-    optional bool EnableTopicServiceTx = 86 [default = true];
+    optional bool EnableTopicServiceTx = 86 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
@@ -118,12 +118,12 @@ message TFeatureFlags {
     optional bool EnableScriptExecutionOperations = 92 [default = true];
     reserved 93; // EnableImplicitQueryParameterTypes
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
-    optional bool EnableTopicSplitMerge = 95 [default = true];
+    optional bool EnableTopicSplitMerge = 95 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = true, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = true];
+    optional bool EnableTopicMessageMeta = 100 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
@@ -171,7 +171,7 @@ message TFeatureFlags {
     optional bool EnableParameterizedDecimal = 145 [default = true];
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true, deprecated = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
-    optional bool EnableTopicAutopartitioningForCDC = 148 [default = true];
+    optional bool EnableTopicAutopartitioningForCDC = 148 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableWritePortionsOnInsert = 149 [default = true, deprecated = true];
     optional bool EnableFollowerStats = 150 [default = true];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = true];
@@ -186,7 +186,7 @@ message TFeatureFlags {
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = true];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableChecksumsExport = 162 [default = true];
-    optional bool EnableTopicTransfer = 163 [default = true];
+    optional bool EnableTopicTransfer = 163 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableViewExport = 164 [default = true];
     optional bool EnableColumnStore = 165 [default = false];
     optional bool EnableStrictAclCheck = 166 [default = false];
@@ -261,4 +261,9 @@ message TFeatureFlags {
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
+    optional bool TransferInternalDataDecompression = 237 [default = false];
+    optional bool EnableJsonIndex = 238 [default = false];
+    optional bool EnableSQSMigrationTopicCreation = 239 [default = false];
+    optional bool EnableSQSMigrationCompatibility = 240 [default = false];
+    optional bool EnableSQSMigrationFinished = 241 [default = false];
 }

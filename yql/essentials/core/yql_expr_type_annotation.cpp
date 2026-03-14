@@ -6610,7 +6610,11 @@ template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExpr
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)
 {
-    YQL_ENSURE(input->IsCallable() || input->IsList());
+    if (!input->IsCallable() && !input->IsList()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Expected tuple or callable, but got: " << input->Type()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     YQL_ENSURE(startIndex <= input->ChildrenSize());
 
     auto children = input->ChildrenList();

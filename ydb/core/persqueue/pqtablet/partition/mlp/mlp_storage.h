@@ -166,6 +166,7 @@ public:
     TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
+    bool DLQEmpty() const;
     std::deque<TDLQMessage> GetDLQMessages();
     const absl::flat_hash_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();
@@ -216,7 +217,7 @@ private:
     std::pair<TMessage*, bool> GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
-    ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
+    ui64 DoLock(ui64 offset, TMessage& message, TInstant deadline);
     bool DoCommit(ui64 offset, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);

@@ -417,9 +417,6 @@ namespace NKikimr::NStorage {
             }
 
             UnsubscribeQueue.insert(binding.NodeId);
-
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
-                this, std::placeholders::_1));
         }
     }
 
@@ -494,14 +491,6 @@ namespace NKikimr::NStorage {
 
         if (pendingPush) {
             SendEvent(*Binding, std::move(pendingPush));
-        }
-
-        // if we have a root node id that is not ours, then we drop all inbound pile connections; also execute any
-        // pending commands
-        if (Binding && Binding->RootNodeId) {
-            Y_ABORT_UNLESS(Binding->RootNodeId != SelfId().NodeId());
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot, this,
-                std::placeholders::_1));
         }
     }
 

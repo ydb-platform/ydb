@@ -602,7 +602,9 @@ private:
 
             for (const auto& i : structType->GetItems()) {
                 auto& res = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
-                res.Items = allLineage;
+                TFieldLineageSet items(allLineage);
+                // FIXME: switch back to assign operator when crash in it will be fixed, check YQL-21022
+                std::swap(res.Items, items);
             }
         }
     }

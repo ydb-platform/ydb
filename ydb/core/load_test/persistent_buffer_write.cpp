@@ -1,4 +1,5 @@
 #include "service_actor.h"
+#include "util.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/blobstorage.h>
@@ -14,7 +15,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <cstdint>
 #include <cstring>
 #include <memory>
 
@@ -27,15 +27,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
 
     struct TWriteInfo {
         ui32 Size;
-        ui32 Weight = 1;
-        ui32 AccumWeight = 0;
         TRope Data;
-
-        struct TFindByWeight {
-            bool operator ()(ui32 left, const TWriteInfo& right) const {
-                return left < right.AccumWeight;
-            }
-        };
     };
 
     struct TRequestInfo {
@@ -73,7 +65,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     bool TestStarted = false;
 
     std::vector<TWriteInfo> WriteInfos;
-    ui32 TotalWeight = 0;
+    TWeightedIndices WriteInfosByWeight;
 
     std::unordered_map<ui64, ui64> Lsns;
     double FreeSpace = 1;
@@ -140,7 +132,6 @@ public:
         FillRatio = cmd.GetFillRatio();
         Y_ABORT_UNLESS(FillRatio <= 100, "FillRatio percentage should be less than or equal to 100");
 
-        ui32 accumWeight = 0;
         for (auto wi : cmd.GetWriteInfos()) {
             ui32 size = wi.GetSize();
             ui32 weight = wi.GetWeight();
@@ -151,11 +142,10 @@ public:
             if (size % SectorSize != 0) {
                 ythrow TLoadActorException() << "WriteInfo.Size must be divisible by SectorSize";
             }
-            accumWeight += weight;
 
-            WriteInfos.push_back(TWriteInfo{size, weight, accumWeight, BuildPayload(size)});
+            WriteInfos.push_back(TWriteInfo{size, BuildPayload(size)});
+            WriteInfosByWeight.AddWeight(weight);
         }
-        TotalWeight = accumWeight;
         if (WriteInfos.empty()) {
             ythrow TLoadActorException() << "WriteInfos may not be empty";
         }
@@ -283,13 +273,10 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     TWriteInfo& PickWriteByWeight() {
-        Y_DEBUG_ABORT_UNLESS(TotalWeight, "TotalWeight must be non-zero");
-        const ui32 w = Rng() % TotalWeight;
-        auto it = std::upper_bound(WriteInfos.begin(), WriteInfos.end(), w, TWriteInfo::TFindByWeight());
-        if (it == WriteInfos.end()) {
-            it = std::prev(it);
-        }
-        return *it;
+        Y_DEBUG_ABORT_UNLESS(!WriteInfosByWeight.Empty(), "WriteInfosByWeight must be non-empty");
+        const ui32 writeIdx = WriteInfosByWeight.GetRandomIndex();
+        Y_DEBUG_ABORT_UNLESS(writeIdx < WriteInfos.size(), "Weighted index is out of bounds");
+        return WriteInfos[writeIdx];
     }
 
     void SendWriteRequests(const TActorContext& ctx) {
@@ -306,7 +293,7 @@ public:
 
         while (InFlight < MaxInFlight) {
             bool doWrite = Rng() % 2;
-            if (Lsns.empty() || doWrite || FillRatio < FreeSpace * 100) {
+            if (Lsns.empty() || doWrite || FillRatio < (1 - FreeSpace) * 100) {
                 TWriteInfo& write = PickWriteByWeight();
                 Report->Size += write.Size;
                 const TInstant now = TAppData::TimeProvider->Now();

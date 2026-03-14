@@ -1,4 +1,5 @@
 #include "service_actor.h"
+#include "util.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/blobstorage.h>
@@ -150,7 +151,6 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
         TDeque<ui32> WriteQueue;
         ui32 AreaSizeBytes = 0;
         ui32 Weight = 1;
-        ui64 AccumWeight = 0;
         bool Sequential = true;
 
         NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::EAreaInit InitType =
@@ -160,12 +160,6 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
         ui32 NumChunks = 0;
         ui32 InitNextChunk = 0;
         ui32 InitNextPosition = 0;
-
-        struct TFindByWeight {
-            bool operator ()(ui64 left, const TAreaInfo& right) const {
-                return left < right.AccumWeight;
-            }
-        };
     };
     struct TRequestInfo {
         ui32 Size;
@@ -210,7 +204,7 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     bool TestStarted = false;
 
     TVector<TAreaInfo> Areas;
-    ui64 TotalWeight = 0;
+    TWeightedIndices AreasByWeight;
 
     ui32 CurrentInitArea = 0;
     bool Initializing = false;
@@ -302,7 +296,6 @@ public:
         Y_ABORT_UNLESS(BackgroundReadRatio <= 100, "BackgroundReadRatio must be in [0, 100]");
 
         ui64 nextBaseChunk = 0;
-        ui64 accumWeight = 0;
         for (const auto& area : cmd.GetAreas()) {
             const ui32 areaSize = area.GetAreaSize();
             if (!areaSize) {
@@ -317,7 +310,6 @@ public:
                 {},
                 areaSize,
                 area.GetWeight(),
-                accumWeight,
                 area.GetSequential(),
                 area.GetInitType(),
                 nextBaseChunk,
@@ -325,10 +317,9 @@ public:
                 0,
                 0
             });
-            accumWeight += area.GetWeight();
+            AreasByWeight.AddWeight(area.GetWeight());
             nextBaseChunk += numChunks;
         }
-        TotalWeight = accumWeight;
         if (Areas.empty()) {
             ythrow TLoadActorException() << "Areas may not be empty";
         }
@@ -472,13 +463,10 @@ public:
     }
 
     TAreaInfo& PickAreaByWeight() {
-        Y_DEBUG_ABORT_UNLESS(TotalWeight, "TotalWeight must be non-zero");
-        const ui64 w = (ui64(Rng()) << 32 | Rng()) % TotalWeight;
-        auto it = std::upper_bound(Areas.begin(), Areas.end(), w, TAreaInfo::TFindByWeight());
-        if (it == Areas.end()) {
-            it = std::prev(Areas.end());
-        }
-        return *it;
+        Y_DEBUG_ABORT_UNLESS(!AreasByWeight.Empty(), "AreasByWeight must be non-empty");
+        const ui32 areaIdx = AreasByWeight.GetRandomIndex();
+        Y_DEBUG_ABORT_UNLESS(areaIdx < Areas.size(), "Weighted index is out of bounds");
+        return Areas[areaIdx];
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

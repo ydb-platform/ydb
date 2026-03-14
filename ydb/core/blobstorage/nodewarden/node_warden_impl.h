@@ -243,9 +243,12 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
+        TControlWrapper EnableChunkKeeper;
+
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
         TControlWrapper CommonStaticLogChunks;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;

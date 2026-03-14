@@ -221,6 +221,7 @@ message TPQConfig {
 
     optional TCompactionConfig CompactionConfig = 58;
     optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
+    optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
 }
 
 message TChannelProfile {
@@ -1146,12 +1147,14 @@ message TEvReadingPartitionFinishedRequest {
     optional uint32 PartitionId = 2;
     optional bool ScaleAwareSDK = 3;
     optional bool StartedReadingFromEndOffset = 4;
+    optional NActorsProto.TActorId PipeClient = 5;
 };
 
 // The consumer's reading of the partition is started (from ReadSession)
 message TEvReadingPartitionStartedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional NActorsProto.TActorId PipeClient = 3;
 };
 
 message TPartitionScaleParticipants {

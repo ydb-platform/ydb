@@ -15,6 +15,7 @@ class TInMemoryDirectBlockGroup
     , public std::enable_shared_from_this<TInMemoryDirectBlockGroup>
 {
 private:
+    ui64 TabletId;
     TIntrusivePtr<NKikimr::NPDisk::TSectorMap> SectorMap;
     ui32 BlockSize;
 
@@ -33,20 +34,36 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
-    void EstablishConnections(
+    NThreading::TFuture<void> EstablishConnections(
+        TExecutorPtr executor,
         NWilson::TTraceId traceId,
         ui32 vChunkIndex) override;
 
-    NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+    NThreading::TFuture<TDBGReadBlocksResponse>
+    ReadBlocksLocalFromPersistentBuffer(
+        ui32 vChunkIndex,
+        ui8 persistentBufferIndex,
+        TCallContextPtr callContext,
+        std::shared_ptr<TReadBlocksLocalRequest> request,
+        NWilson::TTraceId traceId,
+        ui64 lsn) override;
+
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksLocalFromDDisk(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksLocal(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
+        ui32 vChunkIndex,
+        ui8 persistBufferIndex,
+        const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) override;
 };
 

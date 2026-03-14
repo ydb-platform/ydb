@@ -4325,6 +4325,10 @@ public:
         auto afterWaitTasksState = std::move(*AfterWaitTasksState);
         AfterWaitTasksState = std::nullopt;
 
+        ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
+            actor->Unlink();
+        });
+
         if (afterWaitTasksState.IsCommit) {
             Commit(afterWaitTasksState.TxId, std::move(afterWaitTasksState.TraceId));
         } else {

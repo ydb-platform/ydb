@@ -6,11 +6,17 @@
 
 namespace NSQLFormat {
 
+enum class EConvergenceRequirement: ui8 {
+    None,
+    Triple, // format(format(input)) == format(format(format(input)))
+    Double, // .      format(input)  ==        format(format(input))
+};
+
 TMaybe<TString> CheckedFormat(
     const TString& query,
     const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     NYql::TIssues& issues,
-    bool isIdempotencyChecked = true);
+    EConvergenceRequirement convergence = EConvergenceRequirement::Double);
 
 } // namespace NSQLFormat

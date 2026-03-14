@@ -178,7 +178,7 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
 }
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     AFL_VERIFY(op.GetCaseSensitive());

@@ -256,24 +256,21 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDataCenter() const {
-            if (NodeInfo.Location.GetDataCenterId()) {
-                return NodeInfo.Location.GetDataCenterId();
-            }
             return SystemState.GetLocation().GetDataCenter();
         }
 
         TString GetRack() const {
-            if (NodeInfo.Location.GetRackId()) {
-                return NodeInfo.Location.GetRackId();
-            }
             return SystemState.GetLocation().GetRack();
         }
 
         TString GetPileName() const {
-            if (NodeInfo.Location.GetBridgePileName()) {
-                return NodeInfo.Location.GetBridgePileName().value_or("");
-            }
             return SystemState.GetLocation().GetBridgePileName();
+        }
+
+        void MergeInterconnectLocation() {
+            NActorsInterconnect::TNodeLocation location;
+            NodeInfo.Location.Serialize(&location, false);
+            SystemState.MutableLocation()->MergeFrom(location);
         }
 
         void Cleanup() {
@@ -1885,6 +1882,8 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
+                        node.MergeInterconnectLocation();
+
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }

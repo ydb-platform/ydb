@@ -155,7 +155,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCheckSum = 0;
+                ui32 RdmaCumulativeCheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -168,7 +168,7 @@ namespace NActors {
 
             void PrepareCatchBuffer();
             void ApplyCatchBuffer();
-            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            int FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
@@ -283,7 +283,7 @@ namespace NActors {
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
-        size_t PayloadSize;
+        size_t PayloadSize = 0;
         ui32 ChecksumExpected, Checksum;
         bool IgnorePayload;
         TRope Payload;
@@ -370,6 +370,13 @@ namespace NActors {
 
         inline ui64 GetMaxCyclesPerEvent() const {
             return DurationToCycles(TDuration::MicroSeconds(500));
+        }
+
+        bool UseKernelLivenessMode() const {
+            // Once kernel liveness is negotiated for this session, user-space liveness checks
+            // are disabled and both actors rely on kernel keepalive/user-timeout.
+            // Keep this condition identical to TInterconnectSessionTCP::UseKernelLivenessMode().
+            return Params.UseKernelLiveness;
         }
 
         const TDuration DeadPeerTimeout;
@@ -561,6 +568,10 @@ namespace NActors {
         TDuration GetLostConnectionTimeout() const;
         ui32 GetTotalInflightAmountOfData() const;
         ui64 GetMaxCyclesPerEvent() const;
+        bool UseKernelLivenessMode() const {
+            // Effective liveness mode for the currently attached transport connection.
+            return KernelLivenessMode;
+        }
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -598,7 +609,9 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params;
+        const TSessionParams Params; // stable session template used for continuation handshakes
+        // Runtime mode negotiated for the current socket; may differ from Params on reconnect.
+        bool KernelLivenessMode = false;
         std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;
@@ -659,6 +672,7 @@ namespace NActors {
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;
         TMonotonic ForcePacketTimestamp = TMonotonic::Max();
+        TMonotonic ClockSkewPingTimestamp = TMonotonic::Max();
         TPriorityQueue<TMonotonic, TVector<TMonotonic>, std::greater<TMonotonic>> FlushSchedule;
         size_t MaxFlushSchedule = 0;
         ui64 FlushEventsScheduled = 0;

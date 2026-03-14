@@ -162,9 +162,6 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("slim", &TThis::Slim)
         .DefaultNew();
 
-    registrar.Parameter("versioned_row_digest", &TThis::VersionedRowDigest)
-        .DefaultNew();
-
     registrar.Parameter("testing_options", &TThis::TestingOptions)
         .DefaultNew();
 
@@ -544,16 +541,6 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
     ValidateKeyWeight = true;
     ValidateColumnCount = true;
     ValidateAnyIsValidYson = validateAnyIsValidYson;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TVersionedRowDigestConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("enable", &TThis::Enable)
-        .Default(false);
-    registrar.Parameter("t_digest", &TThis::TDigest)
-        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

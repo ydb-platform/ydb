@@ -465,6 +465,9 @@
     "name": "yt.QueryCacheChunkLimit"
   },
   {
+    "name": "yt.QueryCacheCombineChunksReplace"
+  },
+  {
     "name": "yt.QueryCacheIgnoreTableRevision"
   },
   {

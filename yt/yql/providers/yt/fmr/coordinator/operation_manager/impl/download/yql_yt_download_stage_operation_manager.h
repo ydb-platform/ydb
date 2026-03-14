@@ -5,6 +5,6 @@
 
 namespace NYql::NFmr {
 
-IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager();
+IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider);
 
 } // namespace NYql::NFmr

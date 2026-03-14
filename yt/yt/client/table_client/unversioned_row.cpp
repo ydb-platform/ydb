@@ -598,7 +598,7 @@ size_t GetUnversionedRowByteSize(ui32 valueCount)
     return sizeof(TUnversionedRowHeader) + sizeof(TUnversionedValue) * valueCount;
 }
 
-size_t GetDataWeight(TUnversionedRow row)
+i64 GetDataWeight(TUnversionedRow row)
 {
     if (!row) {
         return 0;
@@ -611,7 +611,7 @@ size_t GetDataWeight(TUnversionedRow row)
     return result;
 }
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows)
+i64 GetDataWeight(TRange<TUnversionedRow> rows)
 {
     size_t result = 0;
     for (auto row : rows) {

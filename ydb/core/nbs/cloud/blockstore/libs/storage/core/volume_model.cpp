@@ -4,7 +4,7 @@
 
 // #include <ydb/core/nbs/cloud/storage/core/libs/common/media.h>
 
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/channel_data_kind.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>

@@ -7811,7 +7811,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(MessageMetadata) {
         NPersQueue::TTestServer server;
-        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessageMeta(true);
         TString topicFullName = "rt3.dc1--topic1";
         auto driver = SetupTestAndGetDriver(server, topicFullName);
 
@@ -8392,7 +8391,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
         settings.PQConfig.SetRoot("/Root");
         settings.PQConfig.SetDatabase("/Root");
-        settings.SetEnableTopicServiceTx(true);
         NPersQueue::TTestServer server{settings, true};
 
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);

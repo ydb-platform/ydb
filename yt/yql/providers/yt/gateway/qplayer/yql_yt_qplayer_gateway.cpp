@@ -243,6 +243,7 @@ public:
                     data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
                     data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
                     data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                    data.Meta->HasRLS = metaNode.HasKey("HasRLS") ? metaNode["HasRLS"].AsBool() : false;
                     data.Meta->SqlView = metaNode["SqlView"].AsString();
                     data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
                     for (const auto& x : metaNode["Attrs"].AsMap()) {
@@ -324,6 +325,7 @@ public:
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
                         ("InferredScheme",data.Meta->InferredScheme)
                         ("IsDynamic",data.Meta->IsDynamic)
+                        ("HasRLS",data.Meta->HasRLS)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
                         ("Attrs",attrsNode) : NYT::TNode();
@@ -1178,6 +1180,9 @@ private:
                 if (tableInfo.Meta && tableInfo.Meta->DoesExist) {
                     if (tableInfo.Meta->IsDynamic) {
                         throw yexception() << "dynamic table " << req.Table() << " on cluster " << req.Cluster();
+                    }
+                    if (tableInfo.Meta->HasRLS) {
+                        throw yexception() << "rls table " << req.Table() << " on cluster " << req.Cluster();
                     }
 
                     YQL_ENSURE(tableInfo.Stat);

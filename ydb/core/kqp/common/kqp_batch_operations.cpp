@@ -12,6 +12,7 @@ bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStre
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+        case NYql::TIndexDescription::EType::GlobalJson:
         case NYql::TIndexDescription::EType::LocalBloomFilter:
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
             return false;

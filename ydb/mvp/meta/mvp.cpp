@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/support_links/source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
@@ -168,12 +169,48 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config) {
+void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig) {
+    if (!appConfig.HasMeta()) {
+        ythrow yexception() << "Check that `meta` section exists and is on the same indentation as `generic` section";
+    }
+
+    const auto& config = appConfig.GetMeta();
+
     MetaApiEndpoint = config.GetMetaApiEndpoint();
     MetaDatabase = config.GetMetaDatabase();
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
+    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
+    MetaSettings.MetaDatabase = MetaDatabase;
+    if (MetaSettings.MetaApiEndpoint.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
+    }
+    if (MetaSettings.MetaDatabase.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
+    }
+
+    if (config.HasGrafana()) {
+        MetaSettings.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
+        MetaSettings.GrafanaSecretName = config.GetGrafana().GetSecretName();
+    } else {
+        MetaSettings.GrafanaEndpoint.clear();
+        MetaSettings.GrafanaSecretName.clear();
+    }
+
+    if (config.HasSupportLinks()) {
+        const auto& supportLinks = config.GetSupportLinks();
+        MetaSettings.ClusterLinkSources.clear();
+        MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
+        for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
+            MetaSettings.ClusterLinkSources.push_back(MakeLinkSource(supportLinks.GetCluster(i)));
+        }
+        MetaSettings.DatabaseLinkSources.clear();
+        MetaSettings.DatabaseLinkSources.reserve(supportLinks.GetDatabase().size());
+        for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
+            MetaSettings.DatabaseLinkSources.push_back(MakeLinkSource(supportLinks.GetDatabase(i)));
+        }
+    }
 }
 
 void TMVP::TryGetMetaOptionsFromConfig() {
@@ -184,15 +221,11 @@ void TMVP::TryGetMetaOptionsFromConfig() {
         YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
         NMvp::NMeta::TMetaAppConfig appConfig;
         MergeYamlNodeToProto(config, appConfig);
-        if (appConfig.HasMeta()) {
-            TryGetMetaOptionsFromConfig(appConfig.GetMeta());
-        }
+        TryGetMetaOptionsFromConfig(appConfig);
     } catch (const YAML::Exception& e) {
-        std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-        std::exit(EXIT_FAILURE);
+        ythrow yexception() << "Error parsing YAML configuration file: " << e.what();
     }
 }
-
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
@@ -207,6 +240,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     if (MetaDatabase.empty()) {
         MetaDatabase = defaultMetaDatabase;
     }
+
+    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
 
     if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);

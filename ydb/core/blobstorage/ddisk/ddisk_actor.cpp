@@ -1,4 +1,6 @@
 #include "ddisk_actor.h"
+#include "direct_io_op.h"
+#include "write_persistent_buffers_request_actor.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -11,10 +13,11 @@
 namespace NKikimr::NDDisk {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : BaseInfo(std::move(baseInfo))
         , Info(std::move(info))
         , CountersBase(GetServiceCounters(counters, "ddisks"))
+        , PersistentBufferFormat(std::move(pbFormat))
     {
         CountersChain.emplace_back("ddiskPool", BaseInfo.StoragePoolName);
         CountersChain.emplace_back("group", Sprintf("%09" PRIu32, Info->GroupID));
@@ -76,6 +79,10 @@ namespace NKikimr::NDDisk {
 
         DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
             << ':' << BaseInfo.VDiskSlotId << ']';
+    }
+
+    TDDiskActor::~TDDiskActor() {
+        [[maybe_unused]] constexpr size_t CompleteTypeGuard = sizeof(TDirectIoOpBase);
     }
 
     void TDDiskActor::Bootstrap() {
@@ -156,16 +163,24 @@ namespace NKikimr::NDDisk {
             hFunc(TEvPrivate::TEvShortIO, HandleShortIO)
 #endif
 
+            hFunc(NPDisk::TEvCheckSpaceResult, Handle);
+
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
+
+            case TEvWritePersistentBuffers::EventType: {
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor()));
+                break;
+            }
         )
     }
 
     void TDDiskActor::PassAway() {
 #if defined(__linux__)
         if (UringRouter) {
-            for (int i = 0; i < 1000 && InFlightCount.load(std::memory_order_acquire) > 0; ++i) {
+            for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
                 usleep(1000);
             }
             UringRouter->Stop();
@@ -177,8 +192,8 @@ namespace NKikimr::NDDisk {
     }
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(counters));
+            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(counters));
     }
 
 } // NKikimr::NDDisk

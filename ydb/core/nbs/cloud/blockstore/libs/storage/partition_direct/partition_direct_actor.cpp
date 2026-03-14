@@ -258,12 +258,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             TActivationContext::ActorSystem(),
             TabletID(),
             1,   // generation
-            i,   // directBlockGroupIndex
             std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            VolumeConfig.GetBlockSize(),
-            VolumeConfig.GetPartitions(0).GetBlockCount(),
-            StorageConfig.GetSyncRequestsBatchSize()));
+            std::move(persistentBufferDDiskIds)));
     }
 
     return directBlockGroups;
@@ -391,7 +387,11 @@ void TPartitionActor::Start(
 
     TVector<IDirectBlockGroupPtr> directBlockGroups =
         CreateDirectBlockGroups(std::move(ids));
-    auto region = std::make_shared<TRegion>(std::move(directBlockGroups));
+    auto region = std::make_shared<TRegion>(
+        std::move(directBlockGroups),
+        3   // syncRequestsBatchSize
+    );
+
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
@@ -490,7 +490,7 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 {
     auto response =
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
-    response->ActorId = LoadActorAdapter.ToString();
+    response->Record.SetActorId(LoadActorAdapter.ToString());
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

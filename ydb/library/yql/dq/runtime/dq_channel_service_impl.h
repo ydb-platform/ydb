@@ -905,12 +905,10 @@ public:
 // IDqInput // Deprecated
 
     i64 GetFreeSpace() const override {
-        Y_ENSURE(false);
         return 0;
     }
 
     ui64 GetStoredBytes() const override {
-        Y_ENSURE(false);
         return 0;
     }
 

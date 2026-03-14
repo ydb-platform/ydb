@@ -5,6 +5,8 @@
 #include "helpers.h"
 #include "http.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
@@ -74,21 +76,27 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 static_cast<int>(httpCode),
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
+            TMaybe<TErrorResponse> errorResponse;
             if (auto errorHeader = response->GetHeaders()->Find("X-YT-Error")) {
                 TYtError error;
                 error.ParseFrom(*errorHeader);
 
-                TErrorResponse errorResponse(std::move(error), requestId);
-                if (errorResponse.IsOk()) {
-                    return Nothing();
+                if (error.GetCode() != 0) {
+                    errorResponse.Emplace(std::move(error), requestId);
                 }
-                return errorResponse;
+            } else {
+                errorResponse = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
             }
 
-            return TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
+            if (errorResponse && TExpectedErrorGuard::IsErrorExpected(*errorResponse)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
+            }
+
+            return errorResponse;
         }
     }
 }

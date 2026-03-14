@@ -4,19 +4,6 @@
 
 namespace NYql::NFmr {
 
-namespace {
-
-TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns) {
-    return TFmrTableKeysBoundary(
-        NYT::NodeToYsonString(keyRow, NYT::NYson::EYsonFormat::Binary),
-        keyColumns.Columns,
-        keyColumns.SortOrders
-    );
-}
-
-} // namespace
-
-
 void TSortedPartitioner::TChunkContainer::Push(TChunkUnit chunk) {
     Chunks_.push_back(std::move(chunk));
 }
@@ -148,11 +135,9 @@ void TSortedPartitioner::TFmrTablesChunkPool::InitTableInputs(const std::vector<
             "SortedPartitioner requires at least one chunk for input table: " << tableId);
 
         std::stable_sort(chunks.begin(), chunks.end(), [](const TChunkUnit& a, const TChunkUnit& b) {
-            Y_ENSURE(a.KeyRange.IsFirstKeySet() && b.KeyRange.IsFirstKeySet(), "Chunk key bounds must be set");
             if (*a.KeyRange.FirstKeysBound != *b.KeyRange.FirstKeysBound) {
                 return *a.KeyRange.FirstKeysBound < *b.KeyRange.FirstKeysBound;
             }
-            Y_ENSURE(a.KeyRange.IsLastKeySet() && b.KeyRange.IsLastKeySet(), "Chunk key bounds must be set");
             return *a.KeyRange.LastKeysBound < *b.KeyRange.LastKeysBound;
         });
 

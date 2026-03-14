@@ -2,7 +2,6 @@ from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.platform_macros import LLVM_VERSION
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 # as of 15.0.x, libfuzzer makes use of
 #
 # ATTRIBUTE_NO_SANITIZE_ALL

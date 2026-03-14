@@ -275,6 +275,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 a Int64 NOT NULL,
 	            b Int64,
                 c Int64,
+                d Decimal(14, 3),
+                e Decimal(12, 2) NOT NULL,
                 primary key(a)
             ))";
         if (columnStore) {
@@ -354,6 +356,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 .AddMember("a").Int64(i)
                 .AddMember("b").Int64(i & 1 ? 1 : 2)
                 .AddMember("c").Int64(2)
+                .AddMember("d").Decimal(TDecimalValue(ToString(i + 0.1), 14, 3))
+                .AddMember("e").Decimal(TDecimalValue(ToString(i + 0.2), 12, 2))
                 .EndStruct();
         }
         rowsTableT2.EndList();
@@ -362,6 +366,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, sum(t2.d), sum(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, min(t2.d), max(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, count(t2.d), count(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, avg(t2.d), avg(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 group by t1.b order by t1.b;
@@ -522,7 +542,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             */
         };
 
-        std::vector<std::string> results = {R"([[[1];[4]];[[2];[6]]])",
+        std::vector<std::string> results = {
+                                            R"([[[1];["4.2"];"4.4"];[[2];["6.3"];"6.6"]])",
+                                            R"([[[1];["1.1"];"3.2"];[[2];["0.1"];"4.2"]])",
+                                            R"([[[1];2u;2u];[[2];3u;3u]])",
+                                            R"([[[1];["2.1"];"2.2"];[[2];["2.1"];"2.2"]])",
+                                            R"([[[1];[4]];[[2];[6]]])",
                                             R"([[[1];[4]];[[2];[6]]])",
                                             R"([[[1];1];[[2];0]])",
                                             R"([[[1];3];[[2];4]])",
@@ -811,9 +836,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return buffer.str();
     }
 
-    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
-        std::string query = GetFullPath("../join/data/", schemaPath);
-
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& pathPrefix, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(pathPrefix, schemaPath);
         if (useColumnStore) {
             std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
             query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
@@ -822,6 +846,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
         res.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(res.IsSuccess());
+    }
+
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        CreateTablesFromPath(session, "../join/data/", schemaPath, useColumnStore);
     }
 
     void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
@@ -875,9 +903,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     enum EBenchType { TPCH = 0, TPCDS };
-    static constexpr std::array<const char*, 2> BenchmarkSchemePath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(../join/data/)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
-    static constexpr std::array<ui32, 2> BenchmarkQueryCount{1, 99};
+    static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
 
     void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
                              const bool printStatus = false, const bool compareResults = false) {
@@ -891,7 +920,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTablesFromPath(session, BenchmarkSchemePath[type], columnStore);
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
         std::vector<bool> queriesCurrentStatus;
         std::vector<bool> queriesExpectedStatus;
@@ -905,6 +934,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             }
             queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+
+            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();

@@ -11,6 +11,11 @@ namespace {
 
 class TMergeStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TMergeStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         const auto& operationParams = std::get<TMergeOperationParams>(context.OperationParams);
         const auto& fmrOperationSpec = context.FmrOperationSpec;
@@ -53,12 +58,34 @@ public:
 
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
+
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+        TGetNewPartIdsForTaskResult result;
+        TMergeTaskParams& mergeTaskParams = std::get<TMergeTaskParams>(context.Task->TaskParams);
+        TString tableId = mergeTaskParams.Output.TableId;
+        TString newPartId = GenerateId();
+
+        mergeTaskParams.Output.PartId = newPartId;
+        result.NewPartIdsForTables[tableId].emplace_back(newPartId);
+        return result;
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+        std::vector<TPartIdInfo> groupsToClear;
+        TMergeTaskParams& mergeTaskParams = std::get<TMergeTaskParams>(context.Task->TaskParams);
+        TString tableId = mergeTaskParams.Output.TableId;
+        if (!mergeTaskParams.Output.PartId.empty() && context.PartIdStats.contains(mergeTaskParams.Output.PartId)) {
+            auto prevPartId = mergeTaskParams.Output.PartId;
+            groupsToClear.emplace_back(tableId, prevPartId);
+        }
+        return groupsToClear;
+    }
 };
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeMergeStageOperationManager() {
-    return MakeIntrusive<TMergeStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeMergeStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TMergeStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

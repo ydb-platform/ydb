@@ -352,11 +352,6 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && newStreamOp.GetTopicAutoPartitioning()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Topic autopartitioning for CDC is disabled");
-            return result;
-        }
-
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
         context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);

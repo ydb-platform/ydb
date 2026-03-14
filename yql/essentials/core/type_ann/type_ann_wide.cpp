@@ -172,6 +172,10 @@ IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     if (input->ChildrenSize() > 2U) {
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
         const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {

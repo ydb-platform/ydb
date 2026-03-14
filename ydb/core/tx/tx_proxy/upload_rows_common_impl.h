@@ -1127,7 +1127,7 @@ private:
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
-        if (UserCtx!=nullptr) {
+        if (UserCtx != nullptr) {
             ev->Record.SetUserSID(UserCtx->GetUserSID());
             ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
         }

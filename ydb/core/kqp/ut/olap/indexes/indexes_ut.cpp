@@ -316,6 +316,133 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(hasCaseSensitiveFalse, "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
     }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableRenameBloom`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecSchemeQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableRenameBloom` RENAME INDEX idx_bloom TO idx_bloom_renamed;");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto showResult = session.ExecuteQuery(
+                "SHOW CREATE TABLE `/Root/olapTableRenameBloom`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+            UNIT_ASSERT(!showResult.GetResultSets().empty());
+            NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+            TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+            UNIT_ASSERT_C(createText.Contains("idx_bloom_renamed"), "SHOW CREATE should contain renamed index idx_bloom_renamed, got: " << createText);
+        }
+
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBloom` DROP INDEX idx_bloom_renamed;");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomNgramIndex, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableRenameNgram`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecSchemeQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableRenameNgram` RENAME INDEX idx_ngram TO idx_ngram_renamed;");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto showResult = session.ExecuteQuery(
+                "SHOW CREATE TABLE `/Root/olapTableRenameNgram`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+            UNIT_ASSERT(!showResult.GetResultSets().empty());
+            NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+            TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+            UNIT_ASSERT_C(createText.Contains("idx_ngram_renamed"), "SHOW CREATE should contain renamed index idx_ngram_renamed, got: " << createText);
+        }
+
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameNgram` DROP INDEX idx_ngram_renamed;");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableRenameBoth`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecSchemeQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableRenameBoth` RENAME INDEX idx_bloom TO bloom_renamed;");
+        ExecSchemeQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableRenameBoth` RENAME INDEX idx_ngram TO ngram_renamed;");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto showResult = session.ExecuteQuery(
+                "SHOW CREATE TABLE `/Root/olapTableRenameBoth`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+            UNIT_ASSERT(!showResult.GetResultSets().empty());
+            NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+            TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+            UNIT_ASSERT_C(createText.Contains("bloom_renamed"), "SHOW CREATE should contain bloom_renamed, got: " << createText);
+            UNIT_ASSERT_C(createText.Contains("ngram_renamed"), "SHOW CREATE should contain ngram_renamed, got: " << createText);
+        }
+
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX bloom_renamed;");
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX ngram_renamed;");
+    }
+
     // DEPRECATED: old syntax
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

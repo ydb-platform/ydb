@@ -2,6 +2,52 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+bool ValidateRenameIndexOperation(
+    const NKikimrSchemeOp::TOlapIndexRename& rename,
+    TSet<TString>& renameSources,
+    TSet<TString>& renameDestinations,
+    IErrorCollector& errors
+) {
+    if (!rename.GetSourceName()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "Empty source index name for rename");
+        return false;
+    }
+
+    if (!rename.GetDestinationName()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "Empty destination index name for rename");
+        return false;
+    }
+
+    if (rename.GetSourceName() == rename.GetDestinationName()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "Source and destination index names must differ");
+        return false;
+    }
+
+    if (!renameSources.emplace(rename.GetSourceName()).second) {
+        errors.AddError(
+            NKikimrScheme::StatusInvalidParameter,
+            TStringBuilder() << "Duplicated index for rename source: " << rename.GetSourceName()
+        );
+
+        return false;
+    }
+
+    if (!renameDestinations.emplace(rename.GetDestinationName()).second) {
+        errors.AddError(
+            NKikimrScheme::StatusAlreadyExists,
+            TStringBuilder() << "Duplicated index for rename destination: " << rename.GetDestinationName()
+        );
+
+        return false;
+    }
+
+    return true;
+}
+
+}
+
 void TOlapIndexUpsert::SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const {
     requestedProto.SetName(Name);
     if (StorageId && !!*StorageId) {
@@ -32,6 +78,17 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
             return false;
         }
     }
+
+    TSet<TString> renameSources;
+    TSet<TString> renameDestinations;
+    for (auto&& rename : alterRequest.GetRenameIndexes()) {
+        if (!ValidateRenameIndexOperation(rename, renameSources, renameDestinations, errors)) {
+            return false;
+        }
+
+        RenameIndexes.emplace_back(rename.GetSourceName(), rename.GetDestinationName(), rename.GetReplaceDestination());
+    }
+
     TSet<TString> upsertIndexNames;
     for (auto& indexSchema : alterRequest.GetUpsertIndexes()) {
         TOlapIndexUpsert index;

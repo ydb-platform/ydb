@@ -104,6 +104,33 @@ std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) 
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
+bool ValidateRenameIndexRequest(
+    const Ydb::Table::RenameIndexItem& rename,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error
+) {
+    if (rename.source_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source index name must not be empty";
+        return false;
+    }
+
+    if (rename.destination_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Destination index name must not be empty";
+        return false;
+    }
+
+    if (rename.source_name() == rename.destination_name()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source and destination index names must differ";
+        return false;
+    }
+
+    return true;
+}
+
+
 }
 
 
@@ -1096,6 +1123,19 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = "Only local bloom indexes are supported for column tables";
                 return false;
         }
+    } else if (OpType == EAlterOperationKind::RenameIndex) {
+        const auto& rename = req->rename_indexes(0);
+        if (!ValidateRenameIndexRequest(rename, status, error)) {
+            return false;
+        }
+
+        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        auto* renameIndex = alterColumnTable->MutableAlterSchema()->AddRenameIndexes();
+        renameIndex->SetSourceName(rename.source_name());
+        renameIndex->SetDestinationName(rename.destination_name());
+        renameIndex->SetReplaceDestination(rename.replace_destination());
     } else if (OpType == EAlterOperationKind::DropIndex) {
         if (req->drop_indexes_size() != 1) {
             status = Ydb::StatusIds::UNSUPPORTED;

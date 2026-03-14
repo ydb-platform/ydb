@@ -556,9 +556,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
-        double fs = 1;
         for (ui32 i = 1; i < 10000; ++i) {
-            fs = f.WritePB(0, 128); // Max size records to overfill in memory buffer
+            f.WritePB(0, 128); // Max size records to overfill in memory buffer
         }
         for (ui32 i = 1; i < 1000; ++i) {
             f.ReadPB(2);

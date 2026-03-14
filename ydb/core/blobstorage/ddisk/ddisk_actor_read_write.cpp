@@ -179,23 +179,6 @@ namespace NKikimr::NDDisk {
         }
 
         const auto it = ReadCallbacks.find(ev->Cookie);
-
-        // TODO: remove
-        if (it == ReadCallbacks.end()) {
-            const auto it2 = ReadCallbacksRaw.find(ev->Cookie);
-            Y_ABORT_UNLESS(it2 != ReadCallbacksRaw.end());
-            std::visit(TOverloaded{
-                [&](TPendingRead& w) {
-                    w.Callback(msg, std::move(w.Span));
-                },
-                [&](const TPersistentBufferPendingRead& callback) {
-                    callback(msg);
-                }
-            }, it2->second);
-            ReadCallbacksRaw.erase(it2);
-            return;
-        }
-
         Y_ABORT_UNLESS(it != ReadCallbacks.end());
 
         // fill the op with result

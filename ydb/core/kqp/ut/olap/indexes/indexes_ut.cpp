@@ -492,6 +492,74 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckForConflictsWithAlreadyExistingIndices, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableIndexConflicts`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        {
+            const TString addDuplicateQuery =
+                "ALTER TABLE `/Root/olapTableIndexConflicts` ADD INDEX idx_bloom LOCAL USING bloom_filter "
+                "ON (uid) WITH (false_positive_probability = 0.01);";
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(addDuplicateQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                const TString issues = result.GetIssues().ToString();
+                const bool nameConflict = issues.Contains("idx_bloom") && issues.Contains("duplication");
+                const bool incompatibleUpdate = issues.Contains("cannot modify index") || issues.Contains("columns set is different");
+                UNIT_ASSERT_C(nameConflict || incompatibleUpdate,
+                    "Expected conflict (duplicate name or incompatible update), got: " << issues);
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(addDuplicateQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+                const TString issues = alterResult.GetIssues().ToString();
+                const bool nameConflict = issues.Contains("idx_bloom") && issues.Contains("duplication");
+                const bool incompatibleUpdate = issues.Contains("cannot modify index") || issues.Contains("columns set is different");
+                UNIT_ASSERT_C(nameConflict || incompatibleUpdate,
+                    "Expected conflict (duplicate name or incompatible update), got: " << issues);
+            }
+        }
+
+        {
+            const TString renameToExistingQuery =
+                "ALTER TABLE `/Root/olapTableIndexConflicts` RENAME INDEX idx_ngram TO idx_bloom;";
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(renameToExistingQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("already exists") || result.GetIssues().ToString().contains("idx_bloom"),
+                    "Expected conflict message about existing index name, got: " << result.GetIssues().ToString());
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(renameToExistingQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    alterResult.GetIssues().ToString().contains("already exists") || alterResult.GetIssues().ToString().contains("idx_bloom"),
+                    "Expected conflict message about existing index name, got: " << alterResult.GetIssues().ToString());
+            }
+        }
+    }
+
     // DEPRECATED: old syntax
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
